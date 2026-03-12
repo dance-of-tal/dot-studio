@@ -1,0 +1,438 @@
+.figma-explorer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border-main);
+}
+
+.figma-explorer--stacked {
+    gap: 0;
+}
+
+.figma-explorer-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.figma-explorer-section:last-child {
+    border-bottom: none;
+}
+
+.figma-explorer__divider {
+    flex: 0 0 4px;
+    cursor: row-resize;
+    background: transparent;
+    border-top: 1px solid var(--border-light);
+    transition: background 0.15s ease;
+}
+
+.figma-explorer__divider:hover {
+    background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.figma-explorer-section--stages {
+    flex: 0 0 190px;
+}
+
+.figma-explorer-section--threads {
+    flex: 1 1 auto;
+}
+
+.figma-explorer__subheader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-elevated, rgba(255, 255, 255, 0.02));
+    border-bottom: 1px solid var(--border-light);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.figma-explorer__actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.figma-explorer__title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.figma-explorer__context {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+}
+
+.figma-explorer__context--selected {
+    padding-top: 4px;
+}
+
+.figma-explorer__context-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.figma-explorer__context strong {
+    font-size: 12px;
+    color: var(--text-primary);
+}
+
+.figma-explorer__context-path {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.figma-explorer__tree {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 6px 8px;
+}
+
+/* ── Generic Layer Row ───────────────────────────────── */
+.figma-layer-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 8px;
+    border: none;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.1s ease;
+}
+
+.figma-layer-row:hover {
+    background: var(--bg-hover);
+}
+
+.figma-layer-row.active {
+    background: var(--bg-selected);
+}
+
+.figma-layer-row.muted .figma-layer-row__label,
+.figma-layer-row.muted .figma-layer-row__meta {
+    color: var(--text-muted);
+}
+
+.figma-layer-row__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.figma-layer-row__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.figma-layer-row__label {
+    font-size: 11px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.figma-layer-row__meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.figma-layer-row__meta--default {
+    color: var(--text-muted);
+}
+
+.figma-layer-row__meta--success,
+.figma-layer-row__meta--warn,
+.figma-layer-row__meta--danger {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: color-mix(in srgb, var(--bg-hover) 84%, transparent);
+}
+
+.figma-layer-row__meta--success {
+    color: #10b981;
+    border-color: color-mix(in srgb, #10b981 25%, var(--border-light));
+    background: color-mix(in srgb, #10b981 10%, var(--bg-hover));
+}
+
+.figma-layer-row__meta--warn {
+    color: #f59e0b;
+    border-color: color-mix(in srgb, #f59e0b 25%, var(--border-light));
+    background: color-mix(in srgb, #f59e0b 10%, var(--bg-hover));
+}
+
+.figma-layer-row__meta--danger {
+    color: #ef4444;
+    border-color: color-mix(in srgb, #ef4444 25%, var(--border-light));
+    background: color-mix(in srgb, #ef4444 10%, var(--bg-hover));
+}
+
+.figma-layer-row__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.figma-layer-row:hover .figma-layer-row__actions,
+.figma-layer-row.active .figma-layer-row__actions {
+    opacity: 1;
+}
+
+/* ── Thread Group ───────────────────────────────── */
+.figma-thread-group {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Thread Row (flat tree-view) ────────────────── */
+.figma-thread-card {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px 5px 4px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+
+.figma-thread-card:hover {
+    background: var(--bg-hover);
+}
+
+.figma-thread-card.active {
+    background: var(--bg-selected);
+}
+
+.figma-thread-card.muted .figma-thread-card__name {
+    color: var(--text-muted);
+}
+
+.figma-thread-card.muted .figma-thread-card__icon {
+    opacity: 0.5;
+}
+
+/* ── Chevron ─────────────────────────────────────────── */
+.figma-thread-card__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+    cursor: pointer;
+    flex-shrink: 0;
+    border-radius: 3px;
+}
+
+.figma-thread-card__chevron:hover {
+    color: var(--text-primary);
+}
+
+.figma-thread-card__chevron.is-open {
+    transform: rotate(90deg);
+}
+
+.figma-thread-card__chevron-spacer {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+/* ── Icon ────────────────────────────────────────────── */
+.figma-thread-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: color 0.1s ease;
+}
+
+.figma-thread-card.active .figma-thread-card__icon {
+    color: var(--text-secondary);
+}
+
+/* ── Body ────────────────────────────────────────────── */
+.figma-thread-card__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.figma-thread-card__name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+}
+
+.figma-thread-card__meta {
+    display: none;
+}
+
+
+
+/* ── Actions (always visible) ────────────────────────── */
+.figma-thread-card__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0.5;
+    transition: opacity 0.1s ease;
+}
+
+.figma-thread-card:hover .figma-thread-card__actions,
+.figma-thread-card.active .figma-thread-card__actions {
+    opacity: 1;
+}
+
+.figma-thread-card__actions .icon-btn {
+    color: var(--text-muted);
+    transition: color 0.1s ease;
+}
+
+.figma-thread-card__actions .icon-btn:hover {
+    color: var(--text-primary);
+}
+
+.figma-thread-card__actions .icon-btn.visibility-on {
+    color: var(--text-secondary);
+}
+
+.figma-thread-card__actions .icon-btn.visibility-off {
+    color: var(--text-secondary);
+}
+
+.figma-thread-card__delete-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--tal-color);
+    padding-right: 2px;
+}
+
+/* ── Children (nested tree items) ────────────────────── */
+.figma-thread-children {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0 0 2px 12px;
+    margin-left: 12px;
+    border-left: 1px solid var(--border-light);
+}
+
+.figma-thread-children .figma-layer-row {
+    padding: 4px 8px;
+    border-radius: 5px;
+}
+
+.figma-thread-children .figma-layer-row__label {
+    font-size: 11px;
+}
+
+.figma-thread-children .figma-layer-row__meta {
+    font-size: 9px;
+}
+
+.figma-thread-inline-input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border-main);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: 11px;
+    padding: 4px 6px;
+}
+
+.figma-thread-inline-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* ── Shared Utilities ────────────────────────────────── */
+.figma-empty--nested {
+    padding-left: 8px;
+}
+
+.figma-badge {
+    margin-left: auto;
+    font-size: 9px;
+    padding: 2px 5px;
+    background: var(--border-light);
+    border-radius: 999px;
+    color: var(--text-secondary);
+}
+
+.figma-empty {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 20px 16px;
+    text-align: center;
+    line-height: 1.5;
+}
+
+.figma-empty--tight {
+    padding: 6px 12px;
+    text-align: left;
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+.figma-show-more-btn {
+    margin: 2px 8px 0;
+    padding: 6px 8px;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    border-radius: 8px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-align: left;
+}
+
+.figma-show-more-btn:hover {
+    background: var(--bg-hover);
+}

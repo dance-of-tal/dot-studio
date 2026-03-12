@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+client/
+*.tgz
+
+# Local data
+.dance-of-tal/
+test-results/
+tmp-client-sourcemap/
+
+# Environment and machine-local config
+.env
+.env.*
+!.env.example
+*.local
+.DS_Store
+
+# Editor files
+.idea/
+.vscode/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Internal-only docs
+AGENT.md

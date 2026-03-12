@@ -1,0 +1,82 @@
+.figma-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 6px 12px;
+    box-shadow: var(--shadow-dropdown);
+}
+
+.figma-toolbar__item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.dot-auth-status {
+    border-radius: 999px;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.dot-auth-status--ok {
+    color: #14ae5c;
+}
+
+.dot-auth-status--warn {
+    color: var(--text-main);
+}
+
+.dot-auth-status--warn:hover {
+    background: var(--bg-hover);
+}
+
+.figma-divider-v {
+    width: 1px;
+    height: 16px;
+    background: var(--border-strong);
+    margin: 0 4px;
+}
+
+.figma-toolbar__dropdown {
+    position: relative;
+}
+
+.figma-toolbar__menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 168px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: 12px;
+    box-shadow: var(--shadow-dropdown);
+}
+
+.figma-toolbar__menu--right {
+    left: auto;
+    right: 0;
+}
+
+.figma-toolbar__menu-item {
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.figma-toolbar__menu-item:hover {
+    background: var(--bg-hover);
+}

@@ -1,0 +1,114 @@
+.studio-toast-viewport {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(420px, calc(100vw - 32px));
+    pointer-events: none;
+}
+
+.studio-toast-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    border: 1px solid var(--border-main);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    pointer-events: auto;
+}
+
+.studio-toast-card--info {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-color: var(--border-main);
+}
+
+.studio-toast-card--error {
+    background: rgba(242, 72, 34, 0.12);
+    color: #d9412c;
+    border-color: rgba(242, 72, 34, 0.2);
+}
+
+.studio-toast-card--warning {
+    background: rgba(219, 147, 32, 0.12);
+    color: #9a6300;
+    border-color: rgba(219, 147, 32, 0.24);
+}
+
+.studio-toast-card--success {
+    background: rgba(20, 174, 92, 0.12);
+    color: #0d9e4f;
+    border-color: rgba(20, 174, 92, 0.2);
+}
+
+.studio-toast-card__content {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.studio-toast-card__title {
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.studio-toast-card__message {
+    min-width: 0;
+}
+
+.studio-toast-card__count {
+    margin-left: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    opacity: 0.8;
+}
+
+.studio-toast-card__action {
+    align-self: flex-start;
+    border: 0;
+    background: rgba(0, 0, 0, 0.08);
+    color: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 5px 8px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.studio-toast-card__action:hover {
+    background: rgba(0, 0, 0, 0.14);
+}
+
+.studio-toast-card__dismiss {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    background: transparent;
+    color: currentColor;
+    opacity: 0.72;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.studio-toast-card__dismiss:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.06);
+}

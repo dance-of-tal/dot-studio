@@ -1,0 +1,198 @@
+.figma-sidebar {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* ── Sidebar Container (Main + Drawer) ────────────────── */
+.sidebar-container {
+    display: flex;
+    flex-direction: row;
+    height: 100%;
+    position: relative;
+    z-index: 10;
+}
+
+/* Main sidebar sections */
+.sidebar-main-top {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border-main);
+}
+
+.sidebar-main-bottom {
+    flex: 0 0 auto;
+    max-height: 45%;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.sidebar-main-bottom--asset-drawer {
+    max-height: none;
+    overflow: visible;
+    padding-bottom: 8px;
+    border-top: 1px solid var(--border-main);
+}
+
+/* ── Resize Handle ───────────────────────────────────── */
+.sidebar-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    width: 5px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 20;
+    background: transparent;
+    transition: background 0.15s;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+    background: var(--accent);
+    opacity: 0.5;
+}
+
+.sidebar-resize-handle--occluded {
+    pointer-events: none;
+}
+
+/* ── Asset Drawer ─────────────────────────────────────── */
+.sidebar-drawer {
+    width: 0;
+    overflow: hidden;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border-main);
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 40;
+    pointer-events: none;
+}
+
+.sidebar-drawer.open {
+    width: 280px;
+    pointer-events: auto;
+}
+
+.sidebar-drawer.left-drawer {
+    border-left: none;
+    border-right: 1px solid var(--border-main);
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
+}
+
+.sidebar-container--drawer-open .figma-sidebar {
+    z-index: 20;
+}
+
+.sidebar-resize-handle--drawer {
+    right: -2px;
+    left: auto;
+}
+
+/* ── Drawer Header ────────────────────────────────────── */
+.drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-main);
+    flex-shrink: 0;
+}
+
+.drawer-header__title {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+
+/* ── Asset Library Button (prominent, full-width) ─────── */
+.asset-library-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: calc(100% - 16px);
+    margin: 6px 8px 2px;
+    padding: 7px 10px;
+    background: var(--bg-elevated, rgba(13, 153, 255, 0.04));
+    border: 1px solid var(--border-main);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    transition: all 0.15s ease;
+}
+
+.asset-library-btn:hover {
+    background: rgba(13, 153, 255, 0.08);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.asset-library-btn.active {
+    background: rgba(13, 153, 255, 0.1);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.asset-library-btn span {
+    flex: 1;
+    text-align: left;
+}
+
+.asset-library-arrow {
+    transition: transform 0.2s ease;
+    opacity: 0.6;
+}
+
+.asset-library-arrow.rotated {
+    transform: rotate(180deg);
+}
+
+/* ── Legacy tab styles ────────────────────────────────── */
+.figma-sidebar__tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-main);
+    background: var(--bg-panel);
+}
+
+.figma-tab {
+    flex: 1;
+    padding: 10px 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.1s;
+    text-align: center;
+}
+
+.figma-tab:hover {
+    color: var(--text-secondary);
+}
+
+.figma-tab.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--text-primary);
+    font-weight: 600;
+}
+
+.figma-sidebar__content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}

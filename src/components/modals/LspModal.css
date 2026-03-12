@@ -1,0 +1,161 @@
+/* LspModal.css */
+.figma-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(2px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.figma-modal.lsp-modal {
+    background: var(--bg-card);
+    width: 480px;
+    max-height: 80vh;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-modal);
+    border: 1px solid var(--border-main);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.figma-modal__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-light);
+    background: var(--bg-panel);
+}
+
+.figma-modal__header h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    color: var(--text-primary);
+}
+
+.figma-modal__body {
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.lsp-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.lsp-server-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.lsp-server-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+}
+
+.server-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.server-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.server-status.badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: rgba(20, 174, 92, 0.1);
+    color: #14AE5C;
+    border: 1px solid rgba(20, 174, 92, 0.2);
+    text-transform: capitalize;
+}
+
+.lsp-diagnostics-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.diagnostic-item {
+    font-size: 12px;
+    padding: 10px;
+    border-radius: var(--radius);
+    background: var(--bg-panel);
+    border-left: 3px solid transparent;
+}
+
+.diagnostic-item.severity-1 {
+    /* Error */
+    border-left-color: #F24822;
+    background: rgba(242, 72, 34, 0.05);
+}
+
+.diagnostic-item.severity-2 {
+    /* Warning */
+    border-left-color: #dbba00;
+    background: rgba(219, 186, 0, 0.05);
+}
+
+.diagnostic-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.diagnostic-file {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.diagnostic-line {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.diagnostic-message {
+    color: var(--text-secondary);
+    line-height: 1.4;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.diagnostic-source {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--bg-hover);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+}

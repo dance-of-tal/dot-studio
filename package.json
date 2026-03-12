@@ -1,0 +1,103 @@
+{
+  "name": "dot-studio",
+  "version": "0.0.1",
+  "description": "DOT Studio visual workspace for composing and running Dance of Tal performers and acts on top of OpenCode.",
+  "license": "MIT",
+  "author": "monarchjuno",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dance-of-tal/dance-of-tal.git"
+  },
+  "homepage": "https://github.com/dance-of-tal/dance-of-tal",
+  "bugs": {
+    "url": "https://github.com/dance-of-tal/dance-of-tal/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "dance-of-tal",
+    "dot",
+    "studio",
+    "opencode",
+    "agentic-ai",
+    "visual-editor"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "type": "module",
+  "scripts": {
+    "start": "tsx server/start.ts",
+    "dev": "vite",
+    "kill-ports": "lsof -ti:5173,3001,4096 | xargs kill -9 2>/dev/null || true",
+    "dev:all": "npm run kill-ports && concurrently -k -n vite,server,opencode -c cyan,yellow,magenta \"vite\" \"tsx --watch server/index.ts\" \"opencode --port 4096 .\"",
+    "server": "tsx server/index.ts",
+    "server:dev": "tsx --watch server/index.ts",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); require('fs').rmSync('client', { recursive: true, force: true })\"",
+    "build": "npm run build:all",
+    "build:client": "vite build --outDir client",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:all": "npm run clean && npm run build:client && npm run build:server",
+    "pack:check": "npm run build:all && npm pack --dry-run",
+    "type-check": "tsc -b --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "opencode": "opencode --port 4096 .",
+    "prepublishOnly": "npm run build:all"
+  },
+  "bin": {
+    "dot-studio": "./dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "client/",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@hono/node-server": "^1.19.11",
+    "@opencode-ai/sdk": "^1.2.17",
+    "@tanstack/react-query": "^5.90.21",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^6.0.0",
+    "@xyflow/react": "^12.10.1",
+    "dance-of-tal": "^3.2.3",
+    "elkjs": "^0.11.1",
+    "highlight.js": "^11.11.1",
+    "hono": "^4.12.5",
+    "lucide-react": "^0.577.0",
+    "material-file-icons": "^2.4.0",
+    "open": "^10.0.0",
+    "opencode-ai": "1.2.24",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
+    "tsx": "^4.21.0",
+    "ws": "^8.19.0",
+    "xstate": "^5.28.0",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "vite": "^6.4.1"
+  }
+}

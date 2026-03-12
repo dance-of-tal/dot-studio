@@ -1,0 +1,220 @@
+/* ── Terminal Panel ── */
+
+.terminal-panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: #000000;
+    border-top: 1px solid var(--border-main, #444444);
+    z-index: 20;
+}
+
+.terminal-resize-handle {
+    position: absolute;
+    top: -3px;
+    left: 0;
+    right: 0;
+    height: 6px;
+    cursor: ns-resize;
+    z-index: 30;
+}
+
+.terminal-resize-handle:hover {
+    background: var(--accent, #0D99FF);
+    opacity: 0.5;
+}
+
+/* ── Header ── */
+.terminal-header {
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    height: 32px;
+    background: var(--bg-panel, #2C2C2C);
+    border-bottom: 1px solid var(--border-light, #383838);
+    flex-shrink: 0;
+    gap: 8px;
+}
+
+.terminal-header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted, #888888);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+/* ── Tabs ── */
+.terminal-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 1;
+    overflow-x: auto;
+    padding: 0 4px;
+}
+
+.terminal-tabs::-webkit-scrollbar {
+    height: 0;
+}
+
+.terminal-tab {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-secondary, #B3B3B3);
+    white-space: nowrap;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+}
+
+.terminal-tab:hover {
+    background: var(--bg-hover, #444444);
+    color: var(--text-primary, #FFFFFF);
+}
+
+.terminal-tab.active {
+    background: var(--bg-selected, rgba(13, 153, 255, 0.15));
+    color: var(--text-primary, #FFFFFF);
+    border-color: var(--border-active, rgba(13, 153, 255, 0.3));
+}
+
+.terminal-tab-title {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: default;
+}
+
+.terminal-tab-rename-input {
+    width: 80px;
+    background: var(--bg-hover, #444444);
+    border: 1px solid var(--accent, #0D99FF);
+    border-radius: 3px;
+    color: var(--text-primary, #FFFFFF);
+    font-size: 11px;
+    padding: 1px 4px;
+    outline: none;
+}
+
+.terminal-tab-close {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 1px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.terminal-tab:hover .terminal-tab-close,
+.terminal-tab.active .terminal-tab-close {
+    opacity: 0.6;
+}
+
+.terminal-tab-close:hover {
+    opacity: 1 !important;
+    background: rgba(248, 113, 113, 0.2);
+    color: #f87171;
+}
+
+.terminal-tab-add {
+    background: none;
+    border: none;
+    color: var(--text-muted, #888888);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+}
+
+.terminal-tab-add:hover {
+    background: var(--bg-hover, #444444);
+    color: var(--text-primary, #FFFFFF);
+}
+
+/* ── Header Actions ── */
+.terminal-header-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.terminal-header-actions button {
+    background: none;
+    border: none;
+    color: var(--text-muted, #888888);
+    cursor: pointer;
+    padding: 4px 5px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    transition: all 0.15s;
+}
+
+.terminal-header-actions button:hover {
+    background: var(--bg-hover, #444444);
+    color: var(--text-primary, #FFFFFF);
+}
+
+/* ── Body ── */
+.terminal-body {
+    flex: 1;
+    padding: 4px 8px;
+    overflow: hidden;
+}
+
+.terminal-body .xterm {
+    height: 100%;
+    font-kerning: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "liga" 0, "calt" 0;
+    text-rendering: geometricPrecision;
+}
+
+.terminal-body .xterm-viewport {
+    overflow-y: auto !important;
+}
+
+/* ── Toggle Button (when closed) ── */
+.terminal-toggle-btn {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    background: var(--bg-panel, #2C2C2C);
+    border: 1px solid var(--border-main, #444444);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    color: var(--text-secondary, #B3B3B3);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    z-index: 20;
+    transition: all 0.2s;
+}
+
+.terminal-toggle-btn:hover {
+    background: var(--bg-hover, #444444);
+    color: var(--text-primary, #FFFFFF);
+    border-color: var(--accent, #0D99FF);
+}

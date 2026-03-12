@@ -1,0 +1,42 @@
+.canvas-drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    transition: color 0.16s ease, border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.canvas-drag-handle--interactive {
+    cursor: grab;
+}
+
+.canvas-drag-handle--interactive:hover {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--border-strong) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-card) 84%, white 16%);
+}
+
+.canvas-drag-handle--interactive:focus-visible {
+    outline: none;
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent, #3b82f6) 58%, var(--border-strong));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #3b82f6) 16%, transparent);
+}
+
+.canvas-drag-handle--active {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--accent, #3b82f6) 58%, var(--border-strong));
+    background: color-mix(in srgb, var(--accent, #3b82f6) 12%, var(--bg-card));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #3b82f6) 18%, transparent);
+}
+
+.canvas-drag-handle svg {
+    pointer-events: none;
+}
