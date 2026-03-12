@@ -58,6 +58,7 @@ export interface WorkspaceSlice {
         model?: ModelConfig | string | null
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
+        mcpBindingMap?: Record<string, string>
         mcpConfig?: Record<string, any> | null
     }, x?: number, y?: number) => void
     applyPerformerAsset: (performerId: string, asset: {
@@ -67,6 +68,7 @@ export interface WorkspaceSlice {
         model?: ModelConfig | string | null
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
+        mcpBindingMap?: Record<string, string>
         mcpConfig?: Record<string, any> | null
     }) => void
     removePerformer: (id: string) => void
@@ -106,6 +108,7 @@ export interface WorkspaceSlice {
     setPerformerDanceDeliveryMode: (performerId: string, mode: 'auto' | 'tool' | 'inline') => void
     addPerformerMcp: (performerId: string, mcp: McpServer) => void
     removePerformerMcp: (performerId: string, mcpName: string) => void
+    setPerformerMcpBinding: (performerId: string, placeholderName: string, serverName: string | null) => void
     updatePerformerAuthoringMeta: (performerId: string, patch: { slug?: string; description?: string; tags?: string[] }) => void
     togglePerformerVisibility: (id: string) => void
     setPerformerAutoCompact: (id: string, enabled: boolean) => void
@@ -153,6 +156,7 @@ export interface WorkspaceSlice {
         model?: ModelConfig | string | null
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
+        mcpBindingMap?: Record<string, string>
         mcpConfig?: Record<string, any> | null
     }, position?: { x: number; y: number }) => void
     createActOwnedPerformerForNode: (actId: string, nodeId: string, asset?: {
@@ -163,6 +167,7 @@ export interface WorkspaceSlice {
         model?: ModelConfig | string | null
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
+        mcpBindingMap?: Record<string, string>
         mcpConfig?: Record<string, any> | null
     } | null) => string | null
     updateActNode: (actId: string, nodeId: string, patch: Partial<StageActNode>) => void

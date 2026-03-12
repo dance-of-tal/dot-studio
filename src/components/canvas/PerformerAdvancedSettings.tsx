@@ -17,8 +17,12 @@ type PerformerAdvancedSettingsProps = {
     onRemoveDance?: (ref: AssetRef) => void
     onClearModel?: () => void
     onRemoveMcp?: (serverName: string) => void
+    onSetMcpBinding?: (placeholderName: string, serverName: string | null) => void
     onAutoCompactChange?: (enabled: boolean) => void
+    mcpBindings?: Array<{ placeholderName: string; serverName: string | null }>
+    mcpOptions?: Array<{ name: string; disabled?: boolean }>
     runtimeControls?: ReactNode
+    runtimeStatus?: ReactNode
 }
 
 function assetRefLabel(ref: AssetRef) {
@@ -41,8 +45,12 @@ export default function PerformerAdvancedSettings({
     onRemoveDance,
     onClearModel,
     onRemoveMcp,
+    onSetMcpBinding,
     onAutoCompactChange,
+    mcpBindings,
+    mcpOptions,
     runtimeControls,
+    runtimeStatus,
 }: PerformerAdvancedSettingsProps) {
     const unresolvedMcpPlaceholders = performer ? unresolvedDeclaredMcpServerNames(performer) : []
     return (
@@ -145,6 +153,7 @@ export default function PerformerAdvancedSettings({
                             {runtimeControls}
                         </div>
                     ) : null}
+                    {runtimeStatus ? runtimeStatus : null}
                     <label className="adv-toggle">
                         <input
                             type="checkbox"
@@ -179,16 +188,37 @@ export default function PerformerAdvancedSettings({
                                     ) : null}
                                 </div>
                             ))}
-                            {unresolvedMcpPlaceholders.map((serverName) => (
+                            {!mcpBindings?.length ? unresolvedMcpPlaceholders.map((serverName) => (
                                 <div key={`placeholder:${serverName}`} className="adv-list__item">
                                     <span className="adv-list__label">{serverName}</span>
                                     <span className="adv-section__summary">Imported from asset · not mapped in Asset Library MCP catalog</span>
                                 </div>
-                            ))}
+                            )) : null}
                         </div>
                     ) : (
                         <span className="adv-section__summary">{mcpSummary || 'No MCP servers connected'}</span>
                     )}
+                    {mcpBindings && mcpBindings.length > 0 ? (
+                        <div className="adv-list" style={{ marginTop: 10 }}>
+                            {mcpBindings.map((binding) => (
+                                <label key={`binding:${binding.placeholderName}`} className="adv-field">
+                                    <span className="adv-field__label">{binding.placeholderName}</span>
+                                    <select
+                                        className="figma-edit-select nodrag nowheel"
+                                        value={binding.serverName || ''}
+                                        onChange={(event) => onSetMcpBinding?.(binding.placeholderName, event.target.value || null)}
+                                    >
+                                        <option value="">Select project MCP server</option>
+                                        {(mcpOptions || []).map((option) => (
+                                            <option key={option.name} value={option.name} disabled={option.disabled}>
+                                                {option.name}{option.disabled ? ' (disabled)' : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            ))}
+                        </div>
+                    ) : null}
                 </div>
             </div>
         </div>

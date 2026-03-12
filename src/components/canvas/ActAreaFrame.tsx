@@ -3,7 +3,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { useStore } from '@xyflow/react'
 import { Workflow, ArrowLeft, Plus, Trash2, Bot, Hexagon, Zap, Cpu, Server, Pencil, EyeOff, Save, X } from 'lucide-react'
 import { useStudioStore } from '../../store'
-import { useAssets, useMcpServers } from '../../hooks/queries'
+import { useAssets, useMcpServers, useRuntimeTools } from '../../hooks/queries'
 import { computeActAutoLayout, ACT_LAYOUT_NODE_WIDTH, ACT_LAYOUT_NODE_HEIGHT } from '../../lib/act-layout'
 import ActThreadPanel from './ActThreadPanel'
 import CanvasWindowFrame from './CanvasWindowFrame'
@@ -16,7 +16,7 @@ import ModelVariantSelect from './ModelVariantSelect'
 import AgentSelect from './AgentSelect'
 
 import type { ActPerformerSessionBinding, ActSessionMode, ChatMessage, PerformerNode } from '../../types'
-import { buildAssetCardMap, buildMcpServerMap, resolvePerformerPresentation } from '../../lib/performers'
+import { buildAssetCardMap, buildMcpServerMap, resolvePerformerPresentation, resolvePerformerRuntimeConfig } from '../../lib/performers'
 import './ActAreaFrame.css'
 
 type ActAreaNodeView = {
@@ -105,6 +105,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     const selectedActSessionId = useStudioStore((state) => state.selectedActSessionId)
     const actPerformerChats = useStudioStore((state) => state.actPerformerChats)
     const actPerformerBindings = useStudioStore((state) => state.actPerformerBindings)
+    const setPerformerMcpBinding = useStudioStore((state) => state.setPerformerMcpBinding)
     const width = Number(data.width || 420)
     const height = Number(data.height || 280)
     const rfWidth = useStore((state) => state.width)
@@ -374,9 +375,51 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                 danceAssets: [],
                 mcpServers: [],
                 mcpPlaceholders: [],
+                mappedMcpPlaceholders: [],
                 declaredMcpServerNames: [],
             }
     ), [assetInventory, data.drafts, focusedPerformerNode, mcpServers])
+    const focusedRuntimeConfig = useMemo(
+        () => focusedPerformerNode ? resolvePerformerRuntimeConfig(focusedPerformerNode) : null,
+        [focusedPerformerNode],
+    )
+    const { data: focusedRuntimeTools } = useRuntimeTools(
+        focusedRuntimeConfig?.model || null,
+        focusedRuntimeConfig?.mcpServerNames || [],
+        !!focusedRuntimeConfig,
+    )
+    const focusedMcpBindingRows = useMemo(
+        () => (focusedPerformerPresentation.declaredMcpServerNames || [])
+            .map((placeholderName) => ({
+                placeholderName,
+                serverName: focusedPerformerNode?.mcpBindingMap?.[placeholderName] || null,
+            })),
+        [focusedPerformerNode?.mcpBindingMap, focusedPerformerPresentation.declaredMcpServerNames],
+    )
+    const focusedMcpBindingOptions = useMemo(
+        () => mcpServers.map((server) => ({
+            name: server.name,
+            disabled: server.enabled === false,
+        })),
+        [mcpServers],
+    )
+
+    useEffect(() => {
+        if (!focusedPerformerId || !focusedPerformerNode?.mcpBindingMap) {
+            return
+        }
+        const validNames = new Set(
+            mcpServers
+                .filter((server) => server.enabled !== false)
+                .map((server) => server.name),
+        )
+        for (const [placeholderName, serverName] of Object.entries(focusedPerformerNode.mcpBindingMap)) {
+            if (!serverName || validNames.has(serverName)) {
+                continue
+            }
+            setPerformerMcpBinding(focusedPerformerId, placeholderName, null)
+        }
+    }, [focusedPerformerId, focusedPerformerNode?.mcpBindingMap, mcpServers, setPerformerMcpBinding])
 
     const { isOver: isPerformerOver, setNodeRef: setPerformerDropRef } = useDroppable({
         id: focusedNode ? `act-node-performer-${id}-${focusedNode.id}` : `act-node-performer-${id}-idle`,
@@ -1014,9 +1057,24 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                                     />
                                                                 </>
                                                             )}
+                                                            runtimeStatus={focusedRuntimeTools ? (
+                                                                <div className="adv-section__summary">
+                                                                    {focusedRuntimeTools.resolvedTools.length > 0
+                                                                        ? `Resolved tools: ${focusedRuntimeTools.resolvedTools.join(', ')}`
+                                                                        : focusedRuntimeTools.selectedMcpServers.length > 0
+                                                                            ? 'No MCP tools resolved for the current model yet.'
+                                                                            : 'No MCP servers selected.'}
+                                                                    {focusedRuntimeTools.unavailableDetails.length > 0 ? ` Unavailable: ${focusedRuntimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.` : ''}
+                                                                </div>
+                                                            ) : null}
                                                             onRemoveMcp={(serverName) => {
                                                                 data.onRemovePerformerMcp?.(focusedPerformerId, serverName)
                                                             }}
+                                                            onSetMcpBinding={(placeholderName, serverName) => {
+                                                                setPerformerMcpBinding(focusedPerformerId, placeholderName, serverName)
+                                                            }}
+                                                            mcpBindings={focusedMcpBindingRows}
+                                                            mcpOptions={focusedMcpBindingOptions}
                                                         />
                                                     ) : (
                                                         <div className="act-area-frame__rail-empty">

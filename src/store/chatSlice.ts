@@ -400,7 +400,10 @@ export const createChatSlice: StateCreator<
                 const run = await api.act.run({
                     actSessionId: sessionId,
                     stageAct: act,
-                    performers: get().performers,
+                    performers: get().performers.map((performer) => ({
+                        ...performer,
+                        mcpServerNames: resolvePerformerRuntimeConfig(performer).mcpServerNames,
+                    })),
                     drafts: get().drafts,
                     input: text,
                     maxIterations: act.maxIterations,

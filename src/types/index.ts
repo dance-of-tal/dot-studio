@@ -113,13 +113,16 @@ export interface ModelCapabilities {
 
 export interface McpServer {
     name: string           // "github", "postgres", etc.
-    status: string         // "connected", "disconnected", etc.
+    status: 'connected' | 'disconnected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration' | 'unknown'
     tools: Array<{ name: string; description?: string }>
     resources: Array<any>
     enabled?: boolean
     defined?: boolean
     configType?: 'local' | 'remote' | 'toggle'
     authStatus?: 'ready' | 'needs_auth' | 'n/a'
+    error?: string
+    oauthConfigured?: boolean
+    clientRegistrationRequired?: boolean
 }
 
 export type PerformerScope = 'shared' | 'act-owned'
@@ -141,6 +144,7 @@ export interface PerformerNode {
     talRef: AssetRef | null
     danceRefs: AssetRef[]
     mcpServerNames: string[]
+    mcpBindingMap?: Record<string, string>
     declaredMcpConfig?: Record<string, any> | null
     configHash: string
     activeSessionId?: string
@@ -294,7 +298,7 @@ export interface RuntimeToolResolution {
     unavailableTools: string[]
     unavailableDetails: Array<{
         serverName: string
-        reason: 'not_defined' | 'disabled' | 'needs_auth' | 'connect_failed' | 'connected_but_no_tools_for_model'
+        reason: 'not_defined' | 'disabled' | 'needs_auth' | 'needs_client_registration' | 'connect_failed' | 'connected_but_no_tools_for_model'
         toolId?: string
         detail?: string
     }>

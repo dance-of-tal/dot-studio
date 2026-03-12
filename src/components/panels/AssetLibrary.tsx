@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     Hexagon,
@@ -27,6 +27,7 @@ import {
 } from '../../hooks/queries';
 import './AssetLibrary.css';
 import { useStudioStore } from '../../store';
+import { showToast } from '../../lib/toast';
 
 import { slugifyAssetName } from '../../lib/performers';
 import type { AssetCard } from '../../types';
@@ -95,6 +96,8 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const [mcpDraftSnapshot, setMcpDraftSnapshot] = useState<ProjectMcpEntryDraft[]>([])
     const [mcpCatalogStatus, setMcpCatalogStatus] = useState<string | null>(null)
     const [mcpCatalogSaving, setMcpCatalogSaving] = useState(false)
+    const [pendingMcpAuthName, setPendingMcpAuthName] = useState<string | null>(null)
+    const mcpAuthDeadlineRef = useRef<number | null>(null)
     const { data: authUser } = useDotAuthUser()
     const queryClient = useQueryClient()
 
@@ -169,6 +172,41 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                 setMcpCatalogStatus('Failed to load project MCP catalog.')
             })
     }, [showMcps, workingDir])
+
+    useEffect(() => {
+        if (!pendingMcpAuthName) {
+            mcpAuthDeadlineRef.current = null
+            return
+        }
+
+        const live = mcpServers.find((server) => server.name === pendingMcpAuthName)
+        if (live?.status === 'connected') {
+            mcpAuthDeadlineRef.current = null
+            setPendingMcpAuthName(null)
+            setMcpCatalogStatus(`Authenticated and connected ${pendingMcpAuthName}.`)
+            return
+        }
+
+        if (live?.status === 'failed' || live?.status === 'needs_client_registration') {
+            mcpAuthDeadlineRef.current = null
+            setPendingMcpAuthName(null)
+            setMcpCatalogStatus(live.error || `Authentication did not complete for ${pendingMcpAuthName}.`)
+            return
+        }
+
+        const timer = window.setInterval(() => {
+            if (mcpAuthDeadlineRef.current && Date.now() > mcpAuthDeadlineRef.current) {
+                window.clearInterval(timer)
+                mcpAuthDeadlineRef.current = null
+                setPendingMcpAuthName(null)
+                setMcpCatalogStatus(`Timed out waiting for ${pendingMcpAuthName} authentication.`)
+                return
+            }
+            void queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+        }, 2_000)
+
+        return () => window.clearInterval(timer)
+    }, [mcpServers, pendingMcpAuthName, queryClient, workingDir])
 
     const mcpCatalogDirty = useMemo(
         () => JSON.stringify(mcpDraftEntries) !== JSON.stringify(mcpDraftSnapshot),
@@ -248,6 +286,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
             await api.mcp.connect(name)
             setMcpCatalogStatus(`Connected MCP server ${name}.`)
             await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+            await queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
         } catch (error: any) {
             setMcpCatalogStatus(error?.message || `Failed to connect ${name}.`)
         }
@@ -259,8 +298,67 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
             await api.mcp.disconnect(name)
             setMcpCatalogStatus(`Disconnected MCP server ${name}.`)
             await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+            await queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
         } catch (error: any) {
             setMcpCatalogStatus(error?.message || `Failed to disconnect ${name}.`)
+        }
+    }
+
+    const authenticateMcpServer = async (name: string) => {
+        const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null
+        setMcpCatalogStatus(null)
+
+        try {
+            const result = await api.mcp.authStart(name)
+            let opened = false
+            try {
+                if (popup && !popup.closed) {
+                    popup.location.href = result.authorizationUrl
+                    opened = true
+                } else {
+                    const next = window.open(result.authorizationUrl, '_blank')
+                    opened = !!next
+                }
+            } catch {
+                opened = false
+            }
+
+            if (!opened) {
+                popup?.close()
+                showToast(`Open the browser to finish authenticating ${name}.`, 'warning', {
+                    title: 'MCP auth started',
+                    actionLabel: 'Open auth',
+                    onAction: () => {
+                        window.open(result.authorizationUrl, '_blank')
+                    },
+                    dedupeKey: `mcp-auth:${name}`,
+                    durationMs: 8000,
+                })
+            }
+
+            mcpAuthDeadlineRef.current = Date.now() + 180_000
+            setPendingMcpAuthName(name)
+            setMcpCatalogStatus(`Complete authentication for ${name} in the browser.`)
+            await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+        } catch (error: any) {
+            popup?.close()
+            setPendingMcpAuthName(null)
+            setMcpCatalogStatus(error?.message || `Failed to start authentication for ${name}.`)
+        }
+    }
+
+    const clearMcpAuth = async (name: string) => {
+        setMcpCatalogStatus(null)
+        try {
+            await api.mcp.clearAuth(name)
+            if (pendingMcpAuthName === name) {
+                setPendingMcpAuthName(null)
+                mcpAuthDeadlineRef.current = null
+            }
+            setMcpCatalogStatus(`Cleared stored authentication for ${name}.`)
+            await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+        } catch (error: any) {
+            setMcpCatalogStatus(error?.message || `Failed to clear authentication for ${name}.`)
         }
     }
 
@@ -705,6 +803,8 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                     {mcpDraftEntries.map((entry) => {
                                         const live = mcpServers.find((server) => server.name === entry.name.trim())
                                         const liveStatus = live?.status || (entry.enabled ? 'disconnected' : 'disabled')
+                                        const canAuthenticate = entry.type === 'remote' && (liveStatus === 'needs_auth' || liveStatus === 'failed')
+                                        const canClearAuth = entry.type === 'remote' && !!live && (live.authStatus === 'needs_auth' || live.status === 'connected' || live.status === 'failed')
                                         return (
                                             <div key={entry.key} className="asset-mcp-editor">
                                                 <div className="asset-mcp-editor__header">
@@ -714,13 +814,24 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                                             <span>{entry.type}</span>
                                                             <span>{entry.enabled ? 'enabled' : 'disabled'}</span>
                                                             <span>{live?.tools?.length || 0} tools</span>
+                                                            <span>{live?.resources?.length || 0} resources</span>
                                                             {live?.authStatus === 'needs_auth' ? <span>auth required</span> : null}
+                                                            {live?.clientRegistrationRequired ? <span>client registration required</span> : null}
                                                         </div>
                                                     </div>
                                                     <span className={`asset-mcp-editor__status asset-mcp-editor__status--${liveStatus}`}>
                                                         {liveStatus}
                                                     </span>
                                                 </div>
+
+                                                {live?.error ? (
+                                                    <div className="asset-authoring-hint">{live.error}</div>
+                                                ) : null}
+                                                {live?.clientRegistrationRequired ? (
+                                                    <div className="asset-authoring-hint">
+                                                        This MCP server requires OAuth client registration. Fill client ID and secret, save the catalog, then retry authentication.
+                                                    </div>
+                                                ) : null}
 
                                                 <div className="asset-mcp-editor__grid">
                                                     <label className="asset-mcp-editor__field">
@@ -799,12 +910,12 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                                                 />
                                                             </label>
                                                             <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                                <span>Headers</span>
+                                                                <span>Static Headers</span>
                                                                 <textarea
                                                                     className="text-input asset-mcp-editor__textarea"
                                                                     value={entry.headersText}
                                                                     onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, headersText: e.target.value }))}
-                                                                    placeholder="Authorization=Bearer ..."
+                                                                    placeholder="X-Workspace=demo"
                                                                 />
                                                             </label>
                                                         </div>
@@ -852,6 +963,16 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                                 )}
 
                                                 <div className="asset-mcp-editor__actions">
+                                                    {canAuthenticate ? (
+                                                        <button className="asset-authoring-btn" onClick={() => entry.name.trim() && void authenticateMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>
+                                                            {pendingMcpAuthName === entry.name.trim() ? 'Waiting for auth…' : liveStatus === 'failed' ? 'Retry Auth' : 'Authenticate'}
+                                                        </button>
+                                                    ) : null}
+                                                    {canClearAuth ? (
+                                                        <button className="asset-authoring-btn" onClick={() => entry.name.trim() && void clearMcpAuth(entry.name.trim())} disabled={!entry.name.trim()}>
+                                                            Clear Auth
+                                                        </button>
+                                                    ) : null}
                                                     <button className="asset-authoring-btn" onClick={() => entry.name.trim() && void connectMcpServer(entry.name.trim())} disabled={!entry.name.trim() || !entry.enabled}>
                                                         Connect
                                                     </button>

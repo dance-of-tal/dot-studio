@@ -191,9 +191,9 @@ export default function App() {
       showDropWarning(`Model ${normalized.modelPlaceholder.provider}/${normalized.modelPlaceholder.modelId} is not available in this Studio runtime. A placeholder was kept so you can pick a replacement.`);
     }
     const declaredMcpNames = extractMcpServerNamesFromConfig(asset.mcpConfig);
-    const unresolvedMcpNames = declaredMcpNames.filter((name) => !(normalized.mcpServerNames || []).includes(name));
+    const unresolvedMcpNames = declaredMcpNames.filter((name) => !(normalized.mcpBindingMap?.[name] || '').trim());
     if (unresolvedMcpNames.length > 0) {
-      showDropWarning(`Imported MCP placeholders need mapping in Settings: ${unresolvedMcpNames.join(', ')}`);
+      showDropWarning(`Imported MCP placeholders need mapping in the performer editor or Asset Library: ${unresolvedMcpNames.join(', ')}`);
     }
     return normalized;
   };

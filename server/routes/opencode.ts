@@ -10,11 +10,44 @@ import { requestDirectoryQuery, resolveRequestWorkingDir } from '../lib/request-
 import { canRestartOpencodeSidecar, isManagedOpencode, restartOpencodeSidecar } from '../lib/opencode-sidecar.js'
 import { OPENCODE_URL } from '../lib/config.js'
 import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
-import { jsonOpencodeError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
+import { jsonOpencodeError, StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { listRuntimeModels } from '../lib/model-catalog.js'
-import { readProjectMcpCatalog, summarizeProjectMcpCatalog } from '../lib/project-config.js'
+import { readProjectConfigFile, readProjectMcpCatalog, summarizeProjectMcpCatalog } from '../lib/project-config.js'
+import { projectMcpEntryEnabled } from '../../shared/project-mcp.js'
 
 const opencode = new Hono()
+
+function mergeProjectConfig(
+    current: Record<string, unknown>,
+    patch: Record<string, unknown>,
+): Record<string, unknown> {
+    return {
+        ...current,
+        ...patch,
+        ...(patch.mcp && typeof patch.mcp === 'object' ? { mcp: patch.mcp } : {}),
+    }
+}
+
+async function validateMcpAuthRequest(c: Parameters<typeof requestDirectoryQuery>[0], name: string) {
+    const catalog = await readProjectMcpCatalog(resolveRequestWorkingDir(c))
+    const config = catalog[name]
+
+    if (!config) {
+        throw new StudioValidationError(`MCP server '${name}' is not defined in this project.`, 'fix_input', 404)
+    }
+
+    if (!projectMcpEntryEnabled(config)) {
+        throw new StudioValidationError(`MCP server '${name}' is disabled in this project.`, 'fix_input', 400)
+    }
+
+    if (!('type' in config) || config.type !== 'remote') {
+        throw new StudioValidationError(`MCP server '${name}' does not support OAuth authentication.`, 'fix_input', 400)
+    }
+
+    if (config.oauth === false) {
+        throw new StudioValidationError(`MCP server '${name}' does not support OAuth authentication.`, 'fix_input', 400)
+    }
+}
 
 // ── OpenCode Health ─────────────────────────────────────
 opencode.get('/api/opencode/health', async (c) => {
@@ -185,7 +218,10 @@ opencode.put('/api/config', async (c) => {
     const body = await c.req.json()
     try {
         const oc = await getOpencode()
-        const res = await oc.config.update({ ...requestDirectoryQuery(c), config: body })
+        const cwd = resolveRequestWorkingDir(c)
+        const current = await readProjectConfigFile(cwd)
+        const nextConfig = mergeProjectConfig(current, body && typeof body === 'object' ? body : {})
+        const res = await oc.config.update({ ...requestDirectoryQuery(c), config: nextConfig })
         const data = (res as any).data
         invalidate('mcp-servers')
         return c.json(data)
@@ -323,6 +359,66 @@ opencode.post('/api/mcp/:name/connect', async (c) => {
         return c.json(data)
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
+    }
+})
+
+opencode.post('/api/mcp/:name/auth/start', async (c) => {
+    try {
+        await validateMcpAuthRequest(c, c.req.param('name'))
+        const oc = await getOpencode()
+        const data = unwrapOpencodeResult<any>(await oc.mcp.auth.start({
+            name: c.req.param('name'),
+            ...requestDirectoryQuery(c),
+        }))
+        invalidate('mcp-servers')
+        return c.json(data)
+    } catch (err) {
+        return jsonOpencodeError(c, err, { defaultStatus: 500 })
+    }
+})
+
+opencode.post('/api/mcp/:name/auth/callback', async (c) => {
+    const { code } = await c.req.json<{ code: string }>().catch(() => ({ code: '' }))
+    try {
+        const oc = await getOpencode()
+        const data = unwrapOpencodeResult<any>(await oc.mcp.auth.callback({
+            name: c.req.param('name'),
+            ...requestDirectoryQuery(c),
+            code,
+        }))
+        invalidate('mcp-servers')
+        return c.json(data)
+    } catch (err) {
+        return jsonOpencodeError(c, err, { defaultStatus: 500 })
+    }
+})
+
+opencode.post('/api/mcp/:name/auth/authenticate', async (c) => {
+    try {
+        await validateMcpAuthRequest(c, c.req.param('name'))
+        const oc = await getOpencode()
+        const data = unwrapOpencodeResult<any>(await oc.mcp.auth.authenticate({
+            name: c.req.param('name'),
+            ...requestDirectoryQuery(c),
+        }))
+        invalidate('mcp-servers')
+        return c.json(data)
+    } catch (err) {
+        return jsonOpencodeError(c, err, { defaultStatus: 500 })
+    }
+})
+
+opencode.delete('/api/mcp/:name/auth', async (c) => {
+    try {
+        const oc = await getOpencode()
+        const data = unwrapOpencodeResult<any>(await oc.mcp.auth.remove({
+            name: c.req.param('name'),
+            ...requestDirectoryQuery(c),
+        }))
+        invalidate('mcp-servers')
+        return c.json(data)
+    } catch (err) {
+        return jsonOpencodeError(c, err, { defaultStatus: 500 })
     }
 })
 

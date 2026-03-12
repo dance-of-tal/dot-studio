@@ -36,6 +36,9 @@ export function summarizeProjectMcpCatalog(
             const config = catalog[name] as ProjectMcpEntryConfig | undefined
             const live = liveStatus[name]
             const status = live?.status || (config ? (projectMcpEntryEnabled(config) ? 'disconnected' : 'disabled') : 'unknown')
+            const oauthConfig = config && 'type' in config && config.type === 'remote'
+                ? config.oauth
+                : undefined
             return {
                 name,
                 status,
@@ -45,6 +48,13 @@ export function summarizeProjectMcpCatalog(
                 defined: !!config,
                 configType: projectMcpEntryType(config),
                 authStatus: status === 'needs_auth' ? 'needs_auth' : status === 'connected' ? 'ready' : 'n/a',
+                error: typeof live?.error === 'string' ? live.error : undefined,
+                oauthConfigured: !!(
+                    oauthConfig
+                    && typeof oauthConfig === 'object'
+                    && (oauthConfig.clientId || oauthConfig.clientSecret || oauthConfig.scope)
+                ),
+                clientRegistrationRequired: status === 'needs_client_registration',
             }
         })
 }

@@ -215,8 +215,18 @@ export function AssetDetailBody({
                 <>
                     <div className="asset-popover__section">
                         <div className="asset-popover__section-title">Capabilities</div>
+                        <div className="asset-popover__section-item">Status: {asset.status || 'unknown'}</div>
                         <div className="asset-popover__section-item">{asset.tools?.length || 0} Tools</div>
                         <div className="asset-popover__section-item">{asset.resources?.length || 0} Resources</div>
+                        {asset.authStatus === 'needs_auth' && (
+                            <div className="asset-popover__section-item">Authentication required</div>
+                        )}
+                        {asset.clientRegistrationRequired && (
+                            <div className="asset-popover__section-item">OAuth client registration required</div>
+                        )}
+                        {asset.error && (
+                            <div className="asset-popover__section-item">{asset.error}</div>
+                        )}
                     </div>
                     {Array.isArray(asset.tools) && asset.tools.length > 0 && (
                         <div className="asset-popover__section">

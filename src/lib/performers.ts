@@ -145,6 +145,27 @@ export function normalizeAssetMcpForStudio<T extends {
     }
 }
 
+export function buildAutoMcpBindingMap(
+    declaredMcpConfig: Record<string, any> | null | undefined,
+    availableServerNames: string[],
+) {
+    const allowed = new Set(availableServerNames.filter(Boolean))
+    return Object.fromEntries(
+        extractMcpServerNamesFromConfig(declaredMcpConfig)
+            .filter((name) => allowed.has(name))
+            .map((name) => [name, name]),
+    )
+}
+
+export function resolveMappedMcpServerNames(
+    performer: Pick<PerformerNode, 'mcpServerNames' | 'mcpBindingMap'>,
+) {
+    return unique([
+        ...(performer.mcpServerNames || []),
+        ...Object.values(performer.mcpBindingMap || {}).filter(Boolean),
+    ])
+}
+
 export function resolvePerformerAgentId(
     performer: Pick<PerformerNode, 'agentId' | 'planMode'>,
 ): string {
@@ -220,10 +241,18 @@ export function registryUrnsFromRefs(refs: AssetRef[] | undefined | null): strin
 }
 
 export function unresolvedDeclaredMcpServerNames(
-    performer: Pick<PerformerNode, 'mcpServerNames' | 'declaredMcpConfig'>,
+    performer: Pick<PerformerNode, 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig'>,
 ): string[] {
     const declaredNames = extractMcpServerNamesFromConfig(performer.declaredMcpConfig)
-    return declaredNames.filter((name) => !(performer.mcpServerNames || []).includes(name))
+    const bindings = performer.mcpBindingMap || {}
+    const selected = new Set(performer.mcpServerNames || [])
+    return declaredNames.filter((name) => {
+        const mapped = bindings[name]
+        if (mapped && mapped.trim()) {
+            return false
+        }
+        return !selected.has(name)
+    })
 }
 
 export function modelConfigToAssetValue(model: ModelConfig | null | undefined): string | undefined {
@@ -234,17 +263,11 @@ export function modelConfigToAssetValue(model: ModelConfig | null | undefined): 
 }
 
 export function performerMcpConfigForAsset(
-    performer: Pick<PerformerNode, 'mcpServerNames' | 'declaredMcpConfig'>,
+    performer: Pick<PerformerNode, 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig'>,
 ): Record<string, unknown> | undefined {
-    const serverNames = unique(performer.mcpServerNames || [])
+    const serverNames = resolveMappedMcpServerNames(performer)
     if (performer.declaredMcpConfig && typeof performer.declaredMcpConfig === 'object') {
-        const declaredServerNames = extractMcpServerNamesFromConfig(performer.declaredMcpConfig)
-        if (
-            declaredServerNames.length === serverNames.length
-            && declaredServerNames.every((name) => serverNames.includes(name))
-        ) {
-            return performer.declaredMcpConfig
-        }
+        return performer.declaredMcpConfig
     }
 
     if (serverNames.length === 0) {
@@ -257,7 +280,7 @@ export function performerMcpConfigForAsset(
 }
 
 export function buildPerformerAssetPayload(
-    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'model' | 'mcpServerNames' | 'declaredMcpConfig'>,
+    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'model' | 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig'>,
     options: {
         name: string
         description?: string
@@ -293,7 +316,7 @@ export function buildPerformerAssetPayload(
                 .map((name) => [name, options.projectMcpConfig?.[name]]),
         )
         : performerMcpConfigForAsset(performer)
-    if (performer.mcpServerNames.length > 0 && Object.keys(mcpConfig || {}).length !== performer.mcpServerNames.length) {
+    if (resolveMappedMcpServerNames(performer).length > 0 && !mcpConfig) {
         throw new Error('Map imported MCP placeholders to project MCP servers before publishing.')
     }
     const description = options.description?.trim() || options.name.trim()
@@ -355,11 +378,15 @@ export function normalizePerformerAssetInput(asset: {
     model?: ModelConfig | string | null
     modelPlaceholder?: ModelConfig | null
     mcpServerNames?: string[]
+    mcpBindingMap?: Record<string, string>
     mcpConfig?: Record<string, any> | null
 }) {
     const declaredMcpConfig = asset.mcpConfig && typeof asset.mcpConfig === 'object'
         ? asset.mcpConfig
         : null
+    const normalizedMcpServerNames = unique(asset.mcpServerNames || extractMcpServerNamesFromConfig(declaredMcpConfig))
+    const autoBindingMap = buildAutoMcpBindingMap(declaredMcpConfig, normalizedMcpServerNames)
+    const directMcpServerNames = normalizedMcpServerNames.filter((name) => !(name in autoBindingMap))
 
     return {
         name: asset.name,
@@ -369,7 +396,11 @@ export function normalizePerformerAssetInput(asset: {
             ? asset.model
             : modelConfigFromAssetValue(asset.model),
         modelPlaceholder: asset.modelPlaceholder || null,
-        mcpServerNames: asset.mcpServerNames || extractMcpServerNamesFromConfig(declaredMcpConfig),
+        mcpServerNames: directMcpServerNames,
+        mcpBindingMap: {
+            ...autoBindingMap,
+            ...(asset.mcpBindingMap || {}),
+        },
         declaredMcpConfig,
         meta: asset.urn ? { derivedFrom: asset.urn, publishBindingUrn: asset.urn } : undefined,
     }
@@ -413,7 +444,7 @@ function resolveAssetCard(
 }
 
 export function resolvePerformerPresentation(
-    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'mcpServerNames' | 'declaredMcpConfig'>,
+    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig'>,
     assetMap: Record<string, AssetCard>,
     mcpMap: Record<string, McpServer>,
     draftMap: Record<string, DraftAsset> = {},
@@ -423,23 +454,32 @@ export function resolvePerformerPresentation(
         danceAssets: (performer.danceRefs || [])
             .map((ref) => resolveAssetCard(ref, assetMap, draftMap))
             .filter((asset): asset is AssetCard => asset !== null),
-        mcpServers: (performer.mcpServerNames || []).map((name) => (
+        mcpServers: resolveMappedMcpServerNames(performer).map((name) => (
             mcpMap[name] || {
                 name,
-                status: 'unavailable',
+                status: 'unknown',
                 tools: [],
                 resources: [],
             }
         )),
-        mcpPlaceholders: extractMcpServerNamesFromConfig(performer.declaredMcpConfig).filter(
-            (name) => !(performer.mcpServerNames || []).includes(name),
-        ),
+        mcpPlaceholders: unresolvedDeclaredMcpServerNames(performer),
+        mappedMcpPlaceholders: Object.entries(performer.mcpBindingMap || {})
+            .filter(([placeholderName, serverName]) => (
+                !!placeholderName
+                && !!serverName
+                && extractMcpServerNamesFromConfig(performer.declaredMcpConfig).includes(placeholderName)
+            ))
+            .map(([placeholderName, serverName]) => ({
+                placeholderName,
+                serverName,
+                server: mcpMap[serverName] || null,
+            })),
         declaredMcpServerNames: extractMcpServerNamesFromConfig(performer.declaredMcpConfig),
     }
 }
 
 export function resolvePerformerRuntimeConfig(
-    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'model' | 'modelVariant' | 'mcpServerNames' | 'danceDeliveryMode' | 'planMode' | 'agentId'>,
+    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'model' | 'modelVariant' | 'mcpServerNames' | 'mcpBindingMap' | 'danceDeliveryMode' | 'planMode' | 'agentId'>,
 ) {
     return {
         talRef: performer.talRef || null,
@@ -447,21 +487,26 @@ export function resolvePerformerRuntimeConfig(
         model: performer.model || null,
         modelVariant: performer.modelVariant || null,
         agentId: resolvePerformerAgentId(performer),
-        mcpServerNames: performer.mcpServerNames || [],
+        mcpServerNames: resolveMappedMcpServerNames(performer),
         danceDeliveryMode: performer.danceDeliveryMode || 'auto',
         planMode: !!performer.planMode,
     }
 }
 
 export function buildPerformerConfigHash(
-    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'mcpServerNames' | 'declaredMcpConfig' | 'danceDeliveryMode' | 'planMode' | 'modelVariant' | 'agentId'> & {
+    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig' | 'danceDeliveryMode' | 'planMode' | 'modelVariant' | 'agentId'> & {
         model: ModelConfig | null
     },
 ): string {
     const normalized = {
         talRef: assetRefKey(performer.talRef),
         danceRefs: [...assetRefKeys(performer.danceRefs)].sort(),
-        mcpServerNames: [...performer.mcpServerNames].sort(),
+        mcpServerNames: [...resolveMappedMcpServerNames(performer)].sort(),
+        mcpBindingMap: Object.fromEntries(
+            Object.entries(performer.mcpBindingMap || {})
+                .filter(([, value]) => !!value)
+                .sort(([left], [right]) => left.localeCompare(right)),
+        ),
         declaredMcpServerNames: extractMcpServerNamesFromConfig(performer.declaredMcpConfig),
         model: performer.model ? {
             provider: performer.model.provider,
@@ -488,6 +533,7 @@ export function createPerformerNode(input: {
     modelVariant?: string | null
     agentId?: string | null
     mcpServerNames?: string[]
+    mcpBindingMap?: Record<string, string>
     declaredMcpConfig?: Record<string, any> | null
     danceDeliveryMode?: DanceDeliveryMode
     planMode?: boolean
@@ -518,6 +564,9 @@ export function createPerformerNode(input: {
         talRef: input.talRef || null,
         danceRefs: input.danceRefs || [],
         mcpServerNames: unique(input.mcpServerNames || []),
+        mcpBindingMap: Object.fromEntries(
+            Object.entries(input.mcpBindingMap || {}).filter(([placeholderName, serverName]) => !!placeholderName && !!serverName),
+        ),
         declaredMcpConfig: input.declaredMcpConfig || null,
         configHash: '',
         danceDeliveryMode: input.danceDeliveryMode || 'auto',
@@ -540,6 +589,7 @@ export function createPerformerNodeFromAsset(input: {
         model?: ModelConfig | string | null
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
+        mcpBindingMap?: Record<string, string>
         mcpConfig?: Record<string, any> | null
     }
     x: number
@@ -563,6 +613,7 @@ export function createPerformerNodeFromAsset(input: {
         modelVariant: null,
         agentId: null,
         mcpServerNames: normalized.mcpServerNames,
+        mcpBindingMap: normalized.mcpBindingMap,
         declaredMcpConfig: normalized.declaredMcpConfig,
         hidden: input.hidden,
         meta: normalized.meta,
@@ -598,6 +649,7 @@ export function clonePerformerNode(input: {
         modelVariant: input.source.modelVariant || null,
         agentId: input.source.agentId || null,
         mcpServerNames: input.source.mcpServerNames,
+        mcpBindingMap: input.source.mcpBindingMap,
         declaredMcpConfig: input.source.declaredMcpConfig,
         danceDeliveryMode: input.source.danceDeliveryMode,
         planMode: input.source.planMode,

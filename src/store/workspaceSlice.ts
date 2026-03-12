@@ -186,6 +186,7 @@ export const createWorkspaceSlice: StateCreator<
                     modelPlaceholder: normalized.modelPlaceholder,
                     modelVariant: null,
                     mcpServerNames: normalized.mcpServerNames,
+                    mcpBindingMap: normalized.mcpBindingMap,
                     declaredMcpConfig: normalized.declaredMcpConfig,
                     meta: normalized.meta,
                 })
@@ -464,6 +465,7 @@ export const createWorkspaceSlice: StateCreator<
                 configHash: sessionConfigMap[a.id] || configHash,
                 activeSessionId: sessionMap[a.id] || a.activeSessionId,
                 declaredMcpConfig: a.declaredMcpConfig || null,
+                mcpBindingMap: a.mcpBindingMap || {},
                 modelPlaceholder: a.modelPlaceholder || null,
             }
         })
@@ -510,6 +512,7 @@ export const createWorkspaceSlice: StateCreator<
                     modelPlaceholder: performer.modelPlaceholder || null,
                     modelVariant: performer.modelVariant || null,
                     mcpServerNames: performer.mcpServerNames || [],
+                    mcpBindingMap: performer.mcpBindingMap || {},
                     declaredMcpConfig: performer.declaredMcpConfig || null,
                     danceDeliveryMode: performer.danceDeliveryMode || 'auto',
                     planMode: performer.planMode || false,
@@ -968,10 +971,31 @@ export const createWorkspaceSlice: StateCreator<
             a.id === performerId
                 ? (() => {
                     const mcpServerNames = a.mcpServerNames.filter(name => name !== mcpName)
-                    return applyPerformerPatch(a, { mcpServerNames })
+                    const mcpBindingMap = Object.fromEntries(
+                        Object.entries(a.mcpBindingMap || {}).filter(([, serverName]) => serverName !== mcpName),
+                    )
+                    return applyPerformerPatch(a, { mcpServerNames, mcpBindingMap })
                 })()
                 : a
         ),
+        stageDirty: true,
+    })),
+
+    setPerformerMcpBinding: (performerId, placeholderName, serverName) => set((s) => ({
+        performers: s.performers.map((performer) => {
+            if (performer.id !== performerId) {
+                return performer
+            }
+            const mcpBindingMap = {
+                ...(performer.mcpBindingMap || {}),
+            }
+            if (serverName && serverName.trim()) {
+                mcpBindingMap[placeholderName] = serverName.trim()
+            } else {
+                delete mcpBindingMap[placeholderName]
+            }
+            return applyPerformerPatch(performer, { mcpBindingMap })
+        }),
         stageDirty: true,
     })),
 

@@ -5,6 +5,8 @@ import { api } from '../api'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers'
 import { formatStudioApiErrorComment } from '../lib/api-errors'
 import { mapSessionMessagesToChatMessages, upsertAssistantStreamingMessage } from '../lib/chat-messages'
+import { showToast } from '../lib/toast'
+import { queryClient } from '../lib/query-client'
 
 let eventSourceInstance: EventSource | null = null
 let eventSourceWorkingDir: string | null = null
@@ -369,6 +371,31 @@ export const createIntegrationSlice: StateCreator<
 
                 if (data.type === 'lsp.updated') {
                     get().fetchLspStatus()
+                    return
+                }
+
+                if (data.type === 'mcp.tools.changed') {
+                    const workingDir = get().workingDir
+                    queryClient.invalidateQueries({ queryKey: ['mcp-servers', workingDir] })
+                    queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
+                    return
+                }
+
+                if (data.type === 'mcp.browser.open.failed') {
+                    const mcpName = data.properties?.mcpName
+                    const url = data.properties?.url
+                    if (typeof mcpName !== 'string' || typeof url !== 'string' || !url.trim()) {
+                        return
+                    }
+                    showToast(`Studio could not open the browser for MCP auth (${mcpName}).`, 'warning', {
+                        title: 'MCP auth needs browser',
+                        actionLabel: 'Open auth',
+                        onAction: () => {
+                            window.open(url, '_blank')
+                        },
+                        dedupeKey: `mcp-auth-open:${mcpName}`,
+                        durationMs: 8000,
+                    })
                     return
                 }
 

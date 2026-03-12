@@ -10,7 +10,7 @@ import ActAreaFrame from './ActAreaFrame';
 import MarkdownEditorFrame from './MarkdownEditorFrame';
 import CanvasTerminalFrame from './CanvasTerminalFrame';
 import CanvasTrackingFrame from './CanvasTrackingFrame';
-import { hasModelConfig, resolvePerformerAgentId } from '../../lib/performers';
+import { hasModelConfig, resolvePerformerAgentId, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { resolveActNodeLabel, resolveEffectiveActNodeSession } from '../../lib/acts';
 import { computeActAutoLayout } from '../../lib/act-layout';
 import { coerceStudioApiError } from '../../lib/api-errors';
@@ -367,7 +367,7 @@ export default function CanvasArea() {
                                 danceSummary: danceSummaryLabel(performer.danceRefs, drafts),
                                 modelLabel: performer.model?.modelId || null,
                                 agentLabel: resolvePerformerAgentId(performer),
-                                mcpSummary: performer.mcpServerNames.length ? `${performer.mcpServerNames.length} server${performer.mcpServerNames.length === 1 ? '' : 's'}` : null,
+                                mcpSummary: resolvePerformerRuntimeConfig(performer).mcpServerNames.length ? `${resolvePerformerRuntimeConfig(performer).mcpServerNames.length} server${resolvePerformerRuntimeConfig(performer).mcpServerNames.length === 1 ? '' : 's'}` : null,
                                 planMode: !!performer.planMode,
                                 scope: performer.scope,
                             },
@@ -472,7 +472,7 @@ export default function CanvasArea() {
                 onDeactivateTransform: () => deactivateTransformTarget('performer', a.id),
                 talLabel: assetRefLabel(a.talRef, drafts),
                 danceSummary: danceSummaryLabel(a.danceRefs, drafts),
-                mcpSummary: a.mcpServerNames.length ? `${a.mcpServerNames.length} server${a.mcpServerNames.length === 1 ? '' : 's'}` : null,
+                mcpSummary: resolvePerformerRuntimeConfig(a).mcpServerNames.length ? `${resolvePerformerRuntimeConfig(a).mcpServerNames.length} server${resolvePerformerRuntimeConfig(a).mcpServerNames.length === 1 ? '' : 's'}` : null,
                 editMode: editingTarget?.type === 'performer' && editingTarget.id === a.id,
             } as Record<string, unknown>
         }));

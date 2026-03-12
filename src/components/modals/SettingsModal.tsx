@@ -633,6 +633,11 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                     Hide providers you do not want surfaced in this project. This is the cleanest way to reduce the model list in Studio.
                                 </div>
 
+                                <div className="settings-note">
+                                    <div className="settings-note__title">Project MCP servers</div>
+                                    Manage MCP definitions, authentication, and connection state from the Asset Library MCP section.
+                                </div>
+
                                 <div className="settings-checkbox-list">
                                     {providers.map((provider) => (
                                         <label key={provider.id} className="settings-checkbox">

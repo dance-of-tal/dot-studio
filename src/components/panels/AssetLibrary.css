@@ -130,7 +130,8 @@
 }
 
 .asset-mcp-editor__status--needs_auth,
-.asset-mcp-editor__status--failed {
+.asset-mcp-editor__status--failed,
+.asset-mcp-editor__status--needs_client_registration {
     color: #f59e0b;
     background: rgba(245, 158, 11, 0.12);
 }

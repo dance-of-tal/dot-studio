@@ -11,7 +11,7 @@ export type RuntimeToolResolution = {
     unavailableTools: string[]
     unavailableDetails: Array<{
         serverName: string
-        reason: 'not_defined' | 'disabled' | 'needs_auth' | 'connect_failed' | 'connected_but_no_tools_for_model'
+        reason: 'not_defined' | 'disabled' | 'needs_auth' | 'needs_client_registration' | 'connect_failed' | 'connected_but_no_tools_for_model'
         toolId?: string
         detail?: string
     }>
@@ -34,6 +34,9 @@ export function describeUnavailableRuntimeTools(
         }
         if (detail.reason === 'needs_auth') {
             return `${detail.serverName}: authentication required`
+        }
+        if (detail.reason === 'needs_client_registration') {
+            return `${detail.serverName}: OAuth client registration required`
         }
         if (detail.reason === 'disabled') {
             return `${detail.serverName}: disabled in project config`
@@ -124,6 +127,17 @@ async function ensureConnectedServer(
         }
     }
 
+    if (current?.status === 'needs_client_registration') {
+        return {
+            statusMap,
+            unavailable: {
+                serverName,
+                reason: 'needs_client_registration' as const,
+                detail: current?.error || 'Server requires OAuth client registration before it can connect.',
+            },
+        }
+    }
+
     try {
         await oc.mcp.connect({
             name: serverName,
@@ -156,6 +170,17 @@ async function ensureConnectedServer(
                 serverName,
                 reason: 'needs_auth' as const,
                 detail: 'Server requires authentication before it can connect.',
+            },
+        }
+    }
+
+    if (next?.status === 'needs_client_registration') {
+        return {
+            statusMap: refreshed,
+            unavailable: {
+                serverName,
+                reason: 'needs_client_registration' as const,
+                detail: next?.error || 'Server requires OAuth client registration before it can connect.',
             },
         }
     }

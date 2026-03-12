@@ -276,17 +276,33 @@ export const api = {
     // ── MCP (from OpenCode SDK) ───────────────────────────
     mcp: {
         list: () =>
-            fetchJSON<Array<{
-                name: string
-                status: string
-                tools: Array<{ name: string; description?: string }>
-                resources: Array<any>
-            }>>('/api/mcp/servers'),
+            fetchJSON<import('./types').McpServer[]>('/api/mcp/servers'),
 
         add: (name: string, config: { command: string; args?: string[] } | { url: string }) =>
             fetchJSON<any>('/api/mcp/add', {
                 method: 'POST',
                 body: JSON.stringify({ name, config }),
+            }),
+
+        authStart: (name: string) =>
+            fetchJSON<{ authorizationUrl: string }>(`/api/mcp/${name}/auth/start`, {
+                method: 'POST',
+            }),
+
+        authCallback: (name: string, code: string) =>
+            fetchJSON<any>(`/api/mcp/${name}/auth/callback`, {
+                method: 'POST',
+                body: JSON.stringify({ code }),
+            }),
+
+        authenticate: (name: string) =>
+            fetchJSON<any>(`/api/mcp/${name}/auth/authenticate`, {
+                method: 'POST',
+            }),
+
+        clearAuth: (name: string) =>
+            fetchJSON<{ success: true }>(`/api/mcp/${name}/auth`, {
+                method: 'DELETE',
             }),
 
         connect: (name: string) =>

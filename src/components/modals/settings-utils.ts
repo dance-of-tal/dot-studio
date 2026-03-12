@@ -21,7 +21,7 @@ export type ProviderCard = ProviderSummary & {
     authMethods: ProviderAuthMethod[]
 }
 
-export type SettingsTab = 'runtime' | 'project' | 'providers' | 'mcp'
+export type SettingsTab = 'runtime' | 'project' | 'providers'
 export type ProviderListFilter = 'popular' | 'connected' | 'all'
 export type McpStatusTone = 'connected' | 'disconnected' | 'needs_auth' | 'failed' | 'disabled'
 

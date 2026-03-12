@@ -4,11 +4,11 @@ import { NodeResizer, useStore } from '@xyflow/react';
 import { useStudioStore } from '../../store';
 import { useSlashCommands } from '../../hooks/useSlashCommands';
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions';
-import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries';
+import { useAgents, useAssetKind, useAssets, useMcpServers, useRuntimeTools } from '../../hooks/queries';
 import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil } from 'lucide-react';
 import ThreadBody from './ThreadBody';
 import type { AssetCard, AssetRef, DraftAsset } from '../../types';
-import { assetRefKey, buildAssetCardMap, buildMcpServerMap, hasModelConfig, resolvePerformerAgentId, resolvePerformerPresentation } from '../../lib/performers';
+import { assetRefKey, buildAssetCardMap, buildMcpServerMap, hasModelConfig, resolvePerformerAgentId, resolvePerformerPresentation, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { api } from '../../api';
 import { showToast } from '../../lib/toast';
 import { loadMaterialFileIconForPath } from '../../lib/material-file-icons';
@@ -136,6 +136,7 @@ export default function AgentFrame({ data, id }: any) {
         setPerformerModel,
         setPerformerModelVariant,
         removePerformerMcp,
+        setPerformerMcpBinding,
         removePerformerDance,
         setPerformerAutoCompact,
     } = useStudioStore();
@@ -225,6 +226,47 @@ export default function AgentFrame({ data, id }: any) {
                 declaredMcpServerNames: [],
             }
     ), [assetInventory, drafts, mcpServers, performer]);
+    const runtimeConfig = useMemo(
+        () => performer ? resolvePerformerRuntimeConfig(performer) : null,
+        [performer],
+    );
+    const { data: runtimeTools } = useRuntimeTools(
+        runtimeConfig?.model || null,
+        runtimeConfig?.mcpServerNames || [],
+        (isSelected || isEditMode) && !!runtimeConfig,
+    );
+    const mcpBindingRows = useMemo(
+        () => (performerPresentation.declaredMcpServerNames || [])
+            .map((placeholderName) => ({
+                placeholderName,
+                serverName: performer?.mcpBindingMap?.[placeholderName] || null,
+            })),
+        [performer?.mcpBindingMap, performerPresentation.declaredMcpServerNames],
+    );
+    const mcpBindingOptions = useMemo(
+        () => mcpServers.map((server) => ({
+            name: server.name,
+            disabled: server.enabled === false,
+        })),
+        [mcpServers],
+    );
+
+    useEffect(() => {
+        if (!performer?.mcpBindingMap) {
+            return;
+        }
+        const validNames = new Set(
+            mcpServers
+                .filter((server) => server.enabled !== false)
+                .map((server) => server.name),
+        );
+        for (const [placeholderName, serverName] of Object.entries(performer.mcpBindingMap)) {
+            if (!serverName || validNames.has(serverName)) {
+                continue;
+            }
+            setPerformerMcpBinding(id, placeholderName, null);
+        }
+    }, [id, mcpServers, performer?.mcpBindingMap, setPerformerMcpBinding]);
 
     const openAssetEditor = useCallback(async (
         kind: 'tal' | 'dance',
@@ -491,10 +533,33 @@ export default function AgentFrame({ data, id }: any) {
             filename: a.name
         }));
 
+        if (runtimeTools && runtimeTools.selectedMcpServers.length > 0 && runtimeTools.resolvedTools.length === 0 && runtimeTools.unavailableDetails.length > 0) {
+            showToast(
+                `Selected MCP servers are unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.`,
+                'error',
+                {
+                    title: 'MCP tools unavailable',
+                    dedupeKey: `performer-mcp-block:${id}`,
+                },
+            );
+            return;
+        }
+
+        if (runtimeTools && runtimeTools.resolvedTools.length > 0 && runtimeTools.unavailableDetails.length > 0) {
+            showToast(
+                `Some MCP tools are unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.`,
+                'warning',
+                {
+                    title: 'Partial MCP availability',
+                    dedupeKey: `performer-mcp-warn:${id}`,
+                },
+            );
+        }
+
         sendMessage(id, text, formattedAttachments, turnDanceSelections.map((selection) => selection.ref));
         setAttachments([]);
         setTurnDanceSelections([]);
-    }, [input, isLoading, modelConfigured, danceSlashMatch, id, executeSlashCommand, setShowSlashMenu, attachments, sendMessage, setIsMentioning, turnDanceSelections]);
+    }, [input, isLoading, modelConfigured, danceSlashMatch, id, executeSlashCommand, setShowSlashMenu, attachments, sendMessage, setIsMentioning, turnDanceSelections, runtimeTools]);
 
     const handleInputChange = (val: string) => {
         onSlashInputChange(val);
@@ -801,7 +866,10 @@ export default function AgentFrame({ data, id }: any) {
                             onRemoveDance={(ref) => removePerformerDance(id, ref.kind === 'draft' ? ref.draftId : ref.urn)}
                             onClearModel={() => setPerformerModel(id, null)}
                             onRemoveMcp={(serverName) => removePerformerMcp(id, serverName)}
+                            onSetMcpBinding={(placeholderName, serverName) => setPerformerMcpBinding(id, placeholderName, serverName)}
                             onAutoCompactChange={(enabled) => setPerformerAutoCompact(id, enabled)}
+                            mcpBindings={mcpBindingRows}
+                            mcpOptions={mcpBindingOptions}
                             runtimeControls={(
                                 <>
                                     <AgentSelect
@@ -817,6 +885,16 @@ export default function AgentFrame({ data, id }: any) {
                                     />
                                 </>
                             )}
+                            runtimeStatus={runtimeTools ? (
+                                <div className="adv-section__summary">
+                                    {runtimeTools.resolvedTools.length > 0
+                                        ? `Resolved tools: ${runtimeTools.resolvedTools.join(', ')}`
+                                        : runtimeTools.selectedMcpServers.length > 0
+                                            ? 'No MCP tools resolved for the current model yet.'
+                                            : 'No MCP servers selected.'}
+                                    {runtimeTools.unavailableDetails.length > 0 ? ` Unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.` : ''}
+                                </div>
+                            ) : null}
                         />
                     ) : null}
                 </>
