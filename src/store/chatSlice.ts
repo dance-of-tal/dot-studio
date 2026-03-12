@@ -17,13 +17,30 @@ export const createChatSlice: StateCreator<
     [],
     ChatSlice
 > = (set, get) => {
+    const getPerformerById = (performerId: string) => (
+        get().performers.find((item: any) => item.id === performerId) as any
+    )
+
+    const getPerformerSessionId = (performerId: string) => get().sessionMap[performerId]
+
+    const syncPerformerMessages = async (performerId: string, sessionId: string) => {
+        const messages = await api.chat.messages(sessionId)
+        set((state) => ({
+            chats: {
+                ...state.chats,
+                [performerId]: mapSessionMessagesToChatMessages(messages),
+            },
+        }))
+        return messages
+    }
+
     const createFreshSession = async (
         performerId: string,
         options?: {
             resetMessages?: Array<{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }>
         }
     ) => {
-        const performer = get().performers.find((item: any) => item.id === performerId) as any
+        const performer = getPerformerById(performerId)
         const name = performer?.name || 'Untitled Performer'
         const configHash = performer ? buildPerformerConfigHash(performer) : ''
         const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
@@ -168,7 +185,7 @@ export const createChatSlice: StateCreator<
             }
 
             try {
-                const messages = await api.chat.messages(sessionId)
+                const messages = await syncPerformerMessages(performerId, sessionId)
                 const mapped = mapSessionMessagesToChatMessages(messages)
                 const latestAssistant = [...messages]
                     .reverse()
@@ -277,7 +294,7 @@ export const createChatSlice: StateCreator<
         sendMessage: async (performerId, text, attachments, extraDanceRefs = []) => {
             const { sessionMap, sessionConfigMap, addChatMessage } = get()
             let sessionId: string | undefined = sessionMap[performerId]
-            const performer = get().performers.find((a: any) => a.id === performerId) as any
+            const performer = getPerformerById(performerId)
             const currentConfigHash = performer ? buildPerformerConfigHash(performer) : ''
             const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
                 talRef: null,
@@ -470,7 +487,7 @@ export const createChatSlice: StateCreator<
 
         executeSlashCommand: async (performerId, cmd) => {
             const state = get()
-            const sessionId = state.sessionMap[performerId]
+            const sessionId = getPerformerSessionId(performerId)
             if (!sessionId) return
 
             set({ loadingPerformerId: performerId })
@@ -497,13 +514,7 @@ export const createChatSlice: StateCreator<
 
                 // Re-sync messages for undo/redo
                 if (cmd === '/undo' || cmd === '/redo') {
-                    const newMsgs = await api.chat.messages(sessionId)
-                    set((s) => ({
-                        chats: {
-                            ...s.chats,
-                            [performerId]: mapSessionMessagesToChatMessages(newMsgs),
-                        }
-                    }))
+                    await syncPerformerMessages(performerId, sessionId)
                 }
             } catch (e: any) {
                 state.addChatMessage(performerId, {
@@ -533,7 +544,7 @@ export const createChatSlice: StateCreator<
         }),
 
         startNewSession: async (performerId) => {
-            const performer = get().performers.find((item: any) => item.id === performerId) as any
+            const performer = getPerformerById(performerId)
             if (!performer || !hasModelConfig(performer.model)) {
                 get().clearSession(performerId)
                 return
@@ -558,18 +569,11 @@ export const createChatSlice: StateCreator<
         },
 
         abortChat: async (performerId) => {
-            const state = get()
-            const sessionId = state.sessionMap[performerId]
+            const sessionId = getPerformerSessionId(performerId)
             if (sessionId) {
                 try {
                     await api.chat.abort(sessionId)
-                    const newMsgs = await api.chat.messages(sessionId)
-                    set((current) => ({
-                        chats: {
-                            ...current.chats,
-                            [performerId]: mapSessionMessagesToChatMessages(newMsgs),
-                        },
-                    }))
+                    await syncPerformerMessages(performerId, sessionId)
                     appendPerformerSystemMessage(performerId, 'Stopped the current turn.')
                 } catch (err) {
                     console.error('Failed to abort chat', err)
@@ -580,9 +584,8 @@ export const createChatSlice: StateCreator<
         },
 
         summarizeSession: async (performerId) => {
-            const state = get()
-            const sessionId = state.sessionMap[performerId]
-            const performer = state.performers.find((item: any) => item.id === performerId) as any
+            const sessionId = getPerformerSessionId(performerId)
+            const performer = getPerformerById(performerId)
             const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : null
 
             if (!sessionId || !runtimeConfig?.model || !hasModelConfig(runtimeConfig.model)) {
@@ -599,13 +602,7 @@ export const createChatSlice: StateCreator<
                     providerID: runtimeConfig.model.provider,
                     modelID: runtimeConfig.model.modelId,
                 })
-                const newMsgs = await api.chat.messages(sessionId)
-                set((s) => ({
-                    chats: {
-                        ...s.chats,
-                        [performerId]: mapSessionMessagesToChatMessages(newMsgs),
-                    }
-                }))
+                await syncPerformerMessages(performerId, sessionId)
                 appendPerformerSystemMessage(performerId, 'Thread compacted.')
             } catch (e: any) {
                 appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(e))
@@ -621,13 +618,7 @@ export const createChatSlice: StateCreator<
 
             for (const [performerId, sessionId] of sessionEntries) {
                 try {
-                    const msgs = await api.chat.messages(sessionId)
-                    set((s) => ({
-                        chats: {
-                            ...s.chats,
-                            [performerId]: mapSessionMessagesToChatMessages(msgs),
-                        }
-                    }))
+                    await syncPerformerMessages(performerId, sessionId)
                 } catch (err) {
                     console.error(`Failed to rehydrate session for performer ${performerId}:`, err)
                 }
@@ -647,7 +638,7 @@ export const createChatSlice: StateCreator<
                         const newMap = { ...state.sessionMap }
                         newMap[performerId] = newSessionId
                         const newConfigMap = { ...state.sessionConfigMap }
-                        const performer = get().performers.find((a: any) => a.id === performerId) as any
+                        const performer = getPerformerById(performerId)
                         newConfigMap[performerId] = performer ? buildPerformerConfigHash(performer) : ''
                         return { sessionMap: newMap, sessionConfigMap: newConfigMap }
                     })
