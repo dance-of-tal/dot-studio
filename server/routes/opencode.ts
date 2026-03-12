@@ -17,6 +17,44 @@ import { projectMcpEntryEnabled } from '../../shared/project-mcp.js'
 
 const opencode = new Hono()
 
+function opencodeModeMeta() {
+    return {
+        managed: isManagedOpencode(),
+        mode: isManagedOpencode() ? 'managed' as const : 'external' as const,
+        restartAvailable: canRestartOpencodeSidecar(),
+    }
+}
+
+function responseData<T>(response: unknown, fallback: T): T {
+    const data = (response as any).data
+    return (data || fallback) as T
+}
+
+async function readProjectConfigFromOpencode(c: Parameters<typeof requestDirectoryQuery>[0]) {
+    const oc = await getOpencode()
+    const cwd = resolveRequestWorkingDir(c)
+    const res = await oc.file.read({
+        directory: cwd,
+        path: 'config.json',
+    })
+    const data = responseData<any>(res, {})
+    const raw = typeof data?.content === 'string' ? data.content : '{}'
+    return {
+        cwd,
+        config: JSON.parse(raw),
+    }
+}
+
+async function runMcpMutation(
+    c: Parameters<typeof requestDirectoryQuery>[0],
+    action: (oc: Awaited<ReturnType<typeof getOpencode>>) => Promise<unknown>,
+) {
+    const oc = await getOpencode()
+    const result = await action(oc)
+    invalidate('mcp-servers')
+    return c.json(responseData(result, {}))
+}
+
 function mergeProjectConfig(
     current: Record<string, unknown>,
     patch: Record<string, unknown>,
@@ -54,23 +92,19 @@ opencode.get('/api/opencode/health', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.project.current(requestDirectoryQuery(c))
-        const data = (res as any).data
+        const data = responseData(res, null)
         return c.json({
             connected: true,
             url: OPENCODE_URL,
             project: data,
-            managed: isManagedOpencode(),
-            mode: isManagedOpencode() ? 'managed' : 'external',
-            restartAvailable: canRestartOpencodeSidecar(),
+            ...opencodeModeMeta(),
         })
     } catch (err: any) {
         return c.json({
             connected: false,
             error: err.message,
             url: OPENCODE_URL,
-            managed: isManagedOpencode(),
-            mode: isManagedOpencode() ? 'managed' : 'external',
-            restartAvailable: canRestartOpencodeSidecar(),
+            ...opencodeModeMeta(),
         }, 503)
     }
 })
@@ -126,8 +160,7 @@ opencode.get('/api/agents', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.app.agents(requestDirectoryQuery(c))
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch {
         return c.json([])
     }
@@ -138,8 +171,7 @@ opencode.get('/api/tools', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.tool.ids(requestDirectoryQuery(c))
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch {
         return c.json([])
     }
@@ -153,8 +185,7 @@ opencode.get('/api/tools/:provider/:model', async (c) => {
             provider: c.req.param('provider'),
             model: c.req.param('model'),
         })
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -182,30 +213,22 @@ opencode.get('/api/config', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.config.get(requestDirectoryQuery(c))
-        const data = (res as any).data
-        return c.json(data || {})
+        return c.json(responseData(res, {}))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
 })
 
 opencode.get('/api/config/project', async (c) => {
-    const cwd = resolveRequestWorkingDir(c)
     try {
-        const oc = await getOpencode()
-        const res = await oc.file.read({
-            directory: cwd,
-            path: 'config.json',
-        })
-        const data = (res as any).data
-        const raw = typeof data?.content === 'string' ? data.content : '{}'
-        const config = JSON.parse(raw)
+        const { cwd, config } = await readProjectConfigFromOpencode(c)
         return c.json({
             exists: true,
             path: `${cwd}/config.json`,
             config,
         })
     } catch {
+        const cwd = resolveRequestWorkingDir(c)
         return c.json({
             exists: false,
             path: `${cwd}/config.json`,
@@ -222,9 +245,8 @@ opencode.put('/api/config', async (c) => {
         const current = await readProjectConfigFile(cwd)
         const nextConfig = mergeProjectConfig(current, body && typeof body === 'object' ? body : {})
         const res = await oc.config.update({ ...requestDirectoryQuery(c), config: nextConfig })
-        const data = (res as any).data
         invalidate('mcp-servers')
-        return c.json(data)
+        return c.json(responseData(res, {}))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -304,8 +326,7 @@ opencode.get('/api/lsp/status', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.lsp.status(requestDirectoryQuery(c))
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -333,15 +354,11 @@ opencode.post('/api/mcp/add', async (c) => {
         config: { command: string; args?: string[]; env?: Record<string, string> } | { url: string }
     }>()
     try {
-        const oc = await getOpencode()
-        const res = await oc.mcp.add({
+        return await runMcpMutation(c, (oc) => oc.mcp.add({
             ...requestDirectoryQuery(c),
             name,
             config: config as any,
-        })
-        const data = (res as any).data
-        invalidate('mcp-servers')
-        return c.json(data)
+        }))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -349,14 +366,10 @@ opencode.post('/api/mcp/add', async (c) => {
 
 opencode.post('/api/mcp/:name/connect', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.mcp.connect({
+        return await runMcpMutation(c, (oc) => oc.mcp.connect({
             name: c.req.param('name'),
             ...requestDirectoryQuery(c),
-        })
-        const data = (res as any).data
-        invalidate('mcp-servers')
-        return c.json(data)
+        }))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -424,14 +437,10 @@ opencode.delete('/api/mcp/:name/auth', async (c) => {
 
 opencode.post('/api/mcp/:name/disconnect', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.mcp.disconnect({
+        return await runMcpMutation(c, (oc) => oc.mcp.disconnect({
             name: c.req.param('name'),
             ...requestDirectoryQuery(c),
-        })
-        const data = (res as any).data
-        invalidate('mcp-servers')
-        return c.json(data)
+        }))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -443,8 +452,7 @@ opencode.get('/api/file/list', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.file.list({ ...requestDirectoryQuery(c), path: dirPath })
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch {
         return c.json([])
     }
@@ -456,8 +464,7 @@ opencode.get('/api/file/read', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.file.read({ ...requestDirectoryQuery(c), path: filePath })
-        const data = (res as any).data
-        return c.json(data)
+        return c.json(responseData(res, {}))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -467,8 +474,7 @@ opencode.get('/api/file/status', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.file.status(requestDirectoryQuery(c))
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch {
         return c.json([])
     }
@@ -481,8 +487,7 @@ opencode.get('/api/find/text', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.find.text({ ...requestDirectoryQuery(c), pattern })
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -494,8 +499,7 @@ opencode.get('/api/find/files', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.find.files({ ...requestDirectoryQuery(c), query: pattern })
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -507,8 +511,7 @@ opencode.get('/api/find/symbols', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.find.symbols({ ...requestDirectoryQuery(c), query: pattern })
-        const data = (res as any).data
-        return c.json(data || [])
+        return c.json(responseData(res, []))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -519,8 +522,7 @@ opencode.get('/api/vcs', async (c) => {
     try {
         const oc = await getOpencode()
         const res = await oc.vcs.get(requestDirectoryQuery(c))
-        const data = (res as any).data
-        return c.json(data || {})
+        return c.json(responseData(res, {}))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
