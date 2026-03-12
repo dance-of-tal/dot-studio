@@ -79,6 +79,42 @@ function applyPerformerPatch<T extends Record<string, any>>(performer: any, patc
     return next
 }
 
+function mapPerformers(
+    performers: any[],
+    performerId: string,
+    updater: (performer: any) => any,
+) {
+    return performers.map((performer) => (
+        performer.id === performerId
+            ? updater(performer)
+            : performer
+    ))
+}
+
+function mapCanvasTerminals(
+    canvasTerminals: Array<{ id: string }>,
+    id: string,
+    updater: (terminal: any) => any,
+) {
+    return canvasTerminals.map((terminal) => (
+        terminal.id === id
+            ? updater(terminal)
+            : terminal
+    ))
+}
+
+function mapMarkdownEditors(
+    markdownEditors: Array<{ id: string }>,
+    id: string,
+    updater: (editor: any) => any,
+) {
+    return markdownEditors.map((editor) => (
+        editor.id === id
+            ? updater(editor)
+            : editor
+    ))
+}
+
 export const createWorkspaceSlice: StateCreator<
     StudioState,
     [],
@@ -859,11 +895,7 @@ export const createWorkspaceSlice: StateCreator<
     })),
 
     setPerformerTalRef: (performerId, talRef) => set((s) => ({
-        performers: s.performers.map((a) => (
-            a.id === performerId
-                ? applyPerformerPatch(a, { talRef })
-                : a
-        )),
+        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { talRef })),
         stageDirty: true,
     })),
 
@@ -879,24 +911,20 @@ export const createWorkspaceSlice: StateCreator<
     })),
 
     addPerformerDanceRef: (performerId, danceRef) => set((s) => ({
-        performers: s.performers.map((a) => (
-            a.id === performerId && !a.danceRefs.some((ref) => isSameAssetRef(ref, danceRef))
-                ? applyPerformerPatch(a, {
-                    danceRefs: [...a.danceRefs, danceRef],
+        performers: mapPerformers(s.performers, performerId, (performer) => (
+            !performer.danceRefs.some((ref: any) => isSameAssetRef(ref, danceRef))
+                ? applyPerformerPatch(performer, {
+                    danceRefs: [...performer.danceRefs, danceRef],
                 })
-                : a
+                : performer
         )),
         stageDirty: true,
     })),
 
     replacePerformerDanceRef: (performerId, currentRef, nextRef) => set((s) => ({
-        performers: s.performers.map((a) => (
-            a.id === performerId
-                ? applyPerformerPatch(a, {
-                    danceRefs: a.danceRefs.map((ref) => (isSameAssetRef(ref, currentRef) ? nextRef : ref)),
-                })
-                : a
-        )),
+        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, {
+            danceRefs: performer.danceRefs.map((ref: any) => (isSameAssetRef(ref, currentRef) ? nextRef : ref)),
+        })),
         stageDirty: true,
     })),
 
@@ -929,10 +957,7 @@ export const createWorkspaceSlice: StateCreator<
     })),
 
     setPerformerModelVariant: (performerId, modelVariant) => set((s) => ({
-        performers: s.performers.map(a => {
-            if (a.id !== performerId) return a
-            return applyPerformerPatch(a, { modelVariant: modelVariant || null })
-        }),
+        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { modelVariant: modelVariant || null })),
         stageDirty: true,
     })),
 
@@ -948,10 +973,7 @@ export const createWorkspaceSlice: StateCreator<
     })),
 
     setPerformerDanceDeliveryMode: (performerId, danceDeliveryMode) => set((s) => ({
-        performers: s.performers.map(a => {
-            if (a.id !== performerId) return a
-            return applyPerformerPatch(a, { danceDeliveryMode })
-        }),
+        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { danceDeliveryMode })),
         stageDirty: true,
     })),
 
@@ -1070,23 +1092,17 @@ export const createWorkspaceSlice: StateCreator<
     })),
 
     updateCanvasTerminalPosition: (id, x, y) => set((s) => ({
-        canvasTerminals: s.canvasTerminals.map(t =>
-            t.id === id ? { ...t, position: { x, y } } : t
-        ),
+        canvasTerminals: mapCanvasTerminals(s.canvasTerminals, id, (terminal) => ({ ...terminal, position: { x, y } })),
         stageDirty: true,
     })),
 
     updateCanvasTerminalSize: (id, width, height) => set((s) => ({
-        canvasTerminals: s.canvasTerminals.map(t =>
-            t.id === id ? { ...t, width, height } : t
-        ),
+        canvasTerminals: mapCanvasTerminals(s.canvasTerminals, id, (terminal) => ({ ...terminal, width, height })),
         stageDirty: true,
     })),
 
     updateCanvasTerminalSession: (id, sessionId, connected) => set((s) => ({
-        canvasTerminals: s.canvasTerminals.map(t =>
-            t.id === id ? { ...t, sessionId, connected } : t
-        ),
+        canvasTerminals: mapCanvasTerminals(s.canvasTerminals, id, (terminal) => ({ ...terminal, sessionId, connected })),
     })),
 
     closeTrackingWindow: () => set({
@@ -1197,29 +1213,17 @@ export const createWorkspaceSlice: StateCreator<
     },
 
     updateMarkdownEditorPosition: (id, x, y) => set((s) => ({
-        markdownEditors: s.markdownEditors.map((editor) => (
-            editor.id === id
-                ? { ...editor, position: { x, y } }
-                : editor
-        )),
+        markdownEditors: mapMarkdownEditors(s.markdownEditors, id, (editor) => ({ ...editor, position: { x, y } })),
         stageDirty: true,
     })),
 
     updateMarkdownEditorSize: (id, width, height) => set((s) => ({
-        markdownEditors: s.markdownEditors.map((editor) => (
-            editor.id === id
-                ? { ...editor, width, height }
-                : editor
-        )),
+        markdownEditors: mapMarkdownEditors(s.markdownEditors, id, (editor) => ({ ...editor, width, height })),
         stageDirty: true,
     })),
 
     updateMarkdownEditorBaseline: (id, baseline) => set((s) => ({
-        markdownEditors: s.markdownEditors.map((editor) => (
-            editor.id === id
-                ? { ...editor, baseline }
-                : editor
-        )),
+        markdownEditors: mapMarkdownEditors(s.markdownEditors, id, (editor) => ({ ...editor, baseline })),
         stageDirty: true,
     })),
 
