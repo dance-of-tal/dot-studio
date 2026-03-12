@@ -12,17 +12,47 @@ import { TerminalPanel } from './components/terminal';
 import { api, setApiWorkingDirContext } from './api';
 import { showToast } from './lib/toast';
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers';
+import type { ActNodeType, ActSessionLifetime, ActSessionPolicy, AssetCard, AssetRef, StageActNode } from './types';
+import type { StudioState } from './store';
 import { projectMcpServerNames } from '../shared/project-mcp';
 import { extractMcpServerNamesFromConfig } from '../shared/mcp-config';
 
-function toDragPreview(asset: any) {
+type DragPreview = {
+  kind: string;
+  label: string;
+};
+
+type DragAsset = Omit<Partial<AssetCard>, 'kind'> & {
+  kind?: AssetCard['kind'] | 'act-semantic';
+  label?: string;
+  source?: string;
+  slug?: string;
+  modelId?: string;
+  semanticType?: string;
+  value?: unknown;
+  mcpConfig?: Record<string, unknown> | null;
+  mcpBindingMap?: Record<string, string>;
+};
+
+type DropTargetData = {
+  type?: string;
+  performerId?: string | null;
+  editorId?: string;
+  actId?: string;
+  nodeId?: string;
+};
+
+type PerformerAssetPayload = Parameters<StudioState['addPerformerFromAsset']>[0];
+type ActOwnedPerformerSeed = Parameters<StudioState['createActOwnedPerformerForNode']>[2];
+
+function toDragPreview(asset: DragAsset): DragPreview {
   return {
     kind: asset?.kind || 'asset',
     label: asset?.label || asset?.name || asset?.modelId || 'Asset',
   };
 }
 
-function assetRefFromDragAsset(asset: any) {
+function assetRefFromDragAsset(asset: DragAsset): AssetRef | null {
   if (asset?.source === 'draft' && typeof asset.draftId === 'string') {
     return { kind: 'draft' as const, draftId: asset.draftId };
   }
@@ -30,6 +60,113 @@ function assetRefFromDragAsset(asset: any) {
     return { kind: 'registry' as const, urn: asset.urn };
   }
   return null;
+}
+
+function isInstalledAsset(asset: DragAsset) {
+  return asset.source === 'stage' || asset.source === 'global';
+}
+
+function getAssetAuthor(asset: DragAsset) {
+  return String(asset.author || '').replace(/^@/, '');
+}
+
+function getAssetSlug(asset: DragAsset) {
+  return asset.slug || asset.name || '';
+}
+
+function findActNode(store: StudioState, actId: string, nodeId: string) {
+  const act = store.acts.find((item) => item.id === actId);
+  const node = act?.nodes.find((item: StageActNode) => item.id === nodeId) || null;
+  return { act, node };
+}
+
+function ensureActNodePerformer(
+  store: StudioState,
+  actId: string,
+  nodeId: string,
+  seededAsset?: ActOwnedPerformerSeed,
+) {
+  const { act, node } = findActNode(store, actId, nodeId);
+  if (!act || !node || node.type === 'parallel') {
+    return null;
+  }
+  if (node.performerId) {
+    return node.performerId;
+  }
+  return store.createActOwnedPerformerForNode(actId, nodeId, seededAsset || null);
+}
+
+function applyTalToPerformer(store: StudioState, performerId: string, asset: DragAsset) {
+  const ref = assetRefFromDragAsset(asset);
+  if (ref) {
+    store.setPerformerTalRef(performerId, ref);
+    return;
+  }
+  store.setPerformerTal(performerId, asset as AssetCard);
+}
+
+function applyDanceToPerformer(store: StudioState, performerId: string, asset: DragAsset) {
+  const ref = assetRefFromDragAsset(asset);
+  if (ref) {
+    store.addPerformerDanceRef(performerId, ref);
+    return;
+  }
+  store.addPerformerDance(performerId, asset as AssetCard);
+}
+
+function applyModelToPerformer(
+  store: StudioState,
+  performerId: string,
+  asset: DragAsset,
+  showDropWarning: (message: string) => void,
+) {
+  store.setPerformerModel(performerId, {
+    provider: asset.provider as string,
+    modelId: asset.modelId as string,
+  });
+  if (asset.connected === false) {
+    showDropWarning(`${asset.providerName || asset.provider} is not connected in Settings yet. The performer can keep this model selection, but it will not run until provider access is configured.`);
+  }
+}
+
+function applyMcpToPerformer(store: StudioState, performerId: string, asset: DragAsset) {
+  store.addPerformerMcp(performerId, asset as Parameters<StudioState['addPerformerMcp']>[1]);
+}
+
+async function applyAssetToPerformerTarget(
+  store: StudioState,
+  performerId: string,
+  dropType: string | undefined,
+  asset: DragAsset,
+  showDropWarning: (message: string) => void,
+  resolvePerformerAssetForStudio: (asset: DragAsset) => Promise<PerformerAssetPayload>,
+) {
+  if (asset.kind === 'performer') {
+    store.applyPerformerAsset(performerId, await resolvePerformerAssetForStudio(asset));
+    return true;
+  }
+
+  if (dropType === 'tal' && asset.kind === 'tal') {
+    applyTalToPerformer(store, performerId, asset);
+    return true;
+  }
+
+  if (dropType === 'dance' && asset.kind === 'dance') {
+    applyDanceToPerformer(store, performerId, asset);
+    return true;
+  }
+
+  if (dropType === 'model' && asset.kind === 'model') {
+    applyModelToPerformer(store, performerId, asset, showDropWarning);
+    return true;
+  }
+
+  if (dropType === 'mcp' && asset.kind === 'mcp') {
+    applyMcpToPerformer(store, performerId, asset);
+    return true;
+  }
+
+  return false;
 }
 
 export default function App() {
@@ -121,13 +258,13 @@ export default function App() {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveDrag(toDragPreview(event.active.data.current));
+    setActiveDrag(toDragPreview((event.active.data.current as DragAsset | undefined) || {}));
   };
 
   const loadMarkdownTemplateIntoEditor = async (
     editorId: string,
-    asset: any,
-    store: ReturnType<typeof useStudioStore.getState>,
+    asset: DragAsset,
+    store: StudioState,
   ) => {
     const editor = store.markdownEditors.find((item) => item.id === editorId);
     if (!editor) {
@@ -138,10 +275,10 @@ export default function App() {
       return;
     }
 
-    const isLocalInstalled = asset.source === 'stage' || asset.source === 'global';
+    const isLocalInstalled = isInstalledAsset(asset);
     const detail = !isLocalInstalled
-      ? await api.assets.getRegistry(asset.kind, String(asset.author || '').replace(/^@/, ''), asset.slug || asset.name)
-      : await api.assets.get(asset.kind, String(asset.author || '').replace(/^@/, ''), asset.slug || asset.name);
+      ? await api.assets.getRegistry(asset.kind as 'tal' | 'dance', getAssetAuthor(asset), getAssetSlug(asset))
+      : await api.assets.get(asset.kind as 'tal' | 'dance', getAssetAuthor(asset), getAssetSlug(asset));
 
     const currentDraft = store.drafts[editor.draftId];
     if (!currentDraft) {
@@ -170,16 +307,16 @@ export default function App() {
   };
 
   const importActAsset = async (
-    asset: any,
-    store: ReturnType<typeof useStudioStore.getState>,
+    asset: DragAsset,
+    store: StudioState,
   ) => {
-    const detail = asset.source === 'stage' || asset.source === 'global'
-      ? await api.assets.get('act', String(asset.author || '').replace(/^@/, ''), asset.slug || asset.name)
-      : await api.assets.getRegistry('act', String(asset.author || '').replace(/^@/, ''), asset.slug || asset.name);
+    const detail = isInstalledAsset(asset)
+      ? await api.assets.get('act', getAssetAuthor(asset), getAssetSlug(asset))
+      : await api.assets.getRegistry('act', getAssetAuthor(asset), getAssetSlug(asset));
     await store.importActFromAsset(detail);
   };
 
-  const resolvePerformerAssetForStudio = async (asset: any) => {
+  const resolvePerformerAssetForStudio = async (asset: DragAsset): Promise<PerformerAssetPayload> => {
     const projectConfig = await api.config.getProject().catch(() => ({ config: {} }));
     const projectMcpNames = projectMcpServerNames(projectConfig.config);
     const runtimeModels = await api.models.list();
@@ -195,7 +332,7 @@ export default function App() {
     if (unresolvedMcpNames.length > 0) {
       showDropWarning(`Imported MCP placeholders need mapping in the performer editor or Asset Library: ${unresolvedMcpNames.join(', ')}`);
     }
-    return normalized;
+    return normalized as PerformerAssetPayload;
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -203,8 +340,8 @@ export default function App() {
     const { active, over } = event;
     if (!over) return;
 
-    const asset = active.data.current as any;
-    const dropData = over.data.current as any;
+    const asset = active.data.current as DragAsset;
+    const dropData = over.data.current as DropTargetData;
 
     if (!asset || !dropData) {
       return;
@@ -212,45 +349,43 @@ export default function App() {
 
     const store = useStudioStore.getState();
 
-    const ensureActNodePerformer = (actId: string, nodeId: string, seededAsset?: any) => {
-      const act = store.acts.find((item) => item.id === actId);
-      const node = act?.nodes.find((item: any) => item.id === nodeId);
-      if (!act || !node || node.type === 'parallel') {
-        return null;
+    const handleCanvasRootDrop = async () => {
+      if (dropData.type !== 'canvas-root') {
+        return false;
       }
-      if (node.performerId) {
-        return node.performerId;
-      }
-      return store.createActOwnedPerformerForNode(actId, nodeId, seededAsset || null);
-    };
 
-    if (dropData.type === 'canvas-root') {
       if (asset.kind === 'performer') {
         store.addPerformerFromAsset(await resolvePerformerAssetForStudio(asset));
-        return;
+        return true;
       }
 
-      if (asset.kind === 'act') {
-        try {
-          await importActAsset(asset, store);
-        } catch (error) {
-          console.error('Failed to import act asset', error);
-          showToast('Failed to import act asset.', 'error', {
-            title: 'Act import failed',
-            dedupeKey: `act-import:${asset.urn || `${asset.author || ''}/${asset.slug || asset.name}`}`,
-            actionLabel: 'Retry',
-            onAction: () => {
-              void importActAsset(asset, useStudioStore.getState()).catch((retryError) => {
-                console.error('Failed to retry act import', retryError);
-              });
-            },
-          });
-        }
-        return;
+      if (asset.kind !== 'act') {
+        return false;
       }
-    }
 
-    if (dropData.type === 'markdown-editor' && (asset.kind === 'tal' || asset.kind === 'dance')) {
+      try {
+        await importActAsset(asset, store);
+      } catch (error) {
+        console.error('Failed to import act asset', error);
+        showToast('Failed to import act asset.', 'error', {
+          title: 'Act import failed',
+          dedupeKey: `act-import:${asset.urn || `${asset.author || ''}/${asset.slug || asset.name}`}`,
+          actionLabel: 'Retry',
+          onAction: () => {
+            void importActAsset(asset, useStudioStore.getState()).catch((retryError) => {
+              console.error('Failed to retry act import', retryError);
+            });
+          },
+        });
+      }
+      return true;
+    };
+
+    const handleMarkdownEditorDrop = async () => {
+      if (dropData.type !== 'markdown-editor' || (asset.kind !== 'tal' && asset.kind !== 'dance') || !dropData.editorId) {
+        return false;
+      }
+
       try {
         await loadMarkdownTemplateIntoEditor(dropData.editorId, asset, store);
       } catch (error) {
@@ -260,134 +395,143 @@ export default function App() {
           dedupeKey: `markdown-template-import:${dropData.editorId}:${asset.kind}:${asset.slug || asset.name}`,
           actionLabel: 'Retry',
           onAction: () => {
-            void loadMarkdownTemplateIntoEditor(dropData.editorId, asset, useStudioStore.getState()).catch((retryError) => {
+            void loadMarkdownTemplateIntoEditor(dropData.editorId as string, asset, useStudioStore.getState()).catch((retryError) => {
               console.error('Failed to retry markdown template load', retryError);
             });
           },
         });
       }
-      return;
-    }
+      return true;
+    };
 
-    if (dropData.type === 'act-area' && asset.kind === 'performer') {
+    const handleActAreaDrop = async () => {
+      if (dropData.type !== 'act-area' || asset.kind !== 'performer' || !dropData.actId) {
+        return false;
+      }
+
       store.addPerformerAssetToAct(dropData.actId, await resolvePerformerAssetForStudio(asset));
-      return;
-    }
+      return true;
+    };
 
-    if (dropData.type === 'act-node-performer' && asset.kind === 'performer') {
+    const handleActNodePerformerDrop = async () => {
+      if (dropData.type !== 'act-node-performer' || asset.kind !== 'performer' || !dropData.actId || !dropData.nodeId) {
+        return false;
+      }
+
       store.createActOwnedPerformerForNode(dropData.actId, dropData.nodeId, await resolvePerformerAssetForStudio(asset));
-      return;
-    }
+      return true;
+    };
 
-    if (dropData.type === 'act-node-semantic' && asset.kind === 'act-semantic') {
-      const act = store.acts.find((item) => item.id === dropData.actId);
-      const node = act?.nodes.find((item: any) => item.id === dropData.nodeId);
+    const handleActNodeSemanticDrop = () => {
+      if (dropData.type !== 'act-node-semantic' || asset.kind !== 'act-semantic' || !dropData.actId || !dropData.nodeId) {
+        return false;
+      }
+
+      const { act, node } = findActNode(store, dropData.actId, dropData.nodeId);
       if (!act || !node) {
-        return;
+        return true;
       }
 
       if (asset.semanticType === 'entry') {
         store.updateActMeta(dropData.actId, { entryNodeId: dropData.nodeId });
-        return;
+        return true;
       }
 
       if (asset.semanticType === 'node-type') {
-        store.setActNodeType(dropData.actId, dropData.nodeId, asset.value);
-        return;
+        store.setActNodeType(dropData.actId, dropData.nodeId, asset.value as ActNodeType);
+        return true;
       }
 
       if (node.type === 'parallel') {
         showDropWarning('Session reuse and lifetime apply only to performer-backed nodes.');
-        return;
+        return true;
       }
 
       if (asset.semanticType === 'session-policy') {
-        store.updateActNode(dropData.actId, dropData.nodeId, { sessionPolicy: asset.value });
-        return;
+        store.updateActNode(dropData.actId, dropData.nodeId, { sessionPolicy: asset.value as ActSessionPolicy });
+        return true;
       }
 
       if (asset.semanticType === 'session-lifetime') {
-        store.updateActNode(dropData.actId, dropData.nodeId, { sessionLifetime: asset.value });
+        store.updateActNode(dropData.actId, dropData.nodeId, { sessionLifetime: asset.value as ActSessionLifetime });
       }
-      return;
-    }
 
-    if (dropData.type === 'act-node-tal' && asset.kind === 'tal') {
-      const performerId = ensureActNodePerformer(dropData.actId, dropData.nodeId);
-      if (performerId) {
-        const ref = assetRefFromDragAsset(asset);
-        if (ref) {
-          store.setPerformerTalRef(performerId, ref);
-        } else {
-          store.setPerformerTal(performerId, asset);
+      return true;
+    };
+
+    const handleActNodeAssetDrop = () => {
+      if (!dropData.actId || !dropData.nodeId) {
+        return false;
+      }
+
+      if (dropData.type === 'act-node-tal' && asset.kind === 'tal') {
+        const performerId = ensureActNodePerformer(store, dropData.actId, dropData.nodeId);
+        if (performerId) {
+          applyTalToPerformer(store, performerId, asset);
         }
+        return true;
       }
-      return;
-    }
 
-    if (dropData.type === 'act-node-dance' && asset.kind === 'dance') {
-      const performerId = ensureActNodePerformer(dropData.actId, dropData.nodeId);
-      if (performerId) {
-        const ref = assetRefFromDragAsset(asset);
-        if (ref) {
-          store.addPerformerDanceRef(performerId, ref);
-        } else {
-          store.addPerformerDance(performerId, asset);
+      if (dropData.type === 'act-node-dance' && asset.kind === 'dance') {
+        const performerId = ensureActNodePerformer(store, dropData.actId, dropData.nodeId);
+        if (performerId) {
+          applyDanceToPerformer(store, performerId, asset);
         }
+        return true;
       }
-      return;
-    }
 
-    if (dropData.type === 'act-node-model' && asset.kind === 'model') {
-      const performerId = ensureActNodePerformer(dropData.actId, dropData.nodeId);
-      if (performerId) {
-        store.setPerformerModel(performerId, {
-          provider: asset.provider,
-          modelId: asset.modelId,
-        });
-        if (asset.connected === false) {
-          showDropWarning(`${asset.providerName || asset.provider} is not connected in Settings yet. The performer can keep this model selection, but it will not run until provider access is configured.`);
+      if (dropData.type === 'act-node-model' && asset.kind === 'model') {
+        const performerId = ensureActNodePerformer(store, dropData.actId, dropData.nodeId);
+        if (performerId) {
+          applyModelToPerformer(store, performerId, asset, showDropWarning);
         }
+        return true;
       }
+
+      if (dropData.type === 'act-node-mcp' && asset.kind === 'mcp') {
+        const performerId = ensureActNodePerformer(store, dropData.actId, dropData.nodeId);
+        if (performerId) {
+          applyMcpToPerformer(store, performerId, asset);
+        }
+        return true;
+      }
+
+      return false;
+    };
+
+    if (await handleCanvasRootDrop()) {
       return;
     }
 
-    if (dropData.type === 'act-node-mcp' && asset.kind === 'mcp') {
-      const performerId = ensureActNodePerformer(dropData.actId, dropData.nodeId);
-      if (performerId) {
-        store.addPerformerMcp(performerId, asset);
-      }
+    if (await handleMarkdownEditorDrop()) {
+      return;
+    }
+
+    if (await handleActAreaDrop()) {
+      return;
+    }
+
+    if (await handleActNodePerformerDrop()) {
+      return;
+    }
+
+    if (handleActNodeSemanticDrop()) {
+      return;
+    }
+
+    if (handleActNodeAssetDrop()) {
       return;
     }
 
     if (dropData.performerId) {
-      if (asset.kind === 'performer') {
-        store.applyPerformerAsset(dropData.performerId, await resolvePerformerAssetForStudio(asset));
-      } else if (dropData.type === 'tal' && asset.kind === 'tal') {
-        const ref = assetRefFromDragAsset(asset);
-        if (ref) {
-          store.setPerformerTalRef(dropData.performerId, ref);
-        } else {
-          store.setPerformerTal(dropData.performerId, asset);
-        }
-      } else if (dropData.type === 'dance' && asset.kind === 'dance') {
-        const ref = assetRefFromDragAsset(asset);
-        if (ref) {
-          store.addPerformerDanceRef(dropData.performerId, ref);
-        } else {
-          store.addPerformerDance(dropData.performerId, asset);
-        }
-      } else if (dropData.type === 'model' && asset.kind === 'model') {
-        store.setPerformerModel(dropData.performerId, {
-          provider: asset.provider,
-          modelId: asset.modelId,
-        });
-        if (asset.connected === false) {
-          showDropWarning(`${asset.providerName || asset.provider} is not connected in Settings yet. The performer can keep this model selection, but it will not run until provider access is configured.`);
-        }
-      } else if (dropData.type === 'mcp' && asset.kind === 'mcp') {
-        store.addPerformerMcp(dropData.performerId, asset);
-      }
+      await applyAssetToPerformerTarget(
+        store,
+        dropData.performerId,
+        dropData.type,
+        asset,
+        showDropWarning,
+        resolvePerformerAssetForStudio,
+      );
     }
   };
 
