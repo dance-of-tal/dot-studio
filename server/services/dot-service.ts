@@ -1,6 +1,8 @@
 import fs from 'fs/promises'
 import { ensureDotDir, getDotDir, getGlobalCwd, getGlobalDotDir, initRegistry } from 'dance-of-tal/lib/registry'
 import { installActWithDependencies, installAsset, installPerformerAndLock } from 'dance-of-tal/lib/installer'
+import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
+import { startDotLogin } from '../lib/dot-login.js'
 
 export function resolveDotCwd(cwd: string, scope?: string) {
     if (scope === 'global') {
@@ -58,4 +60,68 @@ export async function installDotAsset(cwd: string, input: {
 
     const result = await installAsset(targetCwd, input.urn, input.force)
     return { ...result, scope: input.scope || 'stage' }
+}
+
+export async function getDotAuthUser() {
+    const auth = await readDotAuthUser()
+    return {
+        authenticated: !!auth,
+        username: auth?.username || null,
+    }
+}
+
+export async function loginToDot() {
+    const result = await startDotLogin()
+    return { ok: true, ...result }
+}
+
+export async function logoutFromDot() {
+    await clearDotAuthUser()
+    return { ok: true }
+}
+
+export async function saveDotLocalAsset(cwd: string, input: {
+    kind: StudioAssetKind
+    slug: string
+    author?: string
+    payload: unknown
+}) {
+    const auth = await readDotAuthUser()
+    const author = input.author || auth?.username
+    if (!author) {
+        throw new Error('No author available. Sign in with `dot login` first.')
+    }
+
+    const saved = await saveLocalStudioAsset({
+        cwd,
+        kind: input.kind,
+        author,
+        slug: input.slug,
+        payload: input.payload,
+    })
+    return { ok: true, ...saved }
+}
+
+export async function publishDotAsset(cwd: string, input: {
+    kind: StudioAssetKind
+    slug: string
+    payload?: unknown
+    tags?: string[]
+}) {
+    const auth = await readDotAuthUser()
+    if (!auth) {
+        const error = new Error('You are not logged in. Run `dot login` first.')
+        ;(error as any).status = 401
+        throw error
+    }
+
+    const result = await publishStudioAsset({
+        cwd,
+        kind: input.kind,
+        slug: input.slug,
+        payload: input.payload,
+        tags: input.tags,
+        auth,
+    })
+    return { ok: true, ...result }
 }

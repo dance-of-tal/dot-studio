@@ -5,9 +5,8 @@ import { getPerformer, listLockedPerformerNames } from 'dance-of-tal/lib/registr
 import { readAgentManifest, writeAgentManifest } from 'dance-of-tal/lib/agents'
 import { searchRegistry } from 'dance-of-tal/lib/installer'
 import type { Performer } from 'dance-of-tal/data/types'
-import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
-import { startDotLogin } from '../lib/dot-login.js'
-import { getDotStatus, initDotRegistry, installDotAsset } from '../services/dot-service.js'
+import type { StudioAssetKind } from '../lib/dot-authoring.js'
+import { getDotAuthUser, getDotStatus, initDotRegistry, installDotAsset, loginToDot, logoutFromDot, publishDotAsset, saveDotLocalAsset } from '../services/dot-service.js'
 
 /** Validates that performer URNs follow the 3-part format: kind/@author/name */
 function validatePerformer(performer: Performer): void {
@@ -67,11 +66,7 @@ dot.post('/api/dot/init', async (c) => {
 // ── Auth User ───────────────────────────────────────────
 dot.get('/api/dot/auth-user', async (c) => {
     try {
-        const auth = await readDotAuthUser()
-        return c.json({
-            authenticated: !!auth,
-            username: auth?.username || null,
-        })
+        return c.json(await getDotAuthUser())
     } catch (err: any) {
         return c.json({ authenticated: false, username: null, error: err.message }, 500)
     }
@@ -86,8 +81,7 @@ dot.post('/api/dot/login', async (c) => {
     }
 
     try {
-        const result = await startDotLogin()
-        return c.json({ ok: true, ...result })
+        return c.json(await loginToDot())
     } catch (err: any) {
         return c.json({ error: err.message || 'Failed to start dot login.' }, 500)
     }
@@ -95,8 +89,7 @@ dot.post('/api/dot/login', async (c) => {
 
 dot.post('/api/dot/logout', async (c) => {
     try {
-        await clearDotAuthUser()
-        return c.json({ ok: true })
+        return c.json(await logoutFromDot())
     } catch (err: any) {
         return c.json({ error: err.message || 'Failed to sign out.' }, 500)
     }
@@ -180,21 +173,9 @@ dot.put('/api/dot/assets/local', async (c) => {
     }
 
     try {
-        const auth = await readDotAuthUser()
-        const author = body.author || auth?.username
-        if (!author) {
-            return c.json({ error: 'No author available. Sign in with `dot login` first.' }, 400)
-        }
-
-        const saved = await saveLocalStudioAsset({
-            cwd,
-            kind: body.kind,
-            author,
-            slug: body.slug,
-            payload: body.payload,
-        })
+        const saved = await saveDotLocalAsset(cwd, body)
         invalidate('assets')
-        return c.json({ ok: true, ...saved })
+        return c.json(saved)
     } catch (err: any) {
         return c.json({ error: err.message }, 400)
     }
@@ -221,23 +202,11 @@ dot.post('/api/dot/assets/publish', async (c) => {
     }
 
     try {
-        const auth = await readDotAuthUser()
-        if (!auth) {
-            return c.json({ error: 'You are not logged in. Run `dot login` first.' }, 401)
-        }
-
-        const result = await publishStudioAsset({
-            cwd,
-            kind: body.kind,
-            slug: body.slug,
-            payload: body.payload,
-            tags: body.tags,
-            auth,
-        })
+        const result = await publishDotAsset(cwd, body)
         invalidate('assets')
-        return c.json({ ok: true, ...result })
+        return c.json(result)
     } catch (err: any) {
-        return c.json({ error: err.message }, 400)
+        return c.json({ error: err.message }, err?.status === 401 ? 401 : 400)
     }
 })
 
