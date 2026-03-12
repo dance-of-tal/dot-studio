@@ -4,11 +4,7 @@ import { DndContext, DragOverlay } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { AlertCircle, Hexagon, Zap, Cpu, Server, Package, X } from 'lucide-react';
 import { useStudioStore } from './store';
-import { LeftSidebar } from './components/panels';
-import { CanvasArea } from './components/canvas';
-import ToastViewport from './components/feedback/ToastViewport';
-
-import { TerminalPanel } from './components/terminal';
+import { LeftSidebar, CanvasArea, ToastViewport, TerminalPanel } from './features/workspace';
 import { api, setApiWorkingDirContext } from './api';
 import { showToast } from './lib/toast';
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers';

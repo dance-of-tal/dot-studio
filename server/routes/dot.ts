@@ -1,13 +1,13 @@
 // DOT Integration Routes — .dance-of-tal management
 
 import { Hono } from 'hono'
-import fs from 'fs/promises'
-import { getDotDir, initRegistry, getPerformer, listLockedPerformerNames, getGlobalDotDir, getGlobalCwd, ensureDotDir } from 'dance-of-tal/lib/registry'
+import { getPerformer, listLockedPerformerNames } from 'dance-of-tal/lib/registry'
 import { readAgentManifest, writeAgentManifest } from 'dance-of-tal/lib/agents'
-import { installActWithDependencies, installAsset, installPerformerAndLock, searchRegistry } from 'dance-of-tal/lib/installer'
+import { searchRegistry } from 'dance-of-tal/lib/installer'
 import type { Performer } from 'dance-of-tal/data/types'
 import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
 import { startDotLogin } from '../lib/dot-login.js'
+import { getDotStatus, initDotRegistry, installDotAsset } from '../services/dot-service.js'
 
 /** Validates that performer URNs follow the 3-part format: kind/@author/name */
 function validatePerformer(performer: Performer): void {
@@ -37,45 +37,28 @@ import { resolveRequestWorkingDir } from '../lib/request-context.js'
 
 const dot = new Hono()
 
-// ── Helpers ─────────────────────────────────────────────
-
-function resolveCwd(cwd: string, scope?: string): string {
-    if (scope === 'global') return getGlobalCwd()
-    return cwd
-}
-
-// Uses ensureDotDir() from lib/registry (auto-inits workspace if missing)
-
 // ── DOT Status ──────────────────────────────────────────
 dot.get('/api/dot/status', async (c) => {
     const cwd = resolveRequestWorkingDir(c)
-    const dotDir = getDotDir(cwd)
-    const globalDotDir = getGlobalDotDir()
     try {
-        const [stageExists, globalExists] = await Promise.all([
-            fs.access(dotDir).then(() => true).catch(() => false),
-            fs.access(globalDotDir).then(() => true).catch(() => false),
-        ])
-        return c.json({
-            initialized: stageExists || globalExists,
-            stageInitialized: stageExists,
-            globalInitialized: globalExists,
-            dotDir,
-            globalDotDir,
-            projectDir: cwd,
-        })
+        return c.json(await getDotStatus(cwd))
     } catch {
-        return c.json({ initialized: false, stageInitialized: false, globalInitialized: false, dotDir, globalDotDir, projectDir: cwd })
+        return c.json(await getDotStatus(cwd).catch(() => ({
+            initialized: false,
+            stageInitialized: false,
+            globalInitialized: false,
+            dotDir: '',
+            globalDotDir: '',
+            projectDir: cwd,
+        })))
     }
 })
 
 // ── DOT Init ────────────────────────────────────────────
 dot.post('/api/dot/init', async (c) => {
     const { scope } = await c.req.json<{ scope?: string }>().catch(() => ({ scope: undefined }))
-    const cwd = resolveCwd(resolveRequestWorkingDir(c), scope)
     try {
-        await initRegistry(cwd)
-        return c.json({ ok: true, dotDir: getDotDir(cwd), scope: scope || 'stage' })
+        return c.json(await initDotRegistry(resolveRequestWorkingDir(c), scope))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -166,35 +149,17 @@ dot.put('/api/dot/agents', async (c) => {
 
 // ── Install (with scope: 'global' | 'stage') ────────────
 dot.post('/api/dot/install', async (c) => {
-    const { urn, localName, force, scope } = await c.req.json<{
+    const body = await c.req.json<{
         urn: string
         localName?: string
         force?: boolean
         scope?: 'global' | 'stage'
     }>()
-    const cwd = resolveCwd(resolveRequestWorkingDir(c), scope)
 
     try {
-        // Ensure .dance-of-tal exists
-        await ensureDotDir(cwd)
-
-        // Check if it's a performer (cascading install)
-        if (urn.startsWith('performer/')) {
-            const result = await installPerformerAndLock(cwd, urn, localName, force)
-            invalidate('assets')
-            return c.json({ ...result, scope: scope || 'stage' })
-        }
-
-        if (urn.startsWith('act/')) {
-            const result = await installActWithDependencies(cwd, urn, force)
-            invalidate('assets')
-            return c.json({ ...result, scope: scope || 'stage' })
-        }
-
-        // Single asset install
-        const result = await installAsset(cwd, urn, force)
+        const result = await installDotAsset(resolveRequestWorkingDir(c), body)
         invalidate('assets')
-        return c.json({ ...result, scope: scope || 'stage' })
+        return c.json(result)
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }

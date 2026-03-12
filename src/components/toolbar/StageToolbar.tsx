@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api';
 import { showToast } from '../../lib/toast';
-import SettingsModal from '../modals/SettingsModal';
+import { SettingsModal } from '../../features/providers';
 import PublishModal from '../modals/PublishModal';
 import { GitBranch, CheckCircle, AlertCircle, Settings, Moon, Sun, Hexagon, Terminal as TerminalIcon, Github, FileText, ChevronDown, Upload, LogIn, UserRound } from 'lucide-react';
 import { useStudioStore } from '../../store';

@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { ChevronLeft, LayoutGrid } from 'lucide-react';
 import { useStudioStore } from '../../store';
 import StageExplorer from './StageExplorer';
-import AssetLibrary from './AssetLibrary';
+import { AssetLibrary } from '../../features/assets';
 import './LeftSidebar.css';
 
 export default function LeftSidebar() {
