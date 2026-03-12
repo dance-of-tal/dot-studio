@@ -95,6 +95,54 @@ function normalizeNodeSessionOverride(
     }
 }
 
+function resolveRequestedNodeId(nodeId: string, patch: Record<string, unknown>) {
+    return typeof patch.id === 'string' && patch.id.trim() ? patch.id.trim() : nodeId
+}
+
+function resolveRenamedNodeId(
+    act: { nodes: Array<{ id: string }> },
+    nodeId: string,
+    patch: Record<string, unknown>,
+) {
+    const requestedNodeId = resolveRequestedNodeId(nodeId, patch)
+    return requestedNodeId !== nodeId && act.nodes.some((node) => node.id === requestedNodeId)
+        ? nodeId
+        : requestedNodeId
+}
+
+function applyPatchedActNode(
+    act: any,
+    nodeId: string,
+    patch: Record<string, unknown>,
+) {
+    const renamedNodeId = resolveRenamedNodeId(act, nodeId, patch)
+    return syncStageActStructure({
+        ...act,
+        entryNodeId: act.entryNodeId === nodeId ? renamedNodeId : act.entryNodeId,
+        edges: act.edges.map((edge: any) => ({
+            ...edge,
+            from: edge.from === nodeId ? renamedNodeId : edge.from,
+            to: edge.to === nodeId ? renamedNodeId : edge.to,
+        })),
+        nodes: act.nodes.map((node: any) => (
+            node.id === nodeId
+                ? normalizeNodeSessionOverride(act, { ...node, id: renamedNodeId }, patch) as typeof node
+                : node
+        )),
+    })
+}
+
+function applyActNodeType(
+    act: any,
+    nodeId: string,
+    type: any,
+) {
+    return syncStageActStructure({
+        ...act,
+        nodes: act.nodes.map((node: any) => node.id === nodeId ? coerceStageActNodeType(node, type) : node),
+    })
+}
+
 export function pruneActOwnedPerformers(performers: any[], acts: any[]) {
     const actIds = new Set(acts.map((act) => act.id))
     const referencedPerformerIds = new Set<string>()
@@ -468,36 +516,14 @@ export function createActActions(
                 if (act.id !== actId) {
                     return act
                 }
-                const requestedNodeId = typeof patch.id === 'string' && patch.id.trim() ? patch.id.trim() : nodeId
-                const renamedNodeId = requestedNodeId !== nodeId && act.nodes.some((node: any) => node.id === requestedNodeId)
-                    ? nodeId
-                    : requestedNodeId
-                const nextAct = {
-                    ...act,
-                    entryNodeId: act.entryNodeId === nodeId ? renamedNodeId : act.entryNodeId,
-                    edges: act.edges.map((edge: any) => ({
-                        ...edge,
-                        from: edge.from === nodeId ? renamedNodeId : edge.from,
-                        to: edge.to === nodeId ? renamedNodeId : edge.to,
-                    })),
-                    nodes: act.nodes.map((node: any) => {
-                        if (node.id !== nodeId) {
-                            return node
-                        }
-                        return normalizeNodeSessionOverride(act, { ...node, id: renamedNodeId }, patch) as typeof node
-                    }),
-                }
-                return syncStageActStructure(nextAct)
+                return applyPatchedActNode(act, nodeId, patch)
             }),
             inspectorFocus: (() => {
                 if (s.inspectorFocus !== `act-node:${nodeId}`) {
                     return s.inspectorFocus
                 }
-                const requestedNodeId = typeof patch.id === 'string' && patch.id.trim() ? patch.id.trim() : nodeId
                 const act = s.acts.find((item) => item.id === actId)
-                const renamedNodeId = requestedNodeId !== nodeId && act?.nodes.some((node: any) => node.id === requestedNodeId)
-                    ? nodeId
-                    : requestedNodeId
+                const renamedNodeId = act ? resolveRenamedNodeId(act, nodeId, patch) : nodeId
                 return `act-node:${renamedNodeId}`
             })(),
             performers: pruneActOwnedPerformers(
@@ -506,24 +532,7 @@ export function createActActions(
                     if (act.id !== actId) {
                         return act
                     }
-                    const requestedNodeId = typeof patch.id === 'string' && patch.id.trim() ? patch.id.trim() : nodeId
-                    const renamedNodeId = requestedNodeId !== nodeId && act.nodes.some((node: any) => node.id === requestedNodeId)
-                        ? nodeId
-                        : requestedNodeId
-                    return syncStageActStructure({
-                        ...act,
-                        entryNodeId: act.entryNodeId === nodeId ? renamedNodeId : act.entryNodeId,
-                        edges: act.edges.map((edge: any) => ({
-                            ...edge,
-                            from: edge.from === nodeId ? renamedNodeId : edge.from,
-                            to: edge.to === nodeId ? renamedNodeId : edge.to,
-                        })),
-                        nodes: act.nodes.map((node: any) => (
-                            node.id === nodeId
-                                ? normalizeNodeSessionOverride(act, { ...node, id: renamedNodeId }, patch) as typeof node
-                                : node
-                        )),
-                    })
+                    return applyPatchedActNode(act, nodeId, patch)
                 }),
             ),
             stageDirty: true,
@@ -588,10 +597,7 @@ export function createActActions(
                 if (act.id !== actId) {
                     return act
                 }
-                return syncStageActStructure({
-                    ...act,
-                    nodes: act.nodes.map((node: any) => node.id === nodeId ? coerceStageActNodeType(node, type) : node),
-                })
+                return applyActNodeType(act, nodeId, type)
             }),
             performers: pruneActOwnedPerformers(
                 s.performers,
@@ -599,10 +605,7 @@ export function createActActions(
                     if (act.id !== actId) {
                         return act
                     }
-                    return syncStageActStructure({
-                        ...act,
-                        nodes: act.nodes.map((node: any) => node.id === nodeId ? coerceStageActNodeType(node, type) : node),
-                    })
+                    return applyActNodeType(act, nodeId, type)
                 }),
             ),
             stageDirty: true,
