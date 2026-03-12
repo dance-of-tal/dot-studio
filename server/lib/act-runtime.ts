@@ -342,6 +342,43 @@ function assertActNotAborted(context: Pick<ActMachineContext, 'actSessionId'>) {
     }
 }
 
+function emitToSubscribers(
+    listeners: Set<(event: ActRuntimeEvent) => void>,
+    event: ActRuntimeEvent,
+) {
+    for (const listener of listeners) {
+        try {
+            listener(event)
+        } catch {
+            // Ignore subscriber failures and keep the runtime moving.
+        }
+    }
+}
+
+function serializeThreadSessionHandle(session: ThreadSessionHandleRecord) {
+    return {
+        handle: session.handle,
+        nodeId: session.nodeId,
+        nodeType: session.nodeType,
+        performerId: session.performerId,
+        status: session.status,
+        turnCount: session.turnCount,
+        lastUsedAt: session.lastUsedAt,
+        summary: session.summary,
+    }
+}
+
+function serializeSessionRecord(session: SessionRecord) {
+    return {
+        scopeKey: session.scopeKey,
+        sessionId: session.sessionId,
+        policy: session.policy,
+        lifetime: session.lifetime,
+        nodeId: session.nodeId,
+        performerId: session.performerId,
+    }
+}
+
 function buildResumeSummaryFromContext(context: ActMachineContext): ActThreadResumeSummary {
     return {
         updatedAt: Date.now(),
@@ -355,16 +392,7 @@ function buildResumeSummaryFromContext(context: ActMachineContext): ActThreadRes
                 .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
         ),
         history: [...context.history],
-        sessionHandles: Array.from(context.threadSessionHandles.values()).map((session) => ({
-            handle: session.handle,
-            nodeId: session.nodeId,
-            nodeType: session.nodeType,
-            performerId: session.performerId,
-            status: session.status,
-            turnCount: session.turnCount,
-            lastUsedAt: session.lastUsedAt,
-            summary: session.summary,
-        })),
+        sessionHandles: Array.from(context.threadSessionHandles.values()).map((session) => serializeThreadSessionHandle(session)),
     }
 }
 
@@ -386,13 +414,7 @@ function emitActRuntimeProgress(context: ActMachineContext, status: 'running' | 
         summary: buildResumeSummaryFromContext(context),
     }
 
-    for (const listener of listeners) {
-        try {
-            listener(event)
-        } catch {
-            // Ignore subscriber failures and keep the runtime moving.
-        }
-    }
+    emitToSubscribers(listeners, event)
 }
 
 function emitActPerformerBinding(
@@ -433,13 +455,7 @@ function emitActPerformerBinding(
         return
     }
 
-    for (const listener of listeners) {
-        try {
-            listener(event)
-        } catch {
-            // Ignore subscriber failures and keep the runtime moving.
-        }
-    }
+    emitToSubscribers(listeners, event)
 }
 
 export function subscribeActRuntimeEvents(
@@ -453,11 +469,7 @@ export function subscribeActRuntimeEvents(
     const cachedBindings = actRuntimeBindingCache.get(actSessionId)
     if (cachedBindings) {
         for (const event of cachedBindings.bindings.values()) {
-            try {
-                listener(event)
-            } catch {
-                // Ignore subscriber failures during replay.
-            }
+            emitToSubscribers(new Set([listener]), event)
         }
     }
 
@@ -839,6 +851,24 @@ function buildActRuntimeSystem(
     }
 
     return lines.join('\n')
+}
+
+function buildInitialSharedState(
+    threadSessionHandles: Map<string, ThreadSessionHandleRecord>,
+    coldStartResumeSummary: ActThreadResumeSummary | null,
+) {
+    return {
+        sessionHandles: Array.from(threadSessionHandles.values()).map((session) => serializeThreadSessionHandle(session)),
+        ...(coldStartResumeSummary ? {
+            previousThreadSummary: {
+                runId: coldStartResumeSummary.runId || null,
+                currentNodeId: coldStartResumeSummary.currentNodeId || null,
+                finalOutput: coldStartResumeSummary.finalOutput || null,
+                error: coldStartResumeSummary.error || null,
+                iterations: coldStartResumeSummary.iterations || 0,
+            },
+        } : {}),
+    }
 }
 
 function buildPersistentHandle(
@@ -1741,27 +1771,7 @@ export async function runActRuntime(input: RunActRuntimeInput) {
         maxIterations: input.maxIterations || resolved.act.maxIterations || 10,
         iterations: 0,
         history: [],
-        sharedState: {
-            sessionHandles: Array.from(threadSessionHandles.values()).map((session) => ({
-                handle: session.handle,
-                nodeId: session.nodeId,
-                nodeType: session.nodeType,
-                performerId: session.performerId,
-                status: session.status,
-                turnCount: session.turnCount,
-                lastUsedAt: session.lastUsedAt,
-                summary: session.summary,
-            })),
-            ...(coldStartResumeSummary ? {
-                previousThreadSummary: {
-                    runId: coldStartResumeSummary.runId || null,
-                    currentNodeId: coldStartResumeSummary.currentNodeId || null,
-                    finalOutput: coldStartResumeSummary.finalOutput || null,
-                    error: coldStartResumeSummary.error || null,
-                    iterations: coldStartResumeSummary.iterations || 0,
-                },
-            } : {}),
-        },
+        sharedState: buildInitialSharedState(threadSessionHandles, coldStartResumeSummary),
         nodeOutputs: {},
         resumeSummary: coldStartResumeSummary,
         sessionPool: new Map(),
@@ -1770,42 +1780,29 @@ export async function runActRuntime(input: RunActRuntimeInput) {
     }
 
     emitActRuntimeProgress(initialContext, 'running')
-    const result = await runActMachine(initialContext, (context) => {
-        emitActRuntimeProgress(context, 'running')
-    })
-    persistThreadRuntimeHandles(input.actSessionId, resolved.act.id, result.context.threadSessionHandles)
-    emitActRuntimeProgress(result.context, result.status)
-    const response = {
-        status: result.status,
-        currentNodeId: result.context.currentNodeId,
-        runId: result.context.runId,
-        finalOutput: result.context.finalOutput,
-        error: result.context.error,
-        history: result.context.history,
-        sharedState: result.context.sharedState,
-        sessions: Array.from(result.context.sessionPool.values()).map((session) => ({
-            scopeKey: session.scopeKey,
-            sessionId: session.sessionId,
-            policy: session.policy,
-            lifetime: session.lifetime,
-            nodeId: session.nodeId,
-            performerId: session.performerId,
-        })),
-        sessionHandles: Array.from(result.context.threadSessionHandles.values()).map((session) => ({
-            handle: session.handle,
-            nodeId: session.nodeId,
-            nodeType: session.nodeType,
-            performerId: session.performerId,
-            status: session.status,
-            turnCount: session.turnCount,
-            lastUsedAt: session.lastUsedAt,
-            summary: session.summary,
-        })),
-        iterations: result.context.iterations,
+    try {
+        const result = await runActMachine(initialContext, (context) => {
+            emitActRuntimeProgress(context, 'running')
+        })
+        persistThreadRuntimeHandles(input.actSessionId, resolved.act.id, result.context.threadSessionHandles)
+        emitActRuntimeProgress(result.context, result.status)
+        const response = {
+            status: result.status,
+            currentNodeId: result.context.currentNodeId,
+            runId: result.context.runId,
+            finalOutput: result.context.finalOutput,
+            error: result.context.error,
+            history: result.context.history,
+            sharedState: result.context.sharedState,
+            sessions: Array.from(result.context.sessionPool.values()).map((session) => serializeSessionRecord(session)),
+            sessionHandles: Array.from(result.context.threadSessionHandles.values()).map((session) => serializeThreadSessionHandle(session)),
+            iterations: result.context.iterations,
+        }
+        await cleanupSessionPool(initialContext.cwd, result.context.sessionPool, result.context.threadSessionHandles)
+        return response
+    } finally {
+        if (input.actSessionId) {
+            actRuntimeAbortRequests.delete(input.actSessionId)
+        }
     }
-    await cleanupSessionPool(initialContext.cwd, result.context.sessionPool, result.context.threadSessionHandles)
-    if (input.actSessionId) {
-        actRuntimeAbortRequests.delete(input.actSessionId)
-    }
-    return response
 }
