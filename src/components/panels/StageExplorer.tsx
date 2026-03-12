@@ -17,6 +17,7 @@ import {
     Trash2,
     X,
 } from 'lucide-react';
+import type { ActSessionRecord, PerformerNode, StageAct } from '../../types';
 import './StageExplorer.css';
 
 function stageLabel(workingDir: string) {
@@ -90,6 +91,238 @@ function actSessionTone(status: string): 'default' | 'success' | 'warn' | 'dange
     }
 }
 
+type PerformerSessionRecord = {
+    id: string
+    title?: string
+    createdAt?: number
+}
+
+type PerformerSessionRow = {
+    session: PerformerSessionRecord
+    performerId: string
+    active: boolean
+}
+
+type ExplorerRenamingSession = null | {
+    key: string
+    kind: 'performer' | 'act'
+    sessionId: string
+    currentTitle?: string
+    value: string
+}
+
+type ThreadRow =
+    | {
+        id: string
+        kind: 'performer'
+        label: string
+        meta: string
+        hidden: boolean
+        active: boolean
+        children: PerformerSessionRow[]
+    }
+    | {
+        id: string
+        kind: 'act'
+        label: string
+        meta: string
+        hidden: boolean
+        active: boolean
+        children: ActSessionRecord[]
+    }
+
+function buildPerformerSessionRows(
+    sessions: PerformerSessionRecord[],
+    performers: PerformerNode[],
+    sessionMap: Record<string, string>,
+): PerformerSessionRow[] {
+    const rows = sessions
+        .map((session) => {
+            const metadata = parseStudioSessionTitle(session.title);
+            const performerId = metadata?.performerId || null;
+            const performer = performerId ? performers.find((item) => item.id === performerId) || null : null;
+            if (!performer) {
+                return null;
+            }
+            return {
+                session,
+                performerId,
+                active: sessionMap[performer.id] === session.id,
+            };
+        })
+        .filter((entry): entry is PerformerSessionRow => !!entry && typeof entry.performerId === 'string');
+
+    const seen = new Set<string>();
+    return rows.filter((entry) => {
+        if (seen.has(entry.session.id)) {
+            return false;
+        }
+        seen.add(entry.session.id);
+        return true;
+    });
+}
+
+function groupPerformerSessionsById(performerSessionRows: PerformerSessionRow[]) {
+    const map = new Map<string, PerformerSessionRow[]>();
+    performerSessionRows.forEach((entry) => {
+        const current = map.get(entry.performerId) || [];
+        current.push(entry);
+        map.set(entry.performerId, current);
+    });
+    map.forEach((entries, performerId) => {
+        map.set(performerId, [...entries].sort((left, right) => (right.session.createdAt || 0) - (left.session.createdAt || 0)));
+    });
+    return map;
+}
+
+function groupActSessionsByActId(actSessions: ActSessionRecord[]) {
+    const map = new Map<string, ActSessionRecord[]>();
+    [...actSessions]
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .forEach((session) => {
+            const current = map.get(session.actId) || [];
+            current.push(session);
+            map.set(session.actId, current);
+        });
+    return map;
+}
+
+function buildLatestActSessionMap(
+    actSessionMap: Record<string, string>,
+    actSessionsByActId: Map<string, ActSessionRecord[]>,
+) {
+    const map = new Map<string, { status: string }>();
+    actSessionsByActId.forEach((sessionsForAct, actId) => {
+        const currentSessionId = actSessionMap[actId];
+        const currentSession = currentSessionId
+            ? sessionsForAct.find((session) => session.id === currentSessionId) || sessionsForAct[0]
+            : sessionsForAct[0];
+        if (currentSession) {
+            map.set(actId, { status: currentSession.status });
+        }
+    });
+    return map;
+}
+
+function buildThreadRows(args: {
+    sharedPerformers: PerformerNode[]
+    acts: StageAct[]
+    editingTarget: { type: 'performer' | 'act'; id: string } | null
+    latestActSessionMap: Map<string, { status: string }>
+    performerSessionsById: Map<string, PerformerSessionRow[]>
+    actSessionsByActId: Map<string, ActSessionRecord[]>
+    selectedPerformerId: string | null
+    selectedPerformerSessionId: string | null
+    selectedActId: string | null
+    selectedActSessionId: string | null
+}): ThreadRow[] {
+    const performerRows: ThreadRow[] = args.sharedPerformers.map((performer) => ({
+        id: performer.id,
+        kind: 'performer',
+        label: performer.name,
+        meta: performer.model?.modelId || 'No model selected',
+        hidden: !!performer.hidden,
+        active: ((args.selectedPerformerId === performer.id) || (args.editingTarget?.type === 'performer' && args.editingTarget.id === performer.id))
+            && !args.selectedPerformerSessionId,
+        children: args.performerSessionsById.get(performer.id) || [],
+    }));
+
+    const actRows: ThreadRow[] = args.acts.map((act) => {
+        const latestSession = args.latestActSessionMap.get(act.id);
+        return {
+            id: act.id,
+            kind: 'act',
+            label: act.name,
+            meta: latestSession ? `${latestSession.status} · ${act.nodes.length} nodes` : `${act.nodes.length} nodes`,
+            hidden: !!act.hidden,
+            active: ((args.selectedActId === act.id) || (args.editingTarget?.type === 'act' && args.editingTarget.id === act.id))
+                && !args.selectedActSessionId,
+            children: args.actSessionsByActId.get(act.id) || [],
+        };
+    });
+
+    return [...performerRows, ...actRows];
+}
+
+function SessionNameEditor({
+    renaming,
+    display,
+    onChange,
+    onCommit,
+    onCancel,
+}: {
+    renaming: ExplorerRenamingSession
+    display: ReactNode
+    onChange: (value: string) => void
+    onCommit: () => void
+    onCancel: () => void
+}) {
+    if (!renaming) {
+        return <>{display}</>;
+    }
+
+    return (
+        <input
+            autoFocus
+            className="figma-thread-inline-input"
+            value={renaming.value}
+            onChange={(event) => onChange(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    onCommit();
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    onCancel();
+                }
+            }}
+        />
+    );
+}
+
+function SessionRowActions({
+    renaming,
+    onCommit,
+    onCancel,
+    onRename,
+    onDelete,
+    renameTitle,
+    deleteTitle,
+}: {
+    renaming: ExplorerRenamingSession
+    onCommit: () => void
+    onCancel: () => void
+    onRename: () => void
+    onDelete: () => void
+    renameTitle: string
+    deleteTitle: string
+}) {
+    if (renaming) {
+        return (
+            <>
+                <button className="icon-btn" onClick={onCommit} title="Save name">
+                    <Check size={10} />
+                </button>
+                <button className="icon-btn" onClick={onCancel} title="Cancel rename">
+                    <X size={10} />
+                </button>
+            </>
+        );
+    }
+
+    return (
+        <>
+            <button className="icon-btn" onClick={onRename} title={renameTitle}>
+                <Pencil size={10} />
+            </button>
+            <button className="icon-btn remove-btn" onClick={onDelete} title={deleteTitle}>
+                <Trash2 size={10} />
+            </button>
+        </>
+    );
+}
+
 export default function StageExplorer() {
     const [stagesHeight, setStagesHeight] = useState(190);
     const dividerDragging = useRef(false);
@@ -159,13 +392,7 @@ export default function StageExplorer() {
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
-    const [renamingSession, setRenamingSession] = useState<null | {
-        key: string
-        kind: 'performer' | 'act'
-        sessionId: string
-        currentTitle?: string
-        value: string
-    }>(null);
+    const [renamingSession, setRenamingSession] = useState<ExplorerRenamingSession>(null);
 
     useEffect(() => {
         listStages();
@@ -178,98 +405,34 @@ export default function StageExplorer() {
     );
 
     const performerSessionRows = useMemo(() => {
-        const rows = sessions
-            .map((session) => {
-                const metadata = parseStudioSessionTitle(session.title);
-                const performerId = metadata?.performerId || null;
-                const performer = performerId ? performers.find((item) => item.id === performerId) || null : null;
-                if (!performer) {
-                    return null;
-                }
-                return {
-                    session,
-                    performerId,
-                    active: sessionMap[performer.id] === session.id,
-                };
-            })
-            .filter((entry): entry is NonNullable<typeof entry> & { performerId: string } => !!entry && typeof entry.performerId === 'string');
-
-        const seen = new Set<string>();
-        return rows.filter((entry) => {
-            if (seen.has(entry.session.id)) {
-                return false;
-            }
-            seen.add(entry.session.id);
-            return true;
-        });
+        return buildPerformerSessionRows(sessions, performers, sessionMap);
     }, [performers, sessionMap, sessions]);
 
     const performerSessionsById = useMemo(() => {
-        const map = new Map<string, typeof performerSessionRows>();
-        performerSessionRows.forEach((entry) => {
-            const current = map.get(entry.performerId) || [];
-            current.push(entry);
-            map.set(entry.performerId, current);
-        });
-        map.forEach((entries, performerId) => {
-            map.set(performerId, [...entries].sort((left, right) => (right.session.createdAt || 0) - (left.session.createdAt || 0)));
-        });
-        return map;
+        return groupPerformerSessionsById(performerSessionRows);
     }, [performerSessionRows]);
 
     const actSessionsByActId = useMemo(() => {
-        const map = new Map<string, typeof actSessions>();
-        [...actSessions]
-            .sort((left, right) => right.updatedAt - left.updatedAt)
-            .forEach((session) => {
-                const current = map.get(session.actId) || [];
-                current.push(session);
-                map.set(session.actId, current);
-            });
-        return map;
+        return groupActSessionsByActId(actSessions);
     }, [actSessions]);
 
     const latestActSessionMap = useMemo(() => {
-        const map = new Map<string, { status: string }>();
-        actSessionsByActId.forEach((sessionsForAct, actId) => {
-            const currentSessionId = actSessionMap[actId];
-            const currentSession = currentSessionId
-                ? sessionsForAct.find((session) => session.id === currentSessionId) || sessionsForAct[0]
-                : sessionsForAct[0];
-            if (currentSession) {
-                map.set(actId, { status: currentSession.status });
-            }
-        });
-        return map;
+        return buildLatestActSessionMap(actSessionMap, actSessionsByActId);
     }, [actSessionMap, actSessionsByActId]);
 
     const threadRows = useMemo(() => {
-        const performerRows = sharedPerformers.map((performer) => ({
-            id: performer.id,
-            kind: 'performer' as const,
-            label: performer.name,
-            meta: performer.model?.modelId || 'No model selected',
-            hidden: !!performer.hidden,
-            active: ((selectedPerformerId === performer.id) || (editingTarget?.type === 'performer' && editingTarget.id === performer.id))
-                && !selectedPerformerSessionId,
-            children: performerSessionsById.get(performer.id) || [],
-        }));
-
-        const actRows = acts.map((act) => {
-            const latestSession = latestActSessionMap.get(act.id);
-            return {
-                id: act.id,
-                kind: 'act' as const,
-                label: act.name,
-                meta: latestSession ? `${latestSession.status} · ${act.nodes.length} nodes` : `${act.nodes.length} nodes`,
-                hidden: !!act.hidden,
-                active: ((selectedActId === act.id) || (editingTarget?.type === 'act' && editingTarget.id === act.id))
-                    && !selectedActSessionId,
-                children: actSessionsByActId.get(act.id) || [],
-            };
+        return buildThreadRows({
+            sharedPerformers,
+            acts,
+            editingTarget,
+            latestActSessionMap,
+            performerSessionsById,
+            actSessionsByActId,
+            selectedPerformerId,
+            selectedPerformerSessionId,
+            selectedActId,
+            selectedActSessionId,
         });
-
-        return [...performerRows, ...actRows];
     }, [actSessionsByActId, acts, editingTarget, latestActSessionMap, performerSessionsById, selectedActId, selectedActSessionId, selectedPerformerId, selectedPerformerSessionId, sharedPerformers]);
 
     const stageRows = stageList.map((entry) => {
@@ -596,57 +759,30 @@ export default function StageExplorer() {
                                                 <LayerRow
                                                     key={entry.session.id}
                                                     icon={<MessageSquare size={11} className={entry.active ? 'icon-active' : 'icon-muted'} />}
-                                                    label={renamingSession?.key === `performer:${entry.session.id}` ? (
-                                                        <input
-                                                            autoFocus
-                                                            className="figma-thread-inline-input"
-                                                            value={renamingSession.value}
-                                                            onChange={(event) => setRenamingSession((current) => current ? { ...current, value: event.target.value } : current)}
-                                                            onClick={(event) => event.stopPropagation()}
-                                                            onKeyDown={(event) => {
-                                                                if (event.key === 'Enter') {
-                                                                    event.preventDefault();
-                                                                    void commitRenameSession();
-                                                                } else if (event.key === 'Escape') {
-                                                                    event.preventDefault();
-                                                                    cancelRenameSession();
-                                                                }
-                                                            }}
+                                                    label={(
+                                                        <SessionNameEditor
+                                                            renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
+                                                            display={performerSessionLabel(entry.session)}
+                                                            onChange={(value) => setRenamingSession((current) => current ? { ...current, value } : current)}
+                                                            onCommit={() => void commitRenameSession()}
+                                                            onCancel={cancelRenameSession}
                                                         />
-                                                    ) : performerSessionLabel(entry.session)}
+                                                    )}
                                                     meta={entry.active ? 'Current thread' : 'Saved thread'}
                                                     metaTone={entry.active ? 'success' : 'default'}
                                                     active={selectedPerformerSessionId === entry.session.id}
                                                     onClick={renamingSession?.key === `performer:${entry.session.id}` ? undefined : () => openPerformerSession(row.id, entry.session)}
-                                                    actions={
-                                                        renamingSession?.key === `performer:${entry.session.id}` ? (
-                                                            <>
-                                                                <button className="icon-btn" onClick={() => void commitRenameSession()} title="Save name">
-                                                                    <Check size={10} />
-                                                                </button>
-                                                                <button className="icon-btn" onClick={cancelRenameSession} title="Cancel rename">
-                                                                    <X size={10} />
-                                                                </button>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <button
-                                                                    className="icon-btn"
-                                                                    onClick={() => beginRenamePerformerSession(entry.session)}
-                                                                    title="Rename session"
-                                                                >
-                                                                    <Pencil size={10} />
-                                                                </button>
-                                                                <button
-                                                                    className="icon-btn remove-btn"
-                                                                    onClick={() => deleteSession(entry.session.id)}
-                                                                    title="Delete session"
-                                                                >
-                                                                    <Trash2 size={10} />
-                                                                </button>
-                                                            </>
-                                                        )
-                                                    }
+                                                    actions={(
+                                                        <SessionRowActions
+                                                            renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
+                                                            onCommit={() => void commitRenameSession()}
+                                                            onCancel={cancelRenameSession}
+                                                            onRename={() => beginRenamePerformerSession(entry.session)}
+                                                            onDelete={() => deleteSession(entry.session.id)}
+                                                            renameTitle="Rename session"
+                                                            deleteTitle="Delete session"
+                                                        />
+                                                    )}
                                                 />
                                             )) : (
                                                 <div className="figma-empty figma-empty--tight figma-empty--nested">
@@ -658,57 +794,30 @@ export default function StageExplorer() {
                                                 <LayerRow
                                                     key={session.id}
                                                     icon={<MessageSquare size={11} className={selectedActSessionId === session.id ? 'icon-active' : 'icon-muted'} />}
-                                                    label={renamingSession?.key === `act:${session.id}` ? (
-                                                        <input
-                                                            autoFocus
-                                                            className="figma-thread-inline-input"
-                                                            value={renamingSession.value}
-                                                            onChange={(event) => setRenamingSession((current) => current ? { ...current, value: event.target.value } : current)}
-                                                            onClick={(event) => event.stopPropagation()}
-                                                            onKeyDown={(event) => {
-                                                                if (event.key === 'Enter') {
-                                                                    event.preventDefault();
-                                                                    void commitRenameSession();
-                                                                } else if (event.key === 'Escape') {
-                                                                    event.preventDefault();
-                                                                    cancelRenameSession();
-                                                                }
-                                                            }}
+                                                    label={(
+                                                        <SessionNameEditor
+                                                            renaming={renamingSession?.key === `act:${session.id}` ? renamingSession : null}
+                                                            display={session.title}
+                                                            onChange={(value) => setRenamingSession((current) => current ? { ...current, value } : current)}
+                                                            onCommit={() => void commitRenameSession()}
+                                                            onCancel={cancelRenameSession}
                                                         />
-                                                    ) : session.title}
+                                                    )}
                                                     meta={actSessionMap[row.id] === session.id ? `Current · ${session.status}` : session.status}
                                                     metaTone={actSessionTone(session.status)}
                                                     active={selectedActSessionId === session.id}
                                                     onClick={renamingSession?.key === `act:${session.id}` ? undefined : () => openActSession(row.id, session.id)}
-                                                    actions={
-                                                        renamingSession?.key === `act:${session.id}` ? (
-                                                            <>
-                                                                <button className="icon-btn" onClick={() => void commitRenameSession()} title="Save name">
-                                                                    <Check size={10} />
-                                                                </button>
-                                                                <button className="icon-btn" onClick={cancelRenameSession} title="Cancel rename">
-                                                                    <X size={10} />
-                                                                </button>
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <button
-                                                                    className="icon-btn"
-                                                                    onClick={() => beginRenameActSession(session)}
-                                                                    title="Rename act session"
-                                                                >
-                                                                    <Pencil size={10} />
-                                                                </button>
-                                                                <button
-                                                                    className="icon-btn remove-btn"
-                                                                    onClick={() => deleteActSession(session.id)}
-                                                                    title="Delete act session"
-                                                                >
-                                                                    <Trash2 size={10} />
-                                                                </button>
-                                                            </>
-                                                        )
-                                                    }
+                                                    actions={(
+                                                        <SessionRowActions
+                                                            renaming={renamingSession?.key === `act:${session.id}` ? renamingSession : null}
+                                                            onCommit={() => void commitRenameSession()}
+                                                            onCancel={cancelRenameSession}
+                                                            onRename={() => beginRenameActSession(session)}
+                                                            onDelete={() => deleteActSession(session.id)}
+                                                            renameTitle="Rename act session"
+                                                            deleteTitle="Delete act session"
+                                                        />
+                                                    )}
                                                 />
                                             )) : (
                                                 <div className="figma-empty figma-empty--tight figma-empty--nested">
