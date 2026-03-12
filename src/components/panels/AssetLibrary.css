@@ -35,24 +35,7 @@
     border-bottom: 1px solid var(--border-light);
 }
 
-.asset-authoring-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: 5px 8px;
-    font-size: var(--font-sm);
-    font-weight: 600;
-    color: var(--text-primary);
-    cursor: pointer;
-}
 
-.asset-authoring-btn:hover {
-    border-color: var(--accent-light);
-    background: var(--bg-hover);
-}
 
 .asset-authoring-row__note {
     min-width: 0;
@@ -510,16 +493,7 @@
     position: relative;
 }
 
-.registry-kind-badge {
-    font-size: var(--font-xs);
-    padding: 1px 5px;
-    border-radius: 999px;
-    background: var(--bg-hover);
-    color: var(--text-muted);
-    border: 1px solid var(--border-color);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
+
 
 .registry-install-btn {
     margin-left: auto;
@@ -551,21 +525,7 @@
     background: rgba(20, 174, 92, 0.08);
 }
 
-.registry-tags {
-    display: flex;
-    gap: 4px;
-    margin-top: 4px;
-    flex-wrap: wrap;
-}
 
-.registry-tag {
-    font-size: var(--font-xs);
-    padding: 1px 6px;
-    border-radius: var(--radius-lg);
-    background: var(--bg-hover);
-    color: var(--text-muted);
-    border: 1px solid var(--border-color);
-}
 
 /* ── Install Scope Menu ──────────────────────────────── */
 .install-scope-menu {
@@ -653,13 +613,7 @@
     margin-bottom: 8px;
 }
 
-.asset-detail-panel__eyebrow {
-    font-size: var(--font-xs);
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
+
 
 .asset-detail-panel__title {
     font-size: var(--font-md);
@@ -679,36 +633,7 @@
     letter-spacing: 0.04em;
 }
 
-.asset-detail-panel__actions {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 8px;
-}
 
-.asset-detail-panel__action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: 6px 8px;
-    font-size: var(--font-sm);
-    font-weight: 600;
-    color: var(--text-primary);
-    cursor: pointer;
-}
-
-.asset-detail-panel__action:hover:not(:disabled) {
-    border-color: var(--accent-light);
-    background: var(--bg-hover);
-}
-
-.asset-detail-panel__action:disabled {
-    opacity: 0.55;
-    cursor: default;
-}
 
 .asset-detail-panel__note {
     margin-top: 8px;

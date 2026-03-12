@@ -215,19 +215,7 @@
     text-transform: uppercase;
 }
 
-.settings-select {
-    border: 1px solid var(--border-main);
-    background: var(--bg-panel);
-    color: var(--text-primary);
-    border-radius: var(--radius-lg);
-    padding: 8px 10px;
-    font-size: var(--font-base);
-}
 
-.settings-select:focus {
-    outline: none;
-    border-color: var(--figma-blue);
-}
 
 .provider-list {
     display: flex;
@@ -296,37 +284,7 @@
     margin-top: 10px;
 }
 
-.settings-action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid var(--border-main);
-    background: var(--bg-panel);
-    color: var(--text-primary);
-    border-radius: var(--radius-lg);
-    padding: 7px 10px;
-    font-size: var(--font-base);
-    cursor: pointer;
-}
 
-.settings-action-btn:hover {
-    background: var(--figma-bg-hover);
-}
-
-.settings-action-btn:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-
-.settings-action-btn--primary {
-    background: var(--figma-blue);
-    border-color: var(--figma-blue);
-    color: white;
-}
-
-.settings-action-btn--primary:hover {
-    background: var(--figma-blue-hover);
-}
 
 .settings-note {
     margin-top: 10px;
@@ -433,20 +391,7 @@
     line-height: 1.4;
 }
 
-.settings-input {
-    flex: 1;
-    border: 1px solid var(--border-main);
-    background: var(--bg-panel);
-    color: var(--text-primary);
-    border-radius: var(--radius-lg);
-    padding: 8px 10px;
-    font-size: var(--font-base);
-}
 
-.settings-input:focus {
-    outline: none;
-    border-color: var(--figma-blue);
-}
 
 .settings-checkbox-list {
     display: flex;

@@ -520,14 +520,8 @@ html {
     border-top: 1px solid var(--border-light);
 }
 
-.asset-popover__section-title {
-    font-size: var(--font-xs);
-    font-weight: 700;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
-}
+
+
 
 .asset-popover__section-item {
     font-size: var(--font-sm);
