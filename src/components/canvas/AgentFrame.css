@@ -245,31 +245,8 @@
     border-color: var(--accent);
 }
 
-.figma-edit-section-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    font-size: var(--font-sm);
-    font-weight: 600;
-    border-radius: 999px;
-    border: 1px solid var(--border-main);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-}
 
-.figma-edit-section-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
 
-.figma-edit-section-btn:disabled {
-    opacity: 0.45;
-    cursor: default;
-}
 
 .figma-edit-select {
     appearance: none;
