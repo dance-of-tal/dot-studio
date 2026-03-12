@@ -27,6 +27,20 @@ type PickerItemPerformer = { kind: 'performer'; source: 'canvas'; performerId: s
 type PickerItemAct = { kind: 'act'; source: 'canvas'; actId: string; name: string; issue?: string };
 type PickerItem = PickerItemLocal | PickerItemDraft | PickerItemPerformer | PickerItemAct;
 
+type PerformerPreflightEntry = {
+    label: string
+    required: boolean
+    status: 'ready' | 'draft' | 'missing'
+    detail: string
+}
+
+type ActPreflightEntry = {
+    nodeId: string
+    performerName: string
+    status: 'ready' | 'missing'
+    detail: string
+}
+
 function isPerformerPublishable(p: PerformerNode): boolean {
     if (!p.meta?.derivedFrom) return true;
     if (p.meta.authoring?.slug || p.meta.authoring?.description || (p.meta.authoring?.tags && p.meta.authoring.tags.length > 0)) return true;
@@ -69,6 +83,124 @@ function getActIssue(a: StageAct, allPerformers: PerformerNode[]): string | unde
         return 'All performers are incomplete';
     }
     return undefined;
+}
+
+function buildPickerItems(args: {
+    installedTals: any[]
+    installedDances: any[]
+    markdownEditors: ReturnType<typeof useStudioStore.getState>['markdownEditors']
+    drafts: ReturnType<typeof useStudioStore.getState>['drafts']
+    performers: PerformerNode[]
+    acts: StageAct[]
+}): PickerItem[] {
+    const items: PickerItem[] = [];
+
+    const localTals = args.installedTals.filter((asset) => asset.source === 'stage');
+    for (const tal of localTals) {
+        const hasContent = typeof tal.content === 'string' && tal.content.trim().length > 0;
+        items.push({ kind: 'tal', source: 'local', urn: tal.urn, name: tal.name, slug: tal.name, issue: hasContent ? undefined : 'Empty content' });
+    }
+
+    const localDances = args.installedDances.filter((asset) => asset.source === 'stage');
+    for (const dance of localDances) {
+        const hasContent = typeof dance.content === 'string' && dance.content.trim().length > 0;
+        items.push({ kind: 'dance', source: 'local', urn: dance.urn, name: dance.name, slug: dance.name, issue: hasContent ? undefined : 'Empty content' });
+    }
+
+    const localTalUrns = new Set(localTals.map((asset) => asset.urn));
+    const localDanceUrns = new Set(localDances.map((asset) => asset.urn));
+    for (const editor of args.markdownEditors) {
+        const draft = args.drafts[editor.draftId];
+        if (!draft) continue;
+        if (draft.derivedFrom) {
+            if (editor.kind === 'tal' && localTalUrns.has(draft.derivedFrom)) continue;
+            if (editor.kind === 'dance' && localDanceUrns.has(draft.derivedFrom)) continue;
+        }
+        const hasContent = typeof draft.content === 'string' && draft.content.trim().length > 0;
+        items.push({
+            kind: editor.kind,
+            source: 'draft',
+            editorId: editor.id,
+            draftId: editor.draftId,
+            name: draft.name || `Untitled ${editor.kind}`,
+            issue: hasContent ? undefined : 'Empty content',
+        });
+    }
+
+    for (const performer of args.performers) {
+        if (performer.ownerActId) continue;
+        if (isPerformerPublishable(performer)) {
+            items.push({ kind: 'performer', source: 'canvas', performerId: performer.id, name: performer.name, issue: getPerformerIssue(performer) });
+        }
+    }
+
+    for (const act of args.acts) {
+        if (isActPublishable(act)) {
+            items.push({ kind: 'act', source: 'canvas', actId: act.id, name: act.name, issue: getActIssue(act, args.performers) });
+        }
+    }
+
+    return items;
+}
+
+function buildPerformerPreflight(performer: PerformerNode | null): PerformerPreflightEntry[] {
+    if (!performer) return [];
+
+    return [
+        performer.talRef ? { label: 'Tal', ref: performer.talRef, required: true } : null,
+        ...performer.danceRefs.map((ref, index) => ({ label: `Dance ${index + 1}`, ref, required: false })),
+    ]
+        .filter(Boolean)
+        .map((entry: any) => {
+            const urn = registryUrnFromRef(entry.ref);
+            if (urn) {
+                return { ...entry, status: 'ready' as const, detail: urn };
+            }
+            if (entry.ref?.kind === 'draft') {
+                return { ...entry, status: 'draft' as const, detail: `draft:${entry.ref.draftId}` };
+            }
+            return { ...entry, status: 'missing' as const, detail: 'not set' };
+        });
+}
+
+function buildActPreflight(
+    act: StageAct | null,
+    performers: PerformerNode[],
+    installedPerformers: any[],
+    author: string | null,
+): ActPreflightEntry[] {
+    if (!act) return [];
+
+    const savedPerformerUrns = new Set(
+        installedPerformers
+            .filter((asset) => asset.source === 'stage')
+            .map((asset) => asset.urn),
+    );
+
+    return act.nodes
+        .filter((node: any) => node.type !== 'parallel')
+        .map((node: any) => {
+            const boundPerformer = performers.find((item) => item.id === node.performerId);
+            const performerUrn = resolvePublishablePerformerUrn(boundPerformer, author, {
+                savedPerformerUrns,
+            });
+            return {
+                nodeId: node.id,
+                performerName: boundPerformer?.name || 'Unassigned',
+                status: performerUrn ? 'ready' as const : 'missing' as const,
+                detail: performerUrn || 'Save or publish this performer before publishing the act.',
+            };
+        });
+}
+
+function buildMarkdownAssetPayload(markdownEditor: NonNullable<ReturnType<typeof useStudioStore.getState>['markdownEditors'][number]>, draft: NonNullable<ReturnType<typeof useStudioStore.getState>['drafts'][string]>, slug: string, description: string, tags: string[]) {
+    return {
+        name: draft.name.trim() || (markdownEditor.kind === 'tal' ? 'Untitled Tal' : 'Untitled Dance'),
+        slug: slug.trim(),
+        description: description.trim() || draft.name.trim() || markdownEditor.kind,
+        tags,
+        content: typeof draft.content === 'string' ? draft.content : '',
+    };
 }
 
 // ── Main Component ──────────────────────────────────────
@@ -131,54 +263,14 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
 
     // ── Build publishable item list ─────────────────────
     const pickerItems = useMemo(() => {
-        const items: PickerItem[] = [];
-
-        // Local-saved Tals (source: 'stage')
-        const localTals = installedTals.filter((a) => a.source === 'stage');
-        for (const tal of localTals) {
-            const hasContent = typeof tal.content === 'string' && tal.content.trim().length > 0;
-            items.push({ kind: 'tal', source: 'local', urn: tal.urn, name: tal.name, slug: tal.name, issue: hasContent ? undefined : 'Empty content' });
-        }
-
-        // Local-saved Dances (source: 'stage')
-        const localDances = installedDances.filter((a) => a.source === 'stage');
-        for (const dance of localDances) {
-            const hasContent = typeof dance.content === 'string' && dance.content.trim().length > 0;
-            items.push({ kind: 'dance', source: 'local', urn: dance.urn, name: dance.name, slug: dance.name, issue: hasContent ? undefined : 'Empty content' });
-        }
-
-        // Unsaved markdown editor drafts (not yet in local storage)
-        const localTalUrns = new Set(localTals.map((a) => a.urn));
-        const localDanceUrns = new Set(localDances.map((a) => a.urn));
-        for (const editor of markdownEditors) {
-            const edDraft = drafts[editor.draftId];
-            if (!edDraft) continue;
-            // Skip if this editor's draft already corresponds to a local asset
-            if (edDraft.derivedFrom) {
-                if (editor.kind === 'tal' && localTalUrns.has(edDraft.derivedFrom)) continue;
-                if (editor.kind === 'dance' && localDanceUrns.has(edDraft.derivedFrom)) continue;
-            }
-            const hasContent = typeof edDraft.content === 'string' && (edDraft.content as string).trim().length > 0;
-            items.push({ kind: editor.kind, source: 'draft', editorId: editor.id, draftId: editor.draftId, name: edDraft.name || `Untitled ${editor.kind}`, issue: hasContent ? undefined : 'Empty content' });
-        }
-
-        // Publishable performers
-        for (const p of performers) {
-            // Skip act-owned performers (they get published as part of the act)
-            if (p.ownerActId) continue;
-            if (isPerformerPublishable(p)) {
-                items.push({ kind: 'performer', source: 'canvas', performerId: p.id, name: p.name, issue: getPerformerIssue(p) });
-            }
-        }
-
-        // Publishable acts
-        for (const a of acts) {
-            if (isActPublishable(a)) {
-                items.push({ kind: 'act', source: 'canvas', actId: a.id, name: a.name, issue: getActIssue(a, performers) });
-            }
-        }
-
-        return items;
+        return buildPickerItems({
+            installedTals,
+            installedDances,
+            markdownEditors,
+            drafts,
+            performers,
+            acts,
+        });
     }, [installedTals, installedDances, markdownEditors, drafts, performers, acts]);
 
     // ── Reset on open/close ─────────────────────────────
@@ -234,46 +326,11 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
 
     // ── Preflight checks ────────────────────────────────
     const performerPreflight = useMemo(() => {
-        if (!performer) return [];
-        return [
-            performer.talRef ? { label: 'Tal', ref: performer.talRef, required: true } : null,
-            ...performer.danceRefs.map((ref, index) => ({ label: `Dance ${index + 1}`, ref, required: false })),
-        ]
-            .filter(Boolean)
-            .map((entry: any) => {
-                const urn = registryUrnFromRef(entry.ref);
-                if (urn) {
-                    return { ...entry, status: 'ready', detail: urn };
-                }
-                if (entry.ref?.kind === 'draft') {
-                    return { ...entry, status: 'draft', detail: `draft:${entry.ref.draftId}` };
-                }
-                return { ...entry, status: 'missing', detail: 'not set' };
-            });
+        return buildPerformerPreflight(performer);
     }, [performer]);
 
     const actPreflight = useMemo(() => {
-        if (!act) return [];
-        const author = authUser?.username || null;
-        const savedPerformerUrns = new Set(
-            installedPerformers
-                .filter((asset) => asset.source === 'stage')
-                .map((asset) => asset.urn),
-        );
-        return act.nodes
-            .filter((node: any) => node.type !== 'parallel')
-            .map((node: any) => {
-                const boundPerformer = performers.find((item) => item.id === node.performerId);
-                const performerUrn = resolvePublishablePerformerUrn(boundPerformer, author, {
-                    savedPerformerUrns,
-                });
-                return {
-                    nodeId: node.id,
-                    performerName: boundPerformer?.name || 'Unassigned',
-                    status: performerUrn ? 'ready' : 'missing',
-                    detail: performerUrn || 'Save or publish this performer before publishing the act.',
-                };
-            });
+        return buildActPreflight(act, performers, installedPerformers, authUser?.username || null);
     }, [act, authUser?.username, performers, installedPerformers]);
 
     const markdownDirty = useMemo(() => {
@@ -327,6 +384,38 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
         ]);
     };
 
+    const syncMarkdownDraftPublishState = (
+        resultUrn: string,
+        payload: ReturnType<typeof buildMarkdownAssetPayload>,
+    ) => {
+        if (!markdownEditor || !draft) {
+            return;
+        }
+
+        upsertDraft({
+            ...draft,
+            slug: payload.slug,
+            description: payload.description,
+            tags: payload.tags,
+            derivedFrom: resultUrn,
+            updatedAt: Date.now(),
+        });
+        updateMarkdownEditorBaseline(markdownEditor.id, payload);
+
+        if (!markdownEditor.attachTarget?.performerId) {
+            return;
+        }
+
+        const nextRef = { kind: 'registry' as const, urn: resultUrn };
+        if (markdownEditor.attachTarget.mode === 'tal') {
+            setPerformerTalRef(markdownEditor.attachTarget.performerId, nextRef);
+        } else if (markdownEditor.attachTarget.mode === 'dance-new' && !markdownEditor.attachTarget.targetRef) {
+            addPerformerDanceRef(markdownEditor.attachTarget.performerId, nextRef);
+        } else if (markdownEditor.attachTarget.targetRef) {
+            replacePerformerDanceRef(markdownEditor.attachTarget.performerId, markdownEditor.attachTarget.targetRef, nextRef);
+        }
+    };
+
     // ── Handlers ────────────────────────────────────────
 
     const handleSaveLocal = async () => {
@@ -376,33 +465,9 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
             }
 
             if ((target.kind === 'tal' || target.kind === 'dance') && markdownEditor && draft) {
-                const payload = {
-                    name: draft.name.trim() || (markdownEditor.kind === 'tal' ? 'Untitled Tal' : 'Untitled Dance'),
-                    slug: slug.trim(),
-                    description: description.trim() || draft.name.trim() || markdownEditor.kind,
-                    tags,
-                    content: typeof draft.content === 'string' ? draft.content : '',
-                };
+                const payload = buildMarkdownAssetPayload(markdownEditor, draft, slug, description, tags);
                 const result = await api.dot.saveLocalAsset(markdownEditor.kind, payload.slug, payload, authUser?.username || undefined);
-                upsertDraft({
-                    ...draft,
-                    slug: payload.slug,
-                    description: payload.description,
-                    tags: payload.tags,
-                    derivedFrom: result.urn,
-                    updatedAt: Date.now(),
-                });
-                updateMarkdownEditorBaseline(markdownEditor.id, payload);
-                if (markdownEditor.attachTarget?.performerId) {
-                    const nextRef = { kind: 'registry' as const, urn: result.urn };
-                    if (markdownEditor.attachTarget.mode === 'tal') {
-                        setPerformerTalRef(markdownEditor.attachTarget.performerId, nextRef);
-                    } else if (markdownEditor.attachTarget.mode === 'dance-new' && !markdownEditor.attachTarget.targetRef) {
-                        addPerformerDanceRef(markdownEditor.attachTarget.performerId, nextRef);
-                    } else if (markdownEditor.attachTarget.targetRef) {
-                        replacePerformerDanceRef(markdownEditor.attachTarget.performerId, markdownEditor.attachTarget.targetRef, nextRef);
-                    }
-                }
+                syncMarkdownDraftPublishState(result.urn, payload);
                 await invalidateKind(markdownEditor.kind);
                 setStatus({
                     tone: 'success',
@@ -469,33 +534,9 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
             }
 
             if ((target.kind === 'tal' || target.kind === 'dance') && markdownEditor && draft) {
-                const payload = {
-                    name: draft.name.trim() || (markdownEditor.kind === 'tal' ? 'Untitled Tal' : 'Untitled Dance'),
-                    slug: slug.trim(),
-                    description: description.trim() || draft.name.trim() || markdownEditor.kind,
-                    tags,
-                    content: typeof draft.content === 'string' ? draft.content : '',
-                };
+                const payload = buildMarkdownAssetPayload(markdownEditor, draft, slug, description, tags);
                 const result = await api.dot.publishAsset(markdownEditor.kind, payload.slug, payload, tags, true);
-                upsertDraft({
-                    ...draft,
-                    slug: payload.slug,
-                    description: payload.description,
-                    tags: payload.tags,
-                    derivedFrom: result.urn,
-                    updatedAt: Date.now(),
-                });
-                updateMarkdownEditorBaseline(markdownEditor.id, payload);
-                if (markdownEditor.attachTarget?.performerId) {
-                    const nextRef = { kind: 'registry' as const, urn: result.urn };
-                    if (markdownEditor.attachTarget.mode === 'tal') {
-                        setPerformerTalRef(markdownEditor.attachTarget.performerId, nextRef);
-                    } else if (markdownEditor.attachTarget.mode === 'dance-new' && !markdownEditor.attachTarget.targetRef) {
-                        addPerformerDanceRef(markdownEditor.attachTarget.performerId, nextRef);
-                    } else if (markdownEditor.attachTarget.targetRef) {
-                        replacePerformerDanceRef(markdownEditor.attachTarget.performerId, markdownEditor.attachTarget.targetRef, nextRef);
-                    }
-                }
+                syncMarkdownDraftPublishState(result.urn, payload);
                 await invalidateKind(markdownEditor.kind);
                 setStatus({
                     tone: 'success',
