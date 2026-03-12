@@ -144,6 +144,64 @@ function updateTargetMessages(
     }
 }
 
+function invalidateRuntimeQueries(workingDir: string) {
+    queryClient.invalidateQueries({ queryKey: ['mcp-servers', workingDir] })
+    queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
+}
+
+function resolveEventSessionContext(
+    state: StudioState,
+    sessionId: string | null | undefined,
+): { sessionId: string; target: SessionStreamTarget } | null {
+    if (!sessionId) {
+        return null
+    }
+    const target = resolveSessionTarget(state, sessionId)
+    if (!target) {
+        return null
+    }
+    return { sessionId, target }
+}
+
+function streamingPartContent(
+    store: Map<string, Map<string, string>>,
+    sessionId: string,
+    messageId: string,
+) {
+    return Array.from((store.get(streamingKey(sessionId, messageId)) || new Map()).values()).join('\n').trim()
+}
+
+function updateStreamingPartStore(
+    store: Map<string, Map<string, string>>,
+    sessionId: string,
+    messageId: string,
+    partId: string,
+    nextValue: string,
+) {
+    const key = streamingKey(sessionId, messageId)
+    const partMap = store.get(key) || new Map<string, string>()
+    partMap.set(partId, nextValue)
+    store.set(key, partMap)
+    return key
+}
+
+function removeStreamingPartStoreEntry(
+    store: Map<string, Map<string, string>>,
+    sessionId: string,
+    messageId: string,
+    partId: string,
+) {
+    const key = streamingKey(sessionId, messageId)
+    const partMap = store.get(key)
+    if (partMap) {
+        partMap.delete(partId)
+        if (partMap.size === 0) {
+            store.delete(key)
+        }
+    }
+    return key
+}
+
 function flushPendingActPerformerUpdates(set: (partial: any) => void) {
     if (pendingActPerformerUpdates.size === 0) {
         pendingActPerformerFlushTimer = null
@@ -376,8 +434,7 @@ export const createIntegrationSlice: StateCreator<
 
                 if (data.type === 'mcp.tools.changed') {
                     const workingDir = get().workingDir
-                    queryClient.invalidateQueries({ queryKey: ['mcp-servers', workingDir] })
-                    queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
+                    invalidateRuntimeQueries(workingDir)
                     return
                 }
 
@@ -449,15 +506,18 @@ export const createIntegrationSlice: StateCreator<
 
                     // ── Text parts (streaming) ──
                     if (part.type === 'text') {
-                        const key = streamingKey(part.sessionID, part.messageID)
-                        const partMap = streamingTextParts.get(key) || new Map<string, string>()
-                        partMap.set(part.id, typeof part.text === 'string' ? part.text : '')
-                        streamingTextParts.set(key, partMap)
+                        updateStreamingPartStore(
+                            streamingTextParts,
+                            part.sessionID,
+                            part.messageID,
+                            part.id,
+                            typeof part.text === 'string' ? part.text : '',
+                        )
                         streamingPartKinds.set(
                             streamingPartKey(part.sessionID, part.messageID, part.id),
                             'text',
                         )
-                        const content = Array.from(partMap.values()).join('\n').trim()
+                        const content = streamingPartContent(streamingTextParts, part.sessionID, part.messageID)
 
                         applyTargetMessageUpdate(set, target, (messages) => upsertStreamingAssistant(
                             messages,
@@ -469,10 +529,13 @@ export const createIntegrationSlice: StateCreator<
 
                     // ── Reasoning parts ──
                     if (part.type === 'reasoning') {
-                        const key = streamingKey(part.sessionID, part.messageID)
-                        const partMap = streamingReasoningParts.get(key) || new Map<string, string>()
-                        partMap.set(part.id, typeof part.text === 'string' ? part.text : '')
-                        streamingReasoningParts.set(key, partMap)
+                        updateStreamingPartStore(
+                            streamingReasoningParts,
+                            part.sessionID,
+                            part.messageID,
+                            part.id,
+                            typeof part.text === 'string' ? part.text : '',
+                        )
                         streamingPartKinds.set(
                             streamingPartKey(part.sessionID, part.messageID, part.id),
                             'reasoning',
@@ -480,7 +543,7 @@ export const createIntegrationSlice: StateCreator<
                         const reasoningPart: ChatMessagePart = {
                             id: part.id,
                             type: 'reasoning',
-                            content: partMap.get(part.id) || '',
+                            content: streamingReasoningParts.get(streamingKey(part.sessionID, part.messageID))?.get(part.id) || '',
                         }
                         applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(
                             messages,
@@ -578,11 +641,9 @@ export const createIntegrationSlice: StateCreator<
                     )
 
                     if (partKind === 'text') {
-                        const key = streamingKey(sessionID, messageID)
-                        const partMap = streamingTextParts.get(key) || new Map<string, string>()
-                        partMap.set(partID, `${partMap.get(partID) || ''}${delta}`)
-                        streamingTextParts.set(key, partMap)
-                        const content = Array.from(partMap.values()).join('\n').trim()
+                        const current = streamingTextParts.get(streamingKey(sessionID, messageID))?.get(partID) || ''
+                        updateStreamingPartStore(streamingTextParts, sessionID, messageID, partID, `${current}${delta}`)
+                        const content = streamingPartContent(streamingTextParts, sessionID, messageID)
 
                         applyTargetMessageUpdate(set, target, (messages) => upsertStreamingAssistant(
                             messages,
@@ -593,15 +654,13 @@ export const createIntegrationSlice: StateCreator<
                     }
 
                     if (partKind === 'reasoning') {
-                        const key = streamingKey(sessionID, messageID)
-                        const partMap = streamingReasoningParts.get(key) || new Map<string, string>()
-                        partMap.set(partID, `${partMap.get(partID) || ''}${delta}`)
-                        streamingReasoningParts.set(key, partMap)
+                        const current = streamingReasoningParts.get(streamingKey(sessionID, messageID))?.get(partID) || ''
+                        updateStreamingPartStore(streamingReasoningParts, sessionID, messageID, partID, `${current}${delta}`)
 
                         const reasoningPart: ChatMessagePart = {
                             id: partID,
                             type: 'reasoning',
-                            content: partMap.get(partID) || '',
+                            content: streamingReasoningParts.get(streamingKey(sessionID, messageID))?.get(partID) || '',
                         }
                         applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(
                             messages,
@@ -631,19 +690,11 @@ export const createIntegrationSlice: StateCreator<
                     }
 
                     const partKind = streamingPartKinds.get(streamingPartKey(sessionID, messageID, partID))
-                    const key = streamingKey(sessionID, messageID)
-
                     if (partKind === 'text') {
-                        const partMap = streamingTextParts.get(key)
-                        if (partMap) {
-                            partMap.delete(partID)
-                            if (partMap.size === 0) {
-                                streamingTextParts.delete(key)
-                            }
-                        }
+                        removeStreamingPartStoreEntry(streamingTextParts, sessionID, messageID, partID)
                         streamingPartKinds.delete(streamingPartKey(sessionID, messageID, partID))
 
-                        const content = Array.from((streamingTextParts.get(key) || new Map()).values()).join('\n').trim()
+                        const content = streamingPartContent(streamingTextParts, sessionID, messageID)
                         applyTargetMessageUpdate(set, target, (messages) => upsertStreamingAssistant(
                             messages,
                             messageID,
@@ -653,13 +704,7 @@ export const createIntegrationSlice: StateCreator<
                     }
 
                     if (partKind === 'reasoning') {
-                        const partMap = streamingReasoningParts.get(key)
-                        if (partMap) {
-                            partMap.delete(partID)
-                            if (partMap.size === 0) {
-                                streamingReasoningParts.delete(key)
-                            }
-                        }
+                        removeStreamingPartStoreEntry(streamingReasoningParts, sessionID, messageID, partID)
                         streamingPartKinds.delete(streamingPartKey(sessionID, messageID, partID))
                         applyTargetMessageUpdate(set, target, (messages) => removeMessagePart(
                             messages,
@@ -673,11 +718,11 @@ export const createIntegrationSlice: StateCreator<
                 }
 
                 if (data.type === 'session.status') {
-                    const sessionId = data.properties?.sessionID
-                    const target = sessionId ? resolveSessionTarget(get(), sessionId) : null
-                    if (!target) {
+                    const context = resolveEventSessionContext(get(), data.properties?.sessionID)
+                    if (!context) {
                         return
                     }
+                    const { sessionId, target } = context
                     const statusType = data.properties?.status?.type
                     if (statusType === 'busy' && target.kind === 'performer') {
                         set({ loadingPerformerId: target.performerId })
@@ -708,11 +753,11 @@ export const createIntegrationSlice: StateCreator<
                 }
 
                 if (data.type === 'session.idle') {
-                    const sessionId = data.properties?.sessionID
-                    const target = sessionId ? resolveSessionTarget(get(), sessionId) : null
-                    if (!sessionId || !target) {
+                    const context = resolveEventSessionContext(get(), data.properties?.sessionID)
+                    if (!context) {
                         return
                     }
+                    const { sessionId, target } = context
                     if (target.kind === 'performer' && get().loadingPerformerId === target.performerId) {
                         set({ loadingPerformerId: null })
                     }
@@ -721,25 +766,23 @@ export const createIntegrationSlice: StateCreator<
                 }
 
                 if (data.type === 'session.compacted') {
-                    const sessionId = data.properties?.sessionID
-                    const target = sessionId ? resolveSessionTarget(get(), sessionId) : null
-                    if (!sessionId || !target) {
+                    const context = resolveEventSessionContext(get(), data.properties?.sessionID)
+                    if (!context) {
                         return
                     }
+                    const { sessionId, target } = context
                     void syncSessionMessages(target, sessionId)
                     return
                 }
 
                 if (data.type === 'session.error') {
-                    const sessionId = data.properties?.sessionID
-                    const target = sessionId ? resolveSessionTarget(get(), sessionId) : null
-                    if (!target) {
+                    const context = resolveEventSessionContext(get(), data.properties?.sessionID)
+                    if (!context) {
                         return
                     }
+                    const { sessionId, target } = context
 
-                    if (sessionId) {
-                        clearStreamingSession(sessionId)
-                    }
+                    clearStreamingSession(sessionId)
 
                     if (target.kind === 'performer' && get().loadingPerformerId === target.performerId) {
                         set({ loadingPerformerId: null })
