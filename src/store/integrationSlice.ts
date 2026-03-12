@@ -1,31 +1,21 @@
 import type { StateCreator } from 'zustand'
-import type { ChatMessagePart } from '../types'
 import type { StudioState, IntegrationSlice } from './types'
 import type { AdapterViewEvent } from '../../shared/adapter-view'
 import { api } from '../api'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers'
 import { formatStudioApiErrorComment } from '../lib/api-errors'
 import { mapSessionMessagesToChatMessages } from '../lib/chat-messages'
-import { showToast } from '../lib/toast'
 import {
     adapterEventSourceInstance,
     adapterEventSourceWorkingDir,
     actEventSourceInstance,
     actEventSourceSessionId,
     actEventSourceWorkingDir,
-    applyTargetMessageUpdate,
     clearIntegrationStreamingState,
     clearStreamingSession,
-    diagnosticMatchesWorkingDir,
     eventSourceInstance,
     eventSourceWorkingDir,
-    extractEventErrorMessage,
-    invalidateRuntimeQueries,
-    removeMessagePart,
-    removeStreamingPartStoreEntry,
     resolveCurrentActSessionId,
-    resolveEventSessionContext,
-    resolveSessionTarget,
     setAdapterEventSourceInstance,
     setAdapterEventSourceWorkingDir,
     setActEventSourceInstance,
@@ -33,21 +23,26 @@ import {
     setActEventSourceWorkingDir,
     setEventSourceInstance,
     setEventSourceWorkingDir,
-    streamingKey,
     streamingMessageKey,
     streamingMessageRoles,
-    streamingPartContent,
-    streamingPartKey,
-    streamingPartKinds,
-    streamingReasoningParts,
-    streamingTextParts,
     syncingSessions,
-    updateStreamingPartStore,
     updateTargetMessages,
-    upsertMessagePart,
-    upsertStreamingAssistant,
 } from './integration-streaming'
 import type { SessionStreamTarget } from './integration-streaming'
+import {
+    handleLspDiagnostics,
+    handleLspUpdated,
+    handleMcpToolsChanged,
+    handleMcpBrowserOpenFailed,
+    handleMessageUpdated,
+    handleMessagePartUpdated,
+    handleMessagePartDelta,
+    handleMessagePartRemoved,
+    handleSessionStatus,
+    handleSessionIdle,
+    handleSessionCompacted,
+    handleSessionError,
+} from './integration-event-handlers'
 
 export const createIntegrationSlice: StateCreator<
     StudioState,
@@ -110,391 +105,18 @@ export const createIntegrationSlice: StateCreator<
             try {
                 const data = JSON.parse(event.data)
 
-                if (data.type === 'lsp.client.diagnostics') {
-                    const { uri, diagnostics } = data.properties || {}
-                    if (typeof uri !== 'string' || !diagnosticMatchesWorkingDir(uri, get().workingDir)) {
-                        return
-                    }
-                    set((state) => ({
-                        lspDiagnostics: {
-                            ...state.lspDiagnostics,
-                            [uri]: diagnostics,
-                        },
-                    }))
-                    return
-                }
-
-                if (data.type === 'lsp.updated') {
-                    get().fetchLspStatus()
-                    return
-                }
-
-                if (data.type === 'mcp.tools.changed') {
-                    const workingDir = get().workingDir
-                    invalidateRuntimeQueries(workingDir)
-                    return
-                }
-
-                if (data.type === 'mcp.browser.open.failed') {
-                    const mcpName = data.properties?.mcpName
-                    const url = data.properties?.url
-                    if (typeof mcpName !== 'string' || typeof url !== 'string' || !url.trim()) {
-                        return
-                    }
-                    showToast(`Studio could not open the browser for MCP auth (${mcpName}).`, 'warning', {
-                        title: 'MCP auth needs browser',
-                        actionLabel: 'Open auth',
-                        onAction: () => {
-                            window.open(url, '_blank')
-                        },
-                        dedupeKey: `mcp-auth-open:${mcpName}`,
-                        durationMs: 8000,
-                    })
-                    return
-                }
-
-                if (data.type === 'message.updated') {
-                    const info = data.properties?.info
-                    if (!info?.sessionID || !info?.id || typeof info.role !== 'string') {
-                        return
-                    }
-
-                    if (info.role === 'user' || info.role === 'assistant' || info.role === 'system') {
-                        streamingMessageRoles.set(
-                            streamingMessageKey(info.sessionID, info.id),
-                            info.role,
-                        )
-                    }
-
-                    if (info.role !== 'assistant') {
-                        return
-                    }
-                    const target = resolveSessionTarget(get(), info.sessionID)
-                    if (!target) {
-                        return
-                    }
-
-                    applyTargetMessageUpdate(set, target, (messages) => upsertStreamingAssistant(
-                        messages,
-                        info.id,
-                        messages.find((message) => message.id === info.id)?.content || '',
-                        info.time?.created || Date.now(),
-                    ))
-                    return
-                }
-
-                if (data.type === 'message.part.updated') {
-                    const part = data.properties?.part
-                    if (!part?.sessionID || !part?.messageID) {
-                        return
-                    }
-
-                    const messageRole = streamingMessageRoles.get(
-                        streamingMessageKey(part.sessionID, part.messageID),
-                    )
-                    if (messageRole !== 'assistant') {
-                        return
-                    }
-
-                    const target = resolveSessionTarget(get(), part.sessionID)
-                    if (!target) {
-                        return
-                    }
-
-                    // ── Text parts (streaming) ──
-                    if (part.type === 'text') {
-                        updateStreamingPartStore(
-                            streamingTextParts,
-                            part.sessionID,
-                            part.messageID,
-                            part.id,
-                            typeof part.text === 'string' ? part.text : '',
-                        )
-                        streamingPartKinds.set(
-                            streamingPartKey(part.sessionID, part.messageID, part.id),
-                            'text',
-                        )
-                        const content = streamingPartContent(streamingTextParts, part.sessionID, part.messageID)
-
-                        applyTargetMessageUpdate(set, target, (messages) => upsertStreamingAssistant(
-                            messages,
-                            part.messageID,
-                            content,
-                        ))
-                        return
-                    }
-
-                    // ── Reasoning parts ──
-                    if (part.type === 'reasoning') {
-                        updateStreamingPartStore(
-                            streamingReasoningParts,
-                            part.sessionID,
-                            part.messageID,
-                            part.id,
-                            typeof part.text === 'string' ? part.text : '',
-                        )
-                        streamingPartKinds.set(
-                            streamingPartKey(part.sessionID, part.messageID, part.id),
-                            'reasoning',
-                        )
-                        const reasoningPart: ChatMessagePart = {
-                            id: part.id,
-                            type: 'reasoning',
-                            content: streamingReasoningParts.get(streamingKey(part.sessionID, part.messageID))?.get(part.id) || '',
-                        }
-                        applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(
-                            messages,
-                            part.messageID,
-                            reasoningPart,
-                        ))
-                        return
-                    }
-
-                    // ── Tool parts ──
-                    if (part.type === 'tool') {
-                        const state = part.state || {}
-                        const toolPart: ChatMessagePart = {
-                            id: part.id,
-                            type: 'tool',
-                            tool: {
-                                name: part.tool || 'unknown',
-                                callId: part.callID || part.id,
-                                status: state.status || 'pending',
-                                title: state.title,
-                                input: state.input,
-                                output: state.output,
-                                error: state.error,
-                                time: state.time,
-                            },
-                        }
-                        applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(
-                            messages,
-                            part.messageID,
-                            toolPart,
-                        ))
-                        return
-                    }
-
-                    // ── Step parts ──
-                    if (part.type === 'step-start' || part.type === 'step-finish') {
-                        const stepPart: ChatMessagePart = {
-                            id: part.id,
-                            type: part.type,
-                            step: part.type === 'step-finish' ? {
-                                reason: part.reason,
-                                cost: part.cost,
-                                tokens: part.tokens,
-                            } : undefined,
-                        }
-                        applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(
-                            messages,
-                            part.messageID,
-                            stepPart,
-                        ))
-                        return
-                    }
-
-                    // ── Compaction parts ──
-                    if (part.type === 'compaction') {
-                        const compactionPart: ChatMessagePart = {
-                            id: part.id,
-                            type: 'compaction',
-                            compaction: {
-                                auto: !!part.auto,
-                                overflow: part.overflow,
-                            },
-                        }
-                        applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(
-                            messages,
-                            part.messageID,
-                            compactionPart,
-                        ))
-                        return
-                    }
-
-                    return
-                }
-
-                if (data.type === 'message.part.delta') {
-                    const { sessionID, messageID, partID, field, delta } = data.properties || {}
-                    if (!sessionID || !messageID || !partID || field !== 'text' || typeof delta !== 'string') {
-                        return
-                    }
-
-                    const messageRole = streamingMessageRoles.get(
-                        streamingMessageKey(sessionID, messageID),
-                    )
-                    if (messageRole !== 'assistant') {
-                        return
-                    }
-
-                    const target = resolveSessionTarget(get(), sessionID)
-                    if (!target) {
-                        return
-                    }
-
-                    const partKind = streamingPartKinds.get(
-                        streamingPartKey(sessionID, messageID, partID),
-                    )
-
-                    if (partKind === 'text') {
-                        const current = streamingTextParts.get(streamingKey(sessionID, messageID))?.get(partID) || ''
-                        updateStreamingPartStore(streamingTextParts, sessionID, messageID, partID, `${current}${delta}`)
-                        const content = streamingPartContent(streamingTextParts, sessionID, messageID)
-
-                        applyTargetMessageUpdate(set, target, (messages) => upsertStreamingAssistant(
-                            messages,
-                            messageID,
-                            content,
-                        ))
-                        return
-                    }
-
-                    if (partKind === 'reasoning') {
-                        const current = streamingReasoningParts.get(streamingKey(sessionID, messageID))?.get(partID) || ''
-                        updateStreamingPartStore(streamingReasoningParts, sessionID, messageID, partID, `${current}${delta}`)
-
-                        const reasoningPart: ChatMessagePart = {
-                            id: partID,
-                            type: 'reasoning',
-                            content: streamingReasoningParts.get(streamingKey(sessionID, messageID))?.get(partID) || '',
-                        }
-                        applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(
-                            messages,
-                            messageID,
-                            reasoningPart,
-                        ))
-                    }
-                    return
-                }
-
-                if (data.type === 'message.part.removed') {
-                    const { sessionID, messageID, partID } = data.properties || {}
-                    if (!sessionID || !messageID || !partID) {
-                        return
-                    }
-
-                    const messageRole = streamingMessageRoles.get(
-                        streamingMessageKey(sessionID, messageID),
-                    )
-                    if (messageRole !== 'assistant') {
-                        return
-                    }
-
-                    const target = resolveSessionTarget(get(), sessionID)
-                    if (!target) {
-                        return
-                    }
-
-                    const partKind = streamingPartKinds.get(streamingPartKey(sessionID, messageID, partID))
-                    if (partKind === 'text') {
-                        removeStreamingPartStoreEntry(streamingTextParts, sessionID, messageID, partID)
-                        streamingPartKinds.delete(streamingPartKey(sessionID, messageID, partID))
-
-                        const content = streamingPartContent(streamingTextParts, sessionID, messageID)
-                        applyTargetMessageUpdate(set, target, (messages) => upsertStreamingAssistant(
-                            messages,
-                            messageID,
-                            content,
-                        ))
-                        return
-                    }
-
-                    if (partKind === 'reasoning') {
-                        removeStreamingPartStoreEntry(streamingReasoningParts, sessionID, messageID, partID)
-                        streamingPartKinds.delete(streamingPartKey(sessionID, messageID, partID))
-                        applyTargetMessageUpdate(set, target, (messages) => removeMessagePart(
-                            messages,
-                            messageID,
-                            partID,
-                        ))
-                        return
-                    }
-
-                    return
-                }
-
-                if (data.type === 'session.status') {
-                    const context = resolveEventSessionContext(get(), data.properties?.sessionID)
-                    if (!context) {
-                        return
-                    }
-                    const { sessionId, target } = context
-                    const statusType = data.properties?.status?.type
-                    if (statusType === 'busy' && target.kind === 'performer') {
-                        set({ loadingPerformerId: target.performerId })
-                    } else if (statusType === 'retry') {
-                        applyTargetMessageUpdate(set, target, (messages) => {
-                            const retryMsgId = `retry-${sessionId}`
-                            const retryIndex = messages.findIndex((message) => message.id === retryMsgId)
-                            const newContent = `⏳ Retrying (Attempt ${data.properties?.status?.attempt}): ${data.properties?.status?.message || 'Operation failed, retrying...'}`
-
-                            if (retryIndex >= 0) {
-                                const nextMessages = [...messages]
-                                nextMessages[retryIndex] = { ...nextMessages[retryIndex], content: newContent }
-                                return nextMessages
-                            }
-
-                            return [
-                                ...messages,
-                                {
-                                    id: retryMsgId,
-                                    role: 'system',
-                                    content: newContent,
-                                    timestamp: Date.now(),
-                                },
-                            ]
-                        })
-                    }
-                    return
-                }
-
-                if (data.type === 'session.idle') {
-                    const context = resolveEventSessionContext(get(), data.properties?.sessionID)
-                    if (!context) {
-                        return
-                    }
-                    const { sessionId, target } = context
-                    if (target.kind === 'performer' && get().loadingPerformerId === target.performerId) {
-                        set({ loadingPerformerId: null })
-                    }
-                    void syncSessionMessages(target, sessionId)
-                    return
-                }
-
-                if (data.type === 'session.compacted') {
-                    const context = resolveEventSessionContext(get(), data.properties?.sessionID)
-                    if (!context) {
-                        return
-                    }
-                    const { sessionId, target } = context
-                    void syncSessionMessages(target, sessionId)
-                    return
-                }
-
-                if (data.type === 'session.error') {
-                    const context = resolveEventSessionContext(get(), data.properties?.sessionID)
-                    if (!context) {
-                        return
-                    }
-                    const { sessionId, target } = context
-
-                    clearStreamingSession(sessionId)
-
-                    if (target.kind === 'performer' && get().loadingPerformerId === target.performerId) {
-                        set({ loadingPerformerId: null })
-                    }
-
-                    applyTargetMessageUpdate(set, target, (messages) => [
-                        ...messages,
-                        {
-                            id: `system-${Date.now()}`,
-                            role: 'system',
-                            content: `⚠️ ${extractEventErrorMessage(data.properties?.error)}`,
-                            timestamp: Date.now(),
-                        },
-                    ])
-                }
+                if (data.type === 'lsp.client.diagnostics') return handleLspDiagnostics(data, get, set)
+                if (data.type === 'lsp.updated') return handleLspUpdated(get)
+                if (data.type === 'mcp.tools.changed') return handleMcpToolsChanged(get)
+                if (data.type === 'mcp.browser.open.failed') return handleMcpBrowserOpenFailed(data)
+                if (data.type === 'message.updated') return handleMessageUpdated(data, get, set)
+                if (data.type === 'message.part.updated') return handleMessagePartUpdated(data, get, set)
+                if (data.type === 'message.part.delta') return handleMessagePartDelta(data, get, set)
+                if (data.type === 'message.part.removed') return handleMessagePartRemoved(data, get, set)
+                if (data.type === 'session.status') return handleSessionStatus(data, get, set)
+                if (data.type === 'session.idle') return handleSessionIdle(data, get, set, syncSessionMessages)
+                if (data.type === 'session.compacted') return handleSessionCompacted(data, get, set, syncSessionMessages)
+                if (data.type === 'session.error') return handleSessionError(data, get, set)
             } catch {
                 // Ignore malformed events and keep the stream alive.
             }
