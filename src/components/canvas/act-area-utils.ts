@@ -1,5 +1,6 @@
 import { computeActAutoLayout, ACT_LAYOUT_NODE_WIDTH, ACT_LAYOUT_NODE_HEIGHT } from '../../lib/act-layout'
 import { useStudioStore } from '../../store'
+import { makeId } from '../../lib/acts'
 
 // ── Types ──────────────────────────────────────────────
 
@@ -225,7 +226,7 @@ export function resolveInlineEditorContent(
 
 export function saveInlineEditorDraft(inlineEditor: InlineEditorState) {
     const store = useStudioStore.getState()
-    const draftId = `${inlineEditor.kind}-draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const draftId = makeId(`${inlineEditor.kind}-draft`)
     const name = inlineEditor.kind === 'tal' ? 'Inline Tal' : 'Inline Dance'
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
     store.upsertDraft({

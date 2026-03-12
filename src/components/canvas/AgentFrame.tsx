@@ -4,10 +4,11 @@ import { NodeResizer, useStore } from '@xyflow/react';
 import { useStudioStore } from '../../store';
 import { useSlashCommands } from '../../hooks/useSlashCommands';
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions';
-import { useAgents, useAssetKind, useAssets, useMcpServers, useRuntimeTools } from '../../hooks/queries';
+import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries';
 import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil } from 'lucide-react';
 import ThreadBody from './ThreadBody';
-import { assetRefKey, buildAssetCardMap, buildMcpServerMap, hasModelConfig, resolvePerformerAgentId, resolvePerformerPresentation, resolvePerformerRuntimeConfig } from '../../lib/performers';
+import { assetRefKey, hasModelConfig, resolvePerformerAgentId } from '../../lib/performers';
+import { usePerformerPresentation } from '../../hooks/usePerformerPresentation';
 import { api } from '../../api';
 import { showToast } from '../../lib/toast';
 import { loadMaterialFileIconForPath } from '../../lib/material-file-icons';
@@ -182,30 +183,12 @@ export default function AgentFrame({ data, id }: any) {
         [agents],
     );
     const isPlanAgent = selectedAgentId === 'plan';
-    const performerPresentation = useMemo(() => (
-        performer
-            ? resolvePerformerPresentation(
-                performer,
-                buildAssetCardMap(assetInventory),
-                buildMcpServerMap(mcpServers),
-                drafts,
-            )
-            : {
-                talAsset: null,
-                danceAssets: [],
-                mcpServers: [],
-                mcpPlaceholders: [],
-                declaredMcpServerNames: [],
-            }
-    ), [assetInventory, drafts, mcpServers, performer]);
-    const runtimeConfig = useMemo(
-        () => performer ? resolvePerformerRuntimeConfig(performer) : null,
-        [performer],
-    );
-    const { data: runtimeTools } = useRuntimeTools(
-        runtimeConfig?.model || null,
-        runtimeConfig?.mcpServerNames || [],
-        (isSelected || isEditMode) && !!runtimeConfig,
+    const { presentation: performerPresentation, runtimeTools } = usePerformerPresentation(
+        performer,
+        assetInventory,
+        mcpServers,
+        drafts,
+        { enableTools: (isSelected || isEditMode) },
     );
     const mcpBindingRows = useMemo(
         () => (performerPresentation.declaredMcpServerNames || [])

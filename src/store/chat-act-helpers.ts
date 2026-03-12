@@ -10,6 +10,7 @@ import type { StudioState } from './types'
 import { api } from '../api'
 import { resolvePerformerRuntimeConfig } from '../lib/performers'
 import { formatStudioApiErrorMessage } from '../lib/api-errors'
+import { makeId } from '../lib/acts'
 import type { ActRunState, ActThreadResumeSummary } from '../types'
 
 type SetFn = (
@@ -62,7 +63,7 @@ export function createFreshActSession(
     },
 ): string {
     const currentCount = get().actSessions.filter((session) => session.actId === actId).length
-    const sessionId = `act-session-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const sessionId = makeId('act-session')
     const nextSession = {
         id: sessionId,
         actId,

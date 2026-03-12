@@ -7,6 +7,7 @@ import {
     normalizePerformerAssetInput,
 } from '../lib/performers'
 import { createActActions } from './actSlice'
+import { makeId } from '../lib/acts'
 import {
     applyPerformerPatch,
     defaultMarkdownContent,
@@ -42,7 +43,7 @@ export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
 export const canvasTerminalIdCounter = { value: 0 }
 const TRACKING_WINDOW_ID = 'stage-tracking-window'
-const genEdgeId = () => `edge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+const genEdgeId = () => makeId('edge')
 
 export const createWorkspaceSlice: StateCreator<
     StudioState,
@@ -508,7 +509,7 @@ export const createWorkspaceSlice: StateCreator<
     createMarkdownEditor: (kind, options) => {
         markdownEditorIdCounter.value++
         const editorId = `markdown-editor-${markdownEditorIdCounter.value}`
-        const draftId = `${kind}-draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        const draftId = makeId(`${kind}-draft`)
         const source = options?.source
         const name = source?.name || (kind === 'tal' ? 'New Tal' : 'New Dance')
         const slug = source?.slug || name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')

@@ -10,7 +10,7 @@ import type {
 } from '../types'
 import { unresolvedDeclaredMcpServerNames } from './performers'
 
-function makeId(prefix: string) {
+export function makeId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
 

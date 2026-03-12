@@ -3,7 +3,7 @@ import { useDroppable } from '@dnd-kit/core'
 import { useStore } from '@xyflow/react'
 import { Workflow, ArrowLeft, Plus, Trash2, Bot, Hexagon, Zap, Cpu, Server, Pencil, EyeOff, Save, X } from 'lucide-react'
 import { useStudioStore } from '../../store'
-import { useAssets, useMcpServers, useRuntimeTools } from '../../hooks/queries'
+import { useAssets, useMcpServers } from '../../hooks/queries'
 
 import ActThreadPanel from './ActThreadPanel'
 import CanvasWindowFrame from './CanvasWindowFrame'
@@ -16,7 +16,7 @@ import ModelVariantSelect from './ModelVariantSelect'
 import AgentSelect from './AgentSelect'
 
 import type { ActPerformerSessionBinding, ActSessionMode, ChatMessage, PerformerNode } from '../../types'
-import { buildAssetCardMap, buildMcpServerMap, resolvePerformerPresentation, resolvePerformerRuntimeConfig } from '../../lib/performers'
+import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
 import {
     edgePath,
     previewEdgePath,
@@ -246,31 +246,11 @@ export default function ActAreaFrame({ data, id, selected }: any) {
         const existingContent = resolveInlineEditorContent(ref, data.drafts || {})
         setInlineEditor({ kind, performerId, content: existingContent })
     }
-    const focusedPerformerPresentation = useMemo(() => (
-        focusedPerformerNode
-            ? resolvePerformerPresentation(
-                focusedPerformerNode,
-                buildAssetCardMap(assetInventory),
-                buildMcpServerMap(mcpServers),
-                data.drafts || {},
-            )
-            : {
-                talAsset: null,
-                danceAssets: [],
-                mcpServers: [],
-                mcpPlaceholders: [],
-                mappedMcpPlaceholders: [],
-                declaredMcpServerNames: [],
-            }
-    ), [assetInventory, data.drafts, focusedPerformerNode, mcpServers])
-    const focusedRuntimeConfig = useMemo(
-        () => focusedPerformerNode ? resolvePerformerRuntimeConfig(focusedPerformerNode) : null,
-        [focusedPerformerNode],
-    )
-    const { data: focusedRuntimeTools } = useRuntimeTools(
-        focusedRuntimeConfig?.model || null,
-        focusedRuntimeConfig?.mcpServerNames || [],
-        !!focusedRuntimeConfig,
+    const { presentation: focusedPerformerPresentation, runtimeTools: focusedRuntimeTools } = usePerformerPresentation(
+        focusedPerformerNode,
+        assetInventory,
+        mcpServers,
+        data.drafts || {},
     )
     const focusedMcpBindingRows = useMemo(
         () => (focusedPerformerPresentation.declaredMcpServerNames || [])

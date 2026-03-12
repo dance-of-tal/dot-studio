@@ -5,6 +5,7 @@
  * authentication lifecycle, and query invalidation.
  */
 
+import { makeId } from '../../lib/acts'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
@@ -109,7 +110,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
     }
 
     const addMcpEntry = (type: 'local' | 'remote') => {
-        const key = `asset-mcp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        const key = makeId('asset-mcp')
         setMcpDraftEntries((current) => [
             ...current,
             {
