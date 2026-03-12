@@ -169,7 +169,7 @@ export function AssetDetailBody({
 
             {inlineContent && (
                 <div className="asset-popover__section">
-                    <div className="asset-popover__section-title">
+                    <div className="section-title">
                         {asset.kind === 'tal' ? 'Instructions' : asset.kind === 'dance' ? 'Skills' : 'Content'}
                     </div>
                     <div className="asset-popover__content">
@@ -192,13 +192,13 @@ export function AssetDetailBody({
                 <>
                     {asset.talUrn && (
                         <div className="asset-popover__section">
-                            <div className="asset-popover__section-title">Tal</div>
+                            <div className="section-title">Tal</div>
                             <div className="asset-popover__section-item">{displayUrn(asset.talUrn)}</div>
                         </div>
                     )}
                     {Array.isArray(asset.danceUrns) && asset.danceUrns.length > 0 && (
                         <div className="asset-popover__section">
-                            <div className="asset-popover__section-title">Dances ({asset.danceUrns.length})</div>
+                            <div className="section-title">Dances ({asset.danceUrns.length})</div>
                             {asset.danceUrns.map((danceUrn: string) => (
                                 <div key={danceUrn} className="asset-popover__section-item">{displayUrn(danceUrn)}</div>
                             ))}
@@ -206,7 +206,7 @@ export function AssetDetailBody({
                     )}
                     {asset.model && (
                         <div className="asset-popover__section">
-                            <div className="asset-popover__section-title">Model</div>
+                            <div className="section-title">Model</div>
                             <div className="asset-popover__section-item">
                                 {typeof asset.model === 'string' ? asset.model : asset.model.modelId}
                             </div>
@@ -217,7 +217,7 @@ export function AssetDetailBody({
 
             {asset.kind === 'act' && (
                 <div className="asset-popover__section">
-                    <div className="asset-popover__section-title">Act Summary</div>
+                    <div className="section-title">Act Summary</div>
                     <div className="asset-popover__section-item">Entry: {asset.entryNode || 'n/a'}</div>
                     <div className="asset-popover__section-item">Nodes: {nodeCount}</div>
                     <div className="asset-popover__section-item">Edges: {edgeCount}</div>
@@ -229,7 +229,7 @@ export function AssetDetailBody({
 
             {asset.kind === 'model' && (
                 <div className="asset-popover__section">
-                    <div className="asset-popover__section-title">Details</div>
+                    <div className="section-title">Details</div>
                     {asset.context && <div className="asset-popover__section-item">Context: {Math.round(asset.context / 1000)}k tokens</div>}
                     <div className="asset-popover__section-item">Status: {asset.connected ? 'Ready' : 'Not Configured'}</div>
                     <div className="asset-popover__section-item">Tools: {asset.toolCall ? 'Yes' : 'No'}</div>
@@ -245,7 +245,7 @@ export function AssetDetailBody({
             {asset.kind === 'mcp' && (
                 <>
                     <div className="asset-popover__section">
-                        <div className="asset-popover__section-title">Capabilities</div>
+                        <div className="section-title">Capabilities</div>
                         <div className="asset-popover__section-item">Status: {asset.status || 'unknown'}</div>
                         <div className="asset-popover__section-item">{asset.tools?.length || 0} Tools</div>
                         <div className="asset-popover__section-item">{asset.resources?.length || 0} Resources</div>
@@ -261,7 +261,7 @@ export function AssetDetailBody({
                     </div>
                     {Array.isArray(asset.tools) && asset.tools.length > 0 && (
                         <div className="asset-popover__section">
-                            <div className="asset-popover__section-title">Tools</div>
+                            <div className="section-title">Tools</div>
                             {asset.tools.slice(0, 8).map((tool: any) => (
                                 <div key={tool.name} className="asset-popover__section-item">
                                     {tool.name}{tool.description ? ` · ${tool.description}` : ''}
@@ -536,7 +536,7 @@ export function RegistryResult({
                     name={item.name}
                     trailing={(
                         <>
-                            <span className="registry-kind-badge">{item.kind}</span>
+                            <span className="badge">{item.kind}</span>
                             <div
                                 style={{ position: 'relative', marginLeft: 'auto' }}
                                 onClick={(event) => event.stopPropagation()}
@@ -566,9 +566,9 @@ export function RegistryResult({
                 <div className="asset-card__author">{normalizeAuthor(item.author)}</div>
                 <div className="asset-card__desc">{item.description || 'No description.'}</div>
                 {Array.isArray(item.tags) && item.tags.length > 0 && (
-                    <div className="registry-tags">
+                    <div className="badges">
                         {item.tags.slice(0, 3).map((tag: string) => (
-                            <span key={tag} className="registry-tag">{tag}</span>
+                            <span key={tag} className="badge">{tag}</span>
                         ))}
                     </div>
                 )}
@@ -621,7 +621,7 @@ export function PinnedDetailPanel({
         <div className="asset-detail-panel">
             <div className="asset-detail-panel__header">
                 <div>
-                    <div className="asset-detail-panel__eyebrow">Pinned Details</div>
+                    <div className="section-title">Pinned Details</div>
                     <div className="asset-detail-panel__title">{resolvedAsset?.name || asset.name}</div>
                 </div>
                 <button className="icon-btn" onClick={onClose} title="Clear detail panel">

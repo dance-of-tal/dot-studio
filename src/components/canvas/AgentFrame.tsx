@@ -779,7 +779,7 @@ export default function AgentFrame({ data, id }: any) {
                         >
                             <ArrowLeft size={12} />
                         </button>
-                        <span className="figma-edit-workbench__eyebrow">Edit</span>
+                        <span className="section-title">Edit</span>
                         <div className="figma-edit-workbench__actions">
                             <button
                                 className={`figma-edit-workbench__tab ${editTab === 'basic' ? 'active' : ''}`}

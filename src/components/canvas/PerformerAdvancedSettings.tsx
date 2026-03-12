@@ -58,7 +58,7 @@ export default function PerformerAdvancedSettings({
             {/* ── Identity ── */}
             <div className="adv-section">
                 <div className="adv-section__head">
-                    <span className="adv-section__title">Identity</span>
+                    <span className="section-title">Identity</span>
                 </div>
                 <div className="adv-section__body">
                     <label className="adv-field">
@@ -86,7 +86,7 @@ export default function PerformerAdvancedSettings({
             {/* ── Tal ── */}
             <div className="adv-section">
                 <div className="adv-section__head">
-                    <span className="adv-section__title">Tal</span>
+                    <span className="section-title">Tal</span>
                     <button type="button" className="btn btn--sm" onClick={onOpenTalEditor}>
                         {performer?.talRef ? 'Edit' : '+ New'}
                     </button>
@@ -101,7 +101,7 @@ export default function PerformerAdvancedSettings({
             {/* ── Dances ── */}
             <div className="adv-section">
                 <div className="adv-section__head">
-                    <span className="adv-section__title">Dances</span>
+                    <span className="section-title">Dances</span>
                     <button type="button" className="btn btn--sm" onClick={onCreateDanceDraft} disabled={!onCreateDanceDraft}>
                         + New
                     </button>
@@ -137,7 +137,7 @@ export default function PerformerAdvancedSettings({
             {/* ── Runtime ── */}
             <div className="adv-section">
                 <div className="adv-section__head">
-                    <span className="adv-section__title">Runtime</span>
+                    <span className="section-title">Runtime</span>
                     {performer?.model && onClearModel ? (
                         <button type="button" className="btn btn--sm" onClick={onClearModel}>
                             Clear Model
@@ -171,7 +171,7 @@ export default function PerformerAdvancedSettings({
             {/* ── MCP Servers ── */}
             <div className="adv-section">
                 <div className="adv-section__head">
-                    <span className="adv-section__title">MCP Servers</span>
+                    <span className="section-title">MCP Servers</span>
                 </div>
                 <div className="adv-section__body">
                     {performer?.mcpServerNames?.length || unresolvedMcpPlaceholders.length ? (
