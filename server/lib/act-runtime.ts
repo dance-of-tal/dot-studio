@@ -2,248 +2,34 @@ import { createActor, fromPromise, setup, toPromise, assign } from 'xstate'
 import { readAsset } from 'dance-of-tal/lib/registry'
 import type { Act } from 'dance-of-tal/data/types'
 import { getOpencode } from './opencode.js'
-import { buildPromptEnvelope, type DanceDeliveryMode, type ModelSelection } from './prompt.js'
+import { buildPromptEnvelope, type ModelSelection } from './prompt.js'
 import { buildEnabledToolMap, describeUnavailableRuntimeTools, resolveRuntimeTools } from './runtime-tools.js'
 import { normalizeOpencodeError, unwrapOpencodeResult, unwrapPromptResult } from './opencode-errors.js'
-
-type ActSessionPolicy = 'fresh' | 'node' | 'performer' | 'act'
-type ActSessionLifetime = 'run' | 'thread'
-type ActSessionMode = 'default' | 'all_nodes_thread'
-type RuntimeAssetRef =
-    | { kind: 'registry'; urn: string }
-    | { kind: 'draft'; draftId: string }
-type RuntimeDraftAsset = {
-    id: string
-    kind: 'tal' | 'dance' | 'performer' | 'act'
-    name: string
-    content: unknown
-    description?: string
-    derivedFrom?: string | null
-}
-
-type StagePerformerInput = {
-    id: string
-    name: string
-    model?: ModelSelection
-    modelVariant?: string | null
-    agentId?: string | null
-    talRef?: RuntimeAssetRef | null
-    danceRefs?: RuntimeAssetRef[]
-    mcpServerNames?: string[]
-    declaredMcpConfig?: Record<string, unknown> | null
-    danceDeliveryMode?: DanceDeliveryMode
-    planMode?: boolean
-    meta?: {
-        derivedFrom?: string | null
-    }
-}
-
-type StageActWorkerNode = {
-    id: string
-    type: 'worker'
-    performerId: string | null
-    modelVariant?: string | null
-    position: { x: number; y: number }
-    sessionPolicy: ActSessionPolicy
-    sessionLifetime: ActSessionLifetime
-    sessionModeOverride?: boolean
-}
-
-type StageActOrchestratorNode = {
-    id: string
-    type: 'orchestrator'
-    performerId: string | null
-    modelVariant?: string | null
-    position: { x: number; y: number }
-    maxDelegations?: number
-    sessionPolicy: ActSessionPolicy
-    sessionLifetime: ActSessionLifetime
-    sessionModeOverride?: boolean
-}
-
-type StageActParallelNode = {
-    id: string
-    type: 'parallel'
-    position: { x: number; y: number }
-    join: 'all' | 'any'
-}
-
-type StageActNode = StageActWorkerNode | StageActOrchestratorNode | StageActParallelNode
-
-type StageActEdge = {
-    id?: string
-    from: string
-    to: string
-    role?: 'branch'
-    condition?: 'always' | 'on_success' | 'on_fail'
-}
-
-type StageActInput = {
-    id: string
-    name: string
-    description: string
-    sessionMode?: ActSessionMode
-    bounds?: {
-        x: number
-        y: number
-        width: number
-        height: number
-    }
-    entryNodeId: string | null
-    nodes: StageActNode[]
-    edges: StageActEdge[]
-    maxIterations: number
-    meta?: {
-        derivedFrom?: string | null
-    }
-}
-
-type RuntimePerformer = {
-    id: string
-    name: string
-    model: ModelSelection
-    modelVariant?: string | null
-    agentId?: string | null
-    talRef: RuntimeAssetRef | null
-    danceRefs: RuntimeAssetRef[]
-    mcpServerNames: string[]
-    danceDeliveryMode: DanceDeliveryMode
-    planMode: boolean
-}
-
-type SessionRecord = {
-    scopeKey: string
-    sessionId: string
-    configKey?: string
-    policy: ActSessionPolicy
-    lifetime?: ActSessionLifetime
-    nodeId?: string | null
-    performerId?: string | null
-    persistentHandle?: string | null
-}
-
-type ThreadSessionHandleRecord = {
-    handle: string
-    sessionId: string
-    configKey?: string
-    nodeId: string
-    nodeType: 'worker' | 'orchestrator'
-    performerId?: string | null
-    status: 'warm'
-    turnCount: number
-    lastUsedAt: number
-    summary?: string
-}
-
-type ActThreadResumeSummary = {
-    updatedAt: number
-    runId?: string | null
-    currentNodeId?: string | null
-    finalOutput?: string
-    error?: string
-    iterations?: number
-    nodeOutputs?: Record<string, string>
-    history?: ActHistoryEntry[]
-    sessionHandles?: Array<{
-        handle: string
-        nodeId: string
-        nodeType: 'worker' | 'orchestrator'
-        performerId?: string | null
-        status: 'warm'
-        turnCount: number
-        lastUsedAt: number
-        summary?: string
-    }>
-}
-
-type PendingSessionDirective = {
-    nodeId: string
-    mode: 'fresh' | 'reuse'
-    handle?: string | null
-}
-
-type ResolvedSession = {
-    oc: Awaited<ReturnType<typeof getOpencode>>
-    sessionId: string
-    configKey: string
-    scopeKey?: string
-    ephemeral: boolean
-    source: 'fresh' | 'run' | 'thread'
-}
-
-type ActHistoryEntry = {
-    nodeId: string
-    nodeType: 'worker' | 'orchestrator' | 'parallel'
-    action: string
-    timestamp: number
-}
-
-type ActMachineContext = {
-    runId: string
-    actSessionId?: string | null
-    cwd: string
-    act: StageActInput
-    performersById: Record<string, RuntimePerformer>
-    drafts: Record<string, RuntimeDraftAsset>
-    currentNodeId: string | null
-    pendingInput: string
-    maxIterations: number
-    iterations: number
-    history: ActHistoryEntry[]
-    sharedState: Record<string, unknown>
-    nodeOutputs: Record<string, string>
-    resumeSummary?: ActThreadResumeSummary | null
-    sessionPool: Map<string, SessionRecord>
-    threadSessionHandles: Map<string, ThreadSessionHandleRecord>
-    pendingSessionDirective?: PendingSessionDirective | null
-    finalOutput?: string
-    error?: string
-}
-
-type ActMachineOutput = {
-    status: 'completed' | 'failed' | 'interrupted'
-    context: ActMachineContext
-}
-
-type ActRuntimeProgressEvent = {
-    type: 'act.runtime'
-    actSessionId: string
-    actId: string
-    runId: string
-    status: 'running' | 'completed' | 'failed' | 'interrupted'
-    summary: ActThreadResumeSummary
-}
-
-type ActPerformerBindingEvent = {
-    type: 'act.performer.binding'
-    actSessionId: string
-    actId: string
-    runId: string
-    sessionId: string
-    nodeId: string
-    nodeLabel: string
-    performerId?: string | null
-    performerName?: string | null
-}
-
-type ActRuntimeEvent = ActRuntimeProgressEvent | ActPerformerBindingEvent
-
-type StepResult = {
-    status: 'continue' | 'completed' | 'failed' | 'interrupted'
-    context: ActMachineContext
-}
-
-export type RunActRuntimeInput = {
-    cwd: string
-    actSessionId?: string
-    actUrn?: string
-    stageAct?: StageActInput
-    performers?: StagePerformerInput[]
-    drafts?: Record<string, RuntimeDraftAsset>
-    input: string
-    maxIterations?: number
-    resumeSummary?: ActThreadResumeSummary
-}
+import type {
+    ActMachineContext,
+    ActMachineOutput,
+    ActPerformerBindingEvent,
+    ActRuntimeEvent,
+    ActRuntimeProgressEvent,
+    ActSessionLifetime,
+    ActSessionMode,
+    ActSessionPolicy,
+    PendingSessionDirective,
+    ResolvedSession,
+    RunActRuntimeInput,
+    RuntimeAssetRef,
+    RuntimeDraftAsset,
+    RuntimePerformer,
+    SessionRecord,
+    StageActInput,
+    StageActOrchestratorNode,
+    StageActParallelNode,
+    StageActWorkerNode,
+    StagePerformerInput,
+    StepResult,
+    ThreadSessionHandleRecord,
+    ActThreadResumeSummary,
+} from './act-runtime-types.js'
 
 function makeId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`

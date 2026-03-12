@@ -15,105 +15,22 @@ import {
 import { defaultActSessionMode } from '../lib/acts'
 import { coerceStudioApiError } from '../lib/api-errors'
 import { createActActions } from './actSlice'
+import {
+    applyPerformerPatch,
+    defaultMarkdownContent,
+    getMaxMarkdownEditorCounter,
+    getMaxPerformerCounter,
+    mapCanvasTerminals,
+    mapMarkdownEditors,
+    mapPerformers,
+    normalizePath,
+} from './workspace-helpers'
 
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
 export const canvasTerminalIdCounter = { value: 0 }
 const TRACKING_WINDOW_ID = 'stage-tracking-window'
 const genEdgeId = () => `edge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-
-// ── Path Utilities ──────────────────────────────────────
-function normalizePath(dir: string): string {
-    // Strip trailing slashes (macOS picker adds them), trim whitespace
-    return dir.trim().replace(/\/+$/, '')
-}
-
-function getMaxPerformerCounter(performers: Array<{ id: string }>): number {
-    return performers.reduce((max, performer) => {
-        const match = performer.id.match(/^performer-(\d+)$/)
-        if (!match) {
-            return max
-        }
-        return Math.max(max, Number.parseInt(match[1], 10))
-    }, 0)
-}
-
-function getMaxMarkdownEditorCounter(editors: Array<{ id: string }>): number {
-    return editors.reduce((max, editor) => {
-        const match = editor.id.match(/^markdown-editor-(\d+)$/)
-        if (!match) {
-            return max
-        }
-        return Math.max(max, Number.parseInt(match[1], 10))
-    }, 0)
-}
-
-function defaultMarkdownContent(_kind: 'tal' | 'dance') {
-    return ''
-}
-
-function applyPerformerPatch<T extends Record<string, any>>(performer: any, patch: T) {
-    const mutatesPublishIdentity = (
-        'name' in patch
-        || 'talRef' in patch
-        || 'danceRefs' in patch
-        || 'model' in patch
-        || 'modelPlaceholder' in patch
-        || 'mcpServerNames' in patch
-        || 'declaredMcpConfig' in patch
-        || 'danceDeliveryMode' in patch
-    ) && (patch.meta?.publishBindingUrn === undefined)
-
-    const next = {
-        ...performer,
-        ...patch,
-    }
-    if (mutatesPublishIdentity) {
-        next.meta = {
-            ...performer.meta,
-            ...patch.meta,
-            publishBindingUrn: null,
-        }
-    }
-    next.configHash = buildPerformerConfigHash(next)
-    return next
-}
-
-function mapPerformers(
-    performers: any[],
-    performerId: string,
-    updater: (performer: any) => any,
-) {
-    return performers.map((performer) => (
-        performer.id === performerId
-            ? updater(performer)
-            : performer
-    ))
-}
-
-function mapCanvasTerminals(
-    canvasTerminals: Array<{ id: string }>,
-    id: string,
-    updater: (terminal: any) => any,
-) {
-    return canvasTerminals.map((terminal) => (
-        terminal.id === id
-            ? updater(terminal)
-            : terminal
-    ))
-}
-
-function mapMarkdownEditors(
-    markdownEditors: Array<{ id: string }>,
-    id: string,
-    updater: (editor: any) => any,
-) {
-    return markdownEditors.map((editor) => (
-        editor.id === id
-            ? updater(editor)
-            : editor
-    ))
-}
 
 export const createWorkspaceSlice: StateCreator<
     StudioState,
