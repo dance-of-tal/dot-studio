@@ -87,7 +87,7 @@ export default function PerformerAdvancedSettings({
             <div className="adv-section">
                 <div className="adv-section__head">
                     <span className="adv-section__title">Tal</span>
-                    <button type="button" className="adv-section__action" onClick={onOpenTalEditor}>
+                    <button type="button" className="btn btn--sm" onClick={onOpenTalEditor}>
                         {performer?.talRef ? 'Edit' : '+ New'}
                     </button>
                 </div>
@@ -102,7 +102,7 @@ export default function PerformerAdvancedSettings({
             <div className="adv-section">
                 <div className="adv-section__head">
                     <span className="adv-section__title">Dances</span>
-                    <button type="button" className="adv-section__action" onClick={onCreateDanceDraft} disabled={!onCreateDanceDraft}>
+                    <button type="button" className="btn btn--sm" onClick={onCreateDanceDraft} disabled={!onCreateDanceDraft}>
                         + New
                     </button>
                 </div>
@@ -139,7 +139,7 @@ export default function PerformerAdvancedSettings({
                 <div className="adv-section__head">
                     <span className="adv-section__title">Runtime</span>
                     {performer?.model && onClearModel ? (
-                        <button type="button" className="adv-section__action" onClick={onClearModel}>
+                        <button type="button" className="btn btn--sm" onClick={onClearModel}>
                             Clear Model
                         </button>
                     ) : null}

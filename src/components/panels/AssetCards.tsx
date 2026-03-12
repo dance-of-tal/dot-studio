@@ -629,9 +629,9 @@ export function PinnedDetailPanel({
                 </button>
             </div>
             {resolvedAsset?.source === 'global' && authUser?.authenticated && onSaveLocal ? (
-                <div className="asset-detail-panel__actions">
+                <div className="btns">
                     <button
-                        className="asset-detail-panel__action"
+                        className="btn"
                         onClick={() => onSaveLocal(resolvedAsset)}
                         disabled={actionLoading !== null}
                     >
@@ -640,9 +640,9 @@ export function PinnedDetailPanel({
                 </div>
             ) : null}
             {resolvedAsset?.source === 'stage' && authUser?.authenticated && onPublish ? (
-                <div className="asset-detail-panel__actions">
+                <div className="btns">
                     <button
-                        className="asset-detail-panel__action"
+                        className="btn"
                         onClick={() => onPublish(resolvedAsset)}
                         disabled={actionLoading !== null}
                     >
@@ -651,9 +651,9 @@ export function PinnedDetailPanel({
                 </div>
             ) : null}
             {resolvedAsset?.kind === 'act' && (resolvedAsset?.source === 'stage' || resolvedAsset?.source === 'global') && onImportToStage ? (
-                <div className="asset-detail-panel__actions">
+                <div className="btns">
                     <button
-                        className="asset-detail-panel__action"
+                        className="btn"
                         onClick={() => onImportToStage(resolvedAsset)}
                         disabled={actionLoading !== null}
                     >

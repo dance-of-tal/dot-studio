@@ -534,7 +534,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                         <h4>OpenCode Connection</h4>
                                         {opencodeInfo?.mode === 'managed' && opencodeInfo.restartAvailable && (
                                             <button
-                                                className="settings-action-btn"
+                                                className="btn"
                                                 onClick={async () => {
                                                     setError(null)
                                                     try {
@@ -624,7 +624,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                     <label className="settings-field">
                                         <span className="settings-field__label">Share mode</span>
                                         <select
-                                            className="settings-select"
+                                            className="select"
                                             value={projectDraft?.share || 'manual'}
                                             onChange={(e) => setProjectDraft((current) => current ? {
                                                 ...current,
@@ -640,7 +640,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                     <label className="settings-field">
                                         <span className="settings-field__label">Username</span>
                                         <input
-                                            className="settings-input"
+                                            className="input"
                                             value={projectDraft?.username || ''}
                                             onChange={(e) => setProjectDraft((current) => current ? {
                                                 ...current,
@@ -681,14 +681,14 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
                                 <div className="settings-save-row">
                                     <button
-                                        className="settings-action-btn"
+                                        className="btn"
                                         onClick={resetProjectDraft}
                                         disabled={!projectDirty || savingProject}
                                     >
                                         Reset
                                     </button>
                                     <button
-                                        className="settings-action-btn settings-action-btn--primary"
+                                        className="btn btn--primary"
                                         onClick={saveProjectSettings}
                                         disabled={!projectDirty || savingProject}
                                     >
@@ -735,7 +735,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                         {modelPicker.performerId && (
                                             <div className="provider-model-picker">
                                                 <input
-                                                    className="settings-input"
+                                                    className="input"
                                                     value={modelPicker.query}
                                                     onChange={(e) => setModelPicker((current) => current ? {
                                                         ...current,
@@ -806,7 +806,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                         <div className="provider-actions">
                                                             {supportsApiAuth && (
                                                                 <button
-                                                                    className="settings-action-btn settings-action-btn--primary"
+                                                                    className="btn btn--primary"
                                                                     onClick={() => openApiKeyFlow(provider)}
                                                                 >
                                                                     Enter API Key
@@ -814,7 +814,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                             )}
                                                             {provider.connected && selectedPerformer && (
                                                                 <button
-                                                                    className="settings-action-btn"
+                                                                    className="btn"
                                                                     onClick={() => openModelPicker(provider.id, provider.name)}
                                                                 >
                                                                     Choose Model
@@ -822,7 +822,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                             )}
                                                             {provider.connected && (
                                                                 <button
-                                                                    className="settings-action-btn"
+                                                                    className="btn"
                                                                     onClick={() => disconnectProvider(provider.id, provider.name)}
                                                                 >
                                                                     Disconnect
@@ -831,7 +831,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                             {oauthMethods.map(({ method, methodIndex }) => (
                                                                 <button
                                                                     key={`${provider.id}-${method.label}-${methodIndex}`}
-                                                                    className="settings-action-btn"
+                                                                    className="btn"
                                                                     onClick={() => handleAuthMethod(provider, methodIndex, method)}
                                                                 >
                                                                     <ExternalLink size={12} />
@@ -862,7 +862,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                             {flow.mode === 'code' || flow.mode === 'api' ? (
                                                                 <div className="oauth-code">
                                                                     <input
-                                                                        className="settings-input"
+                                                                        className="input"
                                                                         value={flow.code}
                                                                         onChange={(e) => {
                                                                             const code = e.target.value
@@ -879,7 +879,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                                         type={flow.mode === 'api' ? 'password' : 'text'}
                                                                     />
                                                                     <button
-                                                                        className="settings-action-btn settings-action-btn--primary"
+                                                                        className="btn btn--primary"
                                                                         onClick={() => flow.mode === 'api'
                                                                             ? handleApiAuthSave(provider.id)
                                                                             : handleOauthCallback(provider.id)}
@@ -898,7 +898,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                                     <div className="provider-actions">
                                                                         {flow.url && (
                                                                             <button
-                                                                                className="settings-action-btn"
+                                                                                className="btn"
                                                                                 onClick={() => window.open(flow.url, '_blank', 'noopener,noreferrer')}
                                                                             >
                                                                                 <ExternalLink size={12} />
@@ -906,7 +906,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                                             </button>
                                                                         )}
                                                                         <button
-                                                                            className="settings-action-btn settings-action-btn--primary"
+                                                                            className="btn btn--primary"
                                                                             onClick={() => retryBrowserOauth(provider.id)}
                                                                             disabled={flow.submitting}
                                                                         >

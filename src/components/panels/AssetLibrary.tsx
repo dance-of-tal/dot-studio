@@ -634,22 +634,22 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     {localSection === 'installed' && (
                         <div className="asset-authoring-row">
                             {installedKind === 'performer' && (
-                                <button className="asset-authoring-btn" onClick={createNewPerformer}>
+                                <button className="btn" onClick={createNewPerformer}>
                                     <Plus size={10} /> New Performer
                                 </button>
                             )}
                             {installedKind === 'tal' && (
-                                <button className="asset-authoring-btn" onClick={() => createNewPerformerDraftEntry('tal')}>
+                                <button className="btn" onClick={() => createNewPerformerDraftEntry('tal')}>
                                     <Plus size={10} /> New Tal Draft
                                 </button>
                             )}
                             {installedKind === 'dance' && (
-                                <button className="asset-authoring-btn" onClick={() => createNewPerformerDraftEntry('dance')}>
+                                <button className="btn" onClick={() => createNewPerformerDraftEntry('dance')}>
                                     <Plus size={10} /> New Dance Draft
                                 </button>
                             )}
                             {installedKind === 'act' && (
-                                <button className="asset-authoring-btn" onClick={createNewAct}>
+                                <button className="btn" onClick={createNewAct}>
                                     <Plus size={10} /> New Act
                                 </button>
                             )}
@@ -680,10 +680,10 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     {showMcps && (
                         <div className="asset-mcp-manager">
                             <div className="asset-authoring-row">
-                                <button className="asset-authoring-btn" onClick={() => addMcpEntry('local')}>
+                                <button className="btn" onClick={() => addMcpEntry('local')}>
                                     <Plus size={10} /> Add Local MCP
                                 </button>
-                                <button className="asset-authoring-btn" onClick={() => addMcpEntry('remote')}>
+                                <button className="btn" onClick={() => addMcpEntry('remote')}>
                                     <Plus size={10} /> Add Remote MCP
                                 </button>
                                 <div className="asset-authoring-row__note">
@@ -857,22 +857,22 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
 
                                                 <div className="asset-mcp-editor__actions">
                                                     {canAuthenticate ? (
-                                                        <button className="asset-authoring-btn" onClick={() => entry.name.trim() && void authenticateMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>
+                                                        <button className="btn" onClick={() => entry.name.trim() && void authenticateMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>
                                                             {pendingMcpAuthName === entry.name.trim() ? 'Waiting for auth…' : liveStatus === 'failed' ? 'Retry Auth' : 'Authenticate'}
                                                         </button>
                                                     ) : null}
                                                     {canClearAuth ? (
-                                                        <button className="asset-authoring-btn" onClick={() => entry.name.trim() && void clearMcpAuth(entry.name.trim())} disabled={!entry.name.trim()}>
+                                                        <button className="btn" onClick={() => entry.name.trim() && void clearMcpAuth(entry.name.trim())} disabled={!entry.name.trim()}>
                                                             Clear Auth
                                                         </button>
                                                     ) : null}
-                                                    <button className="asset-authoring-btn" onClick={() => entry.name.trim() && void connectMcpServer(entry.name.trim())} disabled={!entry.name.trim() || !entry.enabled}>
+                                                    <button className="btn" onClick={() => entry.name.trim() && void connectMcpServer(entry.name.trim())} disabled={!entry.name.trim() || !entry.enabled}>
                                                         Connect
                                                     </button>
-                                                    <button className="asset-authoring-btn" onClick={() => entry.name.trim() && void disconnectMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>
+                                                    <button className="btn" onClick={() => entry.name.trim() && void disconnectMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>
                                                         Disconnect
                                                     </button>
-                                                    <button className="asset-authoring-btn" onClick={() => removeMcpEntry(entry.key)}>
+                                                    <button className="btn" onClick={() => removeMcpEntry(entry.key)}>
                                                         Remove
                                                     </button>
                                                 </div>
@@ -885,10 +885,10 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                             )}
 
                             <div className="asset-mcp-manager__footer">
-                                <button className="asset-authoring-btn" onClick={resetMcpCatalog} disabled={!mcpCatalogDirty || mcpCatalogSaving}>
+                                <button className="btn" onClick={resetMcpCatalog} disabled={!mcpCatalogDirty || mcpCatalogSaving}>
                                     Reset
                                 </button>
-                                <button className="asset-authoring-btn" onClick={() => void saveMcpCatalog()} disabled={!mcpCatalogDirty || mcpCatalogSaving}>
+                                <button className="btn" onClick={() => void saveMcpCatalog()} disabled={!mcpCatalogDirty || mcpCatalogSaving}>
                                     {mcpCatalogSaving ? 'Saving…' : 'Save MCP Catalog'}
                                 </button>
                             </div>
