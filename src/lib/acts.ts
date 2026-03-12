@@ -265,6 +265,97 @@ export function collectActPerformerUrns(asset: {
     return Array.from(urns)
 }
 
+function assetNodeLabel(id: string, label: unknown) {
+    return typeof label === 'string' && label.trim()
+        ? label.trim()
+        : humanizeActNodeName(id)
+}
+
+function stageActNodeFromAsset(
+    id: string,
+    node: Record<string, any>,
+    index: number,
+    resolvePerformerId: (nodeId: string, performerUrn: string) => string | null,
+): StageActNode {
+    const position = defaultNodePosition(index)
+
+    if (node.type === 'orchestrator') {
+        return {
+            id,
+            type: 'orchestrator',
+            performerId: typeof node.performer === 'string' ? resolvePerformerId(id, node.performer) : null,
+            modelVariant: null,
+            position,
+            maxDelegations: typeof node.maxDelegations === 'number' ? node.maxDelegations : 3,
+            sessionPolicy: defaultSessionPolicy('orchestrator'),
+            sessionLifetime: defaultSessionLifetime('orchestrator'),
+            sessionModeOverride: false,
+            label: assetNodeLabel(id, node.label),
+        }
+    }
+
+    if (node.type === 'parallel') {
+        return {
+            id,
+            type: 'parallel',
+            position,
+            join: node.join === 'any' ? 'any' : 'all',
+            label: assetNodeLabel(id, node.label),
+        }
+    }
+
+    return {
+        id,
+        type: 'worker',
+        performerId: typeof node.performer === 'string' ? resolvePerformerId(id, node.performer) : null,
+        modelVariant: null,
+        position,
+        sessionPolicy: defaultSessionPolicy('worker'),
+        sessionLifetime: defaultSessionLifetime('worker'),
+        sessionModeOverride: false,
+        label: assetNodeLabel(id, node.label),
+    }
+}
+
+function serializeActNodeForAsset(
+    node: StageActNode,
+    performers: PerformerNode[],
+    author: string | null,
+    options?: { savedPerformerUrns?: Iterable<string> },
+) {
+    if (node.type === 'parallel') {
+        return {
+            type: 'parallel' as const,
+            join: node.join,
+        }
+    }
+
+    if (!node.performerId) {
+        throw new Error(`Act node '${node.id}' is missing a performer binding.`)
+    }
+
+    const performer = performers.find((item) => item.id === node.performerId)
+    const performerUrn = resolvePublishablePerformerUrn(performer, author, {
+        savedPerformerUrns: options?.savedPerformerUrns,
+    })
+    if (!performerUrn) {
+        throw new Error(`Act node '${node.id}' does not have a publishable performer reference.`)
+    }
+
+    if (node.type === 'orchestrator') {
+        return {
+            type: 'orchestrator' as const,
+            performer: performerUrn,
+            ...(typeof node.maxDelegations === 'number' ? { maxDelegations: node.maxDelegations } : {}),
+        }
+    }
+
+    return {
+        type: 'worker' as const,
+        performer: performerUrn,
+    }
+}
+
 export function stageActFromAsset(
     asset: {
         name: string
@@ -281,50 +372,9 @@ export function stageActFromAsset(
         index?: number
     },
 ): StageAct {
-    const nodes = Object.entries(asset.nodes || {}).map(([id, node], index: number) => {
-        const position = defaultNodePosition(index)
-        if (node.type === 'orchestrator') {
-            return {
-                id,
-                type: 'orchestrator' as const,
-                performerId: typeof node.performer === 'string' ? resolvePerformerId(id, node.performer) : null,
-                modelVariant: null,
-                position,
-                maxDelegations: typeof node.maxDelegations === 'number' ? node.maxDelegations : 3,
-                sessionPolicy: defaultSessionPolicy('orchestrator'),
-                sessionLifetime: defaultSessionLifetime('orchestrator'),
-                sessionModeOverride: false,
-                label: typeof node.label === 'string' && node.label.trim()
-                    ? node.label.trim()
-                    : humanizeActNodeName(id),
-            }
-        }
-        if (node.type === 'parallel') {
-            const join: 'all' | 'any' = node.join === 'any' ? 'any' : 'all'
-            return {
-                id,
-                type: 'parallel' as const,
-                position,
-                join,
-                label: typeof node.label === 'string' && node.label.trim()
-                    ? node.label.trim()
-                    : humanizeActNodeName(id),
-            }
-        }
-        return {
-            id,
-            type: 'worker' as const,
-            performerId: typeof node.performer === 'string' ? resolvePerformerId(id, node.performer) : null,
-            modelVariant: null,
-            position,
-            sessionPolicy: defaultSessionPolicy('worker'),
-            sessionLifetime: defaultSessionLifetime('worker'),
-            sessionModeOverride: false,
-            label: typeof node.label === 'string' && node.label.trim()
-                ? node.label.trim()
-                : humanizeActNodeName(id),
-        }
-    })
+    const nodes = Object.entries(asset.nodes || {}).map(([id, node], index: number) =>
+        stageActNodeFromAsset(id, node as Record<string, any>, index, resolvePerformerId),
+    )
 
     return {
         id: options?.actId || makeId('act'),
@@ -412,39 +462,9 @@ export function buildActAssetPayload(
     const nodes: Record<string, Record<string, unknown>> = {}
 
     for (const node of act.nodes) {
-        if (node.type === 'parallel') {
-            nodes[node.id] = {
-                type: 'parallel',
-                join: node.join,
-            }
-            continue
-        }
-
-        if (!node.performerId) {
-            throw new Error(`Act node '${node.id}' is missing a performer binding.`)
-        }
-
-        const performer = performers.find((item) => item.id === node.performerId)
-        const performerUrn = resolvePublishablePerformerUrn(performer, author, {
+        nodes[node.id] = serializeActNodeForAsset(node, performers, author, {
             savedPerformerUrns: options?.savedPerformerUrns,
         })
-        if (!performerUrn) {
-            throw new Error(`Act node '${node.id}' does not have a publishable performer reference.`)
-        }
-
-        if (node.type === 'orchestrator') {
-            nodes[node.id] = {
-                type: 'orchestrator',
-                performer: performerUrn,
-                ...(typeof node.maxDelegations === 'number' ? { maxDelegations: node.maxDelegations } : {}),
-            }
-            continue
-        }
-
-        nodes[node.id] = {
-            type: 'worker',
-            performer: performerUrn,
-        }
     }
 
     const entryNode = act.entryNodeId || act.nodes[0]?.id
