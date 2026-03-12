@@ -48,7 +48,7 @@ function LayerRow({
         <div
             role="button"
             tabIndex={0}
-            className={`figma-layer-row ${active ? 'active' : ''} ${muted ? 'muted' : ''}`}
+            className={`layer-row ${active ? 'active' : ''} ${muted ? 'muted' : ''}`}
             onClick={onClick}
             onKeyDown={(event) => {
                 if ((event.key === 'Enter' || event.key === ' ') && onClick) {
@@ -57,18 +57,18 @@ function LayerRow({
                 }
             }}
         >
-            <span className="figma-layer-row__icon">{icon}</span>
-            <span className="figma-layer-row__body">
-                <span className="figma-layer-row__label">{label}</span>
+            <span className="layer-row__icon">{icon}</span>
+            <span className="layer-row__body">
+                <span className="layer-row__label">{label}</span>
                 {meta ? (
-                    <span className={`figma-layer-row__meta figma-layer-row__meta--${metaTone}`}>
+                    <span className={`layer-row__meta layer-row__meta--${metaTone}`}>
                         {meta}
                     </span>
                 ) : null}
             </span>
             {actions ? (
                 <span
-                    className="figma-layer-row__actions"
+                    className="layer-row__actions"
                     onClick={(event) => event.stopPropagation()}
                 >
                     {actions}
@@ -264,7 +264,7 @@ function SessionNameEditor({
     return (
         <input
             autoFocus
-            className="figma-thread-inline-input"
+            className="thread-inline-input"
             value={renaming.value}
             onChange={(event) => onChange(event.target.value)}
             onClick={(event) => event.stopPropagation()}
@@ -586,34 +586,34 @@ export default function StageExplorer() {
     };
 
     return (
-        <div className="figma-explorer figma-explorer--stacked">
-            <section className="figma-explorer-section figma-explorer-section--stages" style={{ flex: `0 0 ${stagesHeight}px` }}>
-                <div className="figma-explorer__subheader">
-                    <span className="figma-explorer__title">Stages</span>
+        <div className="explorer explorer--stacked">
+            <section className="explorer-section explorer-section--stages" style={{ flex: `0 0 ${stagesHeight}px` }}>
+                <div className="explorer__subheader">
+                    <span className="explorer__title">Stages</span>
                     <button className="icon-btn" onClick={newStage} title="Open working directory">
                         <Plus size={12} />
                     </button>
                 </div>
-                <div className="figma-explorer__context">
-                    <span className="figma-explorer__context-label">Current</span>
+                <div className="explorer__context">
+                    <span className="explorer__context-label">Current</span>
                     <strong>{workingDir ? stageLabel(workingDir) : 'No working directory'}</strong>
                     {workingDir ? (
-                        <span className="figma-explorer__context-path" title={workingDir}>
+                        <span className="explorer__context-path" title={workingDir}>
                             {workingDir}
                         </span>
                     ) : null}
                 </div>
-                <div className="figma-explorer__tree figma-scroll">
-                    {stageRows.length > 0 ? stageRows : <div className="figma-empty">No saved working directories</div>}
+                <div className="explorer__tree scroll-area">
+                    {stageRows.length > 0 ? stageRows : <div className="empty-state">No saved working directories</div>}
                 </div>
             </section>
 
-            <div className="figma-explorer__divider" onMouseDown={onDividerMouseDown} />
+            <div className="explorer__divider" onMouseDown={onDividerMouseDown} />
 
-            <section className="figma-explorer-section figma-explorer-section--threads">
-                <div className="figma-explorer__subheader">
-                    <span className="figma-explorer__title">Threads</span>
-                    <div className="figma-explorer__actions">
+            <section className="explorer-section explorer-section--threads">
+                <div className="explorer__subheader">
+                    <span className="explorer__title">Threads</span>
+                    <div className="explorer__actions">
                         <button
                             className="icon-btn"
                             onClick={() => addPerformer(`Performer ${sharedPerformers.length + 1}`, 80 + (sharedPerformers.length * 24), 80 + (sharedPerformers.length * 18))}
@@ -626,19 +626,19 @@ export default function StageExplorer() {
                         </button>
                     </div>
                 </div>
-                <div className="figma-explorer__tree figma-scroll">
+                <div className="explorer__tree scroll-area">
                     {threadRows.length > 0 ? threadRows.map((row) => {
                         const rowKey = `${row.kind}-${row.id}`;
                         const expanded = expandedRows[rowKey] ?? false;
 
                         return (
-                            <div key={rowKey} className="figma-thread-group">
+                            <div key={rowKey} className="thread-group">
                                 {/* ── Thread Row ── */}
                                 <div
                                     role="button"
                                     tabIndex={0}
                                     className={[
-                                        'figma-thread-card',
+                                        'thread-card',
                                         row.active ? 'active' : '',
                                         row.hidden ? 'muted' : '',
                                     ].filter(Boolean).join(' ')}
@@ -659,7 +659,7 @@ export default function StageExplorer() {
                                 >
                                     {/* Toggle chevron – always visible */}
                                     <span
-                                        className={`figma-thread-card__chevron ${expanded ? 'is-open' : ''}`}
+                                        className={`thread-card__chevron ${expanded ? 'is-open' : ''}`}
                                         onClick={(event) => {
                                             event.stopPropagation();
                                             toggleExpanded(rowKey);
@@ -669,26 +669,26 @@ export default function StageExplorer() {
                                     </span>
 
                                     {/* Type icon */}
-                                    <span className="figma-thread-card__icon">
+                                    <span className="thread-card__icon">
                                         {row.kind === 'performer'
                                             ? <MessageSquare size={13} />
                                             : <GitBranch size={13} />}
                                     </span>
 
                                     {/* Name */}
-                                    <span className="figma-thread-card__body">
-                                        <span className="figma-thread-card__name">{row.label}</span>
+                                    <span className="thread-card__body">
+                                        <span className="thread-card__name">{row.label}</span>
                                     </span>
 
                                     {/* Always-visible actions */}
                                     <span
-                                        className="figma-thread-card__actions"
+                                        className="thread-card__actions"
                                         onClick={(event) => event.stopPropagation()}
                                     >
                                         {pendingDelete === rowKey ? (
                                             /* ── Inline delete confirmation ── */
                                             <>
-                                                <span className="figma-thread-card__delete-label">Delete?</span>
+                                                <span className="thread-card__delete-label">Delete?</span>
                                                 <button
                                                     className="icon-btn remove-btn"
                                                     onClick={() => {
@@ -753,7 +753,7 @@ export default function StageExplorer() {
                                     </span>
                                 </div>
                                 {expanded ? (
-                                    <div className="figma-thread-children">
+                                    <div className="thread-children">
                                         {row.kind === 'performer' ? (
                                             row.children.length > 0 ? row.children.map((entry) => (
                                                 <LayerRow
@@ -785,7 +785,7 @@ export default function StageExplorer() {
                                                     )}
                                                 />
                                             )) : (
-                                                <div className="figma-empty figma-empty--tight figma-empty--nested">
+                                                <div className="empty-state empty-state--tight empty-state--nested">
                                                     No threads yet
                                                 </div>
                                             )
@@ -820,7 +820,7 @@ export default function StageExplorer() {
                                                     )}
                                                 />
                                             )) : (
-                                                <div className="figma-empty figma-empty--tight figma-empty--nested">
+                                                <div className="empty-state empty-state--tight empty-state--nested">
                                                     No threads yet
                                                 </div>
                                             )
@@ -830,7 +830,7 @@ export default function StageExplorer() {
                             </div>
                         );
                     }) : (
-                        <div className="figma-empty">
+                        <div className="empty-state">
                             Add a performer or act to start building this stage.
                         </div>
                     )}

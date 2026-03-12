@@ -1,4 +1,4 @@
-.figma-frame {
+.canvas-frame {
     background: var(--bg-card);
     border: 1px solid var(--border-main);
     border-radius: var(--radius);
@@ -11,17 +11,17 @@
     overflow: hidden;
 }
 
-.figma-frame--active {
+.canvas-frame--active {
     border-color: var(--text-muted);
     box-shadow: 0 0 0 1px var(--text-muted), var(--shadow-window);
 }
 
-.figma-frame--content-active.figma-frame--active {
+.canvas-frame--content-active.canvas-frame--active {
     border-color: var(--border-main);
     box-shadow: var(--shadow-window);
 }
 
-.figma-handle {
+.canvas-handle {
     width: 8px;
     height: 8px;
     background: var(--bg-panel);
@@ -29,11 +29,11 @@
     border-radius: 50%;
 }
 
-.figma-frame .react-flow__resize-control {
+.canvas-frame .react-flow__resize-control {
     z-index: 5;
 }
 
-.figma-frame__header {
+.canvas-frame__header {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -44,11 +44,11 @@
     cursor: grab;
 }
 
-.figma-frame__header:active {
+.canvas-frame__header:active {
     cursor: grabbing;
 }
 
-.figma-frame__header-start {
+.canvas-frame__header-start {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -56,7 +56,7 @@
     min-width: 0;
 }
 
-.figma-frame__header-end {
+.canvas-frame__header-end {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -65,20 +65,20 @@
     overflow: hidden;
 }
 
-.figma-frame__header-actions {
+.canvas-frame__header-actions {
     display: flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
 }
 
-.figma-frame__variant {
+.canvas-frame__variant {
     display: inline-flex;
     align-items: center;
     min-width: 0;
 }
 
-.figma-frame__variant .text-input {
+.canvas-frame__variant .text-input {
     min-width: 86px;
     max-width: 112px;
     height: 22px;
@@ -86,14 +86,14 @@
     font-size: var(--font-sm);
 }
 
-.figma-frame__badges {
+.canvas-frame__badges {
     display: flex;
     align-items: center;
     gap: 4px;
     min-width: 0;
 }
 
-.figma-frame__name {
+.canvas-frame__name {
     font-size: var(--font-md);
     font-weight: 600;
     color: var(--text-primary);
@@ -103,7 +103,7 @@
     white-space: nowrap;
 }
 
-.figma-frame__badge {
+.canvas-frame__badge {
     display: inline-flex;
     align-items: center;
     font-size: var(--font-xs);
@@ -119,7 +119,7 @@
     white-space: nowrap;
 }
 
-.figma-frame__body {
+.canvas-frame__body {
     display: flex;
     flex-direction: column;
     flex: 1;

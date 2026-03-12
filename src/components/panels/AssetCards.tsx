@@ -377,7 +377,7 @@ export function DraggableAsset({
                 ref={setNodeRef}
                 {...listeners}
                 {...attributes}
-                className={`figma-asset-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
+                className={`asset-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
                 onClick={() => onSelect(asset)}
             >
                 <AssetCardHeader
@@ -418,7 +418,7 @@ export function DraggableModel({
                 ref={setNodeRef}
                 {...listeners}
                 {...attributes}
-                className={`figma-asset-card figma-model-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
+                className={`asset-card model-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
                 onClick={() => onSelect(modelAsset)}
             >
                 <AssetCardHeader
@@ -463,7 +463,7 @@ export function DraggableMcp({
                 ref={setNodeRef}
                 {...listeners}
                 {...attributes}
-                className={`figma-asset-card figma-mcp-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
+                className={`asset-card mcp-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
                 onClick={() => onSelect(mcpAsset)}
             >
                 <AssetCardHeader
@@ -528,7 +528,7 @@ export function RegistryResult({
     return (
         <HoverableCard asset={item} installed={localInstalled}>
             <div
-                className={`figma-asset-card registry-result ${error ? 'has-error' : ''} ${selected ? 'is-selected' : ''}`}
+                className={`asset-card registry-result ${error ? 'has-error' : ''} ${selected ? 'is-selected' : ''}`}
                 onClick={() => onSelect(item)}
             >
                 <AssetCardHeader

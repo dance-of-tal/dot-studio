@@ -545,7 +545,7 @@ export default function App() {
 
   return (
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className={`figma-app figma-theme-${theme}`} style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div className={`studio-app theme-${theme}`} style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
 
         {dropWarning ? (
           <div className="app-warning-banner" role="status" aria-live="polite">

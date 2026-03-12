@@ -458,7 +458,7 @@ export default function ActThreadPanel({
             <ThreadBody
                 messages={feedMessages}
                 loading={loading}
-                historyClassName="act-area-frame__thread-messages figma-scroll"
+                historyClassName="act-area-frame__thread-messages scroll-area"
                 historyRef={historyRef}
                 onHistoryScroll={handleHistoryScroll}
                 renderEmpty={() => (

@@ -29,7 +29,7 @@ export default function ThreadBody<TMessage extends ThreadMessage>({
     endRef,
     historyRef,
     onHistoryScroll,
-    historyClassName = 'figma-chat-history',
+    historyClassName = 'chat-history',
 }: ThreadBodyProps<TMessage>) {
     return (
         <>

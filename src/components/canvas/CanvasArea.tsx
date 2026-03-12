@@ -339,7 +339,7 @@ export default function CanvasArea() {
             position: { x: act.bounds.x, y: act.bounds.y },
             selected: isActSelected,
             draggable: true,
-            dragHandle: '.figma-frame__header',
+            dragHandle: '.canvas-frame__header',
             hidden: act.hidden,
             zIndex: getCanvasWindowZIndex({
                 selected: isActSelected,
@@ -469,7 +469,7 @@ export default function CanvasArea() {
         type: 'performer',
         position: performer.position,
         selected: performer.id === selectedPerformerId,
-        dragHandle: '.figma-frame__header',
+        dragHandle: '.canvas-frame__header',
         hidden: performer.hidden,
         zIndex: getCanvasWindowZIndex({
             selected: performer.id === selectedPerformerId,
@@ -503,7 +503,7 @@ export default function CanvasArea() {
         type: 'markdownEditor',
         position: editor.position,
         selected: editor.id === selectedMarkdownEditorId,
-        dragHandle: '.figma-frame__header',
+        dragHandle: '.canvas-frame__header',
         hidden: editor.hidden,
         zIndex: getCanvasWindowZIndex({
             selected: editor.id === selectedMarkdownEditorId,
@@ -528,7 +528,7 @@ export default function CanvasArea() {
         id: terminal.id,
         type: 'canvasTerminal',
         position: terminal.position,
-        dragHandle: '.figma-frame__header',
+        dragHandle: '.canvas-frame__header',
         zIndex: getCanvasWindowZIndex({
             transformActive: transformTarget?.type === 'canvasTerminal' && transformTarget.id === terminal.id,
         }),
@@ -547,7 +547,7 @@ export default function CanvasArea() {
         id: trackingWindow.id,
         type: 'stageTracking',
         position: trackingWindow.position,
-        dragHandle: '.figma-frame__header',
+        dragHandle: '.canvas-frame__header',
         zIndex: getCanvasWindowZIndex({
             transformActive: transformTarget?.type === 'stageTracking' && transformTarget.id === trackingWindow.id,
         }),
@@ -700,7 +700,7 @@ export default function CanvasArea() {
             : null;
 
     return (
-        <div className="figma-canvas-area" ref={setCanvasRefs}>
+        <div className="canvas-area" ref={setCanvasRefs}>
             <div className="canvas-top-right-bar">
                 <CustomControls />
                 <StageToolbar />

@@ -1,4 +1,4 @@
-.figma-sidebar {
+.sidebar {
     display: flex;
     flex-direction: column;
     position: relative;
@@ -87,7 +87,7 @@
     box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
 }
 
-.sidebar-container--drawer-open .figma-sidebar {
+.sidebar-container--drawer-open .sidebar {
     z-index: 20;
 }
 
@@ -160,13 +160,13 @@
 }
 
 /* ── Legacy tab styles ────────────────────────────────── */
-.figma-sidebar__tabs {
+.sidebar__tabs {
     display: flex;
     border-bottom: 1px solid var(--border-main);
     background: var(--bg-panel);
 }
 
-.figma-tab {
+.sidebar-tab {
     flex: 1;
     padding: 10px 0;
     font-size: var(--font-base);
@@ -180,17 +180,17 @@
     text-align: center;
 }
 
-.figma-tab:hover {
+.sidebar-tab:hover {
     color: var(--text-secondary);
 }
 
-.figma-tab.active {
+.sidebar-tab.active {
     color: var(--text-primary);
     border-bottom-color: var(--text-primary);
     font-weight: 600;
 }
 
-.figma-sidebar__content {
+.sidebar__content {
     flex: 1;
     display: flex;
     flex-direction: column;

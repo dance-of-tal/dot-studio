@@ -1,5 +1,5 @@
 /* LspModal.css */
-.figma-modal-overlay {
+.modal-overlay {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.4);
@@ -10,7 +10,7 @@
     justify-content: center;
 }
 
-.figma-modal.lsp-modal {
+.modal.lsp-modal {
     background: var(--bg-card);
     width: 480px;
     max-height: 80vh;
@@ -22,7 +22,7 @@
     overflow: hidden;
 }
 
-.figma-modal__header {
+.modal__header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -31,7 +31,7 @@
     background: var(--bg-panel);
 }
 
-.figma-modal__header h3 {
+.modal__header h3 {
     margin: 0;
     font-size: var(--font-lg);
     font-weight: 600;
@@ -40,7 +40,7 @@
     color: var(--text-primary);
 }
 
-.figma-modal__body {
+.modal__body {
     padding: 16px;
     overflow-y: auto;
     display: flex;

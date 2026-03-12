@@ -49,7 +49,7 @@ export default function LeftSidebar() {
 
     return (
         <div className={`sidebar-container ${isAssetLibraryOpen ? 'sidebar-container--drawer-open' : ''}`}>
-            <div className="figma-sidebar" style={{ width: sidebarWidth }}>
+            <div className="sidebar" style={{ width: sidebarWidth }}>
                 <div className="sidebar-main-top" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <StageExplorer />
                 </div>

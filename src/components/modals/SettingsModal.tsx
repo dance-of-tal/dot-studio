@@ -491,7 +491,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 </div>
 
                 {loading ? (
-                    <div className="figma-empty" style={{ padding: 32 }}>Loading...</div>
+                    <div className="empty-state" style={{ padding: 32 }}>Loading...</div>
                 ) : (
                     <div className="settings-body">
                         <div className="tab tab--lgs" role="tablist" aria-label="Settings sections">
@@ -772,7 +772,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                 )}
 
                                 {filteredProviders.length === 0 ? (
-                                    <div className="figma-empty" style={{ padding: 12 }}>
+                                    <div className="empty-state" style={{ padding: 12 }}>
                                         No provider information available.
                                     </div>
                                 ) : (

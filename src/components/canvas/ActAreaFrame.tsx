@@ -397,7 +397,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     return (
         <div ref={setNodeRef}>
             <CanvasWindowFrame
-                className={`act-area-frame nowheel ${hasFrameChrome ? 'figma-frame--active' : ''} ${isFocused ? 'figma-frame--focused' : ''} ${hasFrameChrome && !showResizeChrome ? 'figma-frame--content-active' : ''} ${showResizeChrome ? 'act-area-frame--transform-active' : ''} ${isOver ? 'act-area-frame--drop' : ''}`}
+                className={`act-area-frame nowheel ${hasFrameChrome ? 'canvas-frame--active' : ''} ${isFocused ? 'canvas-frame--focused' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''} ${showResizeChrome ? 'act-area-frame--transform-active' : ''} ${isOver ? 'act-area-frame--drop' : ''}`}
                 width={frameWidth}
                 height={frameHeight}
                 onPointerDownCapture={handleFramePointerDownCapture}
@@ -434,7 +434,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                 onChange={(event) => onUpdateName?.(event.target.value)}
                             />
                         ) : (
-                            <span className="figma-frame__name">{data.name}</span>
+                            <span className="canvas-frame__name">{data.name}</span>
                         )}
                     </div>
                 )}

@@ -2,7 +2,7 @@
    PREMIUM CHAT HISTORY — Codex / Antigravity Style
    ═══════════════════════════════════════════ */
 
-.figma-chat-history {
+.chat-history {
     flex: 1;
     overflow-y: auto;
     padding: 16px;

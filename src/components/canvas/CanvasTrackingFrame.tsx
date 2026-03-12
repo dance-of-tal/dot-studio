@@ -57,7 +57,7 @@ export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) 
 
     return (
         <div className="canvas-tracking-frame" style={{ width, height }}>
-            <div className="canvas-tracking-frame__header figma-frame__header canvas-drag-handle--interactive">
+            <div className="canvas-tracking-frame__header canvas-frame__header canvas-drag-handle--interactive">
                 <div className="canvas-tracking-frame__header-left">
                     <Activity size={12} />
                     <span className="canvas-tracking-frame__title">{title}</span>
@@ -73,7 +73,7 @@ export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) 
                     <X size={12} />
                 </button>
             </div>
-            <div className="canvas-tracking-frame__body figma-scroll">
+            <div className="canvas-tracking-frame__body scroll-area">
                 {files.length === 0 ? (
                     <div className="canvas-tracking-frame__empty">No uncommitted files detected.</div>
                 ) : (

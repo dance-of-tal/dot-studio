@@ -16,7 +16,7 @@
     border-color: var(--accent);
 }
 
-.figma-frame__body {
+.canvas-frame__body {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -24,7 +24,7 @@
     background: var(--bg-panel);
 }
 
-.figma-edit-workbench {
+.edit-workbench {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -33,7 +33,7 @@
     overflow-y: auto;
 }
 
-.figma-edit-workbench__header {
+.edit-workbench__header {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -41,7 +41,7 @@
     border-bottom: 1px solid var(--border-light);
 }
 
-.figma-edit-workbench__back {
+.edit-workbench__back {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -56,21 +56,21 @@
     transition: background 0.15s, color 0.15s;
 }
 
-.figma-edit-workbench__back:hover {
+.edit-workbench__back:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
 }
 
 
 
-.figma-edit-grid {
+.edit-grid {
     display: flex;
     flex-direction: column;
     gap: 6px;
     padding: 12px 14px;
 }
 
-.figma-edit-grid--hidden {
+.edit-grid--hidden {
     height: 0;
     overflow: hidden;
     padding: 0;
@@ -78,11 +78,11 @@
     pointer-events: none;
 }
 
-.figma-edit-workbench__header {
+.edit-workbench__header {
     padding: 10px 14px;
 }
 
-.figma-edit-card-shell {
+.edit-card-shell {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -93,7 +93,7 @@
     transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.figma-edit-card {
+.edit-card {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -105,22 +105,22 @@
     cursor: pointer;
 }
 
-.figma-edit-card-shell:hover,
-.figma-edit-card-shell.is-over {
+.edit-card-shell:hover,
+.edit-card-shell.is-over {
     border-color: var(--accent);
     background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
 }
 
-.figma-edit-card:disabled {
+.edit-card:disabled {
     cursor: default;
     opacity: 0.55;
 }
 
-.figma-edit-card--wide {
+.edit-card--wide {
     grid-column: 1 / -1;
 }
 
-.figma-edit-card__icon {
+.edit-card__icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -132,38 +132,38 @@
     flex-shrink: 0;
 }
 
-.figma-edit-card__body {
+.edit-card__body {
     display: flex;
     flex-direction: column;
     gap: 4px;
     min-width: 0;
 }
 
-.figma-edit-card__body strong {
+.edit-card__body strong {
     font-size: var(--font-base);
     color: var(--text-primary);
 }
 
-.figma-edit-card__hint {
+.edit-card__hint {
     color: var(--text-muted);
     font-weight: 600;
 }
 
-.figma-edit-card__body span {
+.edit-card__body span {
     font-size: var(--font-sm);
     line-height: 1.45;
     color: var(--text-secondary);
     word-break: break-word;
 }
 
-.figma-edit-card__stack {
+.edit-card__stack {
     display: flex;
     flex-direction: column;
     gap: 6px;
     padding-top: 2px;
 }
 
-.figma-edit-card__stack-item {
+.edit-card__stack-item {
     display: flex;
     align-items: flex-start;
     gap: 8px;
@@ -173,7 +173,7 @@
     background: color-mix(in srgb, var(--bg-hover) 72%, transparent);
 }
 
-.figma-edit-card__stack-body {
+.edit-card__stack-body {
     display: flex;
     flex-direction: column;
     gap: 3px;
@@ -181,20 +181,20 @@
     flex: 1;
 }
 
-.figma-edit-card__stack-body strong {
+.edit-card__stack-body strong {
     font-size: var(--font-sm);
     color: var(--text-primary);
     line-height: 1.4;
 }
 
-.figma-edit-card__stack-body span {
+.edit-card__stack-body span {
     font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.45;
     word-break: break-word;
 }
 
-.figma-edit-card__remove {
+.edit-card__remove {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -209,13 +209,13 @@
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.figma-edit-card__remove:hover {
+.edit-card__remove:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
     border-color: var(--border-strong);
 }
 
-.figma-edit-workbench__actions {
+.edit-workbench__actions {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -231,7 +231,7 @@
 
 
 
-.figma-edit-advanced {
+.edit-advanced {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -404,13 +404,13 @@
 }
 
 /* Legacy — keep for backward compat */
-.figma-edit-advanced__grid {
+.edit-advanced__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
 }
 
-.figma-edit-field {
+.edit-field {
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -418,7 +418,7 @@
     color: var(--text-secondary);
 }
 
-.figma-edit-advanced__section {
+.edit-advanced__section {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -428,19 +428,19 @@
     background: var(--bg-panel);
 }
 
-.figma-edit-advanced__section-head {
+.edit-advanced__section-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
 }
 
-.figma-edit-advanced__summary {
+.edit-advanced__summary {
     font-size: var(--font-base);
     color: var(--text-secondary);
 }
 
-.figma-edit-advanced__runtime-controls {
+.edit-advanced__runtime-controls {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
@@ -455,13 +455,13 @@
     color: var(--text-secondary);
 }
 
-.figma-edit-advanced__list {
+.edit-advanced__list {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.figma-edit-advanced__list-row {
+.edit-advanced__list-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -473,7 +473,7 @@
     font-size: var(--font-base);
 }
 
-.figma-edit-advanced__list-actions {
+.edit-advanced__list-actions {
     display: flex;
     align-items: center;
     gap: 4px;

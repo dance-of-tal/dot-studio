@@ -1,4 +1,4 @@
-.figma-toolbar {
+.toolbar {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -9,7 +9,7 @@
     box-shadow: var(--shadow-dropdown);
 }
 
-.figma-toolbar__item {
+.toolbar__item {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -35,18 +35,18 @@
     background: var(--bg-hover);
 }
 
-.figma-divider-v {
+.divider-v {
     width: 1px;
     height: 16px;
     background: var(--border-strong);
     margin: 0 4px;
 }
 
-.figma-toolbar__dropdown {
+.toolbar__dropdown {
     position: relative;
 }
 
-.figma-toolbar__menu {
+.toolbar__menu {
     position: absolute;
     top: calc(100% + 8px);
     left: 0;
@@ -61,12 +61,12 @@
     box-shadow: var(--shadow-dropdown);
 }
 
-.figma-toolbar__menu--right {
+.toolbar__menu--right {
     left: auto;
     right: 0;
 }
 
-.figma-toolbar__menu-item {
+.toolbar__menu-item {
     border: none;
     background: transparent;
     color: var(--text-main);
@@ -77,6 +77,6 @@
     cursor: pointer;
 }
 
-.figma-toolbar__menu-item:hover {
+.toolbar__menu-item:hover {
     background: var(--bg-hover);
 }

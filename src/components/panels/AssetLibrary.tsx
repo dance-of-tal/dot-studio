@@ -543,7 +543,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const installedEmptyMessage = `No ${labelForInstalledKind(installedKind).toLowerCase()} assets found.`
 
     return (
-        <div className="figma-assets-panel">
+        <div className="assets-panel">
             <div className="drawer-header">
                 <span className="drawer-header__title">Asset Library</span>
                 {onClose && (
@@ -587,7 +587,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                         </button>
                     </div>
 
-                    <div className="figma-assets-tabs">
+                    <div className="assets-tabs">
                         {(localSection === 'installed' ? installedTabs : runtimeTabs).map((tab) => {
                             const active = localSection === 'installed'
                                 ? installedKind === tab.key
@@ -595,7 +595,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                             return (
                                 <button
                                     key={tab.key}
-                                    className={`figma-asset-tab ${active ? 'active' : ''}`}
+                                    className={`asset-tab ${active ? 'active' : ''}`}
                                     onClick={() => {
                                         if (localSection === 'installed') {
                                             setInstalledKind(tab.key as InstalledKind)
@@ -659,7 +659,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                         </div>
                     )}
 
-                    <div className="figma-explorer__header">
+                    <div className="explorer__header">
                         <div className="search-wrapper">
                             <Search size={12} className="icon-muted" />
                             <input
@@ -927,10 +927,10 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     )}
 
                     <div className="asset-library-body">
-                        <div className="figma-assets-list">
+                        <div className="assets-list">
                             {showInstalledAssets && (
-                                assetsLoading ? <div className="figma-empty">Loading...</div> :
-                                    filteredInstalledAssets.length === 0 ? <div className="figma-empty">{installedEmptyMessage}</div> :
+                                assetsLoading ? <div className="empty-state">Loading...</div> :
+                                    filteredInstalledAssets.length === 0 ? <div className="empty-state">{installedEmptyMessage}</div> :
                                         filteredInstalledAssets.map((asset) => (
                                             <DraggableAsset
                                                 key={asset.urn}
@@ -941,7 +941,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                         ))
                             )}
                             {showModels && (
-                                groupedModels.length === 0 ? <div className="figma-empty">No models available for this filter.</div> :
+                                groupedModels.length === 0 ? <div className="empty-state">No models available for this filter.</div> :
                                     groupedModels.map((group) => {
                                         const expanded = !!expandedModelProviders[group.key]
                                         const visibleItems = queryText || expanded
@@ -982,7 +982,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                     })
                             )}
                             {showMcps && (
-                                filteredMcps.length === 0 ? <div className="figma-empty">No MCP servers connected.</div> :
+                                filteredMcps.length === 0 ? <div className="empty-state">No MCP servers connected.</div> :
                                     filteredMcps.map((mcp) => (
                                         <DraggableMcp
                                             key={mcp.name}
@@ -1009,7 +1009,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                 </>
             ) : (
                 <>
-                    <div className="figma-explorer__header">
+                    <div className="explorer__header">
                         <div className="search-wrapper">
                             <Globe size={12} className="icon-muted" />
                             <input
@@ -1053,11 +1053,11 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     )}
 
                     <div className="asset-library-body">
-                        <div className="figma-assets-list">
+                        <div className="assets-list">
                             {registryLoading ? (
-                                <div className="figma-empty">Searching registry...</div>
+                                <div className="empty-state">Searching registry...</div>
                             ) : registryResults.length === 0 ? (
-                                <div className="figma-empty">
+                                <div className="empty-state">
                                     {registryError ? (
                                         <span style={{ color: 'var(--tal-color)' }}>{(registryError as Error)?.message || 'Search failed.'}</span>
                                     ) : registryQuery ? 'No results found.' : 'Search the DOT registry to discover and install assets.'}

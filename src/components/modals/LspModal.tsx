@@ -19,17 +19,17 @@ export default function LspModal({ open, onClose }: { open: boolean, onClose: ()
     );
 
     return (
-        <div className="figma-modal-overlay" onClick={onClose}>
-            <div className="figma-modal lsp-modal" onClick={e => e.stopPropagation()}>
-                <div className="figma-modal__header">
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal lsp-modal" onClick={e => e.stopPropagation()}>
+                <div className="modal__header">
                     <h3><Activity size={14} className="icon-muted" style={{ marginRight: 6 }} /> Code Intelligence (LSP)</h3>
                     <button className="icon-btn" onClick={onClose}><X size={14} /></button>
                 </div>
-                <div className="figma-modal__body">
+                <div className="modal__body">
                     <div className="lsp-section">
                         <h4>Active Language Servers</h4>
                         {lspServers.length === 0 ? (
-                            <div className="figma-empty">No language servers running.</div>
+                            <div className="empty-state">No language servers running.</div>
                         ) : (
                             <ul className="lsp-server-list">
                                 {lspServers.map((s: any, i) => (
@@ -48,7 +48,7 @@ export default function LspModal({ open, onClose }: { open: boolean, onClose: ()
                     <div className="lsp-section">
                         <h4>Diagnostics ({allDiagnostics.length})</h4>
                         {allDiagnostics.length === 0 ? (
-                            <div className="figma-empty">No stage errors found.</div>
+                            <div className="empty-state">No stage errors found.</div>
                         ) : (
                             <div className="lsp-diagnostics-list">
                                 {allDiagnostics.map((d, i) => (

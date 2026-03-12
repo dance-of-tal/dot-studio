@@ -266,7 +266,7 @@ export default function MarkdownEditorFrame({ id, data, selected }: any) {
 
     return (
         <CanvasWindowFrame
-            className={`${hasFrameChrome ? 'figma-frame--active' : ''} ${hasFrameChrome && !showResizeChrome ? 'figma-frame--content-active' : ''} markdown-editor-frame`}
+            className={`${hasFrameChrome ? 'canvas-frame--active' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''} markdown-editor-frame`}
             width={Number(data.width || 560)}
             height={Number(data.height || 380)}
             onPointerDownCapture={handleFramePointerDownCapture}

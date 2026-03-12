@@ -34,38 +34,38 @@ export default function PerformerComposeCards({
     hidden = false,
 }: PerformerComposeCardsProps) {
     return (
-        <div className={`figma-edit-grid ${hidden ? 'figma-edit-grid--hidden' : ''}`}>
+        <div className={`edit-grid ${hidden ? 'edit-grid--hidden' : ''}`}>
             {cards.map((card) => (
                 <div
                     key={card.key}
                     ref={card.setNodeRef}
-                    className={`figma-edit-card-shell ${card.isOver ? 'is-over' : ''}`}
+                    className={`edit-card-shell ${card.isOver ? 'is-over' : ''}`}
                 >
                     <button
                         type="button"
-                        className="figma-edit-card"
+                        className="edit-card"
                         onClick={card.onClick}
                         disabled={card.disabled}
                     >
-                        <span className="figma-edit-card__icon">{card.icon}</span>
-                        <span className="figma-edit-card__body">
+                        <span className="edit-card__icon">{card.icon}</span>
+                        <span className="edit-card__body">
                             <strong>{card.title}</strong>
-                            {card.hint ? <span className="figma-edit-card__hint">{card.hint}</span> : null}
+                            {card.hint ? <span className="edit-card__hint">{card.hint}</span> : null}
                             {!card.items?.length ? <span>{card.description}</span> : null}
                         </span>
                     </button>
                     {card.items?.length ? (
-                        <div className="figma-edit-card__stack">
+                        <div className="edit-card__stack">
                             {card.items.map((item) => (
-                                <div key={item.key} className="figma-edit-card__stack-item">
-                                    <span className="figma-edit-card__stack-body">
+                                <div key={item.key} className="edit-card__stack-item">
+                                    <span className="edit-card__stack-body">
                                         <strong>{item.label}</strong>
                                         {item.description ? <span>{item.description}</span> : null}
                                     </span>
                                     {item.onOpen ? (
                                         <button
                                             type="button"
-                                            className="figma-edit-card__remove"
+                                            className="edit-card__remove"
                                             onClick={(event) => {
                                                 event.stopPropagation()
                                                 item.onOpen?.()
@@ -78,7 +78,7 @@ export default function PerformerComposeCards({
                                     {item.onRemove ? (
                                         <button
                                             type="button"
-                                            className="figma-edit-card__remove"
+                                            className="edit-card__remove"
                                             onClick={(event) => {
                                                 event.stopPropagation()
                                                 item.onRemove?.()
@@ -94,7 +94,7 @@ export default function PerformerComposeCards({
                     ) : null}
                 </div>
             ))}
-            {footer ? <div className="figma-edit-card-shell figma-edit-card-shell--wide"><div className="figma-edit-card figma-edit-card--wide">{footer}</div></div> : null}
+            {footer ? <div className="edit-card-shell edit-card-shell--wide"><div className="edit-card edit-card--wide">{footer}</div></div> : null}
         </div>
     )
 }

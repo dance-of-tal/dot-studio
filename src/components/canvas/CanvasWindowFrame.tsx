@@ -33,23 +33,23 @@ export default function CanvasWindowFrame({
 }: CanvasWindowFrameProps) {
     return (
         <div
-            className={`figma-frame ${className}`.trim()}
+            className={`canvas-frame ${className}`.trim()}
             style={{ width, height }}
             onPointerDownCapture={onPointerDownCapture}
         >
             {chrome}
-            <div className="figma-frame__header">
+            <div className="canvas-frame__header">
                 <CanvasDragHandle active={dragHandleActive} onActivate={onActivateTransform} />
-                <div className="figma-frame__header-start">
+                <div className="canvas-frame__header-start">
                     {headerStart}
                 </div>
                 {headerEnd ? (
-                    <div className="figma-frame__header-end">
+                    <div className="canvas-frame__header-end">
                         {headerEnd}
                     </div>
                 ) : null}
             </div>
-            <div ref={bodyRef} className={`figma-frame__body ${bodyClassName}`.trim()}>
+            <div ref={bodyRef} className={`canvas-frame__body ${bodyClassName}`.trim()}>
                 {children}
             </div>
         </div>

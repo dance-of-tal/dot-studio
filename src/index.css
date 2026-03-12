@@ -138,7 +138,7 @@ html {
 }
 
 /* ================== LAYOUT ================== */
-.figma-app {
+.studio-app {
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -147,7 +147,7 @@ html {
     overflow: hidden;
 }
 
-.figma-sidebar {
+.sidebar {
     min-width: 180px;
     height: 100%;
     background: var(--bg-panel);
@@ -159,7 +159,7 @@ html {
     border-right: 1px solid var(--border-main);
 }
 
-.figma-canvas-area {
+.canvas-area {
     flex: 1;
     position: relative;
     background: var(--bg-canvas);
@@ -259,7 +259,7 @@ html {
     fill: currentColor;
 }
 
-.figma-compose-banner {
+.compose-banner {
     position: absolute;
     top: 12px;
     left: 12px;
@@ -277,7 +277,7 @@ html {
     font-size: var(--font-base);
 }
 
-.figma-compose-banner strong {
+.compose-banner strong {
     color: #38bdf8;
     font-weight: 700;
 }

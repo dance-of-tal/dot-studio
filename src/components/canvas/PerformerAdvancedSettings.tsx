@@ -54,7 +54,7 @@ export default function PerformerAdvancedSettings({
 }: PerformerAdvancedSettingsProps) {
     const unresolvedMcpPlaceholders = performer ? unresolvedDeclaredMcpServerNames(performer) : []
     return (
-        <div className="figma-edit-advanced nodrag nowheel">
+        <div className="edit-advanced nodrag nowheel">
             {/* ── Identity ── */}
             <div className="adv-section">
                 <div className="adv-section__head">

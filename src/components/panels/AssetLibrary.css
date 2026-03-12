@@ -1,5 +1,5 @@
 /* Asset Library */
-.figma-assets-panel {
+.assets-panel {
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -14,7 +14,7 @@
     width: 100%;
 }
 
-.figma-assets-list {
+.assets-list {
     flex: 1;
     overflow-y: auto;
     padding: 8px 12px;
@@ -161,7 +161,7 @@
     padding: 0 12px;
 }
 
-.figma-asset-card {
+.asset-card {
     padding: 12px;
     background: var(--bg-primary);
     border: 1px solid var(--border-main);
@@ -172,22 +172,22 @@
 }
 
 
-.figma-asset-card:hover {
+.asset-card:hover {
     border-color: var(--accent-light);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-.figma-asset-card.is-selected {
+.asset-card.is-selected {
     border-color: var(--accent);
     box-shadow: 0 0 0 1px rgba(0, 102, 255, 0.16);
     background: var(--bg-hover);
 }
 
-.figma-asset-card:active {
+.asset-card:active {
     cursor: grabbing;
 }
 
-.figma-asset-card.is-dragging {
+.asset-card.is-dragging {
     opacity: 0.5;
     cursor: grabbing;
     background: var(--bg-hover);
@@ -238,14 +238,14 @@
 }
 
 /* Tabs */
-.figma-assets-tabs {
+.assets-tabs {
     display: flex;
     border-bottom: 1px solid var(--border-main);
     background: var(--bg-panel);
     flex-shrink: 0;
 }
 
-.figma-asset-tab {
+.asset-tab {
     flex: 1;
     background: transparent;
     border: none;
@@ -262,11 +262,11 @@
     gap: 3px;
 }
 
-.figma-asset-tab:hover {
+.asset-tab:hover {
     color: var(--text-primary);
 }
 
-.figma-asset-tab.active {
+.asset-tab.active {
     color: var(--accent);
     border-bottom-color: var(--accent);
 }
@@ -578,7 +578,7 @@
     word-break: break-word;
 }
 
-.figma-asset-card.has-error {
+.asset-card.has-error {
     border-color: rgba(242, 72, 34, 0.3);
 }
 

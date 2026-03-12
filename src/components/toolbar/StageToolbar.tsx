@@ -77,9 +77,9 @@ export default function StageToolbar() {
 
     return (
         <>
-            <div className="figma-toolbar">
+            <div className="toolbar">
                 <button
-                    className={`figma-toolbar__item dot-status ${dotInitialized ? 'dot-ok' : 'dot-missing'}`}
+                    className={`toolbar__item dot-status ${dotInitialized ? 'dot-ok' : 'dot-missing'}`}
                     onClick={handleDotInit}
                     title={dotInitialized
                         ? `DOT: ${performers.length} performer${performers.length !== 1 ? 's' : ''} locked`
@@ -95,14 +95,14 @@ export default function StageToolbar() {
                 </button>
 
                 {gitBranch && (
-                    <span className="figma-toolbar__item" title={`Branch: ${gitBranch}`}>
+                    <span className="toolbar__item" title={`Branch: ${gitBranch}`}>
                         <GitBranch size={12} className="icon-muted" /> {gitBranch}
                     </span>
                 )}
 
-                <div className="figma-toolbar__dropdown">
+                <div className="toolbar__dropdown">
                     <button
-                        className={`figma-toolbar__item dot-auth-status ${authUser?.authenticated ? 'dot-auth-status--ok' : 'dot-auth-status--warn'}`}
+                        className={`toolbar__item dot-auth-status ${authUser?.authenticated ? 'dot-auth-status--ok' : 'dot-auth-status--warn'}`}
                         onClick={() => {
                             if (!authUser?.authenticated) {
                                 void startLogin(true);
@@ -138,9 +138,9 @@ export default function StageToolbar() {
                         {authUser?.authenticated ? <ChevronDown size={10} /> : null}
                     </button>
                     {authUser?.authenticated && authMenuOpen ? (
-                        <div className="figma-toolbar__menu figma-toolbar__menu--right">
+                        <div className="toolbar__menu toolbar__menu--right">
                             <button
-                                className="figma-toolbar__menu-item"
+                                className="toolbar__menu-item"
                                 onClick={() => {
                                     setAuthMenuOpen(false);
                                     void logout();
@@ -154,23 +154,23 @@ export default function StageToolbar() {
                 </div>
 
                 <span
-                    className="figma-toolbar__item"
+                    className="toolbar__item"
                     title={serverConnected ? 'Local server connected' : 'Local server disconnected'}
                 >
                     {serverConnected ? <CheckCircle size={12} color="#14AE5C" /> : <AlertCircle size={12} color="#F24822" />}
                 </span>
 
-                <div className="figma-divider-v" />
+                <div className="divider-v" />
 
-                <div className="figma-toolbar__dropdown">
+                <div className="toolbar__dropdown">
                     <button className="icon-btn" onClick={() => setTerminalMenuOpen(o => !o)} title="Terminal">
                         <TerminalIcon size={12} className={isTerminalOpen ? 'icon-active' : ''} />
                         <ChevronDown size={10} />
                     </button>
                     {terminalMenuOpen ? (
-                        <div className="figma-toolbar__menu">
+                        <div className="toolbar__menu">
                             <button
-                                className="figma-toolbar__menu-item"
+                                className="toolbar__menu-item"
                                 onClick={() => {
                                     setTerminalOpen(!isTerminalOpen);
                                     setTerminalMenuOpen(false);
@@ -179,7 +179,7 @@ export default function StageToolbar() {
                                 {isTerminalOpen ? 'Hide' : 'Show'} Pinned Terminal
                             </button>
                             <button
-                                className="figma-toolbar__menu-item"
+                                className="toolbar__menu-item"
                                 onClick={() => {
                                     addCanvasTerminal();
                                     setTerminalMenuOpen(false);
@@ -195,15 +195,15 @@ export default function StageToolbar() {
                     <Github size={12} className={isTrackingOpen ? 'icon-active' : ''} />
                 </button>
 
-                <div className="figma-toolbar__dropdown">
+                <div className="toolbar__dropdown">
                     <button className="icon-btn" onClick={() => setMarkdownMenuOpen((open) => !open)} title="Markdown editors">
                         <FileText size={12} />
                         <ChevronDown size={10} />
                     </button>
                     {markdownMenuOpen ? (
-                        <div className="figma-toolbar__menu">
+                        <div className="toolbar__menu">
                             <button
-                                className="figma-toolbar__menu-item"
+                                className="toolbar__menu-item"
                                 onClick={() => {
                                     createMarkdownEditor('tal');
                                     setMarkdownMenuOpen(false);
@@ -212,7 +212,7 @@ export default function StageToolbar() {
                                 New Tal Editor
                             </button>
                             <button
-                                className="figma-toolbar__menu-item"
+                                className="toolbar__menu-item"
                                 onClick={() => {
                                     createMarkdownEditor('dance');
                                     setMarkdownMenuOpen(false);

@@ -2,7 +2,7 @@
    CHAT INPUT
    ═══════════════════════════════════════════ */
 
-.figma-chat-input {
+.chat-input {
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -12,7 +12,7 @@
     box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.figma-chat-input__warning {
+.chat-input__warning {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -25,14 +25,14 @@
     line-height: 1.45;
 }
 
-.figma-chat-input__main {
+.chat-input__main {
     display: flex;
     align-items: flex-end;
     gap: 6px;
     width: 100%;
 }
 
-.figma-chat-input__runtime-row {
+.chat-input__runtime-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -40,20 +40,20 @@
     width: 100%;
 }
 
-.figma-chat-input__mode-group {
+.chat-input__mode-group {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     min-width: 0;
 }
 
-.figma-chat-input__variant {
+.chat-input__variant {
     display: inline-flex;
     align-items: center;
     min-width: 0;
 }
 
-.figma-chat-input__variant .text-input {
+.chat-input__variant .text-input {
     min-width: 88px;
     max-width: 132px;
     height: 28px;
@@ -61,7 +61,7 @@
     font-size: var(--font-base);
 }
 
-.figma-chat-input .text-input {
+.chat-input .text-input {
     min-height: 32px;
     max-height: 102px;
     resize: none;
@@ -77,21 +77,21 @@
     flex: 1;
 }
 
-.figma-chat-input .text-input:focus {
+.chat-input .text-input:focus {
     background: var(--bg-panel);
     border-color: var(--accent);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
     outline: none;
 }
 
-.figma-chat-input .text-input::placeholder {
+.chat-input .text-input::placeholder {
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.figma-send-btn {
+.send-btn {
     width: 30px;
     height: 30px;
     border-radius: var(--radius-lg);
@@ -106,22 +106,22 @@
     transition: background 0.15s, transform 0.1s;
 }
 
-.figma-send-btn:hover:not(:disabled) {
+.send-btn:hover:not(:disabled) {
     filter: brightness(1.1);
     transform: scale(1.05);
 }
 
-.figma-send-btn:disabled {
+.send-btn:disabled {
     opacity: 0.3;
     cursor: not-allowed;
     background: var(--text-muted);
 }
 
-.figma-send-btn.abort {
+.send-btn.abort {
     background: #ef4444;
 }
 
-.figma-send-btn.abort:hover {
+.send-btn.abort:hover {
     background: #dc2626;
 }
 

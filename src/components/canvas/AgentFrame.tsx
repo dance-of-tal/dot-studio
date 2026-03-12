@@ -44,19 +44,19 @@ function PerformerHeaderMeta({
     danceSummary: string | null
 }) {
     return (
-        <div className="figma-frame__badges">
+        <div className="canvas-frame__badges">
             {talLabel ? (
-                <span className="figma-frame__badge" title={`Tal: ${talLabel}`}>
+                <span className="canvas-frame__badge" title={`Tal: ${talLabel}`}>
                     {talLabel}
                 </span>
             ) : null}
             {danceSummary ? (
-                <span className="figma-frame__badge" title={`Dance: ${danceSummary}`}>
+                <span className="canvas-frame__badge" title={`Dance: ${danceSummary}`}>
                     {danceSummary}
                 </span>
             ) : null}
             {modelLabel ? (
-                <span className="figma-frame__badge" title={modelTitle || modelLabel}>
+                <span className="canvas-frame__badge" title={modelTitle || modelLabel}>
                     {modelLabel}
                 </span>
             ) : null}
@@ -542,7 +542,7 @@ export default function AgentFrame({ data, id }: any) {
 
     return (
         <CanvasWindowFrame
-            className={`nowheel ${hasFrameChrome ? 'figma-frame--active' : ''} ${isFocused ? 'figma-frame--focused' : ''} ${hasFrameChrome && !showResizeChrome ? 'figma-frame--content-active' : ''}`}
+            className={`nowheel ${hasFrameChrome ? 'canvas-frame--active' : ''} ${isFocused ? 'canvas-frame--focused' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''}`}
             width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}
             height={isFocused ? Math.max(rfHeight - 140, 400) : (data.height || 400)}
             onPointerDownCapture={handleFramePointerDownCapture}
@@ -562,9 +562,9 @@ export default function AgentFrame({ data, id }: any) {
             )}
             dragHandleActive={isTransformChromeActive}
             onActivateTransform={activateTransformChrome}
-            headerStart={<span className="figma-frame__name">{data.name}</span>}
+            headerStart={<span className="canvas-frame__name">{data.name}</span>}
             headerEnd={(
-                <div className="figma-frame__header-actions">
+                <div className="canvas-frame__header-actions">
                     <PerformerHeaderMeta
                         modelLabel={data.modelLabel || null}
                         modelTitle={data.modelTitle || null}
@@ -602,9 +602,9 @@ export default function AgentFrame({ data, id }: any) {
         >
             {isEditMode ? (
                 <>
-                    <div className="figma-edit-workbench__header">
+                    <div className="edit-workbench__header">
                         <button
-                            className="figma-edit-workbench__back"
+                            className="edit-workbench__back"
                             onClick={(event) => {
                                 event.stopPropagation();
                                 closeEditor();
@@ -614,7 +614,7 @@ export default function AgentFrame({ data, id }: any) {
                             <ArrowLeft size={12} />
                         </button>
                         <span className="section-title">Edit</span>
-                        <div className="figma-edit-workbench__actions">
+                        <div className="edit-workbench__actions">
                             <button
                                 className={`tab ${editTab === 'basic' ? 'active' : ''}`}
                                 onClick={(event) => {
@@ -822,13 +822,13 @@ export default function AgentFrame({ data, id }: any) {
                     endRef={chatEndRef}
                     composer={(
                         <div
-                            className="figma-chat-input"
+                            className="chat-input"
                             style={{ position: 'relative' }}
                             onDrop={handleDrop}
                             onDragOver={e => e.preventDefault()}
                         >
                             {(attachments.length > 0 || turnDanceSelections.length > 0) && (
-                                <div style={{ display: 'flex', gap: '4px', padding: '4px 8px', flexWrap: 'wrap', borderBottom: '1px solid var(--figma-border)' }}>
+                                <div style={{ display: 'flex', gap: '4px', padding: '4px 8px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-main)' }}>
                                     {turnDanceSelections.map((selection, idx) => (
                                         <div key={`${selection.scope}:${assetRefKey(selection.ref) || idx}`} className="turn-option-pill">
                                             <Zap size={10} style={{ marginRight: '4px' }} />
@@ -844,7 +844,7 @@ export default function AgentFrame({ data, id }: any) {
                                         </div>
                                     ))}
                                     {attachments.map((att, idx) => (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', background: 'var(--figma-bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px' }}>
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px' }}>
                                             <FileIcon size={10} style={{ marginRight: '4px' }} />
                                             {att.name}
                                             <X size={10} style={{ marginLeft: '4px', cursor: 'pointer' }} onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} />
@@ -933,7 +933,7 @@ export default function AgentFrame({ data, id }: any) {
                                     ))}
                                 </div>
                             ) : null}
-                            <div className="figma-chat-input__main">
+                            <div className="chat-input__main">
                                 <textarea
                                     ref={inputRef}
                                     value={input}
@@ -957,7 +957,7 @@ export default function AgentFrame({ data, id }: any) {
                                 />
                                 {isLoading ? (
                                     <button
-                                        className="figma-send-btn abort"
+                                        className="send-btn abort"
                                         onClick={() => abortChat(id)}
                                         title="Abort generation"
                                     >
@@ -965,7 +965,7 @@ export default function AgentFrame({ data, id }: any) {
                                     </button>
                                 ) : (
                                     <button
-                                        className="figma-send-btn"
+                                        className="send-btn"
                                         onClick={handleSend}
                                         disabled={!input.trim() || !modelConfigured || danceSlashMatch !== null}
                                     >
@@ -973,8 +973,8 @@ export default function AgentFrame({ data, id }: any) {
                                     </button>
                                 )}
                             </div>
-                            <div className="figma-chat-input__runtime-row">
-                                <div className="figma-chat-input__mode-group">
+                            <div className="chat-input__runtime-row">
+                                <div className="chat-input__mode-group">
                                     <button
                                         className={`mode-toggle ${!isPlanAgent ? 'is-active' : ''}`}
                                         onClick={(e) => {
@@ -1004,7 +1004,7 @@ export default function AgentFrame({ data, id }: any) {
                                     model={performer?.model || null}
                                     value={performer?.modelVariant || null}
                                     onChange={(value) => setPerformerModelVariant(id, value)}
-                                    className="figma-chat-input__variant"
+                                    className="chat-input__variant"
                                     compact
                                     titlePrefix="Performer variant"
                                 />

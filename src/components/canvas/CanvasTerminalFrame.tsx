@@ -245,7 +245,7 @@ export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) 
             className="canvas-terminal-frame"
             style={{ width, height }}
         >
-            <div className="canvas-terminal-frame__header figma-frame__header canvas-drag-handle--interactive">
+            <div className="canvas-terminal-frame__header canvas-frame__header canvas-drag-handle--interactive">
                 <div className="canvas-terminal-frame__header-left">
                     <TerminalIcon size={12} />
                     <span className="canvas-terminal-frame__title">{title}</span>
