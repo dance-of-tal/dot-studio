@@ -68,63 +68,9 @@
     margin: 0 0 12px;
 }
 
-.settings-filter-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid var(--border-main);
-    background: transparent;
-    color: var(--text-secondary);
-    border-radius: 999px;
-    padding: 6px 10px;
-    font-size: var(--font-sm);
-    font-weight: 600;
-    cursor: pointer;
-}
 
-.settings-filter-chip:hover {
-    background: var(--figma-bg-hover);
-}
 
-.settings-filter-chip.active {
-    color: white;
-    background: var(--figma-blue);
-    border-color: var(--figma-blue);
-}
 
-.settings-filter-chip__count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 14px;
-    height: 14px;
-    padding: 0 4px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.18);
-    font-size: var(--font-xs);
-    font-weight: 700;
-}
-
-.settings-tab {
-    border: 1px solid var(--border-main);
-    background: transparent;
-    color: var(--text-secondary);
-    border-radius: 999px;
-    padding: 7px 12px;
-    font-size: var(--font-base);
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.settings-tab:hover {
-    background: var(--figma-bg-hover);
-}
-
-.settings-tab.active {
-    color: white;
-    background: var(--figma-blue);
-    border-color: var(--figma-blue);
-}
 
 .settings-section {
     padding: 12px 20px;
@@ -274,7 +220,7 @@
 
 .provider-status.idle {
     color: var(--text-secondary);
-    background: var(--figma-bg-hover);
+    background: var(--bg-hover);
 }
 
 .provider-actions {
@@ -293,7 +239,7 @@
     font-size: var(--font-sm);
     line-height: 1.5;
     color: var(--text-secondary);
-    background: var(--figma-bg-hover);
+    background: var(--bg-hover);
 }
 
 .settings-note--muted {
@@ -375,7 +321,7 @@
 }
 
 .provider-model-option:hover {
-    border-color: var(--figma-blue);
+    border-color: var(--accent);
     background: var(--bg-panel);
 }
 

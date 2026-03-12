@@ -504,7 +504,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                         <label className="act-area-frame__iterations">
                             <span>Session mode</span>
                             <select
-                                className="figma-edit-select nodrag nowheel"
+                                className="select nodrag nowheel"
                                 value={sessionMode}
                                 onChange={(event) => onUpdateSessionMode?.(event.target.value as ActSessionMode)}
                             >
@@ -574,7 +574,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                     <label className="act-area-frame__node-control">
                                                         <span>From</span>
                                                         <select
-                                                            className="figma-edit-select nodrag nowheel"
+                                                            className="select nodrag nowheel"
                                                             value={selectedEdge.from}
                                                             onChange={(event) => onUpdateEdge?.(selectedEdge.id, { from: event.target.value })}
                                                         >
@@ -588,7 +588,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                     <label className="act-area-frame__node-control">
                                                         <span>To</span>
                                                         <select
-                                                            className="figma-edit-select nodrag nowheel"
+                                                            className="select nodrag nowheel"
                                                             value={selectedEdge.to}
                                                             onChange={(event) => onUpdateEdge?.(selectedEdge.id, { to: event.target.value })}
                                                         >
@@ -605,7 +605,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                     <label className="act-area-frame__node-control">
                                                         <span>Role</span>
                                                         <select
-                                                            className="figma-edit-select nodrag nowheel"
+                                                            className="select nodrag nowheel"
                                                             value={selectedEdge.role || 'flow'}
                                                             onChange={(event) => onUpdateEdge?.(selectedEdge.id, {
                                                                 role: event.target.value === 'branch' ? 'branch' : undefined,
@@ -619,7 +619,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                     <label className="act-area-frame__node-control" title="When this edge activates after the source node completes">
                                                         <span>Condition</span>
                                                         <select
-                                                            className="figma-edit-select nodrag nowheel"
+                                                            className="select nodrag nowheel"
                                                             value={selectedEdge.condition || 'always'}
                                                             disabled={selectedEdge.role === 'branch'}
                                                             onChange={(event) => onUpdateEdge?.(selectedEdge.id, { condition: event.target.value })}
@@ -656,7 +656,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                             <div className="act-area-frame__focus-editor-tabs">
                                                 <button
                                                     type="button"
-                                                    className={`figma-edit-workbench__tab ${focusedEditorTab === 'basic' ? 'active' : ''}`}
+                                                    className={`tab ${focusedEditorTab === 'basic' ? 'active' : ''}`}
                                                     onClick={(event) => {
                                                         event.stopPropagation()
                                                         setFocusedEditorTab('basic')
@@ -666,7 +666,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    className={`figma-edit-workbench__tab ${focusedEditorTab === 'advanced' ? 'active' : ''}`}
+                                                    className={`tab ${focusedEditorTab === 'advanced' ? 'active' : ''}`}
                                                     onClick={(event) => {
                                                         event.stopPropagation()
                                                         setFocusedEditorTab('advanced')

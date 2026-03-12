@@ -186,3 +186,51 @@
     letter-spacing: 0.06em;
     color: var(--text-muted);
 }
+
+/* ── Tabs (pill-shaped toggles) ──────────────────────── */
+
+.tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 4px 10px;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    border-radius: 999px;
+    border: 1px solid var(--border-main);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.tab:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.tab.active {
+    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+/* Larger tab variant (settings) */
+.tab--lg {
+    padding: 7px 12px;
+    font-size: var(--font-base);
+}
+
+/* Tab-scoped count badge */
+.tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: var(--font-xs);
+    font-weight: 700;
+}

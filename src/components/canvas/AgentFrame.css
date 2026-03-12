@@ -222,50 +222,14 @@
     margin-left: auto;
 }
 
-.figma-edit-workbench__tab {
-    padding: 4px 10px;
-    font-size: var(--font-sm);
-    font-weight: 600;
-    border-radius: 999px;
-    border: 1px solid var(--border-main);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.figma-edit-workbench__tab:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
-.figma-edit-workbench__tab.active {
-    color: #fff;
-    background: var(--accent);
-    border-color: var(--accent);
-}
 
 
 
 
-.figma-edit-select {
-    appearance: none;
-    -webkit-appearance: none;
-    padding: 6px 28px 6px 10px;
-    font-size: var(--font-base);
-    font-weight: 500;
-    border: 1px solid var(--border-main);
-    border-radius: var(--radius-sm);
-    background: var(--bg-panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: border-color 0.15s;
-}
 
-.figma-edit-select:focus {
-    outline: none;
-    border-color: var(--accent);
-}
+
+
+
 
 .figma-edit-advanced {
     display: flex;

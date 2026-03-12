@@ -260,7 +260,7 @@
     align-items: center;
     gap: 4px;
     border-radius: 999px;
-    background: var(--figma-bg-hover);
+    background: var(--bg-hover);
     padding: 2px 6px;
     color: var(--text-primary);
     font-size: var(--font-sm);

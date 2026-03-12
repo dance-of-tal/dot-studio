@@ -55,11 +55,7 @@
     --mcp-color: #14AE5C;
     --mcp-bg: rgba(20, 174, 92, 0.1);
 
-    /* Figma-prefixed aliases (used by modals) */
-    --figma-blue: #0D99FF;
-    --figma-blue-hover: #0A85E0;
-    --figma-bg-hover: #F0F0F0;
-    --figma-border: #E5E5E5;
+
 
     color-scheme: light;
 }
@@ -94,11 +90,7 @@
     --mcp-color: #14AE5C;
     --mcp-bg: rgba(20, 174, 92, 0.15);
 
-    /* Figma-prefixed aliases (used by modals) */
-    --figma-blue: #0D99FF;
-    --figma-blue-hover: #0A85E0;
-    --figma-bg-hover: #444444;
-    --figma-border: #444444;
+
 
     color-scheme: dark;
 }

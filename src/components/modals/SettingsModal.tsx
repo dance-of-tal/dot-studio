@@ -494,9 +494,9 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                     <div className="figma-empty" style={{ padding: 32 }}>Loading...</div>
                 ) : (
                     <div className="settings-body">
-                        <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+                        <div className="tab tab--lgs" role="tablist" aria-label="Settings sections">
                             <button
-                                className={`settings-tab ${activeTab === 'runtime' ? 'active' : ''}`}
+                                className={`tab tab--lg ${activeTab === 'runtime' ? 'active' : ''}`}
                                 onClick={() => setActiveTab('runtime')}
                                 role="tab"
                                 aria-selected={activeTab === 'runtime'}
@@ -504,7 +504,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                 Runtime
                             </button>
                             <button
-                                className={`settings-tab ${activeTab === 'project' ? 'active' : ''}`}
+                                className={`tab tab--lg ${activeTab === 'project' ? 'active' : ''}`}
                                 onClick={() => setActiveTab('project')}
                                 role="tab"
                                 aria-selected={activeTab === 'project'}
@@ -512,7 +512,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                 Project
                             </button>
                             <button
-                                className={`settings-tab ${activeTab === 'providers' ? 'active' : ''}`}
+                                className={`tab tab--lg ${activeTab === 'providers' ? 'active' : ''}`}
                                 onClick={() => setActiveTab('providers')}
                                 role="tab"
                                 aria-selected={activeTab === 'providers'}
@@ -715,13 +715,13 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                     {providerFilterOptions.map((filter) => (
                                         <button
                                             key={filter.key}
-                                            className={`settings-filter-chip ${providerFilter === filter.key ? 'active' : ''}`}
+                                            className={`tab ${providerFilter === filter.key ? 'active' : ''}`}
                                             onClick={() => setProviderFilter(filter.key)}
                                             role="tab"
                                             aria-selected={providerFilter === filter.key}
                                         >
                                             {filter.label}
-                                            <span className="settings-filter-chip__count">{filter.count}</span>
+                                            <span className="tab__count">{filter.count}</span>
                                         </button>
                                     ))}
                                 </div>

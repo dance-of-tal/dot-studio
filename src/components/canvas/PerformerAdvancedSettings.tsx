@@ -72,7 +72,7 @@ export default function PerformerAdvancedSettings({
                     <label className="adv-field">
                         <span className="adv-field__label">Dance Delivery</span>
                         <select
-                            className="figma-edit-select nodrag nowheel"
+                            className="select nodrag nowheel"
                             value={performer?.danceDeliveryMode || 'auto'}
                             onChange={(event) => onDanceDeliveryModeChange?.(event.target.value as DanceDeliveryMode)}
                         >
@@ -204,7 +204,7 @@ export default function PerformerAdvancedSettings({
                                 <label key={`binding:${binding.placeholderName}`} className="adv-field">
                                     <span className="adv-field__label">{binding.placeholderName}</span>
                                     <select
-                                        className="figma-edit-select nodrag nowheel"
+                                        className="select nodrag nowheel"
                                         value={binding.serverName || ''}
                                         onChange={(event) => onSetMcpBinding?.(binding.placeholderName, event.target.value || null)}
                                     >

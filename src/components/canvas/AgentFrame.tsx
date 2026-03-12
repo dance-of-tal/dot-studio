@@ -616,7 +616,7 @@ export default function AgentFrame({ data, id }: any) {
                         <span className="section-title">Edit</span>
                         <div className="figma-edit-workbench__actions">
                             <button
-                                className={`figma-edit-workbench__tab ${editTab === 'basic' ? 'active' : ''}`}
+                                className={`tab ${editTab === 'basic' ? 'active' : ''}`}
                                 onClick={(event) => {
                                     event.stopPropagation();
                                     setEditTab('basic');
@@ -626,7 +626,7 @@ export default function AgentFrame({ data, id }: any) {
                                 Basic
                             </button>
                             <button
-                                className={`figma-edit-workbench__tab ${editTab === 'advanced' ? 'active' : ''}`}
+                                className={`tab ${editTab === 'advanced' ? 'active' : ''}`}
                                 onClick={(event) => {
                                     event.stopPropagation();
                                     setEditTab('advanced');
