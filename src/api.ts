@@ -7,12 +7,14 @@ import type {
     ModelConfig,
     PromptPreview,
     ActRunState,
-    ActThreadResumeSummary,
     SavedStageSummary,
 } from './types'
 import type { RuntimeModelCatalogEntry } from '../shared/model-variants'
 import type { AdapterViewActionRequest, AdapterViewProjection } from '../shared/adapter-view'
+import type { RunActRequest } from '../shared/act-contracts'
+import type { AssetListItem } from '../shared/asset-contracts'
 import type { ChatSendRequest, ChatSessionCreateResponse, CompilePromptRequest } from '../shared/chat-contracts'
+import type { DotAuthUserResponse, DotInitResponse, DotInstallRequest, DotLoginResponse, DotPublishRequest, DotSaveLocalRequest, DotStatusResponse } from '../shared/dot-contracts'
 import { StudioApiError } from './lib/api-errors'
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
@@ -144,20 +146,13 @@ export const api = {
     // ── Assets ──────────────────────────────────────────
     assets: {
         list: (kind: string) =>
-            fetchJSON<Array<{
-                kind: string
-                urn: string
-                name: string
-                author: string
-                description: string
-                [key: string]: any
-            }>>(`/api/assets/${kind}`),
+            fetchJSON<AssetListItem[]>(`/api/assets/${kind}`),
 
         get: (kind: string, author: string, name: string) =>
-            fetchJSON<any>(`/api/assets/${kind}/${author}/${name}`),
+            fetchJSON<AssetListItem>(`/api/assets/${kind}/${author}/${name}`),
 
         getRegistry: (kind: string, author: string, name: string) =>
-            fetchJSON<any>(`/api/assets/registry/${kind}/${author}/${name}`),
+            fetchJSON<AssetListItem>(`/api/assets/registry/${kind}/${author}/${name}`),
     },
 
     // ── Stages ──────────────────────────────────────────
@@ -268,16 +263,7 @@ export const api = {
     },
 
     act: {
-        run: (payload: {
-            actSessionId?: string
-            actUrn?: string
-            stageAct?: any
-            performers?: any[]
-            drafts?: Record<string, DraftAsset>
-            input: string
-            maxIterations?: number
-            resumeSummary?: ActThreadResumeSummary
-        }) =>
+        run: (payload: RunActRequest) =>
             postJSON<ActRunState>('/api/act/run', payload),
 
         abort: (actSessionId: string) =>
@@ -491,27 +477,19 @@ export const api = {
     // ── DOT Integration ─────────────────────────────────
     dot: {
         status: () =>
-            fetchJSON<{ initialized: boolean; dotDir: string; projectDir: string }>('/api/dot/status'),
+            fetchJSON<DotStatusResponse>('/api/dot/status'),
 
         authUser: () =>
-            fetchJSON<{ authenticated: boolean; username: string | null }>('/api/dot/auth-user'),
+            fetchJSON<DotAuthUserResponse>('/api/dot/auth-user'),
 
         login: (acknowledgedTos = false) =>
-            postJSON<{
-                ok: boolean
-                started: boolean
-                alreadyRunning?: boolean
-                alreadyAuthenticated?: boolean
-                username?: string | null
-                authUrl?: string
-                browserOpened?: boolean
-            }>('/api/dot/login', { acknowledgedTos }),
+            postJSON<DotLoginResponse>('/api/dot/login', { acknowledgedTos }),
 
         logout: () =>
             postJSON<{ ok: boolean }>('/api/dot/logout'),
 
         init: () =>
-            postJSON<{ ok: boolean; dotDir: string }>('/api/dot/init'),
+            postJSON<DotInitResponse>('/api/dot/init'),
 
         performers: () =>
             fetchJSON<{ names: string[]; skipped: Array<{ file: string; reason: string }> }>('/api/dot/performers'),
@@ -526,7 +504,7 @@ export const api = {
             putJSON<{ ok: boolean }>('/api/dot/agents', manifest),
 
         install: (urn: string, localName?: string, force?: boolean, scope?: 'global' | 'stage') =>
-            postJSON<any>('/api/dot/install', { urn, localName, force, scope }),
+            postJSON<any>('/api/dot/install', { urn, localName, force, scope } satisfies DotInstallRequest),
 
         saveLocalAsset: (
             kind: 'tal' | 'dance' | 'performer' | 'act',
@@ -534,7 +512,7 @@ export const api = {
             payload: Record<string, unknown>,
             author?: string,
         ) =>
-            putJSON<{ ok: boolean; urn: string; path: string; existed: boolean; payload: Record<string, unknown> }>('/api/dot/assets/local', { kind, slug, payload, author }),
+            putJSON<{ ok: boolean; urn: string; path: string; existed: boolean; payload: Record<string, unknown> }>('/api/dot/assets/local', { kind, slug, payload, author } satisfies DotSaveLocalRequest),
 
         publishAsset: (
             kind: 'tal' | 'dance' | 'performer' | 'act',
@@ -550,7 +528,7 @@ export const api = {
                 dependenciesPublished: string[]
                 dependenciesSkipped: string[]
                 dependenciesExisting: string[]
-            }>('/api/dot/assets/publish', { kind, slug, payload, tags, acknowledgedTos }),
+            }>('/api/dot/assets/publish', { kind, slug, payload, tags, acknowledgedTos } satisfies DotPublishRequest),
 
         search: (query: string, kind?: string, limit?: number) =>
             fetchJSON<Array<{ kind: string; name: string; author: string; slug: string; description: string; tags: string[] }>>(

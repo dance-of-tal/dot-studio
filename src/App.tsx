@@ -283,7 +283,7 @@ export default function App() {
 
     store.upsertDraft({
       ...currentDraft,
-      name: detail.name || asset.name,
+      name: detail.name || asset.name || currentDraft.name,
       slug: detail.slug || asset.slug || asset.name,
       description: detail.description || detail.name || asset.name,
       tags: Array.isArray(detail.tags) ? detail.tags : [],
@@ -292,7 +292,7 @@ export default function App() {
       updatedAt: Date.now(),
     });
     store.updateMarkdownEditorBaseline(editor.id, {
-      name: detail.name || asset.name,
+      name: detail.name || asset.name || currentDraft.name,
       slug: detail.slug || asset.slug || asset.name,
       description: detail.description || detail.name || asset.name,
       tags: Array.isArray(detail.tags) ? detail.tags : [],

@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import type { CompilePromptRequest } from '../../shared/chat-contracts.js'
+import type { RunActRequest } from '../../shared/act-contracts.js'
 import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import { abortActRuntime, runActRuntime, subscribeActRuntimeEvents } from '../lib/act-runtime.js'
 import {
@@ -34,16 +35,7 @@ compile.post('/api/compile', async (c) => {
 
 compile.post('/api/act/run', async (c) => {
     try {
-        const body = await c.req.json<{
-            actSessionId?: string
-            actUrn?: string
-            stageAct?: unknown
-            performers?: unknown[]
-            drafts?: Record<string, unknown>
-            input: string
-            maxIterations?: number
-            resumeSummary?: unknown
-        }>()
+        const body = await c.req.json<RunActRequest>()
 
         const cwd = resolveRequestWorkingDir(c)
         const result = await runActRuntime({

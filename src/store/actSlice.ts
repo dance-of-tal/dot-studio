@@ -2,6 +2,7 @@
 // These actions manage Act CRUD, node/edge manipulation, and Act run recording.
 
 import type { StudioState } from './types'
+import type { ModelConfig } from '../types'
 import { api } from '../api'
 import { showToast } from '../lib/toast'
 import {
@@ -236,7 +237,14 @@ export function createActActions(
                     continue
                 }
 
-                const performerAsset = performerAssetByUrn.get(node.performer.trim()) || {
+                const performerAsset: {
+                    urn: string
+                    name: string
+                    model?: ModelConfig | string | null
+                    modelPlaceholder?: ModelConfig | null
+                    mcpConfig?: Record<string, any> | null
+                    mcpServerNames?: string[]
+                } = performerAssetByUrn.get(node.performer.trim()) || {
                     urn: node.performer.trim(),
                     name: performerNameFromUrn(node.performer.trim()),
                 }
