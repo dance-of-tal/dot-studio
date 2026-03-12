@@ -30,6 +30,11 @@ type ActFeedMessage = ChatMessage & {
     subheader?: string | null
 }
 
+type PerformerFilterOption = {
+    value: string
+    label: string
+}
+
 type ActThreadPanelProps = {
     sessionStatus: 'idle' | 'running' | 'completed' | 'failed' | 'interrupted' | null
     entryNodeId: string | null
@@ -65,6 +70,201 @@ function formatFeedTime(timestamp: number) {
     }
 }
 
+function uniqueBindings(bindings: ActPerformerSessionBinding[]) {
+    return Array.from(new Map(
+        bindings.map((binding) => [binding.sessionId, binding]),
+    ).values())
+}
+
+function buildPerformerFilters(bindings: ActPerformerSessionBinding[]): PerformerFilterOption[] {
+    const seen = new Set<string>()
+    return uniqueBindings(bindings).flatMap((binding) => {
+        const value = binding.performerId || `session:${binding.sessionId}`
+        if (seen.has(value)) {
+            return []
+        }
+        seen.add(value)
+        return [{
+            value,
+            label: binding.performerName || binding.nodeLabel || binding.sessionId,
+        }]
+    })
+}
+
+function buildBaseFeedMessages(
+    threadMessages: ActThreadMessage[],
+    performerFilter: string,
+): ActFeedMessage[] {
+    return threadMessages
+        .filter((message) => performerFilter === 'all' || message.role !== 'assistant')
+        .map((message) => ({
+            ...message,
+            key: `thread:${message.id}`,
+            source: 'thread' as const,
+            header: message.role === 'assistant'
+                ? 'Act result'
+                : message.role === 'user'
+                    ? 'Prompt'
+                    : 'System',
+            subheader: formatFeedTime(message.timestamp),
+        }))
+}
+
+function buildPerformerFeedMessages(
+    bindings: ActPerformerSessionBinding[],
+    performerFilter: string,
+    performerThreadMessages: Record<string, ChatMessage[]>,
+): ActFeedMessage[] {
+    return uniqueBindings(bindings)
+        .filter((binding) => (
+            performerFilter === 'all'
+            || performerFilter === (binding.performerId || `session:${binding.sessionId}`)
+        ))
+        .flatMap((binding) => (
+            (performerThreadMessages[binding.sessionId] || [])
+                .filter((message) => message.role !== 'user')
+                .map((message) => ({
+                    ...message,
+                    key: `${binding.sessionId}:${message.id}`,
+                    source: 'performer' as const,
+                    header: binding.performerName || binding.nodeLabel || binding.sessionId,
+                    subheader: `${binding.nodeLabel} · ${formatFeedTime(message.timestamp)}`,
+                }))
+        ))
+}
+
+function buildFeedMessages(
+    threadMessages: ActThreadMessage[],
+    performerThreadMessages: Record<string, ChatMessage[]>,
+    performerThreadBindings: ActPerformerSessionBinding[],
+    performerFilter: string,
+): ActFeedMessage[] {
+    const deduped = new Map<string, ActFeedMessage>()
+    for (const message of [
+        ...buildBaseFeedMessages(threadMessages, performerFilter),
+        ...buildPerformerFeedMessages(performerThreadBindings, performerFilter, performerThreadMessages),
+    ]) {
+        deduped.set(message.key, message)
+    }
+
+    return [...deduped.values()].sort((a, b) => a.timestamp - b.timestamp)
+}
+
+function getRuntimeEdgeCompleted(
+    edge: ActThreadEdge,
+    completedRuntimeNodeIds: Set<string>,
+) {
+    return completedRuntimeNodeIds.has(edge.from) && completedRuntimeNodeIds.has(edge.to)
+}
+
+function getRuntimeNodeStatusClass(args: {
+    nodeId: string
+    activeRuntimeNodeId: string | null
+    completedRuntimeNodeIds: Set<string>
+    failedRuntimeNodeIds: Set<string>
+}) {
+    if (args.failedRuntimeNodeIds.has(args.nodeId)) {
+        return 'is-failed'
+    }
+    if (args.activeRuntimeNodeId === args.nodeId) {
+        return 'is-active'
+    }
+    if (args.completedRuntimeNodeIds.has(args.nodeId)) {
+        return 'is-completed'
+    }
+    return ''
+}
+
+function resizeComposerTextarea(target: HTMLTextAreaElement) {
+    target.style.height = '0'
+    target.style.height = `${target.scrollHeight}px`
+    target.style.overflowY = target.scrollHeight > 128 ? 'auto' : 'hidden'
+}
+
+function RuntimeMinimap({
+    minimapRef,
+    minimapHeight,
+    runtimeGraph,
+    minimapScale,
+    edges,
+    nodes,
+    completedRuntimeNodeIds,
+    activeRuntimeNodeId,
+    failedRuntimeNodeIds,
+    entryNodeId,
+}: {
+    minimapRef: RefObject<HTMLDivElement | null>
+    minimapHeight: number
+    runtimeGraph: RuntimeGraphLayout
+    minimapScale: number
+    edges: ActThreadEdge[]
+    nodes: ActThreadNode[]
+    completedRuntimeNodeIds: Set<string>
+    activeRuntimeNodeId: string | null
+    failedRuntimeNodeIds: Set<string>
+    entryNodeId: string | null
+}) {
+    return (
+        <div ref={minimapRef} className="act-area-frame__graph-minimap" style={{ height: minimapHeight }}>
+            <div
+                className="act-area-frame__graph-minimap-inner"
+                style={{
+                    width: runtimeGraph.width,
+                    height: runtimeGraph.height,
+                    transform: `scale(${minimapScale})`,
+                }}
+            >
+                <svg
+                    className="act-area-frame__graph-edges"
+                    width={runtimeGraph.width}
+                    height={runtimeGraph.height}
+                    aria-hidden="true"
+                >
+                    {edges.map((edge) => {
+                        const from = runtimeGraph.positions[edge.from]
+                        const to = runtimeGraph.positions[edge.to]
+                        if (!from || !to) {
+                            return null
+                        }
+                        const completed = getRuntimeEdgeCompleted(edge, completedRuntimeNodeIds)
+                        return (
+                            <line
+                                key={`runtime-edge-${edge.id}`}
+                                x1={from.x + 46}
+                                y1={from.y + 17}
+                                x2={to.x + 46}
+                                y2={to.y + 17}
+                                className={`act-area-frame__graph-edge ${completed ? 'is-completed' : ''}`}
+                            />
+                        )
+                    })}
+                </svg>
+                {nodes.map((node) => {
+                    const position = runtimeGraph.positions[node.id]
+                    if (!position) {
+                        return null
+                    }
+                    const statusClass = getRuntimeNodeStatusClass({
+                        nodeId: node.id,
+                        activeRuntimeNodeId,
+                        completedRuntimeNodeIds,
+                        failedRuntimeNodeIds,
+                    })
+                    return (
+                        <div
+                            key={`runtime-node-${node.id}`}
+                            className={`act-area-frame__graph-node ${statusClass} ${entryNodeId === node.id ? 'is-entry' : ''}`}
+                            style={{ left: position.x, top: position.y }}
+                        >
+                            <span>{node.label}</span>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
 export default function ActThreadPanel({
     sessionStatus,
     entryNodeId,
@@ -97,21 +297,7 @@ export default function ActThreadPanel({
         : 'act-area-frame__thread-meta-pill--status'
 
     const performerFilters = useMemo(() => {
-        const uniqueBindings = Array.from(new Map(
-            performerThreadBindings.map((binding) => [binding.sessionId, binding]),
-        ).values())
-        const seen = new Set<string>()
-        return uniqueBindings.flatMap((binding) => {
-            const value = binding.performerId || `session:${binding.sessionId}`
-            if (seen.has(value)) {
-                return []
-            }
-            seen.add(value)
-            return [{
-                value,
-                label: binding.performerName || binding.nodeLabel || binding.sessionId,
-            }]
-        })
+        return buildPerformerFilters(performerThreadBindings)
     }, [performerThreadBindings])
 
     useEffect(() => {
@@ -124,46 +310,12 @@ export default function ActThreadPanel({
     }, [performerFilter, performerFilters])
 
     const feedMessages = useMemo<ActFeedMessage[]>(() => {
-        const uniqueBindings = Array.from(new Map(
-            performerThreadBindings.map((binding) => [binding.sessionId, binding]),
-        ).values())
-        const baseMessages = threadMessages
-            .filter((message) => performerFilter === 'all' || message.role !== 'assistant')
-            .map((message) => ({
-                ...message,
-                key: `thread:${message.id}`,
-                source: 'thread' as const,
-                header: message.role === 'assistant'
-                    ? 'Act result'
-                    : message.role === 'user'
-                        ? 'Prompt'
-                        : 'System',
-                subheader: formatFeedTime(message.timestamp),
-            }))
-
-        const performerMessages = uniqueBindings
-            .filter((binding) => (
-                performerFilter === 'all'
-                || performerFilter === (binding.performerId || `session:${binding.sessionId}`)
-            ))
-            .flatMap((binding) => (
-                (performerThreadMessages[binding.sessionId] || [])
-                    .filter((message) => message.role !== 'user')
-                    .map((message) => ({
-                        ...message,
-                        key: `${binding.sessionId}:${message.id}`,
-                        source: 'performer' as const,
-                        header: binding.performerName || binding.nodeLabel || binding.sessionId,
-                        subheader: `${binding.nodeLabel} · ${formatFeedTime(message.timestamp)}`,
-                    }))
-            ))
-
-        const deduped = new Map<string, ActFeedMessage>()
-        for (const message of [...baseMessages, ...performerMessages]) {
-            deduped.set(message.key, message)
-        }
-
-        return [...deduped.values()].sort((a, b) => a.timestamp - b.timestamp)
+        return buildFeedMessages(
+            threadMessages,
+            performerThreadMessages,
+            performerThreadBindings,
+            performerFilter,
+        )
     }, [performerFilter, performerThreadBindings, performerThreadMessages, threadMessages])
 
     const submitThread = () => {
@@ -269,64 +421,18 @@ export default function ActThreadPanel({
                         </button>
                     </div>
                 </div>
-                <div ref={minimapRef} className="act-area-frame__graph-minimap" style={{ height: minimapHeight }}>
-                    <div
-                        className="act-area-frame__graph-minimap-inner"
-                        style={{
-                            width: runtimeGraph.width,
-                            height: runtimeGraph.height,
-                            transform: `scale(${minimapScale})`,
-                        }}
-                    >
-                        <svg
-                            className="act-area-frame__graph-edges"
-                            width={runtimeGraph.width}
-                            height={runtimeGraph.height}
-                            aria-hidden="true"
-                        >
-                            {edges.map((edge) => {
-                                const from = runtimeGraph.positions[edge.from]
-                                const to = runtimeGraph.positions[edge.to]
-                                if (!from || !to) {
-                                    return null
-                                }
-                                const completed = completedRuntimeNodeIds.has(edge.from) && completedRuntimeNodeIds.has(edge.to)
-                                return (
-                                    <line
-                                        key={`runtime-edge-${edge.id}`}
-                                        x1={from.x + 46}
-                                        y1={from.y + 17}
-                                        x2={to.x + 46}
-                                        y2={to.y + 17}
-                                        className={`act-area-frame__graph-edge ${completed ? 'is-completed' : ''}`}
-                                    />
-                                )
-                            })}
-                        </svg>
-                        {nodes.map((node) => {
-                            const position = runtimeGraph.positions[node.id]
-                            if (!position) {
-                                return null
-                            }
-                            const statusClass = failedRuntimeNodeIds.has(node.id)
-                                ? 'is-failed'
-                                : activeRuntimeNodeId === node.id
-                                    ? 'is-active'
-                                    : completedRuntimeNodeIds.has(node.id)
-                                        ? 'is-completed'
-                                        : ''
-                            return (
-                                <div
-                                    key={`runtime-node-${node.id}`}
-                                    className={`act-area-frame__graph-node ${statusClass} ${entryNodeId === node.id ? 'is-entry' : ''}`}
-                                    style={{ left: position.x, top: position.y }}
-                                >
-                                    <span>{node.label}</span>
-                                </div>
-                            )
-                        })}
-                    </div>
-                </div>
+                <RuntimeMinimap
+                    minimapRef={minimapRef}
+                    minimapHeight={minimapHeight}
+                    runtimeGraph={runtimeGraph}
+                    minimapScale={minimapScale}
+                    edges={edges}
+                    nodes={nodes}
+                    completedRuntimeNodeIds={completedRuntimeNodeIds}
+                    activeRuntimeNodeId={activeRuntimeNodeId}
+                    failedRuntimeNodeIds={failedRuntimeNodeIds}
+                    entryNodeId={entryNodeId}
+                />
             </div>
             {performerFilters.length > 0 ? (
                 <div className="act-area-frame__thread-filters">
@@ -400,9 +506,7 @@ export default function ActThreadPanel({
                                 value={threadInput}
                                 onChange={(event) => {
                                     onThreadInputChange(event.target.value)
-                                    event.target.style.height = '0'
-                                    event.target.style.height = `${event.target.scrollHeight}px`
-                                    event.target.style.overflowY = event.target.scrollHeight > 128 ? 'auto' : 'hidden'
+                                    resizeComposerTextarea(event.target)
                                 }}
                                 onKeyDown={(event) => {
                                     if (event.key === 'Enter' && !event.shiftKey) {
