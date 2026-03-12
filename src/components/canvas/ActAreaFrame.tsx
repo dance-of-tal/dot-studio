@@ -75,6 +75,18 @@ type ActRuntimeSummary = {
     history?: ActRuntimeHistoryEntry[]
 }
 
+type RuntimeGraphState = {
+    width: number
+    height: number
+    positions: Record<string, { x: number; y: number }>
+}
+
+type InlineEditorState = {
+    kind: 'tal' | 'dance'
+    performerId: string
+    content: string
+}
+
 function edgePath(from: ActAreaNodeView | undefined, to: ActAreaNodeView | undefined) {
     if (!from || !to) {
         return null
@@ -97,6 +109,155 @@ function previewEdgePath(from: ActAreaNodeView | undefined, point: { x: number; 
     const startY = from.position.y + (ACT_LAYOUT_NODE_HEIGHT / 2)
     const delta = Math.max(40, Math.abs(point.x - startX) * 0.5)
     return `M ${startX} ${startY} C ${startX + delta} ${startY}, ${point.x - delta} ${point.y}, ${point.x} ${point.y}`
+}
+
+function buildRuntimeState(
+    runtimeSummary: ActRuntimeSummary | null,
+    loading: boolean,
+    entryNodeId: string | null | undefined,
+) {
+    const runtimeHistory = runtimeSummary?.history || []
+    const lastHistoryNodeId = runtimeHistory.length > 0 ? runtimeHistory[runtimeHistory.length - 1]?.nodeId || null : null
+    const activeRuntimeNodeId = loading
+        ? (runtimeSummary?.currentNodeId || lastHistoryNodeId || entryNodeId || null)
+        : (runtimeSummary?.currentNodeId || lastHistoryNodeId || null)
+
+    return {
+        runtimeHistory,
+        activeRuntimeNodeId,
+        completedRuntimeNodeIds: new Set(
+            runtimeHistory
+                .filter((entry) => entry.action.includes('completed') || entry.action.includes('selected') || entry.action.includes('delegated'))
+                .map((entry) => entry.nodeId),
+        ),
+        failedRuntimeNodeIds: new Set(
+            runtimeHistory
+                .filter((entry) => entry.action.includes('failed'))
+                .map((entry) => entry.nodeId),
+        ),
+    }
+}
+
+async function computeRuntimeGraphState(
+    nodes: ActAreaNodeView[],
+    edges: ActAreaEdgeView[],
+): Promise<RuntimeGraphState> {
+    if (nodes.length === 0) {
+        return { width: 0, height: 0, positions: {} }
+    }
+
+    const miniNodeWidth = 92
+    const miniNodeHeight = 34
+    const paddingX = 20
+    const paddingY = 18
+
+    const layout = await computeActAutoLayout({
+        bounds: { x: 0, y: 0, width: 800, height: 600 },
+        nodes: nodes as any,
+        edges: edges as any,
+    })
+    const posEntries = Object.entries(layout.positions)
+    if (posEntries.length === 0) {
+        return { width: 240, height: 80, positions: {} }
+    }
+
+    const sX = miniNodeWidth / ACT_LAYOUT_NODE_WIDTH
+    const sY = miniNodeHeight / ACT_LAYOUT_NODE_HEIGHT
+    const xs = posEntries.map(([, p]) => p.x)
+    const ys = posEntries.map(([, p]) => p.y)
+    const minX = Math.min(...xs)
+    const minY = Math.min(...ys)
+    const positions = Object.fromEntries(
+        posEntries.map(([nodeId, position]) => [
+            nodeId,
+            {
+                x: paddingX + (position.x - minX) * sX,
+                y: paddingY + (position.y - minY) * sY,
+            },
+        ]),
+    )
+    const posValues = Object.values(positions)
+    return {
+        width: Math.max(240, Math.max(...posValues.map((position) => position.x)) + miniNodeWidth + paddingX),
+        height: Math.max(80, Math.max(...posValues.map((position) => position.y)) + miniNodeHeight + paddingY),
+        positions,
+    }
+}
+
+function findOrphanedNodeIds(
+    nodes: ActAreaNodeView[],
+    edges: ActAreaEdgeView[],
+    entryNodeId: string | null | undefined,
+) {
+    if (!entryNodeId || nodes.length === 0) return new Set<string>()
+
+    const reachable = new Set<string>()
+    const queue = [entryNodeId]
+    reachable.add(entryNodeId)
+    while (queue.length > 0) {
+        const current = queue.shift()!
+        for (const edge of edges) {
+            if (edge.from === current && !reachable.has(edge.to) && edge.to !== '$exit') {
+                reachable.add(edge.to)
+                queue.push(edge.to)
+            }
+        }
+    }
+    return new Set(nodes.filter((node) => !reachable.has(node.id)).map((node) => node.id))
+}
+
+function buildFocusedNodeSemantics(focusedNode: ActAreaNodeView | null) {
+    if (!focusedNode) {
+        return null
+    }
+    if (focusedNode.type === 'parallel') {
+        return `${focusedNode.type} structure node`
+    }
+    return [
+        focusedNode.type,
+        focusedNode.sessionPolicy || 'fresh',
+        focusedNode.sessionLifetime || 'run',
+        focusedNode.sessionModeOverride ? 'node override' : 'act default',
+        focusedNode.modelVariant ? `variant:${focusedNode.modelVariant}` : null,
+    ].filter(Boolean).join(' · ')
+}
+
+function resolveInlineEditorContent(
+    ref: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null | undefined,
+    drafts: Record<string, { content?: unknown }>,
+) {
+    if (ref?.kind !== 'draft') {
+        return ''
+    }
+    const attachedDraft = drafts[ref.draftId]
+    return typeof attachedDraft?.content === 'string'
+        ? attachedDraft.content
+        : typeof (attachedDraft?.content as { content?: string } | undefined)?.content === 'string'
+            ? (attachedDraft?.content as { content?: string }).content || ''
+            : ''
+}
+
+function saveInlineEditorDraft(inlineEditor: InlineEditorState) {
+    const store = useStudioStore.getState()
+    const draftId = `${inlineEditor.kind}-draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const name = inlineEditor.kind === 'tal' ? 'Inline Tal' : 'Inline Dance'
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    store.upsertDraft({
+        id: draftId,
+        kind: inlineEditor.kind,
+        name,
+        slug,
+        description: name,
+        tags: [],
+        content: inlineEditor.content,
+        updatedAt: Date.now(),
+    })
+    const ref = { kind: 'draft' as const, draftId }
+    if (inlineEditor.kind === 'tal') {
+        store.setPerformerTalRef(inlineEditor.performerId, ref)
+    } else {
+        store.addPerformerDanceRef(inlineEditor.performerId, ref)
+    }
 }
 
 export default function ActAreaFrame({ data, id, selected }: any) {
@@ -151,7 +312,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
 
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
     const [threadInput, setThreadInput] = useState('')
-    const [inlineEditor, setInlineEditor] = useState<{ kind: 'tal' | 'dance'; performerId: string; content: string } | null>(null)
+    const [inlineEditor, setInlineEditor] = useState<InlineEditorState | null>(null)
     const threadEndRef = useRef<HTMLDivElement | null>(null)
     const [resizeDraft, setResizeDraft] = useState<{ width: number; height: number } | null>(null)
     const {
@@ -276,66 +437,18 @@ export default function ActAreaFrame({ data, id, selected }: any) {
         [nodes],
     )
 
-    const runtimeHistory = runtimeSummary?.history || []
-    const lastHistoryNodeId = runtimeHistory.length > 0 ? runtimeHistory[runtimeHistory.length - 1]?.nodeId || null : null
-    const activeRuntimeNodeId = loading
-        ? (runtimeSummary?.currentNodeId || lastHistoryNodeId || data.entryNodeId || null)
-        : (runtimeSummary?.currentNodeId || lastHistoryNodeId || null)
-    const completedRuntimeNodeIds = new Set(
-        runtimeHistory
-            .filter((entry) => entry.action.includes('completed') || entry.action.includes('selected') || entry.action.includes('delegated'))
-            .map((entry) => entry.nodeId),
+    const { activeRuntimeNodeId, completedRuntimeNodeIds, failedRuntimeNodeIds } = useMemo(
+        () => buildRuntimeState(runtimeSummary, loading, data.entryNodeId || null),
+        [data.entryNodeId, loading, runtimeSummary],
     )
-    const failedRuntimeNodeIds = new Set(
-        runtimeHistory
-            .filter((entry) => entry.action.includes('failed'))
-            .map((entry) => entry.nodeId),
-    )
-    const [runtimeGraph, setRuntimeGraph] = useState<{ width: number; height: number; positions: Record<string, { x: number; y: number }> }>({ width: 0, height: 0, positions: {} })
+    const [runtimeGraph, setRuntimeGraph] = useState<RuntimeGraphState>({ width: 0, height: 0, positions: {} })
     const runtimeNodesKey = nodes.map((n) => n.id).sort().join(',')
     const runtimeEdgesKey = edges.map((e) => `${e.from}-${e.to}`).sort().join(',')
     useEffect(() => {
-        if (nodes.length === 0) {
-            setRuntimeGraph({ width: 0, height: 0, positions: {} })
-            return
-        }
-        const miniNodeWidth = 92
-        const miniNodeHeight = 34
-        const paddingX = 20
-        const paddingY = 18
         let cancelled = false
-        computeActAutoLayout({
-            bounds: { x: 0, y: 0, width: 800, height: 600 },
-            nodes: nodes as any,
-            edges: edges as any,
-        }).then((layout) => {
+        computeRuntimeGraphState(nodes, edges).then((nextGraph) => {
             if (cancelled) { return }
-            const posEntries = Object.entries(layout.positions)
-            if (posEntries.length === 0) {
-                setRuntimeGraph({ width: 240, height: 80, positions: {} })
-                return
-            }
-            // Scale factor: ratio of mini node to real node
-            const sX = miniNodeWidth / ACT_LAYOUT_NODE_WIDTH
-            const sY = miniNodeHeight / ACT_LAYOUT_NODE_HEIGHT
-            // Map ELK positions to minimap space
-            const xs = posEntries.map(([, p]) => p.x)
-            const ys = posEntries.map(([, p]) => p.y)
-            const minX = Math.min(...xs)
-            const minY = Math.min(...ys)
-            const positions = Object.fromEntries(
-                posEntries.map(([id, p]) => [
-                    id,
-                    {
-                        x: paddingX + (p.x - minX) * sX,
-                        y: paddingY + (p.y - minY) * sY,
-                    },
-                ]),
-            )
-            const posValues = Object.values(positions)
-            const finalWidth = Math.max(240, Math.max(...posValues.map((p) => p.x)) + miniNodeWidth + paddingX)
-            const finalHeight = Math.max(80, Math.max(...posValues.map((p) => p.y)) + miniNodeHeight + paddingY)
-            setRuntimeGraph({ width: finalWidth, height: finalHeight, positions })
+            setRuntimeGraph(nextGraph)
         })
         return () => { cancelled = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -350,16 +463,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
         performerId: string,
         ref?: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null,
     ) => {
-        const existingContent = ref?.kind === 'draft'
-            ? (() => {
-                const attachedDraft = (data.drafts || {})[ref.draftId]
-                return typeof attachedDraft?.content === 'string'
-                    ? attachedDraft.content
-                    : typeof (attachedDraft?.content as { content?: string } | undefined)?.content === 'string'
-                        ? (attachedDraft?.content as { content?: string }).content || ''
-                        : ''
-            })()
-            : ''
+        const existingContent = resolveInlineEditorContent(ref, data.drafts || {})
         setInlineEditor({ kind, performerId, content: existingContent })
     }
     const focusedPerformerPresentation = useMemo(() => (
@@ -455,20 +559,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
 
     // Compute reachable nodes from entry via BFS
     const orphanedNodeIds = useMemo(() => {
-        if (!data.entryNodeId || nodes.length === 0) return new Set<string>()
-        const reachable = new Set<string>()
-        const queue = [data.entryNodeId as string]
-        reachable.add(data.entryNodeId as string)
-        while (queue.length > 0) {
-            const current = queue.shift()!
-            for (const edge of edges) {
-                if (edge.from === current && !reachable.has(edge.to) && edge.to !== '$exit') {
-                    reachable.add(edge.to)
-                    queue.push(edge.to)
-                }
-            }
-        }
-        return new Set(nodes.filter((n) => !reachable.has(n.id)).map((n) => n.id))
+        return findOrphanedNodeIds(nodes, edges, data.entryNodeId)
     }, [nodes, edges, data.entryNodeId])
 
     useEffect(() => {
@@ -518,17 +609,10 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     }, [activateTransformChrome, handleResizeEnd, onResizeFrame])
 
     const canSendThread = !!threadInput.trim() && !!data.entryNodeId && !loading
-    const focusedNodeSemantics = focusedNode && focusedNode.type !== 'parallel'
-        ? [
-            focusedNode.type,
-            focusedNode.sessionPolicy || 'fresh',
-            focusedNode.sessionLifetime || 'run',
-            focusedNode.sessionModeOverride ? 'node override' : 'act default',
-            focusedNode.modelVariant ? `variant:${focusedNode.modelVariant}` : null,
-        ].filter(Boolean).join(' · ')
-        : focusedNode
-            ? `${focusedNode.type} structure node`
-            : null
+    const focusedNodeSemantics = useMemo(
+        () => buildFocusedNodeSemantics(focusedNode),
+        [focusedNode],
+    )
 
     return (
         <div ref={setNodeRef}>
@@ -1275,27 +1359,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                 disabled={!inlineEditor.content.trim()}
                                                 onClick={(event) => {
                                                     event.stopPropagation()
-                                                    const { kind, performerId, content } = inlineEditor
-                                                    const store = useStudioStore.getState()
-                                                    const draftId = `${kind}-draft-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-                                                    const name = kind === 'tal' ? 'Inline Tal' : 'Inline Dance'
-                                                    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-                                                    store.upsertDraft({
-                                                        id: draftId,
-                                                        kind,
-                                                        name,
-                                                        slug,
-                                                        description: name,
-                                                        tags: [],
-                                                        content,
-                                                        updatedAt: Date.now(),
-                                                    })
-                                                    const ref = { kind: 'draft' as const, draftId }
-                                                    if (kind === 'tal') {
-                                                        store.setPerformerTalRef(performerId, ref)
-                                                    } else {
-                                                        store.addPerformerDanceRef(performerId, ref)
-                                                    }
+                                                    saveInlineEditorDraft(inlineEditor)
                                                     setInlineEditor(null)
                                                 }}
                                             >
