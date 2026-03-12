@@ -42,9 +42,13 @@ function absolutizeWorkspacePath(path: string, workingDir: string | null) {
     return `${workingDir.replace(/\/+$/, '')}/${path.replace(/^\.?\//, '')}`
 }
 
+function withApiBase(url: string) {
+    return `${API_BASE}${withWorkingDirQuery(url, resolveWorkingDirContext())}`
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     const workingDir = resolveWorkingDirContext()
-    const res = await fetch(`${API_BASE}${withWorkingDirQuery(url, workingDir)}`, {
+    const res = await fetch(withApiBase(url), {
         ...init,
         headers: {
             'Content-Type': 'application/json',
@@ -67,6 +71,54 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
     return res.json()
 }
 
+function postJSON<T>(url: string, body?: unknown) {
+    return fetchJSON<T>(url, {
+        method: 'POST',
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+}
+
+function putJSON<T>(url: string, body?: unknown) {
+    return fetchJSON<T>(url, {
+        method: 'PUT',
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+}
+
+function deleteJSON<T>(url: string) {
+    return fetchJSON<T>(url, { method: 'DELETE' })
+}
+
+function createApiEventSource(url: string) {
+    return new EventSource(withApiBase(url))
+}
+
+type WorkspaceFileEntry =
+    | string
+    | {
+        name: string
+        path: string
+        absolute: string
+        type: string
+    }
+
+function normalizeWorkspaceFileEntry(entry: WorkspaceFileEntry) {
+    if (typeof entry === 'string') {
+        return {
+            name: entry.split('/').pop() || entry,
+            path: entry,
+            absolute: absolutizeWorkspacePath(entry, resolveWorkingDirContext()),
+            type: 'file',
+        }
+    }
+    return {
+        name: entry.name,
+        path: entry.path,
+        absolute: absolutizeWorkspacePath(entry.absolute || entry.path, resolveWorkingDirContext()),
+        type: entry.type,
+    }
+}
+
 // ── Health ───────────────────────────────────────────
 export const api = {
     health: () => fetchJSON<{ ok: boolean; project: string }>('/api/health'),
@@ -85,9 +137,7 @@ export const api = {
         }>('/api/opencode/health'),
 
     opencodeRestart: () =>
-        fetchJSON<{ ok: boolean; managed: boolean; mode: 'managed' | 'external' }>('/api/opencode/restart', {
-            method: 'POST',
-        }),
+        postJSON<{ ok: boolean; managed: boolean; mode: 'managed' | 'external' }>('/api/opencode/restart'),
 
     // ── Assets ──────────────────────────────────────────
     assets: {
@@ -113,12 +163,9 @@ export const api = {
         list: () => fetchJSON<SavedStageSummary[]>('/api/stages'),
         get: (id: string) => fetchJSON<any>(`/api/stages/${id}`),
         save: (data: any) =>
-            fetchJSON<{ ok: boolean; id: string; workingDir: string; updatedAt: number }>('/api/stages', {
-                method: 'PUT',
-                body: JSON.stringify(data),
-            }),
+            putJSON<{ ok: boolean; id: string; workingDir: string; updatedAt: number }>('/api/stages', data),
         delete: (id: string) =>
-            fetchJSON<{ ok: boolean }>(`/api/stages/${id}`, { method: 'DELETE' }),
+            deleteJSON<{ ok: boolean }>(`/api/stages/${id}`),
     },
 
     // ── Compile ─────────────────────────────────────────
@@ -133,29 +180,18 @@ export const api = {
         planMode = false,
         danceDeliveryMode: DanceDeliveryMode = 'auto',
     ) =>
-        fetchJSON<PromptPreview>('/api/compile', {
-            method: 'POST',
-            body: JSON.stringify({ talRef, danceRefs, drafts, model, modelVariant, agentId, mcpServerNames, planMode, danceDeliveryMode }),
-        }),
+        postJSON<PromptPreview>('/api/compile', { talRef, danceRefs, drafts, model, modelVariant, agentId, mcpServerNames, planMode, danceDeliveryMode }),
 
     // ── Chat ────────────────────────────────────────────
     chat: {
         createSession: (performerId: string, performerName: string, configHash: string) =>
-            fetchJSON<{ sessionId: string; title: string }>('/api/chat/sessions', {
-                method: 'POST',
-                body: JSON.stringify({ performerId, performerName, configHash }),
-            }),
+            postJSON<{ sessionId: string; title: string }>('/api/chat/sessions', { performerId, performerName, configHash }),
 
         deleteSession: (id: string) =>
-            fetchJSON<{ ok: boolean }>(`/api/chat/sessions/${id}`, {
-                method: 'DELETE',
-            }),
+            deleteJSON<{ ok: boolean }>(`/api/chat/sessions/${id}`),
 
         updateSession: (id: string, title: string) =>
-            fetchJSON<any>(`/api/chat/sessions/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify({ title }),
-            }),
+            putJSON<any>(`/api/chat/sessions/${id}`, { title }),
 
         send: (
             id: string,
@@ -177,15 +213,10 @@ export const api = {
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
             }
         ) =>
-            fetchJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, {
-                method: 'POST',
-                body: JSON.stringify(payload),
-            }),
+            postJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, payload),
 
         abort: (id: string) =>
-            fetchJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/abort`, {
-                method: 'POST',
-            }),
+            postJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/abort`),
 
         messages: (id: string) =>
             fetchJSON<any[]>(`/api/chat/sessions/${id}/messages`),
@@ -197,15 +228,10 @@ export const api = {
             fetchJSON<Array<{ id: string; content: string; status: string; priority: string }>>(`/api/chat/sessions/${id}/todo`),
 
         fork: (id: string, messageId: string) =>
-            fetchJSON<any>(`/api/chat/sessions/${id}/fork`, {
-                method: 'POST',
-                body: JSON.stringify({ messageId }),
-            }),
+            postJSON<any>(`/api/chat/sessions/${id}/fork`, { messageId }),
 
         share: (id: string) =>
-            fetchJSON<{ url: string }>(`/api/chat/sessions/${id}/share`, {
-                method: 'POST',
-            }),
+            postJSON<{ url: string }>(`/api/chat/sessions/${id}/share`),
 
         summarize: (
             id: string,
@@ -215,29 +241,18 @@ export const api = {
                 auto?: boolean
             },
         ) =>
-            fetchJSON<boolean>(`/api/chat/sessions/${id}/summarize`, {
-                method: 'POST',
-                body: JSON.stringify(payload || {}),
-            }),
+            postJSON<boolean>(`/api/chat/sessions/${id}/summarize`, payload || {}),
 
         revert: (id: string, messageId: string, partId?: string) =>
-            fetchJSON<any>(`/api/chat/sessions/${id}/revert`, {
-                method: 'POST',
-                body: JSON.stringify({ messageId, partId }),
-            }),
+            postJSON<any>(`/api/chat/sessions/${id}/revert`, { messageId, partId }),
 
         unrevert: (id: string) =>
-            fetchJSON<any>(`/api/chat/sessions/${id}/unrevert`, {
-                method: 'POST',
-            }),
+            postJSON<any>(`/api/chat/sessions/${id}/unrevert`),
 
         list: () =>
             fetchJSON<any[]>('/api/chat/sessions'),
 
-        events: () => {
-            const eventSource = new EventSource(`${API_BASE}${withWorkingDirQuery('/api/chat/events', resolveWorkingDirContext())}`)
-            return eventSource
-        },
+        events: () => createApiEventSource('/api/chat/events'),
     },
 
     act: {
@@ -251,21 +266,13 @@ export const api = {
             maxIterations?: number
             resumeSummary?: ActThreadResumeSummary
         }) =>
-            fetchJSON<ActRunState>('/api/act/run', {
-                method: 'POST',
-                body: JSON.stringify(payload),
-            }),
+            postJSON<ActRunState>('/api/act/run', payload),
 
         abort: (actSessionId: string) =>
-            fetchJSON<{ ok: boolean }>(`/api/act/sessions/${actSessionId}/abort`, {
-                method: 'POST',
-            }),
+            postJSON<{ ok: boolean }>(`/api/act/sessions/${actSessionId}/abort`),
 
-        events: (actSessionId: string) => {
-            const workingDir = resolveWorkingDirContext()
-            const base = withWorkingDirQuery(`/api/act/events?actSessionId=${encodeURIComponent(actSessionId)}`, workingDir)
-            return new EventSource(`${API_BASE}${base}`)
-        },
+        events: (actSessionId: string) =>
+            createApiEventSource(`/api/act/events?actSessionId=${encodeURIComponent(actSessionId)}`),
     },
 
     // ── LSP (from OpenCode SDK) ───────────────────────────
@@ -279,37 +286,25 @@ export const api = {
             fetchJSON<import('./types').McpServer[]>('/api/mcp/servers'),
 
         add: (name: string, config: { command: string; args?: string[] } | { url: string }) =>
-            fetchJSON<any>('/api/mcp/add', {
-                method: 'POST',
-                body: JSON.stringify({ name, config }),
-            }),
+            postJSON<any>('/api/mcp/add', { name, config }),
 
         authStart: (name: string) =>
-            fetchJSON<{ authorizationUrl: string }>(`/api/mcp/${name}/auth/start`, {
-                method: 'POST',
-            }),
+            postJSON<{ authorizationUrl: string }>(`/api/mcp/${name}/auth/start`),
 
         authCallback: (name: string, code: string) =>
-            fetchJSON<any>(`/api/mcp/${name}/auth/callback`, {
-                method: 'POST',
-                body: JSON.stringify({ code }),
-            }),
+            postJSON<any>(`/api/mcp/${name}/auth/callback`, { code }),
 
         authenticate: (name: string) =>
-            fetchJSON<any>(`/api/mcp/${name}/auth/authenticate`, {
-                method: 'POST',
-            }),
+            postJSON<any>(`/api/mcp/${name}/auth/authenticate`),
 
         clearAuth: (name: string) =>
-            fetchJSON<{ success: true }>(`/api/mcp/${name}/auth`, {
-                method: 'DELETE',
-            }),
+            deleteJSON<{ success: true }>(`/api/mcp/${name}/auth`),
 
         connect: (name: string) =>
-            fetchJSON<any>(`/api/mcp/${name}/connect`, { method: 'POST' }),
+            postJSON<any>(`/api/mcp/${name}/connect`),
 
         disconnect: (name: string) =>
-            fetchJSON<any>(`/api/mcp/${name}/disconnect`, { method: 'POST' }),
+            postJSON<any>(`/api/mcp/${name}/disconnect`),
     },
 
     // ── Models (from OpenCode SDK) ───────────────────────
@@ -358,10 +353,7 @@ export const api = {
             fetchJSON<{ exists: boolean; path: string; config: any }>('/api/config/project'),
 
         update: (config: any) =>
-            fetchJSON<any>('/api/config', {
-                method: 'PUT',
-                body: JSON.stringify(config),
-            }),
+            putJSON<any>('/api/config', config),
     },
 
     // ── Provider Auth (from OpenCode SDK) ────────────────
@@ -382,16 +374,10 @@ export const api = {
         auth: () => fetchJSON<any>('/api/provider/auth'),
 
         oauthAuthorize: (providerId: string, method: number) =>
-            fetchJSON<any>(`/api/provider/${providerId}/oauth/authorize`, {
-                method: 'POST',
-                body: JSON.stringify({ method }),
-            }),
+            postJSON<any>(`/api/provider/${providerId}/oauth/authorize`, { method }),
 
         oauthCallback: (providerId: string, method: number, code?: string) =>
-            fetchJSON<any>(`/api/provider/${providerId}/oauth/callback`, {
-                method: 'POST',
-                body: JSON.stringify(code ? { method, code } : { method }),
-            }),
+            postJSON<any>(`/api/provider/${providerId}/oauth/callback`, code ? { method, code } : { method }),
 
         setAuth: (
             providerId: string,
@@ -400,15 +386,10 @@ export const api = {
                 | { type: 'oauth'; refresh: string; access: string; expires: number; enterpriseUrl?: string }
                 | { type: 'wellknown'; key: string; token: string },
         ) =>
-            fetchJSON<boolean>(`/api/provider/${providerId}/auth`, {
-                method: 'PUT',
-                body: JSON.stringify(auth),
-            }),
+            putJSON<boolean>(`/api/provider/${providerId}/auth`, auth),
 
         clearAuth: (providerId: string) =>
-            fetchJSON<{ ok: boolean }>(`/api/provider/${providerId}/auth`, {
-                method: 'DELETE',
-            }),
+            deleteJSON<{ ok: boolean }>(`/api/provider/${providerId}/auth`),
     },
 
     // ── File (from OpenCode SDK) ─────────────────────────
@@ -464,22 +445,7 @@ export const api = {
             }>>(`/api/find/files?pattern=${encodeURIComponent(normalized)}`)
 
             return entries
-                .map((entry) => {
-                    if (typeof entry === 'string') {
-                        return {
-                            name: entry.split('/').pop() || entry,
-                            path: entry,
-                            absolute: absolutizeWorkspacePath(entry, resolveWorkingDirContext()),
-                            type: 'file',
-                        }
-                    }
-                    return {
-                        name: entry.name,
-                        path: entry.path,
-                        absolute: absolutizeWorkspacePath(entry.absolute || entry.path, resolveWorkingDirContext()),
-                        type: entry.type,
-                    }
-                })
+                .map((entry) => normalizeWorkspaceFileEntry(entry))
                 .filter((entry) => entry.type === 'file')
         },
     },
@@ -490,16 +456,10 @@ export const api = {
             fetchJSON<{ theme?: string; lastStage?: string; openCodeUrl?: string; projectDir?: string }>('/api/studio/config'),
 
         updateConfig: (config: Record<string, any>) =>
-            fetchJSON<any>('/api/studio/config', {
-                method: 'PUT',
-                body: JSON.stringify(config),
-            }),
+            putJSON<any>('/api/studio/config', config),
 
         activate: (workingDir: string) =>
-            fetchJSON<{ ok: boolean; activeProjectDir: string }>('/api/studio/activate', {
-                method: 'POST',
-                body: JSON.stringify({ workingDir }),
-            }),
+            postJSON<{ ok: boolean; activeProjectDir: string }>('/api/studio/activate', { workingDir }),
 
         pickDirectory: () => fetchJSON<{ path?: string; error?: string }>('/api/studio/pick-directory'),
     },
@@ -513,7 +473,7 @@ export const api = {
             fetchJSON<{ authenticated: boolean; username: string | null }>('/api/dot/auth-user'),
 
         login: (acknowledgedTos = false) =>
-            fetchJSON<{
+            postJSON<{
                 ok: boolean
                 started: boolean
                 alreadyRunning?: boolean
@@ -521,18 +481,13 @@ export const api = {
                 username?: string | null
                 authUrl?: string
                 browserOpened?: boolean
-            }>('/api/dot/login', {
-                method: 'POST',
-                body: JSON.stringify({ acknowledgedTos }),
-            }),
+            }>('/api/dot/login', { acknowledgedTos }),
 
         logout: () =>
-            fetchJSON<{ ok: boolean }>('/api/dot/logout', {
-                method: 'POST',
-            }),
+            postJSON<{ ok: boolean }>('/api/dot/logout'),
 
         init: () =>
-            fetchJSON<{ ok: boolean; dotDir: string }>('/api/dot/init', { method: 'POST' }),
+            postJSON<{ ok: boolean; dotDir: string }>('/api/dot/init'),
 
         performers: () =>
             fetchJSON<{ names: string[]; skipped: Array<{ file: string; reason: string }> }>('/api/dot/performers'),
@@ -544,16 +499,10 @@ export const api = {
             fetchJSON<Record<string, string>>('/api/dot/agents'),
 
         updateAgents: (manifest: Record<string, string>) =>
-            fetchJSON<{ ok: boolean }>('/api/dot/agents', {
-                method: 'PUT',
-                body: JSON.stringify(manifest),
-            }),
+            putJSON<{ ok: boolean }>('/api/dot/agents', manifest),
 
         install: (urn: string, localName?: string, force?: boolean, scope?: 'global' | 'stage') =>
-            fetchJSON<any>('/api/dot/install', {
-                method: 'POST',
-                body: JSON.stringify({ urn, localName, force, scope }),
-            }),
+            postJSON<any>('/api/dot/install', { urn, localName, force, scope }),
 
         saveLocalAsset: (
             kind: 'tal' | 'dance' | 'performer' | 'act',
@@ -561,10 +510,7 @@ export const api = {
             payload: Record<string, unknown>,
             author?: string,
         ) =>
-            fetchJSON<{ ok: boolean; urn: string; path: string; existed: boolean; payload: Record<string, unknown> }>('/api/dot/assets/local', {
-                method: 'PUT',
-                body: JSON.stringify({ kind, slug, payload, author }),
-            }),
+            putJSON<{ ok: boolean; urn: string; path: string; existed: boolean; payload: Record<string, unknown> }>('/api/dot/assets/local', { kind, slug, payload, author }),
 
         publishAsset: (
             kind: 'tal' | 'dance' | 'performer' | 'act',
@@ -573,17 +519,14 @@ export const api = {
             tags?: string[],
             acknowledgedTos = false,
         ) =>
-            fetchJSON<{
+            postJSON<{
                 ok: boolean
                 urn: string
                 published: boolean
                 dependenciesPublished: string[]
                 dependenciesSkipped: string[]
                 dependenciesExisting: string[]
-            }>('/api/dot/assets/publish', {
-                method: 'POST',
-                body: JSON.stringify({ kind, slug, payload, tags, acknowledgedTos }),
-            }),
+            }>('/api/dot/assets/publish', { kind, slug, payload, tags, acknowledgedTos }),
 
         search: (query: string, kind?: string, limit?: number) =>
             fetchJSON<Array<{ kind: string; name: string; author: string; slug: string; description: string; tags: string[] }>>(
@@ -591,9 +534,6 @@ export const api = {
             ),
 
         validate: (performer: any) =>
-            fetchJSON<{ valid: boolean; error?: string }>('/api/dot/validate', {
-                method: 'POST',
-                body: JSON.stringify(performer),
-            }),
+            postJSON<{ valid: boolean; error?: string }>('/api/dot/validate', performer),
     },
 }
