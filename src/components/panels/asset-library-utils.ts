@@ -1,5 +1,7 @@
 // Pure utility functions and types extracted from AssetLibrary.tsx
 
+import type { AssetCard, DraftAsset } from '../../types'
+
 export type InstalledKind = 'performer' | 'tal' | 'dance' | 'act'
 export type RuntimeKind = 'models' | 'mcps'
 export type AssetScope = 'local' | 'registry'
@@ -188,4 +190,195 @@ export function scoreModel(model: any): number {
     if (model.reasoning) score += 4
 
     return score + Math.min(Math.round((model.context || 0) / 10000), 20)
+}
+
+export function buildDraftAssetCards(
+    drafts: Record<string, DraftAsset>,
+    installedKind: InstalledKind,
+): AssetCard[] {
+    if (installedKind !== 'tal' && installedKind !== 'dance') {
+        return []
+    }
+
+    return Object.values(drafts)
+        .filter((draft): draft is DraftAsset => !!draft && draft.kind === installedKind)
+        .sort((left, right) => right.updatedAt - left.updatedAt)
+        .map((draft) => ({
+            kind: draft.kind,
+            urn: `draft/${draft.id}`,
+            draftId: draft.id,
+            name: draft.name,
+            author: '@draft',
+            description: draft.description || draft.name,
+            source: 'draft',
+            tags: Array.isArray(draft.tags) ? draft.tags : [],
+            content: typeof draft.content === 'string' ? draft.content : '',
+        }))
+}
+
+export function filterInstalledAssets(
+    assets: AssetCard[],
+    sourceFilter: SourceFilter,
+    queryText: string,
+) {
+    return assets
+        .filter((asset) => sourceFilter === 'all' ? true : asset.source === sourceFilter)
+        .filter((asset) => !queryText || buildSearchHaystack(asset).includes(queryText))
+}
+
+export function groupModels(
+    models: any[],
+    queryText: string,
+    modelAvailabilityFilter: ModelAvailabilityFilter,
+    modelProviderFilter: ModelProviderFilter,
+) {
+    const searched = models.filter((model) => !queryText || buildModelHaystack(model).includes(queryText))
+    const availabilityFiltered = searched.filter((model) => {
+        if (modelAvailabilityFilter === 'all') {
+            return true
+        }
+        return !!model.connected
+    })
+    const providerFiltered = availabilityFiltered.filter((model) => {
+        const category = classifyModelProvider(model)
+        if (modelProviderFilter === 'all') return true
+        if (modelProviderFilter === 'popular') return POPULAR_MODEL_PROVIDER_CATEGORIES.includes(category)
+        return category === modelProviderFilter
+    })
+
+    const groups = new Map<string, {
+        key: string
+        category: Exclude<ModelProviderFilter, 'popular' | 'all'>
+        label: string
+        connected: boolean
+        items: any[]
+    }>()
+
+    for (const model of providerFiltered) {
+        const category = classifyModelProvider(model)
+        const key = model.provider || `${category}-provider`
+        const existing = groups.get(key)
+        if (existing) {
+            existing.items.push(model)
+            existing.connected = existing.connected || !!model.connected
+            continue
+        }
+        groups.set(key, {
+            key,
+            category,
+            label: model.providerName || labelForModelProviderFilter(category),
+            connected: !!model.connected,
+            items: [model],
+        })
+    }
+
+    return Array.from(groups.values())
+        .map((group) => ({
+            ...group,
+            items: [...group.items].sort((left, right) => {
+                const scoreDiff = scoreModel(right) - scoreModel(left)
+                if (scoreDiff !== 0) return scoreDiff
+                return String(left.name || left.id).localeCompare(String(right.name || right.id))
+            }),
+        }))
+        .sort((left, right) => {
+            const connectedDiff = Number(right.connected) - Number(left.connected)
+            if (connectedDiff !== 0) return connectedDiff
+            const leftPriority = POPULAR_MODEL_PROVIDER_CATEGORIES.indexOf(left.category)
+            const rightPriority = POPULAR_MODEL_PROVIDER_CATEGORIES.indexOf(right.category)
+            const normalizedLeft = leftPriority === -1 ? 999 : leftPriority
+            const normalizedRight = rightPriority === -1 ? 999 : rightPriority
+            if (normalizedLeft !== normalizedRight) return normalizedLeft - normalizedRight
+            return left.label.localeCompare(right.label)
+        })
+}
+
+export function buildRegistryGroups(registryResults: any[]) {
+    return INSTALLED_KIND_ORDER
+        .map((kind) => ({
+            kind,
+            label: labelForInstalledKind(kind),
+            items: registryResults.filter((item) => item.kind === kind),
+        }))
+        .filter((group) => group.items.length > 0)
+}
+
+type AuthorableAsset = {
+    kind: InstalledKind
+    name: string
+    description?: string
+    tags?: string[]
+    content?: unknown
+    talUrn?: string | null
+    danceUrns?: string[]
+    actUrn?: string | null
+    model?: unknown
+    mcpConfig?: Record<string, unknown> | null
+    entryNode?: string | null
+    nodes?: Record<string, unknown>
+    edges?: unknown[]
+    maxIterations?: number
+    slug?: string
+}
+
+export function buildAuthoringPayloadFromAsset(asset: AuthorableAsset) {
+    if (asset.kind === 'tal' || asset.kind === 'dance') {
+        return {
+            name: asset.name,
+            description: asset.description || asset.name,
+            tags: Array.isArray(asset.tags) ? asset.tags : [],
+            content: typeof asset.content === 'string' ? asset.content : '',
+        }
+    }
+
+    if (asset.kind === 'performer') {
+        return {
+            name: asset.name,
+            description: asset.description || asset.name,
+            tags: Array.isArray(asset.tags) ? asset.tags : [],
+            ...(asset.talUrn ? { tal: asset.talUrn } : {}),
+            ...(Array.isArray(asset.danceUrns) && asset.danceUrns.length === 1
+                ? { dance: asset.danceUrns[0] }
+                : Array.isArray(asset.danceUrns) && asset.danceUrns.length > 1
+                    ? { dance: asset.danceUrns }
+                    : {}),
+            ...(asset.actUrn ? { act: asset.actUrn } : {}),
+            ...(asset.model ? { model: asset.model } : {}),
+            ...(asset.mcpConfig ? { mcp_config: asset.mcpConfig } : {}),
+        }
+    }
+
+    if (asset.kind === 'act') {
+        return {
+            name: asset.name,
+            description: asset.description || asset.name,
+            tags: Array.isArray(asset.tags) ? asset.tags : [],
+            entryNode: asset.entryNode || '',
+            nodes: asset.nodes || {},
+            edges: Array.isArray(asset.edges) ? asset.edges : [],
+            ...(typeof asset.maxIterations === 'number' ? { maxIterations: asset.maxIterations } : {}),
+        }
+    }
+
+    throw new Error(`Unsupported asset kind '${asset.kind}' for authoring action.`)
+}
+
+export function placeholderForLocalSection(localSection: LocalSection, runtimeKind: RuntimeKind) {
+    if (localSection === 'installed') {
+        return 'name, urn, author, tag...'
+    }
+
+    return runtimeKind === 'models'
+        ? 'model, provider, capability...'
+        : 'server, tool, status...'
+}
+
+export function authoringNoteForInstalledKind(installedKind: InstalledKind) {
+    if (installedKind === 'tal' || installedKind === 'dance') {
+        return 'Creates a new markdown editor on the canvas.'
+    }
+    if (installedKind === 'performer') {
+        return 'Creates a new stage performer.'
+    }
+    return 'Creates a new act area.'
 }

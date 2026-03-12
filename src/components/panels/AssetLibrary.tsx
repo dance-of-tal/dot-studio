@@ -45,19 +45,19 @@ import type {
     ModelAvailabilityFilter,
 } from './asset-library-utils';
 import {
-    INSTALLED_KIND_ORDER,
-    POPULAR_MODEL_PROVIDER_CATEGORIES,
     MAX_MODELS_PER_PROVIDER,
     isInstalledAssetKind,
     getAssetUrn,
     getAssetSelectionKey,
-    buildSearchHaystack,
-    buildModelHaystack,
     buildMcpHaystack,
+    buildDraftAssetCards,
+    filterInstalledAssets,
+    groupModels,
+    buildRegistryGroups,
+    buildAuthoringPayloadFromAsset,
+    placeholderForLocalSection,
+    authoringNoteForInstalledKind,
     labelForInstalledKind,
-    classifyModelProvider,
-    labelForModelProviderFilter,
-    scoreModel,
 } from './asset-library-utils';
 import {
     DraggableAsset,
@@ -115,26 +115,10 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         searchEnabled,
     )
 
-    const draftAssetCards = useMemo<AssetCard[]>(() => {
-        if (installedKind !== 'tal' && installedKind !== 'dance') {
-            return []
-        }
-
-        return Object.values(drafts)
-            .filter((draft): draft is typeof drafts[string] => !!draft && draft.kind === installedKind)
-            .sort((left, right) => right.updatedAt - left.updatedAt)
-            .map((draft) => ({
-                kind: draft.kind,
-                urn: `draft/${draft.id}`,
-                draftId: draft.id,
-                name: draft.name,
-                author: '@draft',
-                description: draft.description || draft.name,
-                source: 'draft' as const,
-                tags: Array.isArray(draft.tags) ? draft.tags : [],
-                content: typeof draft.content === 'string' ? draft.content : '',
-            }))
-    }, [drafts, installedKind])
+    const draftAssetCards = useMemo<AssetCard[]>(
+        () => buildDraftAssetCards(drafts, installedKind),
+        [drafts, installedKind],
+    )
 
     const visibleInstalledAssets = useMemo(
         () => [...draftAssetCards, ...installedAssets],
@@ -280,28 +264,51 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         setMcpCatalogStatus(null)
     }
 
-    const connectMcpServer = async (name: string) => {
-        setMcpCatalogStatus(null)
-        try {
-            await api.mcp.connect(name)
-            setMcpCatalogStatus(`Connected MCP server ${name}.`)
-            await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+    const invalidateMcpQueries = async (includeRuntimeTools = false) => {
+        await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+        if (includeRuntimeTools) {
             await queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
-        } catch (error: any) {
-            setMcpCatalogStatus(error?.message || `Failed to connect ${name}.`)
         }
     }
 
-    const disconnectMcpServer = async (name: string) => {
+    const runMcpCatalogAction = async (
+        request: () => Promise<unknown>,
+        options: {
+            successMessage: string
+            failureMessage: string
+            includeRuntimeTools?: boolean
+            onSuccess?: () => void
+        },
+    ) => {
         setMcpCatalogStatus(null)
         try {
-            await api.mcp.disconnect(name)
-            setMcpCatalogStatus(`Disconnected MCP server ${name}.`)
-            await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
-            await queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
+            await request()
+            options.onSuccess?.()
+            setMcpCatalogStatus(options.successMessage)
+            await invalidateMcpQueries(!!options.includeRuntimeTools)
         } catch (error: any) {
-            setMcpCatalogStatus(error?.message || `Failed to disconnect ${name}.`)
+            setMcpCatalogStatus(error?.message || options.failureMessage)
         }
+    }
+
+    const connectMcpServer = async (name: string) => runMcpCatalogAction(
+        () => api.mcp.connect(name),
+        {
+            successMessage: `Connected MCP server ${name}.`,
+            failureMessage: `Failed to connect ${name}.`,
+            includeRuntimeTools: true,
+        },
+    )
+
+    const disconnectMcpServer = async (name: string) => {
+        await runMcpCatalogAction(
+            () => api.mcp.disconnect(name),
+            {
+                successMessage: `Disconnected MCP server ${name}.`,
+                failureMessage: `Failed to disconnect ${name}.`,
+                includeRuntimeTools: true,
+            },
+        )
     }
 
     const authenticateMcpServer = async (name: string) => {
@@ -348,18 +355,19 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     }
 
     const clearMcpAuth = async (name: string) => {
-        setMcpCatalogStatus(null)
-        try {
-            await api.mcp.clearAuth(name)
-            if (pendingMcpAuthName === name) {
-                setPendingMcpAuthName(null)
-                mcpAuthDeadlineRef.current = null
-            }
-            setMcpCatalogStatus(`Cleared stored authentication for ${name}.`)
-            await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
-        } catch (error: any) {
-            setMcpCatalogStatus(error?.message || `Failed to clear authentication for ${name}.`)
-        }
+        await runMcpCatalogAction(
+            () => api.mcp.clearAuth(name),
+            {
+                successMessage: `Cleared stored authentication for ${name}.`,
+                failureMessage: `Failed to clear authentication for ${name}.`,
+                onSuccess: () => {
+                    if (pendingMcpAuthName === name) {
+                        setPendingMcpAuthName(null)
+                        mcpAuthDeadlineRef.current = null
+                    }
+                },
+            },
+        )
     }
 
     const installedUrns = useMemo(
@@ -409,48 +417,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
             queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(workingDir) }),
             queryClient.invalidateQueries({ queryKey: queryKeys.assetKind(workingDir, kind) }),
         ])
-    }
-
-    const buildAuthoringPayloadFromAsset = (asset: any) => {
-        if (asset.kind === 'tal' || asset.kind === 'dance') {
-            return {
-                name: asset.name,
-                description: asset.description || asset.name,
-                tags: Array.isArray(asset.tags) ? asset.tags : [],
-                content: typeof asset.content === 'string' ? asset.content : '',
-            }
-        }
-
-        if (asset.kind === 'performer') {
-            return {
-                name: asset.name,
-                description: asset.description || asset.name,
-                tags: Array.isArray(asset.tags) ? asset.tags : [],
-                ...(asset.talUrn ? { tal: asset.talUrn } : {}),
-                ...(Array.isArray(asset.danceUrns) && asset.danceUrns.length === 1
-                    ? { dance: asset.danceUrns[0] }
-                    : Array.isArray(asset.danceUrns) && asset.danceUrns.length > 1
-                        ? { dance: asset.danceUrns }
-                        : {}),
-                ...(asset.actUrn ? { act: asset.actUrn } : {}),
-                ...(asset.model ? { model: asset.model } : {}),
-                ...(asset.mcpConfig ? { mcp_config: asset.mcpConfig } : {}),
-            }
-        }
-
-        if (asset.kind === 'act') {
-            return {
-                name: asset.name,
-                description: asset.description || asset.name,
-                tags: Array.isArray(asset.tags) ? asset.tags : [],
-                entryNode: asset.entryNode || '',
-                nodes: asset.nodes || {},
-                edges: Array.isArray(asset.edges) ? asset.edges : [],
-                ...(typeof asset.maxIterations === 'number' ? { maxIterations: asset.maxIterations } : {}),
-            }
-        }
-
-        throw new Error(`Unsupported asset kind '${asset.kind}' for authoring action.`)
     }
 
     const handlePinnedAssetAction = async (asset: any, action: 'save-local' | 'publish') => {
@@ -509,73 +475,14 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const queryText = filter.trim().toLowerCase()
 
     const filteredInstalledAssets = useMemo(
-        () => visibleInstalledAssets
-            .filter((asset) => sourceFilter === 'all' ? true : asset.source === sourceFilter)
-            .filter((asset) => !queryText || buildSearchHaystack(asset).includes(queryText)),
+        () => filterInstalledAssets(visibleInstalledAssets, sourceFilter, queryText),
         [visibleInstalledAssets, queryText, sourceFilter],
     )
 
-    const groupedModels = useMemo(() => {
-        const searched = models.filter((model) => !queryText || buildModelHaystack(model).includes(queryText))
-        const availabilityFiltered = searched.filter((model) => {
-            if (modelAvailabilityFilter === 'all') {
-                return true
-            }
-            return !!model.connected
-        })
-        const providerFiltered = availabilityFiltered.filter((model) => {
-            const category = classifyModelProvider(model)
-            if (modelProviderFilter === 'all') return true
-            if (modelProviderFilter === 'popular') return POPULAR_MODEL_PROVIDER_CATEGORIES.includes(category)
-            return category === modelProviderFilter
-        })
-
-        const groups = new Map<string, {
-            key: string
-            category: Exclude<ModelProviderFilter, 'popular' | 'all'>
-            label: string
-            connected: boolean
-            items: any[]
-        }>()
-
-        for (const model of providerFiltered) {
-            const category = classifyModelProvider(model)
-            const key = model.provider || `${category}-provider`
-            const existing = groups.get(key)
-            if (existing) {
-                existing.items.push(model)
-                existing.connected = existing.connected || !!model.connected
-                continue
-            }
-            groups.set(key, {
-                key,
-                category,
-                label: model.providerName || labelForModelProviderFilter(category),
-                connected: !!model.connected,
-                items: [model],
-            })
-        }
-
-        return Array.from(groups.values())
-            .map((group) => ({
-                ...group,
-                items: [...group.items].sort((left, right) => {
-                    const scoreDiff = scoreModel(right) - scoreModel(left)
-                    if (scoreDiff !== 0) return scoreDiff
-                    return String(left.name || left.id).localeCompare(String(right.name || right.id))
-                }),
-            }))
-            .sort((left, right) => {
-                const connectedDiff = Number(right.connected) - Number(left.connected)
-                if (connectedDiff !== 0) return connectedDiff
-                const leftPriority = POPULAR_MODEL_PROVIDER_CATEGORIES.indexOf(left.category)
-                const rightPriority = POPULAR_MODEL_PROVIDER_CATEGORIES.indexOf(right.category)
-                const normalizedLeft = leftPriority === -1 ? 999 : leftPriority
-                const normalizedRight = rightPriority === -1 ? 999 : rightPriority
-                if (normalizedLeft !== normalizedRight) return normalizedLeft - normalizedRight
-                return left.label.localeCompare(right.label)
-            })
-    }, [modelAvailabilityFilter, modelProviderFilter, models, queryText])
+    const groupedModels = useMemo(
+        () => groupModels(models, queryText, modelAvailabilityFilter, modelProviderFilter),
+        [modelAvailabilityFilter, modelProviderFilter, models, queryText],
+    )
 
     const readyModelCount = useMemo(
         () => models.filter((model) => model.connected).length,
@@ -587,16 +494,10 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         [mcpServers, queryText],
     )
 
-    const registryGroups = useMemo(() => {
-        const results = registryResults as Array<any>
-        return INSTALLED_KIND_ORDER
-            .map((kind) => ({
-                kind,
-                label: labelForInstalledKind(kind),
-                items: results.filter((item) => item.kind === kind),
-            }))
-            .filter((group) => group.items.length > 0)
-    }, [registryResults])
+    const registryGroups = useMemo(
+        () => buildRegistryGroups(registryResults as Array<any>),
+        [registryResults],
+    )
 
     const selectedAssetKey = selectedAsset ? getAssetSelectionKey(selectedAsset) : null
     useEffect(() => {
@@ -637,11 +538,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         { key: 'all', label: 'All', count: models.length },
     ]
 
-    const localPlaceholder = localSection === 'installed'
-        ? 'name, urn, author, tag...'
-        : runtimeKind === 'models'
-            ? 'model, provider, capability...'
-            : 'server, tool, status...'
+    const localPlaceholder = placeholderForLocalSection(localSection, runtimeKind)
 
     const installedEmptyMessage = `No ${labelForInstalledKind(installedKind).toLowerCase()} assets found.`
 
@@ -757,11 +654,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                 </button>
                             )}
                             <div className="asset-authoring-row__note">
-                                {installedKind === 'tal' || installedKind === 'dance'
-                                    ? 'Creates a new markdown editor on the canvas.'
-                                    : installedKind === 'performer'
-                                        ? 'Creates a new stage performer.'
-                                        : 'Creates a new act area.'}
+                                {authoringNoteForInstalledKind(installedKind)}
                             </div>
                         </div>
                     )}
