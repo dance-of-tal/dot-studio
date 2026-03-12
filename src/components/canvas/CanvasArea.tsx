@@ -278,265 +278,298 @@ export default function CanvasArea() {
         };
     }, [editingTarget, focusedActId, focusedPerformerId, reactFlowInstance, nodes.length]);
 
+    const performerMcpSummary = useCallback((performer: typeof performers[number]) => {
+        const count = resolvePerformerRuntimeConfig(performer).mcpServerNames.length
+        return count ? `${count} server${count === 1 ? '' : 's'}` : null
+    }, [])
+
+    const describeActNodePerformer = useCallback((performerId: string | null | undefined) => {
+        const performer = performers.find((item) => item.id === performerId) || null
+        if (!performer) {
+            return {
+                performerId: performerId || null,
+                performerName: null,
+                performerSummary: 'Unassigned performer',
+            }
+        }
+        const parts = [
+            assetRefLabel(performer.talRef, drafts),
+            danceSummaryLabel(performer.danceRefs, drafts),
+            performer.model?.modelId || null,
+        ].filter(Boolean)
+        return {
+            performerId: performer.id,
+            performerName: performer.name,
+            performerSummary: parts.join(' · ') || 'No prompt assets yet',
+        }
+    }, [drafts, performers])
+
+    const performerDetailsById = useCallback(() => Object.fromEntries(
+        performers.map((performer) => [
+            performer.id,
+            {
+                id: performer.id,
+                name: performer.name,
+                talLabel: assetRefLabel(performer.talRef, drafts),
+                danceSummary: danceSummaryLabel(performer.danceRefs, drafts),
+                modelLabel: performer.model?.modelId || null,
+                agentLabel: resolvePerformerAgentId(performer),
+                mcpSummary: performerMcpSummary(performer),
+                planMode: !!performer.planMode,
+                scope: performer.scope,
+            },
+        ]),
+    ), [drafts, performerMcpSummary, performers])
+
+    const buildActAreaNodes = useCallback(() => acts.map((act) => {
+        const currentSessionId = (act.id === selectedActId ? selectedActSessionId : null) || actSessionMap[act.id] || null
+        const currentSession = currentSessionId
+            ? actSessions.find((session) => session.id === currentSessionId) || null
+            : null
+        const focusedNodeId = inspectorFocus?.startsWith('act-node:') ? inspectorFocus.slice('act-node:'.length) : null
+        const isActSelected = act.id === selectedActId
+        const isActFocused = focusedActId === act.id
+        const isActTransforming = transformTarget?.type === 'actArea' && transformTarget.id === act.id
+        const isActEditing = editingTarget?.type === 'act' && editingTarget.id === act.id
+        const entryNode = act.nodes.find((node) => node.id === act.entryNodeId) || null
+
+        return {
+            id: act.id,
+            type: 'actArea',
+            position: { x: act.bounds.x, y: act.bounds.y },
+            selected: isActSelected,
+            draggable: true,
+            dragHandle: '.figma-frame__header',
+            hidden: act.hidden,
+            zIndex: getCanvasWindowZIndex({
+                selected: isActSelected,
+                focused: isActFocused,
+                editing: isActEditing,
+                transformActive: isActTransforming,
+            }),
+            data: {
+                threadMode: !isActEditing,
+                focused: isActFocused,
+                name: act.name,
+                description: act.description,
+                width: act.bounds.width,
+                height: act.bounds.height,
+                maxIterations: act.maxIterations,
+                sessionTitle: currentSession?.title || null,
+                sessionStatus: currentSession?.status || null,
+                threadMessages: currentSessionId ? (actChats[currentSessionId] || []) : [],
+                runtimeSummary: currentSession?.resumeSummary || null,
+                loading: loadingActId === act.id,
+                entryNodeId: act.entryNodeId,
+                sessionMode: act.sessionMode || 'all_nodes_thread',
+                transformActive: isActTransforming,
+                onActivateTransform: () => activateTransformTarget('actArea', act.id),
+                onDeactivateTransform: () => deactivateTransformTarget('actArea', act.id),
+                editMode: isActEditing,
+                focusedNodeId,
+                onUpdateName: (name: string) => updateActMeta(act.id, { name }),
+                onUpdateDescription: (description: string) => updateActMeta(act.id, { description }),
+                onUpdateMaxIterations: (maxIterations: number) => updateActMeta(act.id, { maxIterations }),
+                onUpdateSessionMode: (sessionMode: 'default' | 'all_nodes_thread') => updateActMeta(act.id, { sessionMode }),
+                onResizeFrame: (width: number, height: number) => updateActBounds(act.id, {
+                    width: Math.round(width),
+                    height: Math.round(height),
+                }),
+                onFocusNode: (nodeId: string | null) => setInspectorFocus(nodeId ? `act-node:${nodeId}` : null),
+                onAddNode: (type: 'worker' | 'orchestrator' | 'parallel') => addActNode(act.id, type),
+                onAutoArrange: async () => {
+                    try {
+                        const layout = await computeActAutoLayout(act)
+                        useStudioStore.getState().applyActAutoLayout(act.id, layout.positions, layout.bounds)
+                    } catch (error) {
+                        console.warn('[act-layout] auto arrange failed', error)
+                        showToast(coerceStudioApiError(error).message, 'error', {
+                            title: 'Auto arrange failed',
+                            dedupeKey: `act-layout:${act.id}`,
+                        })
+                    }
+                },
+                onUpdateNode: (nodeId: string, patch: Record<string, unknown>) => updateActNode(act.id, nodeId, patch),
+                onSetNodeType: (nodeId: string, type: 'worker' | 'orchestrator' | 'parallel') => setActNodeType(act.id, nodeId, type),
+                onRemoveNode: (nodeId: string) => removeActNode(act.id, nodeId),
+                onEditAct: () => useStudioStore.getState().openActEditor(act.id, 'act-structure'),
+                onCloseEdit: () => closeEditor(),
+                onSend: (message: string) => sendActMessage(act.id, message),
+                onStop: () => abortAct(act.id),
+                onNewSession: () => {
+                    startNewActSession(act.id)
+                    selectActSession(null)
+                },
+                performerDetailsById: performerDetailsById(),
+                performersById: Object.fromEntries(
+                    performers.map((performer) => [performer.id, performer]),
+                ),
+                onCreatePerformerForNode: (nodeId: string, seededAsset?: Record<string, unknown> | null) =>
+                    useStudioStore.getState().createActOwnedPerformerForNode(act.id, nodeId, seededAsset || null),
+                onCreateTalDraft: (performerId: string) => createMarkdownEditor('tal', {
+                    attachTarget: {
+                        performerId,
+                        mode: 'tal',
+                    },
+                }),
+                onCreateDanceDraft: (performerId: string) => createMarkdownEditor('dance', {
+                    attachTarget: {
+                        performerId,
+                        mode: 'dance-new',
+                    },
+                }),
+                onUpdatePerformerName: (performerId: string, name: string) => updatePerformerName(performerId, name),
+                onUpdatePerformerDanceDeliveryMode: (performerId: string, mode: 'auto' | 'tool' | 'inline') => setPerformerDanceDeliveryMode(performerId, mode),
+                onSetPerformerModel: (performerId: string, model: { provider: string; modelId: string } | null) => setPerformerModel(performerId, model),
+                onSetPerformerModelVariant: (performerId: string, variant: string | null) => setPerformerModelVariant(performerId, variant),
+                onSetPerformerAgentId: (performerId: string, agentId: string | null) => setPerformerAgentId(performerId, agentId),
+                onRemovePerformerDance: (performerId: string, danceRefKey: string) => removePerformerDance(performerId, danceRefKey),
+                onRemovePerformerMcp: (performerId: string, serverName: string) => removePerformerMcp(performerId, serverName),
+                edges: act.edges,
+                onAddEdge: () => addActEdge(act.id),
+                onUpdateEdge: (edgeId: string, patch: Record<string, unknown>) => updateActEdge(act.id, edgeId, patch),
+                onNodeMove: (nodeId: string, x: number, y: number) => updateActNodePosition(act.id, nodeId, x, y),
+                onConnectNodes: (from: string, to: string) => addActEdge(act.id, from, to),
+                onRemoveEdge: (edgeId: string) => removeActEdge(act.id, edgeId),
+                onSetEntry: (nodeId: string) => updateActMeta(act.id, { entryNodeId: nodeId }),
+                entryLabel: entryNode ? resolveActNodeLabel(entryNode as any, performers) : null,
+                nodes: act.nodes.map((node) => {
+                    const effectiveSession = node.type === 'parallel'
+                        ? null
+                        : resolveEffectiveActNodeSession(act, node)
+                    const performerData = node.type === 'parallel'
+                        ? {
+                            performerId: null,
+                            performerName: null,
+                            performerSummary: 'Parallel branch node',
+                        }
+                        : describeActNodePerformer(node.performerId)
+
+                    return {
+                        id: node.id,
+                        type: node.type,
+                        position: node.position,
+                        label: resolveActNodeLabel(node, performers),
+                        entry: act.entryNodeId === node.id,
+                        sessionPolicy: effectiveSession?.policy || null,
+                        sessionLifetime: effectiveSession?.lifetime || null,
+                        sessionModeOverride: node.type === 'parallel' ? null : !!node.sessionModeOverride,
+                        modelVariant: node.type === 'parallel' ? null : (node.modelVariant || null),
+                        performerId: performerData.performerId ?? (node.type === 'parallel' ? null : node.performerId),
+                        performerName: performerData.performerName,
+                        performerSummary: performerData.performerSummary,
+                    }
+                }),
+            } as Record<string, unknown>,
+        }
+    }), [acts, selectedActId, selectedActSessionId, actSessionMap, actSessions, inspectorFocus, focusedActId, transformTarget, editingTarget, actChats, loadingActId, activateTransformTarget, deactivateTransformTarget, updateActMeta, updateActBounds, setInspectorFocus, addActNode, updateActNode, setActNodeType, removeActNode, closeEditor, sendActMessage, abortAct, startNewActSession, selectActSession, performerDetailsById, performers, createMarkdownEditor, updatePerformerName, setPerformerDanceDeliveryMode, setPerformerModel, setPerformerModelVariant, setPerformerAgentId, removePerformerDance, removePerformerMcp, addActEdge, updateActEdge, updateActNodePosition, removeActEdge, describeActNodePerformer, drafts])
+
+    const buildPerformerNodes = useCallback(() => performers.map((performer) => ({
+        id: performer.id,
+        type: 'performer',
+        position: performer.position,
+        selected: performer.id === selectedPerformerId,
+        dragHandle: '.figma-frame__header',
+        hidden: performer.hidden,
+        zIndex: getCanvasWindowZIndex({
+            selected: performer.id === selectedPerformerId,
+            focused: focusedPerformerId === performer.id,
+            editing: editingTarget?.type === 'performer' && editingTarget.id === performer.id,
+            transformActive: transformTarget?.type === 'performer' && transformTarget.id === performer.id,
+        }),
+        data: {
+            name: performer.name,
+            width: performer.width,
+            height: performer.height,
+            model: performer.model,
+            modelLabel: performer.model?.modelId || null,
+            modelTitle: performer.model ? `${performer.model.provider}/${performer.model.modelId}` : null,
+            modelVariant: performer.modelVariant || null,
+            agentId: performer.agentId || null,
+            modelConfigured: hasModelConfig(performer.model),
+            planMode: performer.planMode,
+            transformActive: transformTarget?.type === 'performer' && transformTarget.id === performer.id,
+            onActivateTransform: () => activateTransformTarget('performer', performer.id),
+            onDeactivateTransform: () => deactivateTransformTarget('performer', performer.id),
+            talLabel: assetRefLabel(performer.talRef, drafts),
+            danceSummary: danceSummaryLabel(performer.danceRefs, drafts),
+            mcpSummary: performerMcpSummary(performer),
+            editMode: editingTarget?.type === 'performer' && editingTarget.id === performer.id,
+        } as Record<string, unknown>,
+    })), [drafts, editingTarget, focusedPerformerId, performerMcpSummary, performers, selectedPerformerId, transformTarget, activateTransformTarget, deactivateTransformTarget])
+
+    const buildMarkdownEditorNodes = useCallback(() => markdownEditors.map((editor) => ({
+        id: editor.id,
+        type: 'markdownEditor',
+        position: editor.position,
+        selected: editor.id === selectedMarkdownEditorId,
+        dragHandle: '.figma-frame__header',
+        hidden: editor.hidden,
+        zIndex: getCanvasWindowZIndex({
+            selected: editor.id === selectedMarkdownEditorId,
+            editing: selectedMarkdownEditorId === editor.id,
+            transformActive: transformTarget?.type === 'markdownEditor' && transformTarget.id === editor.id,
+        }),
+        data: {
+            kind: editor.kind,
+            draftId: editor.draftId,
+            baseline: editor.baseline,
+            attachTarget: editor.attachTarget,
+            width: editor.width,
+            height: editor.height,
+            transformActive: transformTarget?.type === 'markdownEditor' && transformTarget.id === editor.id,
+            onActivateTransform: () => activateTransformTarget('markdownEditor', editor.id),
+            onDeactivateTransform: () => deactivateTransformTarget('markdownEditor', editor.id),
+            workingDir,
+        } as Record<string, unknown>,
+    })), [markdownEditors, selectedMarkdownEditorId, transformTarget, activateTransformTarget, deactivateTransformTarget, workingDir])
+
+    const buildCanvasTerminalNodes = useCallback(() => canvasTerminals.map((terminal) => ({
+        id: terminal.id,
+        type: 'canvasTerminal',
+        position: terminal.position,
+        dragHandle: '.figma-frame__header',
+        zIndex: getCanvasWindowZIndex({
+            transformActive: transformTarget?.type === 'canvasTerminal' && transformTarget.id === terminal.id,
+        }),
+        data: {
+            nodeId: terminal.id,
+            title: terminal.title,
+            width: terminal.width,
+            height: terminal.height,
+            onClose: () => removeCanvasTerminal(terminal.id),
+            onResize: (width: number, height: number) => updateCanvasTerminalSize(terminal.id, width, height),
+            onSessionChange: (sessionId: string | null, connected: boolean) => updateCanvasTerminalSession(terminal.id, sessionId, connected),
+        } as Record<string, unknown>,
+    })), [canvasTerminals, transformTarget, removeCanvasTerminal, updateCanvasTerminalSize, updateCanvasTerminalSession])
+
+    const buildTrackingNodes = useCallback(() => trackingWindow ? [{
+        id: trackingWindow.id,
+        type: 'stageTracking',
+        position: trackingWindow.position,
+        dragHandle: '.figma-frame__header',
+        zIndex: getCanvasWindowZIndex({
+            transformActive: transformTarget?.type === 'stageTracking' && transformTarget.id === trackingWindow.id,
+        }),
+        data: {
+            title: trackingWindow.title,
+            width: trackingWindow.width,
+            height: trackingWindow.height,
+            onClose: () => closeTrackingWindow(),
+            onResize: (width: number, height: number) => updateTrackingWindowSize(width, height),
+        } as Record<string, unknown>,
+    }] : [], [trackingWindow, transformTarget, closeTrackingWindow, updateTrackingWindowSize])
+
     // Sync from store to local state when performers change
     useEffect(() => {
-        const actNodes = acts.map((act) => {
-            const currentSessionId = (act.id === selectedActId ? selectedActSessionId : null) || actSessionMap[act.id] || null;
-            const currentSession = currentSessionId
-                ? actSessions.find((session) => session.id === currentSessionId) || null
-                : null;
-            const focusedNodeId = inspectorFocus?.startsWith('act-node:') ? inspectorFocus.slice('act-node:'.length) : null;
-            const isActSelected = act.id === selectedActId;
-            const isActFocused = focusedActId === act.id;
-            const isActTransforming = transformTarget?.type === 'actArea' && transformTarget.id === act.id;
-            const isActEditing = editingTarget?.type === 'act' && editingTarget.id === act.id;
-            return ({
-                id: act.id,
-                type: 'actArea',
-                position: { x: act.bounds.x, y: act.bounds.y },
-                selected: isActSelected,
-                draggable: true,
-                dragHandle: '.figma-frame__header',
-                hidden: act.hidden,
-                zIndex: getCanvasWindowZIndex({
-                    selected: isActSelected,
-                    focused: isActFocused,
-                    editing: isActEditing,
-                    transformActive: isActTransforming,
-                }),
-                data: {
-                    threadMode: !isActEditing,
-                    focused: isActFocused,
-                    name: act.name,
-                    description: act.description,
-                    width: act.bounds.width,
-                    height: act.bounds.height,
-                    maxIterations: act.maxIterations,
-                    sessionTitle: currentSession?.title || null,
-                    sessionStatus: currentSession?.status || null,
-                    threadMessages: currentSessionId ? (actChats[currentSessionId] || []) : [],
-                    runtimeSummary: currentSession?.resumeSummary || null,
-                    loading: loadingActId === act.id,
-                    entryNodeId: act.entryNodeId,
-                    sessionMode: act.sessionMode || 'all_nodes_thread',
-                    transformActive: isActTransforming,
-                    onActivateTransform: () => activateTransformTarget('actArea', act.id),
-                    onDeactivateTransform: () => deactivateTransformTarget('actArea', act.id),
-                    editMode: isActEditing,
-                    focusedNodeId,
-                    onUpdateName: (name: string) => updateActMeta(act.id, { name }),
-                    onUpdateDescription: (description: string) => updateActMeta(act.id, { description }),
-                    onUpdateMaxIterations: (maxIterations: number) => updateActMeta(act.id, { maxIterations }),
-                    onUpdateSessionMode: (sessionMode: 'default' | 'all_nodes_thread') => updateActMeta(act.id, { sessionMode }),
-                    onResizeFrame: (width: number, height: number) => updateActBounds(act.id, {
-                        width: Math.round(width),
-                        height: Math.round(height),
-                    }),
-                    onFocusNode: (nodeId: string | null) => setInspectorFocus(nodeId ? `act-node:${nodeId}` : null),
-                    onAddNode: (type: 'worker' | 'orchestrator' | 'parallel') => addActNode(act.id, type),
-                    onAutoArrange: async () => {
-                        try {
-                            const layout = await computeActAutoLayout(act);
-                            useStudioStore.getState().applyActAutoLayout(act.id, layout.positions, layout.bounds);
-                        } catch (error) {
-                            console.warn('[act-layout] auto arrange failed', error);
-                            showToast(coerceStudioApiError(error).message, 'error', {
-                                title: 'Auto arrange failed',
-                                dedupeKey: `act-layout:${act.id}`,
-                            });
-                        }
-                    },
-                    onUpdateNode: (nodeId: string, patch: Record<string, unknown>) => updateActNode(act.id, nodeId, patch),
-                    onSetNodeType: (nodeId: string, type: 'worker' | 'orchestrator' | 'parallel') => setActNodeType(act.id, nodeId, type),
-                    onRemoveNode: (nodeId: string) => removeActNode(act.id, nodeId),
-                    onEditAct: () => useStudioStore.getState().openActEditor(act.id, 'act-structure'),
-                    onCloseEdit: () => closeEditor(),
-                    onSend: (message: string) => sendActMessage(act.id, message),
-                    onStop: () => abortAct(act.id),
-                    onNewSession: () => {
-                        startNewActSession(act.id);
-                        selectActSession(null);
-                    },
-                    performerDetailsById: Object.fromEntries(
-                        performers.map((performer) => [
-                            performer.id,
-                            {
-                                id: performer.id,
-                                name: performer.name,
-                                talLabel: assetRefLabel(performer.talRef, drafts),
-                                danceSummary: danceSummaryLabel(performer.danceRefs, drafts),
-                                modelLabel: performer.model?.modelId || null,
-                                agentLabel: resolvePerformerAgentId(performer),
-                                mcpSummary: resolvePerformerRuntimeConfig(performer).mcpServerNames.length ? `${resolvePerformerRuntimeConfig(performer).mcpServerNames.length} server${resolvePerformerRuntimeConfig(performer).mcpServerNames.length === 1 ? '' : 's'}` : null,
-                                planMode: !!performer.planMode,
-                                scope: performer.scope,
-                            },
-                        ]),
-                    ),
-                    performersById: Object.fromEntries(
-                        performers.map((performer) => [performer.id, performer]),
-                    ),
-                    onCreatePerformerForNode: (nodeId: string, seededAsset?: Record<string, unknown> | null) =>
-                        useStudioStore.getState().createActOwnedPerformerForNode(act.id, nodeId, seededAsset || null),
-                    onCreateTalDraft: (performerId: string) => createMarkdownEditor('tal', {
-                        attachTarget: {
-                            performerId,
-                            mode: 'tal',
-                        },
-                    }),
-                    onCreateDanceDraft: (performerId: string) => createMarkdownEditor('dance', {
-                        attachTarget: {
-                            performerId,
-                            mode: 'dance-new',
-                        },
-                    }),
-                    onUpdatePerformerName: (performerId: string, name: string) => updatePerformerName(performerId, name),
-                    onUpdatePerformerDanceDeliveryMode: (performerId: string, mode: 'auto' | 'tool' | 'inline') => setPerformerDanceDeliveryMode(performerId, mode),
-                    onSetPerformerModel: (performerId: string, model: { provider: string; modelId: string } | null) => setPerformerModel(performerId, model),
-                    onSetPerformerModelVariant: (performerId: string, variant: string | null) => setPerformerModelVariant(performerId, variant),
-                    onSetPerformerAgentId: (performerId: string, agentId: string | null) => setPerformerAgentId(performerId, agentId),
-                    onRemovePerformerDance: (performerId: string, danceRefKey: string) => removePerformerDance(performerId, danceRefKey),
-                    onRemovePerformerMcp: (performerId: string, serverName: string) => removePerformerMcp(performerId, serverName),
-                    edges: act.edges,
-                    onAddEdge: () => addActEdge(act.id),
-                    onUpdateEdge: (edgeId: string, patch: Record<string, unknown>) => updateActEdge(act.id, edgeId, patch),
-                    onNodeMove: (nodeId: string, x: number, y: number) => updateActNodePosition(act.id, nodeId, x, y),
-                    onConnectNodes: (from: string, to: string) => addActEdge(act.id, from, to),
-                    onRemoveEdge: (edgeId: string) => removeActEdge(act.id, edgeId),
-                    onSetEntry: (nodeId: string) => updateActMeta(act.id, { entryNodeId: nodeId }),
-                    entryLabel: (() => {
-                        const entryNode = act.nodes.find((node) => node.id === act.entryNodeId) || null
-                        return entryNode ? resolveActNodeLabel(entryNode as any, performers) : null
-                    })(),
-                    nodes: act.nodes.map((node) => {
-                        const effectiveSession = node.type === 'parallel'
-                            ? null
-                            : resolveEffectiveActNodeSession(act, node)
-                        return {
-                            id: node.id,
-                            type: node.type,
-                            position: node.position,
-                            label: resolveActNodeLabel(node, performers),
-                            entry: act.entryNodeId === node.id,
-                            sessionPolicy: effectiveSession?.policy || null,
-                            sessionLifetime: effectiveSession?.lifetime || null,
-                            sessionModeOverride: node.type === 'parallel' ? null : !!node.sessionModeOverride,
-                            modelVariant: node.type === 'parallel' ? null : (node.modelVariant || null),
-                            performerId: node.type === 'parallel' ? null : node.performerId,
-                            performerName: node.type === 'parallel'
-                                ? null
-                                : performers.find((performer) => performer.id === node.performerId)?.name || null,
-                            performerSummary: node.type === 'parallel'
-                                ? 'Parallel branch node'
-                                : (() => {
-                                    const performer = performers.find((item) => item.id === node.performerId);
-                                    if (!performer) return 'Unassigned performer';
-                                    const parts = [
-                                        assetRefLabel(performer.talRef, drafts),
-                                        danceSummaryLabel(performer.danceRefs, drafts),
-                                        performer.model?.modelId || null,
-                                    ].filter(Boolean);
-                                    return parts.join(' · ') || 'No prompt assets yet';
-                                })(),
-                        }
-                    }),
-                } as Record<string, unknown>,
-            })
-        })
-        const performerNodes = performers.map(a => ({
-            id: a.id,
-            type: 'performer',
-            position: a.position,
-            selected: a.id === selectedPerformerId,
-            dragHandle: '.figma-frame__header',
-            hidden: a.hidden,
-            zIndex: getCanvasWindowZIndex({
-                selected: a.id === selectedPerformerId,
-                focused: focusedPerformerId === a.id,
-                editing: editingTarget?.type === 'performer' && editingTarget.id === a.id,
-                transformActive: transformTarget?.type === 'performer' && transformTarget.id === a.id,
-            }),
-            data: {
-                name: a.name,
-                width: a.width,
-                height: a.height,
-                model: a.model,
-                modelLabel: a.model?.modelId || null,
-                modelTitle: a.model ? `${a.model.provider}/${a.model.modelId}` : null,
-                modelVariant: a.modelVariant || null,
-                agentId: a.agentId || null,
-                modelConfigured: hasModelConfig(a.model),
-                planMode: a.planMode,
-                transformActive: transformTarget?.type === 'performer' && transformTarget.id === a.id,
-                onActivateTransform: () => activateTransformTarget('performer', a.id),
-                onDeactivateTransform: () => deactivateTransformTarget('performer', a.id),
-                talLabel: assetRefLabel(a.talRef, drafts),
-                danceSummary: danceSummaryLabel(a.danceRefs, drafts),
-                mcpSummary: resolvePerformerRuntimeConfig(a).mcpServerNames.length ? `${resolvePerformerRuntimeConfig(a).mcpServerNames.length} server${resolvePerformerRuntimeConfig(a).mcpServerNames.length === 1 ? '' : 's'}` : null,
-                editMode: editingTarget?.type === 'performer' && editingTarget.id === a.id,
-            } as Record<string, unknown>
-        }));
-        const markdownEditorNodes = markdownEditors.map((editor) => ({
-            id: editor.id,
-            type: 'markdownEditor',
-            position: editor.position,
-            selected: editor.id === selectedMarkdownEditorId,
-            dragHandle: '.figma-frame__header',
-            hidden: editor.hidden,
-            zIndex: getCanvasWindowZIndex({
-                selected: editor.id === selectedMarkdownEditorId,
-                editing: selectedMarkdownEditorId === editor.id,
-                transformActive: transformTarget?.type === 'markdownEditor' && transformTarget.id === editor.id,
-            }),
-            data: {
-                kind: editor.kind,
-                draftId: editor.draftId,
-                baseline: editor.baseline,
-                attachTarget: editor.attachTarget,
-                width: editor.width,
-                height: editor.height,
-                transformActive: transformTarget?.type === 'markdownEditor' && transformTarget.id === editor.id,
-                onActivateTransform: () => activateTransformTarget('markdownEditor', editor.id),
-                onDeactivateTransform: () => deactivateTransformTarget('markdownEditor', editor.id),
-                workingDir,
-            } as Record<string, unknown>,
-        }));
-        const canvasTerminalNodes = canvasTerminals.map((ct) => ({
-            id: ct.id,
-            type: 'canvasTerminal',
-            position: ct.position,
-            dragHandle: '.figma-frame__header',
-            zIndex: getCanvasWindowZIndex({
-                transformActive: transformTarget?.type === 'canvasTerminal' && transformTarget.id === ct.id,
-            }),
-            data: {
-                nodeId: ct.id,
-                title: ct.title,
-                width: ct.width,
-                height: ct.height,
-                onClose: () => removeCanvasTerminal(ct.id),
-                onResize: (w: number, h: number) => updateCanvasTerminalSize(ct.id, w, h),
-                onSessionChange: (sessionId: string | null, connected: boolean) => updateCanvasTerminalSession(ct.id, sessionId, connected),
-            } as Record<string, unknown>,
-        }));
-        const trackingNodes = trackingWindow ? [{
-            id: trackingWindow.id,
-            type: 'stageTracking',
-            position: trackingWindow.position,
-            dragHandle: '.figma-frame__header',
-            zIndex: getCanvasWindowZIndex({
-                transformActive: transformTarget?.type === 'stageTracking' && transformTarget.id === trackingWindow.id,
-            }),
-            data: {
-                title: trackingWindow.title,
-                width: trackingWindow.width,
-                height: trackingWindow.height,
-                onClose: () => closeTrackingWindow(),
-                onResize: (w: number, h: number) => updateTrackingWindowSize(w, h),
-            } as Record<string, unknown>,
-        }] : [];
-        setNodes([...actNodes, ...performerNodes, ...markdownEditorNodes, ...canvasTerminalNodes, ...trackingNodes]);
-    }, [performers, acts, markdownEditors, canvasTerminals, trackingWindow, drafts, selectedActId, focusedActId, selectedActSessionId, selectedMarkdownEditorId, selectedPerformerId, actChats, actSessionMap, actSessions, loadingActId, setNodes, workingDir, editingTarget, inspectorFocus, transformTarget, activateTransformTarget, deactivateTransformTarget, updateActMeta, setInspectorFocus, addActNode, updateActNode, setActNodeType, removeActNode, closeEditor, updatePerformerName, setPerformerDanceDeliveryMode, setPerformerModel, setPerformerAgentId, removePerformerDance, removePerformerMcp, setActiveChatPerformer, updateActBounds, updateActEdge, updateActNodePosition, addActEdge, removeActEdge, sendActMessage, abortAct, startNewActSession, selectActSession, removeCanvasTerminal, closeTrackingWindow, updateCanvasTerminalSize, updateCanvasTerminalSession, updateTrackingWindowSize]);
+        setNodes([
+            ...buildActAreaNodes(),
+            ...buildPerformerNodes(),
+            ...buildMarkdownEditorNodes(),
+            ...buildCanvasTerminalNodes(),
+            ...buildTrackingNodes(),
+        ]);
+    }, [buildActAreaNodes, buildPerformerNodes, buildMarkdownEditorNodes, buildCanvasTerminalNodes, buildTrackingNodes, setNodes]);
 
     const onNodeDragStop = useCallback(
         (_: any, node: import('@xyflow/react').Node) => {
