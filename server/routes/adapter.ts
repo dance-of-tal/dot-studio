@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { dispatchAdapterViewAction, listAdapterViewProjections } from '../services/adapter-view-service.js'
 import type { AdapterViewActionRequest } from '../../shared/adapter-view.js'
+import { createSSEResponse } from '../lib/sse.js'
 
 const adapter = new Hono()
 
@@ -28,13 +29,7 @@ adapter.get('/api/adapter/events', async (_c) => {
         },
     })
 
-    return new Response(stream, {
-        headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-        },
-    })
+    return createSSEResponse(stream)
 })
 
 export default adapter

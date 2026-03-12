@@ -11,6 +11,7 @@ import {
     jsonOpencodeError,
     unwrapOpencodeResult,
 } from '../lib/opencode-errors.js'
+import { createSSEResponse, sseEncode } from '../lib/sse.js'
 
 const chat = new Hono()
 
@@ -101,7 +102,7 @@ chat.post('/api/chat/sessions/:id/abort', async (c) => {
             sessionID: c.req.param('id'),
             ...directoryQuery,
         }))
-        await waitForSessionToSettle(oc, c.req.param('id'), directoryQuery).catch(() => {})
+        await waitForSessionToSettle(oc, c.req.param('id'), directoryQuery).catch(() => { })
         return c.json({ ok: true })
     } catch (err) {
         return jsonOpencodeError(c, err)
@@ -119,7 +120,7 @@ chat.get('/api/chat/events', async (c) => {
                 try {
                     for await (const event of events.stream) {
                         const data = JSON.stringify(event)
-                        controller.enqueue(new TextEncoder().encode(`data: ${data}\n\n`))
+                        controller.enqueue(sseEncode(data))
                     }
                 } catch {
                     controller.close()
@@ -127,13 +128,7 @@ chat.get('/api/chat/events', async (c) => {
             },
         })
 
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                Connection: 'keep-alive',
-            },
-        })
+        return createSSEResponse(stream)
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 503 })
     }

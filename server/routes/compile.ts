@@ -9,6 +9,7 @@ import {
     jsonOpencodeError,
 } from '../lib/opencode-errors.js'
 import { compileStudioPrompt } from '../services/compile-service.js'
+import { createSSEResponse, sseEncode } from '../lib/sse.js'
 
 const compile = new Hono()
 
@@ -76,9 +77,8 @@ compile.get('/api/act/events', async (c) => {
 
         const stream = new ReadableStream({
             start(controller) {
-                const encoder = new TextEncoder()
                 const unsubscribe = subscribeActRuntimeEvents(actSessionId, (event: unknown) => {
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+                    controller.enqueue(sseEncode(JSON.stringify(event)))
                 })
 
                 const close = () => {
@@ -94,13 +94,7 @@ compile.get('/api/act/events', async (c) => {
             },
         })
 
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                Connection: 'keep-alive',
-            },
-        })
+        return createSSEResponse(stream)
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 503 })
     }
