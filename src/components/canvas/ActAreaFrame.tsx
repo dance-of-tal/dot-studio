@@ -18,6 +18,7 @@ import AgentSelect from './AgentSelect'
 import type { ActPerformerSessionBinding, ActSessionMode, ChatMessage, PerformerNode } from '../../types'
 import { buildAssetCardMap, buildMcpServerMap, resolvePerformerPresentation, resolvePerformerRuntimeConfig } from '../../lib/performers'
 import './ActAreaFrame.css'
+import './ActGraph.css'
 
 type ActAreaNodeView = {
     id: string
@@ -837,7 +838,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                         </select>
                                                     </label>
                                                     <label className="act-area-frame__node-control" title="When this edge activates after the source node completes">
-                                                            <span>Condition</span>
+                                                        <span>Condition</span>
                                                         <select
                                                             className="figma-edit-select nodrag nowheel"
                                                             value={selectedEdge.condition || 'always'}

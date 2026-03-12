@@ -21,6 +21,8 @@ import ModelVariantSelect from './ModelVariantSelect';
 import ModelQuickPicker from './ModelQuickPicker';
 import AgentSelect from './AgentSelect';
 import './AgentFrame.css';
+import './AgentChat.css';
+import './AgentInput.css';
 
 /* ── Tool Call Card ───────────────────────────────── */
 function formatAgentLabel(name: string | null | undefined) {
