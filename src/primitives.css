@@ -1,0 +1,188 @@
+/* ============================================================
+   DOT Studio — UI Primitives
+   Canonical patterns for buttons, inputs, badges, and labels.
+   ============================================================ */
+
+/* ── Icon Button ─────────────────────────────────────────── */
+
+.icon-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.icon-btn--active {
+    background: var(--bg-selected);
+    color: var(--accent);
+}
+
+/* ── Text Button ─────────────────────────────────────────── */
+
+.text-btn {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-base);
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.text-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* ── Text Input (inline editable) ────────────────────────── */
+
+.text-input {
+    width: 100%;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    color: var(--text-primary);
+    font-size: var(--font-base);
+    outline: none;
+    transition: border-color 0.1s, background 0.1s;
+}
+
+.text-input:hover {
+    border-color: var(--border-main);
+}
+
+.text-input:focus {
+    border-color: var(--accent);
+    background: var(--bg-panel);
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 5px var(--space-4);
+    font-size: var(--font-sm);
+    font-weight: 600;
+    border-radius: 999px;
+    border: 1px solid var(--border-main);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+    pointer-events: none;
+}
+
+/* Primary (accent fill) */
+.btn--primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.btn--primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+/* Small size modifier */
+.btn--sm {
+    padding: 2px var(--space-3);
+    font-size: var(--font-xs);
+}
+
+/* ── Inputs ──────────────────────────────────────────────── */
+
+.input {
+    width: 100%;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    padding: var(--space-2) var(--space-4);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: var(--font-base);
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.input:hover {
+    border-color: var(--border-strong);
+}
+
+.input:focus {
+    border-color: var(--accent);
+}
+
+/* Select dropdown */
+.select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: var(--space-2) 28px var(--space-2) var(--space-4);
+    font-size: var(--font-base);
+    font-weight: 500;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    background: var(--bg-panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: border-color 0.15s;
+}
+
+.select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* ── Badges ──────────────────────────────────────────────── */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--space-2);
+    font-size: var(--font-xs);
+    font-weight: 700;
+    border-radius: 999px;
+    background: var(--bg-hover);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ── Section Title ───────────────────────────────────────── */
+
+.section-title {
+    font-size: var(--font-sm);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}

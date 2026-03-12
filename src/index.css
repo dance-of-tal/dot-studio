@@ -332,68 +332,7 @@ html {
     fill: currentColor !important;
 }
 
-/* ================== UI PRIMITIVES ================== */
-.icon-btn {
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: background 0.1s, color 0.1s;
-}
 
-.icon-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
-.icon-btn--active {
-    background: var(--bg-selected);
-    color: var(--accent);
-}
-
-.text-btn {
-    padding: 4px 8px;
-    font-size: var(--font-base);
-    font-weight: 500;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    border: 1px solid transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: background 0.1s;
-}
-
-.text-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
-.text-input {
-    width: 100%;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    padding: 4px 6px;
-    color: var(--text-primary);
-    font-size: var(--font-base);
-    outline: none;
-    transition: border-color 0.1s, background 0.1s;
-}
-
-.text-input:hover {
-    border-color: var(--border-main);
-}
-
-.text-input:focus {
-    border-color: var(--accent);
-    background: var(--bg-panel);
-}
 
 /* ── Drag Overlay Card ───────────────────────────── */
 .drag-overlay-card {
