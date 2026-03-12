@@ -2,7 +2,8 @@ import { Hono } from 'hono'
 import type { CompilePromptRequest } from '../../shared/chat-contracts.js'
 import type { RunActRequest } from '../../shared/act-contracts.js'
 import { resolveRequestWorkingDir } from '../lib/request-context.js'
-import { abortActRuntime, runActRuntime, subscribeActRuntimeEvents } from '../lib/act-runtime.js'
+import { runActRuntime } from '../lib/act-runtime.js'
+import { abortActRuntime, subscribeActRuntimeEvents } from '../lib/act-runtime-events.js'
 import {
     StudioValidationError,
     jsonOpencodeError,
@@ -76,7 +77,7 @@ compile.get('/api/act/events', async (c) => {
         const stream = new ReadableStream({
             start(controller) {
                 const encoder = new TextEncoder()
-                const unsubscribe = subscribeActRuntimeEvents(actSessionId, (event) => {
+                const unsubscribe = subscribeActRuntimeEvents(actSessionId, (event: unknown) => {
                     controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
                 })
 
