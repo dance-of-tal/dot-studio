@@ -19,6 +19,10 @@
   <a href="https://github.com/dance-of-tal/dance-of-tal/issues">Request Feature</a>
 </p>
 
+<p align="center">
+  <img src=".github/screenshot.png" alt="DOT Studio Screenshot" width="800" />
+</p>
+
 ---
 
 ## Why DOT Studio?
