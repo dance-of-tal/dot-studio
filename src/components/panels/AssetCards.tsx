@@ -28,6 +28,37 @@ import {
     buildMcpDragPayload,
 } from './asset-library-utils';
 
+function assetKindIcon(kind: string, className = 'asset-icon combo') {
+    if (kind === 'tal') return <Hexagon size={12} className="asset-icon tal" />
+    if (kind === 'dance') return <Zap size={12} className="asset-icon dance" />
+    if (kind === 'performer') return <Package size={12} className="asset-icon performer" />
+    if (kind === 'act') return <GitBranch size={12} className="asset-icon act" />
+    if (kind === 'model') return <Cpu size={12} className="asset-icon model" />
+    if (kind === 'mcp') return <Server size={12} className="asset-icon mcp" />
+    return <Package size={12} className={className} />
+}
+
+function AssetCardHeader({
+    icon,
+    name,
+    trailing,
+    dragHandle = false,
+}: {
+    icon: React.ReactNode
+    name: string
+    trailing?: React.ReactNode
+    dragHandle?: boolean
+}) {
+    return (
+        <div className="asset-card__header">
+            {dragHandle ? <GripVertical size={10} className="drag-handle" /> : null}
+            {icon}
+            <span className="asset-card__name">{name}</span>
+            {trailing}
+        </div>
+    )
+}
+
 // ── useResolvedAssetDetail hook ─────────────────────────
 
 export function useResolvedAssetDetail(asset: any | null) {
@@ -340,14 +371,6 @@ export function DraggableAsset({
         data: dragPayload,
     })
 
-    const getIcon = () => {
-        if (asset.kind === 'tal') return <Hexagon size={12} className="asset-icon tal" />
-        if (asset.kind === 'dance') return <Zap size={12} className="asset-icon dance" />
-        if (asset.kind === 'performer') return <Package size={12} className="asset-icon performer" />
-        if (asset.kind === 'act') return <GitBranch size={12} className="asset-icon act" />
-        return <Package size={12} className="asset-icon combo" />
-    }
-
     return (
         <HoverableCard asset={asset} installed>
             <div
@@ -357,14 +380,12 @@ export function DraggableAsset({
                 className={`figma-asset-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
                 onClick={() => onSelect(asset)}
             >
-                <div className="asset-card__header">
-                    <GripVertical size={10} className="drag-handle" />
-                    {getIcon()}
-                    <span className="asset-card__name">{asset.name}</span>
-                    {asset.source && (
-                        <span className={`source-badge ${asset.source}`}>{asset.source}</span>
-                    )}
-                </div>
+                <AssetCardHeader
+                    icon={assetKindIcon(asset.kind)}
+                    name={asset.name}
+                    dragHandle
+                    trailing={asset.source ? <span className={`source-badge ${asset.source}`}>{asset.source}</span> : undefined}
+                />
                 <div className="asset-card__author">{asset.author}</div>
                 <div className="asset-card__desc">{asset.description || 'No description provided.'}</div>
             </div>
@@ -400,11 +421,11 @@ export function DraggableModel({
                 className={`figma-asset-card figma-model-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
                 onClick={() => onSelect(modelAsset)}
             >
-                <div className="asset-card__header">
-                    <GripVertical size={10} className="drag-handle" />
-                    <Cpu size={12} className="asset-icon model" />
-                    <span className="asset-card__name">{model.name || model.id}</span>
-                </div>
+                <AssetCardHeader
+                    icon={assetKindIcon('model')}
+                    name={model.name || model.id}
+                    dragHandle
+                />
                 <div className="asset-card__author">{model.providerName}</div>
                 <div className="asset-card__desc">
                     {model.context ? `Ctx: ${Math.round(model.context / 1000)}k` : ''}
@@ -445,11 +466,11 @@ export function DraggableMcp({
                 className={`figma-asset-card figma-mcp-card ${isDragging ? 'is-dragging' : ''} ${selected ? 'is-selected' : ''}`}
                 onClick={() => onSelect(mcpAsset)}
             >
-                <div className="asset-card__header">
-                    <GripVertical size={10} className="drag-handle" />
-                    <Server size={12} className="asset-icon mcp" />
-                    <span className="asset-card__name">{mcp.name}</span>
-                </div>
+                <AssetCardHeader
+                    icon={assetKindIcon('mcp')}
+                    name={mcp.name}
+                    dragHandle
+                />
                 <div className="asset-card__author">
                     {mcp.status}
                     {mcp.configType ? ` · ${mcp.configType}` : ''}
@@ -504,48 +525,44 @@ export function RegistryResult({
         }
     }
 
-    const getIcon = () => {
-        if (item.kind === 'tal') return <Hexagon size={12} className="asset-icon tal" />
-        if (item.kind === 'dance') return <Zap size={12} className="asset-icon dance" />
-        if (item.kind === 'performer') return <Package size={12} className="asset-icon performer" />
-        if (item.kind === 'act') return <GitBranch size={12} className="asset-icon act" />
-        return <Package size={12} className="asset-icon combo" />
-    }
-
     return (
         <HoverableCard asset={item} installed={localInstalled}>
             <div
                 className={`figma-asset-card registry-result ${error ? 'has-error' : ''} ${selected ? 'is-selected' : ''}`}
                 onClick={() => onSelect(item)}
             >
-                <div className="asset-card__header">
-                    {getIcon()}
-                    <span className="asset-card__name">{item.name}</span>
-                    <span className="registry-kind-badge">{item.kind}</span>
-                    <div
-                        style={{ position: 'relative', marginLeft: 'auto' }}
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <button
-                            className={`registry-install-btn ${localInstalled ? 'is-installed' : ''}`}
-                            onClick={() => localInstalled ? null : setShowScope(!showScope)}
-                            disabled={installing || localInstalled}
-                            title={localInstalled ? 'Already installed' : `Install ${urn}`}
-                        >
-                            {localInstalled ? 'Installed' : installing ? '...' : <Download size={11} />}
-                        </button>
-                        {showScope && (
-                            <div className="install-scope-menu">
-                                <button className="install-scope-opt" onClick={() => handleInstall('stage')}>
-                                    <FolderOpen size={11} /> Stage
+                <AssetCardHeader
+                    icon={assetKindIcon(item.kind)}
+                    name={item.name}
+                    trailing={(
+                        <>
+                            <span className="registry-kind-badge">{item.kind}</span>
+                            <div
+                                style={{ position: 'relative', marginLeft: 'auto' }}
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <button
+                                    className={`registry-install-btn ${localInstalled ? 'is-installed' : ''}`}
+                                    onClick={() => localInstalled ? null : setShowScope(!showScope)}
+                                    disabled={installing || localInstalled}
+                                    title={localInstalled ? 'Already installed' : `Install ${urn}`}
+                                >
+                                    {localInstalled ? 'Installed' : installing ? '...' : <Download size={11} />}
                                 </button>
-                                <button className="install-scope-opt" onClick={() => handleInstall('global')}>
-                                    <Globe size={11} /> Global
-                                </button>
+                                {showScope && (
+                                    <div className="install-scope-menu">
+                                        <button className="install-scope-opt" onClick={() => handleInstall('stage')}>
+                                            <FolderOpen size={11} /> Stage
+                                        </button>
+                                        <button className="install-scope-opt" onClick={() => handleInstall('global')}>
+                                            <Globe size={11} /> Global
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
-                </div>
+                        </>
+                    )}
+                />
                 <div className="asset-card__author">{normalizeAuthor(item.author)}</div>
                 <div className="asset-card__desc">{item.description || 'No description.'}</div>
                 {Array.isArray(item.tags) && item.tags.length > 0 && (
