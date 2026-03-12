@@ -19,6 +19,7 @@ import type {
     CanvasTrackingWindow,
     ActPerformerSessionBinding,
 } from '../types'
+import type { AdapterViewProjection } from '../../shared/adapter-view'
 
 export interface WorkspaceSlice {
     stageId: string | null
@@ -237,4 +238,10 @@ export interface IntegrationSlice {
     compilePrompt: (performerId: string) => Promise<string>
 }
 
-export type StudioState = WorkspaceSlice & ChatSlice & IntegrationSlice
+export interface AdapterViewSlice {
+    adapterViewsByPerformer: Record<string, Record<string, AdapterViewProjection>>
+    upsertAdapterViewProjection: (projection: AdapterViewProjection) => void
+    clearAdapterViewsForPerformer: (performerId: string) => void
+}
+
+export type StudioState = WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice

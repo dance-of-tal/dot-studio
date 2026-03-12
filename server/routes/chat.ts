@@ -2,12 +2,10 @@
 
 import { Hono } from 'hono'
 import { getOpencode } from '../lib/opencode.js'
-import { compilePrompt } from './compile.js'
-import type { DanceDeliveryMode, ModelSelection } from '../lib/prompt.js'
-import { buildEnabledToolMap, describeUnavailableRuntimeTools, resolveRuntimeTools } from '../lib/runtime-tools.js'
+import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/chat-contracts.js'
 import { requestDirectoryQuery, resolveRequestWorkingDir } from '../lib/request-context.js'
-import { buildStudioSessionTitle } from '../../shared/session-metadata.js'
 import { normalizeIncompleteToolParts, uniqueAssetRefs, waitForSessionToSettle } from '../lib/chat-session.js'
+import { createStudioChatSession, sendStudioChatMessage } from '../services/chat-service.js'
 import {
     StudioValidationError,
     jsonOpencodeError,
@@ -18,21 +16,9 @@ const chat = new Hono()
 
 // ── Create Session ──────────────────────────────────────
 chat.post('/api/chat/sessions', async (c) => {
-    const { performerId, performerName, configHash } = await c.req.json<{
-        performerId: string
-        performerName: string
-        configHash: string
-    }>()
+    const body = await c.req.json<ChatSessionCreateRequest>()
     try {
-        const oc = await getOpencode()
-        const session = unwrapOpencodeResult<{ id: string; title: string }>(await oc.session.create({
-            ...requestDirectoryQuery(c),
-            title: buildStudioSessionTitle(performerId, performerName, configHash),
-        }))
-        return c.json({
-            sessionId: session.id,
-            title: session.title,
-        })
+        return c.json(await createStudioChatSession(resolveRequestWorkingDir(c), body))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -77,25 +63,9 @@ chat.put('/api/chat/sessions/:id', async (c) => {
 
 // ── Send message ────────────────────────────────────────
 chat.post('/api/chat/sessions/:id/send', async (c) => {
-    const { message, performer, attachments } = await c.req.json<{
-        message: string
-        performer: {
-            talRef: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null
-            danceRefs: Array<{ kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string }>
-            extraDanceRefs?: Array<{ kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string }>
-            drafts?: Record<string, { id: string; kind: 'tal' | 'dance' | 'performer' | 'act'; name: string; content: unknown; description?: string; derivedFrom?: string | null }>
-            model?: ModelSelection
-            modelVariant?: string | null
-            agentId?: string | null
-            mcpServerNames?: string[]
-            danceDeliveryMode?: DanceDeliveryMode
-            planMode?: boolean
-            configHash?: string
-        }
-        attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
-    }>()
+    const body = await c.req.json<ChatSendRequest>()
 
-    if (!performer?.model) {
+    if (!body.performer?.model) {
         return jsonOpencodeError(
             c,
             new StudioValidationError(
@@ -106,71 +76,19 @@ chat.post('/api/chat/sessions/:id/send', async (c) => {
     }
 
     try {
-        const oc = await getOpencode()
         const cwd = resolveRequestWorkingDir(c)
-        const envelope = await compilePrompt(
-            cwd,
-            performer?.talRef || null,
-            uniqueAssetRefs([...(performer?.danceRefs || []), ...(performer?.extraDanceRefs || [])]),
-            performer?.model || null,
-            performer?.drafts || {},
-            performer?.modelVariant || null,
-            performer?.danceDeliveryMode || 'auto',
-        )
-        const toolResolution = await resolveRuntimeTools(
-            cwd,
-            performer.model,
-            performer?.mcpServerNames || [],
-        )
-        const unavailableSummary = describeUnavailableRuntimeTools(toolResolution)
-        if (toolResolution.selectedMcpServers.length > 0 && toolResolution.resolvedTools.length === 0 && unavailableSummary) {
-            throw new StudioValidationError(
-                `Selected MCP servers are unavailable: ${unavailableSummary}.`,
-                'fix_input',
-            )
+        const normalizedBody: ChatSendRequest = {
+            ...body,
+            performer: {
+                ...body.performer,
+                danceRefs: uniqueAssetRefs(body.performer?.danceRefs || []),
+                extraDanceRefs: uniqueAssetRefs(body.performer?.extraDanceRefs || []),
+            },
         }
-
-        const parts: any[] = [{ type: 'text', text: message }]
-        if (attachments && attachments.length > 0) {
-            if (envelope.capabilitySnapshot && !envelope.capabilitySnapshot.attachment) {
-                return jsonOpencodeError(
-                    c,
-                    new StudioValidationError(
-                        'Selected model does not support attachments. Remove the files or choose a model that supports them.',
-                        'choose_model',
-                    ),
-                    { model: performer.model },
-                )
-            }
-            for (const att of attachments) {
-                parts.push({
-                    type: 'file',
-                    mime: att.mime,
-                    url: att.url,
-                    filename: att.filename,
-                })
-            }
-        }
-
-        const tools = buildEnabledToolMap([
-            ...toolResolution.resolvedTools,
-            ...(envelope.toolName ? [envelope.toolName] : []),
-        ])
-
-        unwrapOpencodeResult(await oc.session.promptAsync({
-            sessionID: c.req.param('id'),
-            directory: cwd,
-            model: { providerID: performer.model.provider, modelID: performer.model.modelId },
-            agent: performer.agentId || (performer.planMode ? 'plan' : 'build'),
-            system: envelope.system,
-            ...(performer.modelVariant ? { variant: performer.modelVariant } : {}),
-            ...(tools ? { tools } : {}),
-            parts,
-        }))
-
-        return c.json({ accepted: true }, 202)
+        const result = await sendStudioChatMessage(cwd, c.req.param('id'), normalizedBody)
+        return c.json(result, 202)
     } catch (err) {
-        return jsonOpencodeError(c, err, { model: performer.model })
+        return jsonOpencodeError(c, err, { model: body.performer?.model })
     }
 })
 

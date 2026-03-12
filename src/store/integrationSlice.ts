@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { ActPerformerSessionBinding, ChatMessage, ChatMessagePart } from '../types'
 import type { StudioState, IntegrationSlice } from './types'
+import type { AdapterViewEvent } from '../../shared/adapter-view'
 import { api } from '../api'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers'
 import { formatStudioApiErrorComment } from '../lib/api-errors'
@@ -13,6 +14,8 @@ let eventSourceWorkingDir: string | null = null
 let actEventSourceInstance: EventSource | null = null
 let actEventSourceWorkingDir: string | null = null
 let actEventSourceSessionId: string | null = null
+let adapterEventSourceInstance: EventSource | null = null
+let adapterEventSourceWorkingDir: string | null = null
 const streamingTextParts = new Map<string, Map<string, string>>()
 const streamingReasoningParts = new Map<string, Map<string, string>>()
 const streamingMessageRoles = new Map<string, 'user' | 'assistant' | 'system'>()
@@ -918,6 +921,50 @@ export const createIntegrationSlice: StateCreator<
         }
     }
 
+    const reconnectAdapterEventSource = () => {
+        const workingDir = get().workingDir || null
+        if (adapterEventSourceInstance && adapterEventSourceWorkingDir === workingDir) {
+            return
+        }
+
+        if (adapterEventSourceInstance) {
+            adapterEventSourceInstance.close()
+            adapterEventSourceInstance = null
+        }
+
+        adapterEventSourceWorkingDir = workingDir
+        adapterEventSourceInstance = api.adapter.events()
+        adapterEventSourceInstance.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data) as AdapterViewEvent
+                if (data.type === 'adapter.updated') {
+                    get().upsertAdapterViewProjection(data.projection)
+                    return
+                }
+                if (data.type === 'adapter.cleared') {
+                    const current = get().adapterViewsByPerformer[data.performerId] || {}
+                    const next = { ...current }
+                    delete next[data.adapterId]
+                    set((state) => ({
+                        adapterViewsByPerformer: {
+                            ...state.adapterViewsByPerformer,
+                            [data.performerId]: next,
+                        },
+                    }))
+                }
+            } catch {
+                // Ignore malformed adapter events.
+            }
+        }
+
+        adapterEventSourceInstance.onerror = () => {
+            if (adapterEventSourceInstance) {
+                adapterEventSourceInstance.close()
+                adapterEventSourceInstance = null
+            }
+        }
+    }
+
     return ({
         lspServers: [],
         lspDiagnostics: {},
@@ -934,6 +981,7 @@ export const createIntegrationSlice: StateCreator<
         initRealtimeEvents: () => {
             reconnectEventSource()
             reconnectActEventSource()
+            reconnectAdapterEventSource()
         },
 
         cleanupRealtimeEvents: () => {
@@ -945,9 +993,14 @@ export const createIntegrationSlice: StateCreator<
                 actEventSourceInstance.close()
                 actEventSourceInstance = null
             }
+            if (adapterEventSourceInstance) {
+                adapterEventSourceInstance.close()
+                adapterEventSourceInstance = null
+            }
             eventSourceWorkingDir = null
             actEventSourceWorkingDir = null
             actEventSourceSessionId = null
+            adapterEventSourceWorkingDir = null
             streamingTextParts.clear()
             syncingSessions.clear()
         },

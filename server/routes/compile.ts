@@ -1,47 +1,18 @@
 import { Hono } from 'hono'
-import { buildPromptEnvelope, type DanceDeliveryMode, type ModelSelection } from '../lib/prompt.js'
-import { resolveRuntimeTools } from '../lib/runtime-tools.js'
+import type { CompilePromptRequest } from '../../shared/chat-contracts.js'
 import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import { abortActRuntime, runActRuntime, subscribeActRuntimeEvents } from '../lib/act-runtime.js'
 import {
     StudioValidationError,
     jsonOpencodeError,
 } from '../lib/opencode-errors.js'
+import { compileStudioPrompt } from '../services/compile-service.js'
 
 const compile = new Hono()
 
-export async function compilePrompt(
-    cwd: string,
-    talRef: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null,
-    danceRefs: Array<{ kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string }>,
-    model: ModelSelection,
-    drafts: Record<string, { id: string; kind: 'tal' | 'dance' | 'performer' | 'act'; name: string; content: unknown; description?: string; derivedFrom?: string | null }> = {},
-    modelVariant: string | null = null,
-    danceDeliveryMode: DanceDeliveryMode = 'auto',
-) {
-    return buildPromptEnvelope({
-        cwd,
-        talRef,
-        danceRefs,
-        drafts,
-        model,
-        modelVariant,
-        danceDeliveryMode,
-    })
-}
-
 compile.post('/api/compile', async (c) => {
-    const { talRef, danceRefs, drafts = {}, model, modelVariant = null, agentId = null, mcpServerNames = [], planMode = false, danceDeliveryMode = 'auto' } = await c.req.json<{
-        talRef: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null
-        danceRefs: Array<{ kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string }>
-        drafts?: Record<string, { id: string; kind: 'tal' | 'dance' | 'performer' | 'act'; name: string; content: unknown; description?: string; derivedFrom?: string | null }>
-        model: ModelSelection
-        modelVariant?: string | null
-        agentId?: string | null
-        mcpServerNames?: string[]
-        planMode?: boolean
-        danceDeliveryMode?: DanceDeliveryMode
-    }>()
+    const body = await c.req.json<CompilePromptRequest>()
+    const { model } = body
 
     if (!model) {
         return jsonOpencodeError(
@@ -55,25 +26,7 @@ compile.post('/api/compile', async (c) => {
 
     try {
         const cwd = resolveRequestWorkingDir(c)
-        const preview = await compilePrompt(
-            cwd,
-            talRef || null,
-            danceRefs || [],
-            model,
-            drafts,
-            modelVariant,
-            danceDeliveryMode,
-        )
-        const toolResolution = await resolveRuntimeTools(
-            cwd,
-            model,
-            mcpServerNames,
-        )
-        return c.json({
-            agent: agentId || (planMode ? 'plan' : 'build'),
-            ...preview,
-            toolResolution,
-        })
+        return c.json(await compileStudioPrompt(cwd, body))
     } catch (err) {
         return jsonOpencodeError(c, err, { model })
     }

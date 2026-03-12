@@ -11,6 +11,8 @@ import type {
     SavedStageSummary,
 } from './types'
 import type { RuntimeModelCatalogEntry } from '../shared/model-variants'
+import type { AdapterViewActionRequest, AdapterViewProjection } from '../shared/adapter-view'
+import type { ChatSendRequest, ChatSessionCreateResponse, CompilePromptRequest } from '../shared/chat-contracts'
 import { StudioApiError } from './lib/api-errors'
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
@@ -180,12 +182,22 @@ export const api = {
         planMode = false,
         danceDeliveryMode: DanceDeliveryMode = 'auto',
     ) =>
-        postJSON<PromptPreview>('/api/compile', { talRef, danceRefs, drafts, model, modelVariant, agentId, mcpServerNames, planMode, danceDeliveryMode }),
+        postJSON<PromptPreview>('/api/compile', {
+            talRef,
+            danceRefs,
+            drafts,
+            model,
+            modelVariant,
+            agentId,
+            mcpServerNames,
+            planMode,
+            danceDeliveryMode,
+        } satisfies CompilePromptRequest),
 
     // ── Chat ────────────────────────────────────────────
     chat: {
         createSession: (performerId: string, performerName: string, configHash: string) =>
-            postJSON<{ sessionId: string; title: string }>('/api/chat/sessions', { performerId, performerName, configHash }),
+            postJSON<ChatSessionCreateResponse>('/api/chat/sessions', { performerId, performerName, configHash }),
 
         deleteSession: (id: string) =>
             deleteJSON<{ ok: boolean }>(`/api/chat/sessions/${id}`),
@@ -213,7 +225,7 @@ export const api = {
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
             }
         ) =>
-            postJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, payload),
+            postJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, payload satisfies ChatSendRequest),
 
         abort: (id: string) =>
             postJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/abort`),
@@ -343,6 +355,18 @@ export const api = {
                 method: 'POST',
                 body: JSON.stringify(payload),
             }),
+    },
+
+    adapter: {
+        list: (performerId?: string) =>
+            fetchJSON<{ projections: AdapterViewProjection[] }>(
+                `/api/adapter/views${performerId ? `?performerId=${encodeURIComponent(performerId)}` : ''}`,
+            ),
+
+        action: (payload: AdapterViewActionRequest) =>
+            postJSON<any>('/api/adapter/action', payload),
+
+        events: () => createApiEventSource('/api/adapter/events'),
     },
 
     // ── Config (from OpenCode SDK) ───────────────────────
