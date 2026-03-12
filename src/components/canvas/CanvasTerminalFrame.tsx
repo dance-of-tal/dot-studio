@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { Terminal as TerminalIcon, X } from 'lucide-react';
 import { useStudioStore } from '../../store';
+import CanvasWindowFrame from './CanvasWindowFrame';
 import './CanvasTerminalFrame.css';
 
 const termTheme = {
@@ -241,26 +242,30 @@ export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) 
     }, [width, height, onResize]);
 
     return (
-        <div
+        <CanvasWindowFrame
             className="canvas-terminal-frame"
-            style={{ width, height }}
-        >
-            <div className="canvas-terminal-frame__header canvas-frame__header canvas-drag-handle--interactive">
-                <div className="canvas-terminal-frame__header-left">
+            width={width}
+            height={height}
+            dragHandleActive
+            headerStart={(
+                <>
                     <TerminalIcon size={12} />
-                    <span className="canvas-terminal-frame__title">{title}</span>
+                    <span className="canvas-frame__name">{title}</span>
                     <span className={`canvas-terminal-frame__status ${!connected ? 'canvas-terminal-frame__status--disconnected' : ''}`}>
                         {exited ? 'Exited' : connected ? 'Connected' : 'Connecting…'}
                     </span>
-                </div>
+                </>
+            )}
+            headerEnd={(
                 <button
-                    className="canvas-terminal-frame__close"
+                    className="icon-btn"
                     onClick={(e) => { e.stopPropagation(); onClose(); }}
                     title="Close terminal"
                 >
                     <X size={12} />
                 </button>
-            </div>
+            )}
+        >
             <div className="canvas-terminal-frame__body" ref={termRef} />
             {exited && (
                 <div className="canvas-terminal-frame__exited">
@@ -272,6 +277,6 @@ export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) 
                 className="canvas-terminal-frame__resize"
                 onMouseDown={handleResizeStart}
             />
-        </div>
+        </CanvasWindowFrame>
     );
 }

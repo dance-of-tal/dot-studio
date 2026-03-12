@@ -5,7 +5,7 @@ function shouldKeepTransformChrome(target: HTMLElement | null) {
         return false
     }
 
-    return !!target.closest('.canvas-drag-handle--interactive, .figma-frame__header, .react-flow__resize-control, .canvas-resize-control')
+    return !!target.closest('.canvas-drag-handle--interactive, .canvas-frame__header, .react-flow__resize-control, .canvas-resize-control')
 }
 
 type UseTransformChromeOptions = {

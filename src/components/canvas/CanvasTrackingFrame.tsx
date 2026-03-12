@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Activity, FileCode, X } from 'lucide-react'
 import { api } from '../../api'
 import type { FileStatus } from '../../types'
+import CanvasWindowFrame from './CanvasWindowFrame'
 import './CanvasTrackingFrame.css'
 
 interface CanvasTrackingFrameProps {
@@ -56,51 +57,57 @@ export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) 
     }
 
     return (
-        <div className="canvas-tracking-frame" style={{ width, height }}>
-            <div className="canvas-tracking-frame__header canvas-frame__header canvas-drag-handle--interactive">
-                <div className="canvas-tracking-frame__header-left">
+        <CanvasWindowFrame
+            className="canvas-tracking-frame"
+            width={width}
+            height={height}
+            dragHandleActive
+            headerStart={(
+                <>
                     <Activity size={12} />
-                    <span className="canvas-tracking-frame__title">{title}</span>
+                    <span className="canvas-frame__name">{title}</span>
                     <span className="canvas-tracking-frame__status">
                         {files.length === 0 ? 'Clean' : `${files.length} file${files.length === 1 ? '' : 's'}`}
                     </span>
-                </div>
+                </>
+            )}
+            headerEnd={(
                 <button
-                    className="canvas-tracking-frame__close"
+                    className="icon-btn"
                     onClick={(e) => { e.stopPropagation(); onClose() }}
                     title="Close stage tracking"
                 >
                     <X size={12} />
                 </button>
-            </div>
-            <div className="canvas-tracking-frame__body scroll-area">
-                {files.length === 0 ? (
-                    <div className="canvas-tracking-frame__empty">No uncommitted files detected.</div>
-                ) : (
-                    <ul className="canvas-tracking-frame__list">
-                        {files.map((file) => (
-                            <li key={file.path} className="canvas-tracking-frame__item">
-                                <FileCode size={12} className={`canvas-tracking-frame__icon canvas-tracking-frame__icon--${file.status}`} />
-                                <div className="canvas-tracking-frame__info">
-                                    <span className="canvas-tracking-frame__path" title={file.path}>
-                                        {file.path.split('/').pop()}
+            )}
+            bodyClassName="scroll-area"
+        >
+            {files.length === 0 ? (
+                <div className="canvas-tracking-frame__empty">No uncommitted files detected.</div>
+            ) : (
+                <ul className="canvas-tracking-frame__list">
+                    {files.map((file) => (
+                        <li key={file.path} className="canvas-tracking-frame__item">
+                            <FileCode size={12} className={`canvas-tracking-frame__icon canvas-tracking-frame__icon--${file.status}`} />
+                            <div className="canvas-tracking-frame__info">
+                                <span className="canvas-tracking-frame__path" title={file.path}>
+                                    {file.path.split('/').pop()}
+                                </span>
+                                {file.path.includes('/') ? (
+                                    <span className="canvas-tracking-frame__dir">
+                                        {file.path.slice(0, file.path.lastIndexOf('/'))}
                                     </span>
-                                    {file.path.includes('/') ? (
-                                        <span className="canvas-tracking-frame__dir">
-                                            {file.path.slice(0, file.path.lastIndexOf('/'))}
-                                        </span>
-                                    ) : null}
-                                </div>
-                                <div className="canvas-tracking-frame__stats">
-                                    {file.added > 0 ? <span className="canvas-tracking-frame__added">+{file.added}</span> : null}
-                                    {file.removed > 0 ? <span className="canvas-tracking-frame__removed">-{file.removed}</span> : null}
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
+                                ) : null}
+                            </div>
+                            <div className="canvas-tracking-frame__stats">
+                                {file.added > 0 ? <span className="canvas-tracking-frame__added">+{file.added}</span> : null}
+                                {file.removed > 0 ? <span className="canvas-tracking-frame__removed">-{file.removed}</span> : null}
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            )}
             <div className="canvas-tracking-frame__resize" onMouseDown={handleResizeStart} />
-        </div>
+        </CanvasWindowFrame>
     )
 }

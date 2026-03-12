@@ -16,45 +16,7 @@
     border-color: rgba(99, 102, 241, 0.3);
 }
 
-/* ── Header ── */
-.canvas-terminal-frame__header {
-    display: flex;
-    align-items: center;
-    padding: 0 10px;
-    height: 32px;
-    background: #000000;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    flex-shrink: 0;
-    gap: 8px;
-    cursor: grab;
-}
-
-.canvas-terminal-frame__header:active {
-    cursor: grabbing;
-}
-
-.canvas-terminal-frame__header-left {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: var(--font-base);
-    font-weight: 600;
-    color: #a0a0b8;
-    flex: 1;
-    min-width: 0;
-}
-
-.canvas-terminal-frame__header-left svg {
-    flex-shrink: 0;
-    color: #a78bfa;
-}
-
-.canvas-terminal-frame__title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
+/* ── Status Badge ── */
 .canvas-terminal-frame__status {
     font-size: var(--font-xs);
     font-weight: 500;
@@ -67,24 +29,6 @@
 
 .canvas-terminal-frame__status--disconnected {
     background: rgba(248, 113, 113, 0.15);
-    color: #f87171;
-}
-
-.canvas-terminal-frame__close {
-    background: none;
-    border: none;
-    color: #4a4a6a;
-    cursor: pointer;
-    padding: 4px;
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    transition: all 0.15s;
-}
-
-.canvas-terminal-frame__close:hover {
-    background: rgba(248, 113, 113, 0.2);
     color: #f87171;
 }
 

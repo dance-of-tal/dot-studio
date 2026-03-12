@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     Hexagon,
@@ -20,19 +20,17 @@ import {
     useAssets,
     useDotAuthUser,
     useModels,
-    useMcpServers,
     queryKeys,
     useRegistrySearch,
     useInstallAsset,
 } from '../../hooks/queries';
 import './AssetLibrary.css';
 import { useStudioStore } from '../../store';
-import { showToast } from '../../lib/toast';
+
 
 import { slugifyAssetName } from '../../lib/performers';
 import type { AssetCard } from '../../types';
-import type { ProjectMcpEntryDraft } from '../modals/settings-utils';
-import { buildProjectMcpDrafts, serializeProjectMcpEntries } from '../modals/settings-utils';
+import { useMcpCatalog } from './useMcpCatalog';
 
 import type {
     InstalledKind,
@@ -92,12 +90,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const [authoringHint, setAuthoringHint] = useState<string | null>(null)
     const [detailActionStatus, setDetailActionStatus] = useState<string | null>(null)
     const [detailActionLoading, setDetailActionLoading] = useState<null | 'save-local' | 'publish' | 'import'>(null)
-    const [mcpDraftEntries, setMcpDraftEntries] = useState<ProjectMcpEntryDraft[]>([])
-    const [mcpDraftSnapshot, setMcpDraftSnapshot] = useState<ProjectMcpEntryDraft[]>([])
-    const [mcpCatalogStatus, setMcpCatalogStatus] = useState<string | null>(null)
-    const [mcpCatalogSaving, setMcpCatalogSaving] = useState(false)
-    const [pendingMcpAuthName, setPendingMcpAuthName] = useState<string | null>(null)
-    const mcpAuthDeadlineRef = useRef<number | null>(null)
     const { data: authUser } = useDotAuthUser()
     const queryClient = useQueryClient()
 
@@ -108,12 +100,31 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const { data: installedAssets = [], isLoading: assetsLoading } = useAssetKind(installedKind, showInstalledAssets)
     const { data: assetInventory = [] } = useAssets(scope === 'registry')
     const { data: models = [] } = useModels(showModels)
-    const { data: mcpServers = [] } = useMcpServers(showMcps)
     const { data: registryResults = [], isLoading: registryLoading, error: registryError } = useRegistrySearch(
         registryQuery,
         registryKind,
         searchEnabled,
     )
+
+    // MCP catalog state & operations (extracted to useMcpCatalog hook)
+    const mcp = useMcpCatalog(workingDir, showMcps)
+    const mcpServers = mcp.mcpServers ?? []
+    const {
+        mcpDraftEntries,
+        mcpCatalogDirty,
+        mcpCatalogStatus,
+        mcpCatalogSaving,
+        pendingMcpAuthName,
+        updateMcpEntry,
+        addMcpEntry,
+        removeMcpEntry,
+        saveMcpCatalog,
+        resetMcpCatalog,
+        connectMcpServer,
+        disconnectMcpServer,
+        authenticateMcpServer,
+        clearMcpAuth,
+    } = mcp
 
     const draftAssetCards = useMemo<AssetCard[]>(
         () => buildDraftAssetCards(drafts, installedKind),
@@ -138,237 +149,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     useEffect(() => {
         setExpandedModelProviders({})
     }, [filter, modelAvailabilityFilter, modelProviderFilter])
-
-    useEffect(() => {
-        if (!showMcps) {
-            return
-        }
-        api.config.getProject()
-            .then((result) => {
-                const config = result?.config && typeof result.config === 'object' ? result.config : {}
-                const drafts = buildProjectMcpDrafts((config as any).mcp || {})
-                setMcpDraftEntries(drafts)
-                setMcpDraftSnapshot(drafts)
-                setMcpCatalogStatus(null)
-            })
-            .catch((error) => {
-                console.error('Failed to load MCP catalog', error)
-                setMcpCatalogStatus('Failed to load project MCP catalog.')
-            })
-    }, [showMcps, workingDir])
-
-    useEffect(() => {
-        if (!pendingMcpAuthName) {
-            mcpAuthDeadlineRef.current = null
-            return
-        }
-
-        const live = mcpServers.find((server) => server.name === pendingMcpAuthName)
-        if (live?.status === 'connected') {
-            mcpAuthDeadlineRef.current = null
-            setPendingMcpAuthName(null)
-            setMcpCatalogStatus(`Authenticated and connected ${pendingMcpAuthName}.`)
-            return
-        }
-
-        if (live?.status === 'failed' || live?.status === 'needs_client_registration') {
-            mcpAuthDeadlineRef.current = null
-            setPendingMcpAuthName(null)
-            setMcpCatalogStatus(live.error || `Authentication did not complete for ${pendingMcpAuthName}.`)
-            return
-        }
-
-        const timer = window.setInterval(() => {
-            if (mcpAuthDeadlineRef.current && Date.now() > mcpAuthDeadlineRef.current) {
-                window.clearInterval(timer)
-                mcpAuthDeadlineRef.current = null
-                setPendingMcpAuthName(null)
-                setMcpCatalogStatus(`Timed out waiting for ${pendingMcpAuthName} authentication.`)
-                return
-            }
-            void queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
-        }, 2_000)
-
-        return () => window.clearInterval(timer)
-    }, [mcpServers, pendingMcpAuthName, queryClient, workingDir])
-
-    const mcpCatalogDirty = useMemo(
-        () => JSON.stringify(mcpDraftEntries) !== JSON.stringify(mcpDraftSnapshot),
-        [mcpDraftEntries, mcpDraftSnapshot],
-    )
-
-    const updateMcpEntry = (key: string, updater: (entry: ProjectMcpEntryDraft) => ProjectMcpEntryDraft) => {
-        setMcpDraftEntries((current) => current.map((entry) => entry.key === key ? updater(entry) : entry))
-    }
-
-    const addMcpEntry = (type: 'local' | 'remote') => {
-        const key = `asset-mcp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-        setMcpDraftEntries((current) => [
-            ...current,
-            {
-                key,
-                name: '',
-                type,
-                enabled: true,
-                commandText: '',
-                environmentText: '',
-                timeoutText: '',
-                url: '',
-                headersText: '',
-                oauthEnabled: true,
-                oauthClientId: '',
-                oauthClientSecret: '',
-                oauthScope: '',
-            },
-        ])
-    }
-
-    const removeMcpEntry = (key: string) => {
-        setMcpDraftEntries((current) => current.filter((entry) => entry.key !== key))
-    }
-
-    const saveMcpCatalog = async () => {
-        setMcpCatalogSaving(true)
-        setMcpCatalogStatus(null)
-        try {
-            const invalidEntry = mcpDraftEntries.find((entry) => (
-                entry.name.trim()
-                && (
-                    (entry.type === 'local' && !entry.commandText.trim())
-                    || (entry.type === 'remote' && !entry.url.trim())
-                )
-            ))
-            if (invalidEntry) {
-                throw new Error(
-                    invalidEntry.type === 'local'
-                        ? `MCP '${invalidEntry.name}' needs a command before saving.`
-                        : `MCP '${invalidEntry.name}' needs a URL before saving.`,
-                )
-            }
-
-            await api.config.update({
-                mcp: serializeProjectMcpEntries(mcpDraftEntries),
-            })
-            setMcpDraftSnapshot(mcpDraftEntries)
-            setMcpCatalogStatus('Saved project MCP catalog.')
-            await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
-        } catch (error: any) {
-            setMcpCatalogStatus(error?.message || 'Failed to save project MCP catalog.')
-        } finally {
-            setMcpCatalogSaving(false)
-        }
-    }
-
-    const resetMcpCatalog = () => {
-        setMcpDraftEntries(mcpDraftSnapshot)
-        setMcpCatalogStatus(null)
-    }
-
-    const invalidateMcpQueries = async (includeRuntimeTools = false) => {
-        await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
-        if (includeRuntimeTools) {
-            await queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
-        }
-    }
-
-    const runMcpCatalogAction = async (
-        request: () => Promise<unknown>,
-        options: {
-            successMessage: string
-            failureMessage: string
-            includeRuntimeTools?: boolean
-            onSuccess?: () => void
-        },
-    ) => {
-        setMcpCatalogStatus(null)
-        try {
-            await request()
-            options.onSuccess?.()
-            setMcpCatalogStatus(options.successMessage)
-            await invalidateMcpQueries(!!options.includeRuntimeTools)
-        } catch (error: any) {
-            setMcpCatalogStatus(error?.message || options.failureMessage)
-        }
-    }
-
-    const connectMcpServer = async (name: string) => runMcpCatalogAction(
-        () => api.mcp.connect(name),
-        {
-            successMessage: `Connected MCP server ${name}.`,
-            failureMessage: `Failed to connect ${name}.`,
-            includeRuntimeTools: true,
-        },
-    )
-
-    const disconnectMcpServer = async (name: string) => {
-        await runMcpCatalogAction(
-            () => api.mcp.disconnect(name),
-            {
-                successMessage: `Disconnected MCP server ${name}.`,
-                failureMessage: `Failed to disconnect ${name}.`,
-                includeRuntimeTools: true,
-            },
-        )
-    }
-
-    const authenticateMcpServer = async (name: string) => {
-        const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null
-        setMcpCatalogStatus(null)
-
-        try {
-            const result = await api.mcp.authStart(name)
-            let opened = false
-            try {
-                if (popup && !popup.closed) {
-                    popup.location.href = result.authorizationUrl
-                    opened = true
-                } else {
-                    const next = window.open(result.authorizationUrl, '_blank')
-                    opened = !!next
-                }
-            } catch {
-                opened = false
-            }
-
-            if (!opened) {
-                popup?.close()
-                showToast(`Open the browser to finish authenticating ${name}.`, 'warning', {
-                    title: 'MCP auth started',
-                    actionLabel: 'Open auth',
-                    onAction: () => {
-                        window.open(result.authorizationUrl, '_blank')
-                    },
-                    dedupeKey: `mcp-auth:${name}`,
-                    durationMs: 8000,
-                })
-            }
-
-            mcpAuthDeadlineRef.current = Date.now() + 180_000
-            setPendingMcpAuthName(name)
-            setMcpCatalogStatus(`Complete authentication for ${name} in the browser.`)
-            await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
-        } catch (error: any) {
-            popup?.close()
-            setPendingMcpAuthName(null)
-            setMcpCatalogStatus(error?.message || `Failed to start authentication for ${name}.`)
-        }
-    }
-
-    const clearMcpAuth = async (name: string) => {
-        await runMcpCatalogAction(
-            () => api.mcp.clearAuth(name),
-            {
-                successMessage: `Cleared stored authentication for ${name}.`,
-                failureMessage: `Failed to clear authentication for ${name}.`,
-                onSuccess: () => {
-                    if (pendingMcpAuthName === name) {
-                        setPendingMcpAuthName(null)
-                        mcpAuthDeadlineRef.current = null
-                    }
-                },
-            },
-        )
-    }
 
     const installedUrns = useMemo(
         () => new Set(assetInventory.map((asset) => getAssetUrn(asset)).filter(Boolean) as string[]),

@@ -7,85 +7,24 @@ import { cached, invalidate, TTL } from '../lib/cache.js'
 import type { ModelSelection } from '../lib/prompt.js'
 import { resolveRuntimeTools } from '../lib/runtime-tools.js'
 import { requestDirectoryQuery, resolveRequestWorkingDir } from '../lib/request-context.js'
-import { canRestartOpencodeSidecar, isManagedOpencode, restartOpencodeSidecar } from '../lib/opencode-sidecar.js'
+import { restartOpencodeSidecar, isManagedOpencode } from '../lib/opencode-sidecar.js'
 import { OPENCODE_URL } from '../lib/config.js'
 import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
-import { jsonOpencodeError, StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
+import { jsonOpencodeError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { listRuntimeModels } from '../lib/model-catalog.js'
 import { readProjectConfigFile, readProjectMcpCatalog, summarizeProjectMcpCatalog } from '../lib/project-config.js'
-import { projectMcpEntryEnabled } from '../../shared/project-mcp.js'
+import {
+    opencodeModeMeta,
+    responseData,
+    readProjectConfigFromOpencode,
+    mergeProjectConfig,
+    runMcpMutation,
+    validateMcpAuthRequest,
+} from '../services/opencode-service.js'
 
 const opencode = new Hono()
 
-function opencodeModeMeta() {
-    return {
-        managed: isManagedOpencode(),
-        mode: isManagedOpencode() ? 'managed' as const : 'external' as const,
-        restartAvailable: canRestartOpencodeSidecar(),
-    }
-}
 
-function responseData<T>(response: unknown, fallback: T): T {
-    const data = (response as any).data
-    return (data || fallback) as T
-}
-
-async function readProjectConfigFromOpencode(c: Parameters<typeof requestDirectoryQuery>[0]) {
-    const oc = await getOpencode()
-    const cwd = resolveRequestWorkingDir(c)
-    const res = await oc.file.read({
-        directory: cwd,
-        path: 'config.json',
-    })
-    const data = responseData<any>(res, {})
-    const raw = typeof data?.content === 'string' ? data.content : '{}'
-    return {
-        cwd,
-        config: JSON.parse(raw),
-    }
-}
-
-async function runMcpMutation(
-    c: Parameters<typeof requestDirectoryQuery>[0],
-    action: (oc: Awaited<ReturnType<typeof getOpencode>>) => Promise<unknown>,
-) {
-    const oc = await getOpencode()
-    const result = await action(oc)
-    invalidate('mcp-servers')
-    return c.json(responseData(result, {}))
-}
-
-function mergeProjectConfig(
-    current: Record<string, unknown>,
-    patch: Record<string, unknown>,
-): Record<string, unknown> {
-    return {
-        ...current,
-        ...patch,
-        ...(patch.mcp && typeof patch.mcp === 'object' ? { mcp: patch.mcp } : {}),
-    }
-}
-
-async function validateMcpAuthRequest(c: Parameters<typeof requestDirectoryQuery>[0], name: string) {
-    const catalog = await readProjectMcpCatalog(resolveRequestWorkingDir(c))
-    const config = catalog[name]
-
-    if (!config) {
-        throw new StudioValidationError(`MCP server '${name}' is not defined in this project.`, 'fix_input', 404)
-    }
-
-    if (!projectMcpEntryEnabled(config)) {
-        throw new StudioValidationError(`MCP server '${name}' is disabled in this project.`, 'fix_input', 400)
-    }
-
-    if (!('type' in config) || config.type !== 'remote') {
-        throw new StudioValidationError(`MCP server '${name}' does not support OAuth authentication.`, 'fix_input', 400)
-    }
-
-    if (config.oauth === false) {
-        throw new StudioValidationError(`MCP server '${name}' does not support OAuth authentication.`, 'fix_input', 400)
-    }
-}
 
 // ── OpenCode Health ─────────────────────────────────────
 opencode.get('/api/opencode/health', async (c) => {
@@ -117,8 +56,8 @@ opencode.post('/api/opencode/restart', async (c) => {
             managed: isManagedOpencode(),
             mode: isManagedOpencode() ? 'managed' : 'external',
         })
-    } catch (err: any) {
-        return c.json({ error: err.message }, 400)
+    } catch (err) {
+        return jsonOpencodeError(c, err, { defaultStatus: 400 })
     }
 })
 
@@ -186,8 +125,8 @@ opencode.get('/api/tools/:provider/:model', async (c) => {
             model: c.req.param('model'),
         })
         return c.json(responseData(res, []))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -203,8 +142,8 @@ opencode.post('/api/runtime/tools', async (c) => {
             mcpServerNames,
         )
         return c.json(resolution)
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -214,8 +153,8 @@ opencode.get('/api/config', async (c) => {
         const oc = await getOpencode()
         const res = await oc.config.get(requestDirectoryQuery(c))
         return c.json(responseData(res, {}))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -247,8 +186,8 @@ opencode.put('/api/config', async (c) => {
         const res = await oc.config.update({ ...requestDirectoryQuery(c), config: nextConfig })
         invalidate('mcp-servers')
         return c.json(responseData(res, {}))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -327,8 +266,8 @@ opencode.get('/api/lsp/status', async (c) => {
         const oc = await getOpencode()
         const res = await oc.lsp.status(requestDirectoryQuery(c))
         return c.json(responseData(res, []))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -359,8 +298,8 @@ opencode.post('/api/mcp/add', async (c) => {
             name,
             config: config as any,
         }))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -370,8 +309,8 @@ opencode.post('/api/mcp/:name/connect', async (c) => {
             name: c.req.param('name'),
             ...requestDirectoryQuery(c),
         }))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -441,8 +380,8 @@ opencode.post('/api/mcp/:name/disconnect', async (c) => {
             name: c.req.param('name'),
             ...requestDirectoryQuery(c),
         }))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -465,8 +404,8 @@ opencode.get('/api/file/read', async (c) => {
         const oc = await getOpencode()
         const res = await oc.file.read({ ...requestDirectoryQuery(c), path: filePath })
         return c.json(responseData(res, {}))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -488,8 +427,8 @@ opencode.get('/api/find/text', async (c) => {
         const oc = await getOpencode()
         const res = await oc.find.text({ ...requestDirectoryQuery(c), pattern })
         return c.json(responseData(res, []))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -500,8 +439,8 @@ opencode.get('/api/find/files', async (c) => {
         const oc = await getOpencode()
         const res = await oc.find.files({ ...requestDirectoryQuery(c), query: pattern })
         return c.json(responseData(res, []))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -512,8 +451,8 @@ opencode.get('/api/find/symbols', async (c) => {
         const oc = await getOpencode()
         const res = await oc.find.symbols({ ...requestDirectoryQuery(c), query: pattern })
         return c.json(responseData(res, []))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 
@@ -523,8 +462,8 @@ opencode.get('/api/vcs', async (c) => {
         const oc = await getOpencode()
         const res = await oc.vcs.get(requestDirectoryQuery(c))
         return c.json(responseData(res, {}))
-    } catch (err: any) {
-        return c.json({ error: err.message }, 500)
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 

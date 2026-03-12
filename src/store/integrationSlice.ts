@@ -6,23 +6,9 @@ import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers
 import { formatStudioApiErrorComment } from '../lib/api-errors'
 import { mapSessionMessagesToChatMessages } from '../lib/chat-messages'
 import {
-    adapterEventSourceInstance,
-    adapterEventSourceWorkingDir,
-    actEventSourceInstance,
-    actEventSourceSessionId,
-    actEventSourceWorkingDir,
     clearIntegrationStreamingState,
     clearStreamingSession,
-    eventSourceInstance,
-    eventSourceWorkingDir,
     resolveCurrentActSessionId,
-    setAdapterEventSourceInstance,
-    setAdapterEventSourceWorkingDir,
-    setActEventSourceInstance,
-    setActEventSourceSessionId,
-    setActEventSourceWorkingDir,
-    setEventSourceInstance,
-    setEventSourceWorkingDir,
     streamingMessageKey,
     streamingMessageRoles,
     syncingSessions,
@@ -43,6 +29,20 @@ import {
     handleSessionCompacted,
     handleSessionError,
 } from './integration-event-handlers'
+import {
+    reconnectManagedEventSource,
+    closeManagedEventSource,
+} from './integration-eventsource'
+import type { EventSourceSlot } from './integration-eventsource'
+import {
+    eventSourceInstance, setEventSourceInstance,
+    eventSourceWorkingDir, setEventSourceWorkingDir,
+    actEventSourceInstance, setActEventSourceInstance,
+    actEventSourceWorkingDir, setActEventSourceWorkingDir,
+    actEventSourceSessionId, setActEventSourceSessionId,
+    adapterEventSourceInstance, setAdapterEventSourceInstance,
+    adapterEventSourceWorkingDir, setAdapterEventSourceWorkingDir,
+} from './integration-streaming'
 
 export const createIntegrationSlice: StateCreator<
     StudioState,
@@ -84,27 +84,39 @@ export const createIntegrationSlice: StateCreator<
         }
     }
 
+    // ── EventSource Slots ────────────────────────────────
+
+    const chatSlot: EventSourceSlot = {
+        getInstance: () => eventSourceInstance,
+        setInstance: setEventSourceInstance,
+        getWorkingDir: () => eventSourceWorkingDir,
+        setWorkingDir: setEventSourceWorkingDir,
+    }
+
+    const actSlot: EventSourceSlot = {
+        getInstance: () => actEventSourceInstance,
+        setInstance: setActEventSourceInstance,
+        getWorkingDir: () => actEventSourceWorkingDir,
+        setWorkingDir: setActEventSourceWorkingDir,
+        getExtraKey: () => actEventSourceSessionId,
+        setExtraKey: setActEventSourceSessionId,
+    }
+
+    const adapterSlot: EventSourceSlot = {
+        getInstance: () => adapterEventSourceInstance,
+        setInstance: setAdapterEventSourceInstance,
+        getWorkingDir: () => adapterEventSourceWorkingDir,
+        setWorkingDir: setAdapterEventSourceWorkingDir,
+    }
+
+    // ── Reconnect wrappers ───────────────────────────────
+
     const reconnectEventSource = () => {
-        const workingDir = get().workingDir || null
-        if (eventSourceInstance && eventSourceWorkingDir === workingDir) {
-            return
-        }
-
-        if (eventSourceInstance) {
-            eventSourceInstance.close()
-            setEventSourceInstance(null)
-        }
-
-        setEventSourceWorkingDir(workingDir)
-        setEventSourceInstance(api.chat.events())
-        const chatEventSource = eventSourceInstance
-        if (!chatEventSource) {
-            return
-        }
-        chatEventSource.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data)
-
+        reconnectManagedEventSource({
+            slot: chatSlot,
+            resolveWorkingDir: () => get().workingDir || null,
+            createEventSource: () => api.chat.events(),
+            onMessage: (data: any) => {
                 if (data.type === 'lsp.client.diagnostics') return handleLspDiagnostics(data, get, set)
                 if (data.type === 'lsp.updated') return handleLspUpdated(get)
                 if (data.type === 'mcp.tools.changed') return handleMcpToolsChanged(get)
@@ -117,53 +129,20 @@ export const createIntegrationSlice: StateCreator<
                 if (data.type === 'session.idle') return handleSessionIdle(data, get, set, syncSessionMessages)
                 if (data.type === 'session.compacted') return handleSessionCompacted(data, get, set, syncSessionMessages)
                 if (data.type === 'session.error') return handleSessionError(data, get, set)
-            } catch {
-                // Ignore malformed events and keep the stream alive.
-            }
-        }
-
-        chatEventSource.onerror = () => {
-            if (eventSourceInstance) {
-                eventSourceInstance.close()
-                setEventSourceInstance(null)
-            }
-        }
+            },
+        })
     }
 
     const reconnectActEventSource = () => {
-        const state = get()
-        const workingDir = state.workingDir || null
-        const actSessionId = resolveCurrentActSessionId(state)
+        const actSessionId = resolveCurrentActSessionId(get())
 
-        if (
-            actEventSourceInstance
-            && actEventSourceWorkingDir === workingDir
-            && actEventSourceSessionId === actSessionId
-        ) {
-            return
-        }
-
-        if (actEventSourceInstance) {
-            actEventSourceInstance.close()
-            setActEventSourceInstance(null)
-        }
-
-        setActEventSourceWorkingDir(workingDir)
-        setActEventSourceSessionId(actSessionId)
-
-        if (!actSessionId) {
-            return
-        }
-
-        setActEventSourceInstance(api.act.events(actSessionId))
-        const currentActEventSource = actEventSourceInstance
-        if (!currentActEventSource) {
-            return
-        }
-        currentActEventSource.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data)
-                if (data.actSessionId !== actSessionId) {
+        reconnectManagedEventSource({
+            slot: actSlot,
+            resolveWorkingDir: () => get().workingDir || null,
+            resolveExtraKey: () => actSessionId,
+            createEventSource: () => actSessionId ? api.act.events(actSessionId) : null,
+            onMessage: (data: any) => {
+                if (!actSessionId || data.actSessionId !== actSessionId) {
                     return
                 }
 
@@ -228,65 +207,34 @@ export const createIntegrationSlice: StateCreator<
                             : state.loadingActId,
                     }))
                 }
-            } catch {
-                // Ignore malformed act runtime events.
-            }
-        }
-
-        currentActEventSource.onerror = () => {
-            if (actEventSourceInstance) {
-                actEventSourceInstance.close()
-                setActEventSourceInstance(null)
-            }
-        }
+            },
+        })
     }
 
     const reconnectAdapterEventSource = () => {
-        const workingDir = get().workingDir || null
-        if (adapterEventSourceInstance && adapterEventSourceWorkingDir === workingDir) {
-            return
-        }
-
-        if (adapterEventSourceInstance) {
-            adapterEventSourceInstance.close()
-            setAdapterEventSourceInstance(null)
-        }
-
-        setAdapterEventSourceWorkingDir(workingDir)
-        setAdapterEventSourceInstance(api.adapter.events())
-        const currentAdapterEventSource = adapterEventSourceInstance
-        if (!currentAdapterEventSource) {
-            return
-        }
-        currentAdapterEventSource.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data) as AdapterViewEvent
-                if (data.type === 'adapter.updated') {
-                    get().upsertAdapterViewProjection(data.projection)
+        reconnectManagedEventSource({
+            slot: adapterSlot,
+            resolveWorkingDir: () => get().workingDir || null,
+            createEventSource: () => api.adapter.events(),
+            onMessage: (data: unknown) => {
+                const event = data as AdapterViewEvent
+                if (event.type === 'adapter.updated') {
+                    get().upsertAdapterViewProjection(event.projection)
                     return
                 }
-                if (data.type === 'adapter.cleared') {
-                    const current = get().adapterViewsByPerformer[data.performerId] || {}
+                if (event.type === 'adapter.cleared') {
+                    const current = get().adapterViewsByPerformer[event.performerId] || {}
                     const next = { ...current }
-                    delete next[data.adapterId]
+                    delete next[event.adapterId]
                     set((state) => ({
                         adapterViewsByPerformer: {
                             ...state.adapterViewsByPerformer,
-                            [data.performerId]: next,
+                            [event.performerId]: next,
                         },
                     }))
                 }
-            } catch {
-                // Ignore malformed adapter events.
-            }
-        }
-
-        currentAdapterEventSource.onerror = () => {
-            if (adapterEventSourceInstance) {
-                adapterEventSourceInstance.close()
-                setAdapterEventSourceInstance(null)
-            }
-        }
+            },
+        })
     }
 
     return ({
@@ -309,22 +257,13 @@ export const createIntegrationSlice: StateCreator<
         },
 
         cleanupRealtimeEvents: () => {
-            if (eventSourceInstance) {
-                eventSourceInstance.close()
-                setEventSourceInstance(null)
-            }
-            if (actEventSourceInstance) {
-                actEventSourceInstance.close()
-                setActEventSourceInstance(null)
-            }
-            if (adapterEventSourceInstance) {
-                adapterEventSourceInstance.close()
-                setAdapterEventSourceInstance(null)
-            }
-            setEventSourceWorkingDir(null)
-            setActEventSourceWorkingDir(null)
-            setActEventSourceSessionId(null)
-            setAdapterEventSourceWorkingDir(null)
+            closeManagedEventSource(chatSlot)
+            closeManagedEventSource(actSlot)
+            closeManagedEventSource(adapterSlot)
+            chatSlot.setWorkingDir(null)
+            actSlot.setWorkingDir(null)
+            actSlot.setExtraKey?.(null)
+            adapterSlot.setWorkingDir(null)
             clearIntegrationStreamingState()
         },
 

@@ -1,6 +1,33 @@
 // DOT Studio — Core Types
 
 import type { RuntimeModelVariant } from '../../shared/model-variants'
+import type {
+    ActSessionPolicy,
+    ActSessionLifetime,
+    ActSessionMode,
+    ActNodeType,
+    StageActWorkerNode,
+    StageActOrchestratorNode,
+    StageActParallelNode,
+    StageActNode,
+    StageActEdge,
+    ActHistoryEntry,
+    ActThreadResumeSummary,
+} from '../../shared/act-contracts'
+
+export type {
+    ActSessionPolicy,
+    ActSessionLifetime,
+    ActSessionMode,
+    ActNodeType,
+    StageActWorkerNode,
+    StageActOrchestratorNode,
+    StageActParallelNode,
+    StageActNode,
+    StageActEdge,
+    ActHistoryEntry,
+    ActThreadResumeSummary,
+}
 
 export type AssetKind = 'tal' | 'dance' | 'act' | 'performer' | 'model' | 'mcp'
 
@@ -50,7 +77,6 @@ export interface ModelConfig {
 export type DanceDeliveryMode = 'auto' | 'tool' | 'inline'
 export type DraftAssetKind = 'tal' | 'dance' | 'performer' | 'act'
 export type MarkdownEditorKind = 'tal' | 'dance'
-export type ActSessionMode = 'default' | 'all_nodes_thread'
 
 export type RegistryAssetRef = {
     kind: 'registry'
@@ -126,8 +152,6 @@ export interface McpServer {
 }
 
 export type PerformerScope = 'shared' | 'act-owned'
-export type ActSessionPolicy = 'fresh' | 'node' | 'performer' | 'act'
-export type ActSessionLifetime = 'run' | 'thread'
 
 export interface PerformerNode {
     id: string
@@ -171,50 +195,7 @@ export interface PerformerLink {
     condition?: string
 }
 
-export type ActNodeType = 'worker' | 'orchestrator' | 'parallel'
 
-export interface StageActWorkerNode {
-    id: string
-    type: 'worker'
-    performerId: string | null
-    modelVariant?: string | null
-    position: { x: number; y: number }
-    sessionPolicy: ActSessionPolicy
-    sessionLifetime: ActSessionLifetime
-    sessionModeOverride?: boolean
-    label?: string
-}
-
-export interface StageActOrchestratorNode {
-    id: string
-    type: 'orchestrator'
-    performerId: string | null
-    modelVariant?: string | null
-    position: { x: number; y: number }
-    maxDelegations?: number
-    sessionPolicy: ActSessionPolicy
-    sessionLifetime: ActSessionLifetime
-    sessionModeOverride?: boolean
-    label?: string
-}
-
-export interface StageActParallelNode {
-    id: string
-    type: 'parallel'
-    position: { x: number; y: number }
-    join: 'all' | 'any'
-    label?: string
-}
-
-export type StageActNode = StageActWorkerNode | StageActOrchestratorNode | StageActParallelNode
-
-export interface StageActEdge {
-    id: string
-    from: string
-    to: string
-    role?: 'branch'
-    condition?: 'always' | 'on_success' | 'on_fail'
-}
 
 export interface StageAct {
     id: string
@@ -391,41 +372,10 @@ export interface ActRunState {
         lastUsedAt: number;
         summary?: string;
     }>;
-    history: Array<{
-        nodeId: string;
-        nodeType: 'worker' | 'orchestrator' | 'parallel';
-        action: string;
-        timestamp: number;
-    }>;
+    history: ActHistoryEntry[];
     finalOutput?: string;
     error?: string;
     iterations?: number;
-}
-
-export interface ActThreadResumeSummary {
-    updatedAt: number;
-    runId?: string | null;
-    currentNodeId?: string | null;
-    finalOutput?: string;
-    error?: string;
-    iterations?: number;
-    nodeOutputs?: Record<string, string>;
-    history?: Array<{
-        nodeId: string;
-        nodeType: 'worker' | 'orchestrator' | 'parallel';
-        action: string;
-        timestamp: number;
-    }>;
-    sessionHandles?: Array<{
-        handle: string;
-        nodeId: string;
-        nodeType: 'worker' | 'orchestrator';
-        performerId?: string | null;
-        status: 'warm';
-        turnCount: number;
-        lastUsedAt: number;
-        summary?: string;
-    }>;
 }
 
 export interface ActSessionRecord {

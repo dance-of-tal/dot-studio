@@ -2,10 +2,8 @@ import type { StateCreator } from 'zustand'
 import type { StudioState, WorkspaceSlice } from './types'
 import { api, setApiWorkingDirContext } from '../api'
 import {
-    assetRefKey,
     createPerformerNode,
     createPerformerNodeFromAsset,
-    isSameAssetRef,
     normalizePerformerAssetInput,
 } from '../lib/performers'
 import { createActActions } from './actSlice'
@@ -14,7 +12,6 @@ import {
     defaultMarkdownContent,
     mapCanvasTerminals,
     mapMarkdownEditors,
-    mapPerformers,
     normalizePath,
 } from './workspace-helpers'
 import {
@@ -22,6 +19,24 @@ import {
     saveStage as saveStageImpl,
     loadStage as loadStageImpl,
 } from './workspace-stage'
+import {
+    setPerformerTal as setPerformerTalImpl,
+    setPerformerTalRef as setPerformerTalRefImpl,
+    addPerformerDance as addPerformerDanceImpl,
+    addPerformerDanceRef as addPerformerDanceRefImpl,
+    replacePerformerDanceRef as replacePerformerDanceRefImpl,
+    removePerformerDance as removePerformerDanceImpl,
+    setPerformerModel as setPerformerModelImpl,
+    setPerformerModelVariant as setPerformerModelVariantImpl,
+    setPerformerAgentId as setPerformerAgentIdImpl,
+    setPerformerDanceDeliveryMode as setPerformerDanceDeliveryModeImpl,
+    addPerformerMcp as addPerformerMcpImpl,
+    removePerformerMcp as removePerformerMcpImpl,
+    setPerformerMcpBinding as setPerformerMcpBindingImpl,
+    updatePerformerAuthoringMeta as updatePerformerAuthoringMetaImpl,
+    togglePerformerVisibility as togglePerformerVisibilityImpl,
+    setPerformerAutoCompact as setPerformerAutoCompactImpl,
+} from './workspace-performer-config'
 
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
@@ -371,174 +386,37 @@ export const createWorkspaceSlice: StateCreator<
         stageDirty: true,
     })),
 
-    setPerformerTal: (performerId, tal) => set((s) => ({
-        performers: s.performers.map(a => {
-            if (a.id !== performerId) return a
-            return applyPerformerPatch(a, {
-                talRef: tal?.urn ? { kind: 'registry' as const, urn: tal.urn } : null,
-            })
-        }),
-        stageDirty: true,
-    })),
+    setPerformerTal: (performerId, tal) => setPerformerTalImpl(set, performerId, tal),
 
-    setPerformerTalRef: (performerId, talRef) => set((s) => ({
-        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { talRef })),
-        stageDirty: true,
-    })),
+    setPerformerTalRef: (performerId, talRef) => setPerformerTalRefImpl(set, performerId, talRef),
 
-    addPerformerDance: (performerId, dance) => set((s) => ({
-        performers: s.performers.map(a =>
-            a.id === performerId && !a.danceRefs.some((ref) => ref.kind === 'registry' && ref.urn === dance.urn)
-                ? applyPerformerPatch(a, {
-                    danceRefs: [...a.danceRefs, { kind: 'registry' as const, urn: dance.urn }],
-                })
-                : a
-        ),
-        stageDirty: true,
-    })),
+    addPerformerDance: (performerId, dance) => addPerformerDanceImpl(set, performerId, dance),
 
-    addPerformerDanceRef: (performerId, danceRef) => set((s) => ({
-        performers: mapPerformers(s.performers, performerId, (performer) => (
-            !performer.danceRefs.some((ref: any) => isSameAssetRef(ref, danceRef))
-                ? applyPerformerPatch(performer, {
-                    danceRefs: [...performer.danceRefs, danceRef],
-                })
-                : performer
-        )),
-        stageDirty: true,
-    })),
+    addPerformerDanceRef: (performerId, danceRef) => addPerformerDanceRefImpl(set, performerId, danceRef),
 
-    replacePerformerDanceRef: (performerId, currentRef, nextRef) => set((s) => ({
-        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, {
-            danceRefs: performer.danceRefs.map((ref: any) => (isSameAssetRef(ref, currentRef) ? nextRef : ref)),
-        })),
-        stageDirty: true,
-    })),
+    replacePerformerDanceRef: (performerId, currentRef, nextRef) => replacePerformerDanceRefImpl(set, performerId, currentRef, nextRef),
 
-    removePerformerDance: (performerId, danceUrn) => set((s) => ({
-        performers: s.performers.map(a =>
-            a.id === performerId
-                ? (() => {
-                    const danceRefs = a.danceRefs.filter((ref) => assetRefKey(ref) !== danceUrn && !(ref.kind === 'registry' && ref.urn === danceUrn))
-                    return applyPerformerPatch(a, { danceRefs })
-                })()
-                : a
-        ),
-        stageDirty: true,
-    })),
+    removePerformerDance: (performerId, danceUrn) => removePerformerDanceImpl(set, performerId, danceUrn),
 
-    setPerformerModel: (performerId, model) => set((s) => ({
-        performers: s.performers.map(a => {
-            if (a.id !== performerId) return a
-            const sameModel = (
-                (a.model?.provider || null) === (model?.provider || null)
-                && (a.model?.modelId || null) === (model?.modelId || null)
-            )
-            return applyPerformerPatch(a, {
-                model,
-                modelVariant: sameModel ? (a.modelVariant || null) : null,
-                modelPlaceholder: null,
-            })
-        }),
-        stageDirty: true,
-    })),
+    setPerformerModel: (performerId, model) => setPerformerModelImpl(set, performerId, model),
 
-    setPerformerModelVariant: (performerId, modelVariant) => set((s) => ({
-        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { modelVariant: modelVariant || null })),
-        stageDirty: true,
-    })),
+    setPerformerModelVariant: (performerId, modelVariant) => setPerformerModelVariantImpl(set, performerId, modelVariant),
 
-    setPerformerAgentId: (performerId, agentId) => set((s) => ({
-        performers: s.performers.map(a => {
-            if (a.id !== performerId) return a
-            return applyPerformerPatch(a, {
-                agentId: agentId || null,
-                planMode: agentId === 'plan',
-            })
-        }),
-        stageDirty: true,
-    })),
+    setPerformerAgentId: (performerId, agentId) => setPerformerAgentIdImpl(set, performerId, agentId),
 
-    setPerformerDanceDeliveryMode: (performerId, danceDeliveryMode) => set((s) => ({
-        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { danceDeliveryMode })),
-        stageDirty: true,
-    })),
+    setPerformerDanceDeliveryMode: (performerId, danceDeliveryMode) => setPerformerDanceDeliveryModeImpl(set, performerId, danceDeliveryMode),
 
-    addPerformerMcp: (performerId, mcp) => set((s) => ({
-        performers: s.performers.map(a =>
-            a.id === performerId && !a.mcpServerNames.includes(mcp.name)
-                ? (() => {
-                    return applyPerformerPatch(a, { mcpServerNames: [...a.mcpServerNames, mcp.name] })
-                })()
-                : a
-        ),
-        stageDirty: true,
-    })),
+    addPerformerMcp: (performerId, mcp) => addPerformerMcpImpl(set, performerId, mcp),
 
-    removePerformerMcp: (performerId, mcpName) => set((s) => ({
-        performers: s.performers.map(a =>
-            a.id === performerId
-                ? (() => {
-                    const mcpServerNames = a.mcpServerNames.filter(name => name !== mcpName)
-                    const mcpBindingMap = Object.fromEntries(
-                        Object.entries(a.mcpBindingMap || {}).filter(([, serverName]) => serverName !== mcpName),
-                    )
-                    return applyPerformerPatch(a, { mcpServerNames, mcpBindingMap })
-                })()
-                : a
-        ),
-        stageDirty: true,
-    })),
+    removePerformerMcp: (performerId, mcpName) => removePerformerMcpImpl(set, performerId, mcpName),
 
-    setPerformerMcpBinding: (performerId, placeholderName, serverName) => set((s) => ({
-        performers: s.performers.map((performer) => {
-            if (performer.id !== performerId) {
-                return performer
-            }
-            const mcpBindingMap = {
-                ...(performer.mcpBindingMap || {}),
-            }
-            if (serverName && serverName.trim()) {
-                mcpBindingMap[placeholderName] = serverName.trim()
-            } else {
-                delete mcpBindingMap[placeholderName]
-            }
-            return applyPerformerPatch(performer, { mcpBindingMap })
-        }),
-        stageDirty: true,
-    })),
+    setPerformerMcpBinding: (performerId, placeholderName, serverName) => setPerformerMcpBindingImpl(set, performerId, placeholderName, serverName),
 
-    updatePerformerAuthoringMeta: (performerId, patch) => set((s) => ({
-        performers: s.performers.map((a) => (
-            a.id === performerId
-                ? {
-                    ...a,
-                    meta: {
-                        ...a.meta,
-                        authoring: {
-                            ...(a.meta?.authoring || {}),
-                            ...patch,
-                        },
-                    },
-                }
-                : a
-        )),
-        stageDirty: true,
-    })),
+    updatePerformerAuthoringMeta: (performerId, patch) => updatePerformerAuthoringMetaImpl(set, performerId, patch),
 
-    togglePerformerVisibility: (id) => set((s) => ({
-        performers: s.performers.map(a =>
-            a.id === id ? { ...a, hidden: !a.hidden } : a
-        ),
-        stageDirty: true,
-    })),
+    togglePerformerVisibility: (id) => togglePerformerVisibilityImpl(set, id),
 
-    setPerformerAutoCompact: (id, enabled) => set((s) => ({
-        performers: s.performers.map(a =>
-            a.id === id ? { ...a, autoCompact: enabled } : a
-        ),
-        stageDirty: true,
-    })),
+    setPerformerAutoCompact: (id, enabled) => setPerformerAutoCompactImpl(set, id, enabled),
 
     toggleActVisibility: (id) => set((s) => ({
         acts: s.acts.map((act) => (

@@ -8,50 +8,7 @@
     box-shadow: 0 12px 28px color-mix(in srgb, black 12%, transparent);
 }
 
-.canvas-tracking-frame__header {
-    justify-content: space-between;
-}
 
-.canvas-tracking-frame__header-left {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.canvas-tracking-frame__title {
-    font-size: var(--font-md);
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.canvas-tracking-frame__status {
-    font-size: var(--font-sm);
-    color: var(--text-secondary);
-}
-
-.canvas-tracking-frame__close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: var(--radius-lg);
-}
-
-.canvas-tracking-frame__close:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-}
-
-.canvas-tracking-frame__body {
-    flex: 1;
-    min-height: 0;
-    padding: 10px 12px 12px;
-}
 
 .canvas-tracking-frame__empty {
     display: flex;

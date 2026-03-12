@@ -4,14 +4,11 @@ import { AlertCircle, CheckCircle, ExternalLink, RefreshCw, X } from 'lucide-rea
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import './SettingsModal.css'
+import { useProviderAuth } from './useProviderAuth'
 import type {
     ProviderCard,
     SettingsTab,
     ProviderListFilter,
-    ProviderAuthMethod,
-    OauthFlow,
-    ConnectedModel,
-    ModelPickerState,
     OpenCodeInfo,
     ProjectSettingsDraft,
     ProjectConfigMeta,
@@ -43,27 +40,6 @@ function buildProviderFilterOptions(providers: ProviderCard[]) {
     ]
 }
 
-function sortConnectedModels(models: ConnectedModel[], providerId: string) {
-    return models
-        .filter((model) => model.provider === providerId && model.connected)
-        .sort((left, right) => {
-            const leftName = left.name || left.id
-            const rightName = right.name || right.id
-            if (left.toolCall !== right.toolCall) {
-                return left.toolCall ? -1 : 1
-            }
-            return leftName.localeCompare(rightName)
-        })
-}
-
-function filterModelPickerModels(modelPicker: ModelPickerState) {
-    const query = modelPicker.query.trim().toLowerCase()
-    return modelPicker.models.filter((model) => {
-        if (!query) return true
-        return `${model.name} ${model.id}`.toLowerCase().includes(query)
-    })
-}
-
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     const queryClient = useQueryClient()
     const workingDir = useStudioStore((state) => state.workingDir)
@@ -77,18 +53,52 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const [refreshTick, setRefreshTick] = useState(0)
     const [activeTab, setActiveTab] = useState<SettingsTab>('runtime')
     const [providerFilter, setProviderFilter] = useState<ProviderListFilter>('popular')
-    const [oauthFlows, setOauthFlows] = useState<Record<string, OauthFlow>>({})
     const [projectDraft, setProjectDraft] = useState<ProjectSettingsDraft | null>(null)
     const [projectSnapshot, setProjectSnapshot] = useState<ProjectSettingsDraft | null>(null)
     const [projectMeta, setProjectMeta] = useState<ProjectConfigMeta | null>(null)
     const [savingProject, setSavingProject] = useState(false)
     const [projectMessage, setProjectMessage] = useState<string | null>(null)
-    const [modelPicker, setModelPicker] = useState<ModelPickerState | null>(null)
     const projectDirtyRef = useRef(false)
     const selectedPerformer = useMemo(
         () => performers.find((performer) => performer.id === selectedPerformerId) || null,
         [performers, selectedPerformerId],
     )
+
+    function refreshSettings() {
+        setRefreshTick((value) => value + 1)
+    }
+
+    async function refreshProviderState() {
+        queryClient.invalidateQueries({ queryKey: ['models'] })
+        refreshSettings()
+    }
+
+    const auth = useProviderAuth({
+        providers,
+        selectedPerformer: selectedPerformer ? { id: selectedPerformer.id, name: selectedPerformer.name } : null,
+        setPerformerModel,
+        refreshProviderState,
+        setError,
+        setProjectMessage,
+        setActiveTab: (tab) => setActiveTab(tab as SettingsTab),
+    })
+    const {
+        oauthFlows,
+        modelPicker,
+        setModelPicker,
+        visibleModelPickerModels,
+        openApiKeyFlow,
+        handleAuthMethod,
+        handleOauthCallback,
+        handleApiAuthSave,
+        dismissOauthFlow,
+        disconnectProvider,
+        openModelPicker,
+        applyPickedModel,
+        retryBrowserOauth,
+        syncFlowsWithProviders,
+        setOauthFlows,
+    } = auth
 
     const projectDirty = useMemo(
         () => !isProjectDraftEqual(projectDraft, projectSnapshot),
@@ -102,11 +112,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const providerFilterOptions = useMemo(
         () => buildProviderFilterOptions(providers),
         [providers],
-    )
-
-    const visibleModelPickerModels = useMemo(
-        () => modelPicker ? filterModelPickerModels(modelPicker) : [],
-        [modelPicker],
     )
 
     useEffect(() => {
@@ -161,17 +166,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                     setProjectSnapshot(nextDraft)
                 }
 
-                setOauthFlows((current) => {
-                    let changed = false
-                    const next = { ...current }
-                    for (const provider of mergedProviders) {
-                        if (provider.connected && next[provider.id]) {
-                            delete next[provider.id]
-                            changed = true
-                        }
-                    }
-                    return changed ? next : current
-                })
+                syncFlowsWithProviders(mergedProviders)
             } catch (err) {
                 if (!cancelled) {
                     setError(err instanceof Error ? err.message : String(err))
@@ -190,233 +185,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         }
     }, [open, refreshTick, workingDir])
 
-    function refreshSettings() {
-        setRefreshTick((value) => value + 1)
-    }
-
     if (!open) return null
-
-    function clearProviderFlow(providerId: string) {
-        setOauthFlows((current) => {
-            const next = { ...current }
-            delete next[providerId]
-            return next
-        })
-    }
-
-    function updateProviderFlow(providerId: string, updater: (flow: OauthFlow) => OauthFlow) {
-        setOauthFlows((current) => {
-            const flow = current[providerId]
-            if (!flow) {
-                return current
-            }
-            return {
-                ...current,
-                [providerId]: updater(flow),
-            }
-        })
-    }
-
-    async function refreshProviderState() {
-        queryClient.invalidateQueries({ queryKey: ['models'] })
-        refreshSettings()
-    }
-
-    async function openModelPicker(providerId: string, providerName: string) {
-        const performer = selectedPerformer
-        const models = await api.models.list()
-        const connectedModels = sortConnectedModels(models, providerId)
-
-        setModelPicker({
-            providerId,
-            providerName,
-            performerId: performer?.id || null,
-            performerName: performer?.name || null,
-            models: connectedModels,
-            query: '',
-        })
-    }
-
-    async function handleAuthSuccess(providerId: string, providerName: string) {
-        clearProviderFlow(providerId)
-        await refreshProviderState()
-        if (selectedPerformer) {
-            await openModelPicker(providerId, providerName)
-        } else {
-            setProjectMessage(`${providerName} connected. Select a performer to assign a model.`)
-        }
-    }
-
-    async function waitForBrowserOauth(providerId: string, methodIndex: number) {
-        try {
-            await api.provider.oauthCallback(providerId, methodIndex)
-            const provider = providers.find((entry) => entry.id === providerId)
-            await handleAuthSuccess(providerId, provider?.name || providerId)
-        } catch (err) {
-            const message = err instanceof Error ? err.message : String(err)
-            updateProviderFlow(providerId, (flow) => ({
-                ...flow,
-                submitting: false,
-                error: message,
-            }))
-        }
-    }
-
-    async function handleAuthMethod(provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) {
-        setError(null)
-        setProjectMessage(null)
-        setActiveTab('providers')
-
-        if (method.type === 'api') {
-            openApiKeyFlow(provider, methodIndex, method.label)
-            return
-        }
-
-        try {
-            const authorization = await api.provider.oauthAuthorize(provider.id, methodIndex)
-            if (authorization.url) {
-                window.open(authorization.url, '_blank', 'noopener,noreferrer')
-            }
-            setOauthFlows((current) => ({
-                ...current,
-                [provider.id]: {
-                    methodIndex,
-                    label: method.label,
-                    mode: authorization.method,
-                    url: authorization.url,
-                    instructions: authorization.instructions || '',
-                    code: '',
-                    submitting: authorization.method === 'auto',
-                },
-            }))
-
-            if (authorization.method === 'auto') {
-                void waitForBrowserOauth(provider.id, methodIndex)
-            } else {
-                refreshSettings()
-            }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err))
-        }
-    }
-
-    function openApiKeyFlow(provider: ProviderCard, methodIndex = 0, label = 'API Key') {
-        setModelPicker(null)
-        setOauthFlows((current) => ({
-            ...current,
-            [provider.id]: {
-                methodIndex,
-                label,
-                mode: 'api',
-                instructions: provider.env.length > 0
-                    ? `Paste the credential for ${provider.name}. OpenCode will store it in its auth store for ${provider.env.join(', ')}.`
-                    : `Paste the credential for ${provider.name}. OpenCode will store it in its auth store.`,
-                code: '',
-                submitting: false,
-            },
-        }))
-    }
-
-    async function handleOauthCallback(providerId: string) {
-        const flow = oauthFlows[providerId]
-        if (!flow || flow.mode !== 'code' || !flow.code.trim()) {
-            return
-        }
-
-        updateProviderFlow(providerId, (currentFlow) => ({
-            ...currentFlow,
-            submitting: true,
-            error: undefined,
-        }))
-
-        try {
-            await api.provider.oauthCallback(providerId, flow.methodIndex, flow.code.trim())
-            const provider = providers.find((entry) => entry.id === providerId)
-            await handleAuthSuccess(providerId, provider?.name || providerId)
-        } catch (err) {
-            const message = err instanceof Error ? err.message : String(err)
-            updateProviderFlow(providerId, (currentFlow) => ({
-                ...currentFlow,
-                submitting: false,
-                error: message,
-            }))
-        }
-    }
-
-    async function handleApiAuthSave(providerId: string) {
-        const flow = oauthFlows[providerId]
-        if (!flow || flow.mode !== 'api' || !flow.code.trim()) {
-            return
-        }
-
-        updateProviderFlow(providerId, (currentFlow) => ({
-            ...currentFlow,
-            submitting: true,
-            error: undefined,
-        }))
-
-        try {
-            await api.provider.setAuth(providerId, {
-                type: 'api',
-                key: flow.code.trim(),
-            })
-            const provider = providers.find((entry) => entry.id === providerId)
-            await handleAuthSuccess(providerId, provider?.name || providerId)
-        } catch (err) {
-            const message = err instanceof Error ? err.message : String(err)
-            updateProviderFlow(providerId, (currentFlow) => ({
-                ...currentFlow,
-                submitting: false,
-                error: message,
-            }))
-        }
-    }
-
-    function dismissOauthFlow(providerId: string) {
-        clearProviderFlow(providerId)
-    }
-
-    async function disconnectProvider(providerId: string, providerName: string) {
-        setError(null)
-        setProjectMessage(null)
-        try {
-            await api.provider.clearAuth(providerId)
-            clearProviderFlow(providerId)
-            setModelPicker((current) => current?.providerId === providerId ? null : current)
-            await refreshProviderState()
-            setProjectMessage(`${providerName} credentials cleared from OpenCode auth store.`)
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err))
-        }
-    }
-
-    function applyPickedModel(model: ConnectedModel) {
-        if (!modelPicker?.performerId) {
-            return
-        }
-        setPerformerModel(modelPicker.performerId, {
-            provider: model.provider,
-            modelId: model.id,
-        })
-        setProjectMessage(`${model.name || model.id} applied to ${modelPicker.performerName || 'the selected performer'}.`)
-        setModelPicker(null)
-    }
-
-    async function retryBrowserOauth(providerId: string) {
-        const flow = oauthFlows[providerId]
-        if (!flow || flow.mode !== 'auto') {
-            return
-        }
-
-        setError(null)
-        updateProviderFlow(providerId, (currentFlow) => ({
-            ...currentFlow,
-            submitting: true,
-            error: undefined,
-        }))
-
-        void waitForBrowserOauth(providerId, flow.methodIndex)
-    }
 
     function toggleProviderVisibility(providerId: string) {
         setProjectDraft((current) => {
@@ -761,10 +530,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                             </button>
                                                         ))}
                                                     {visibleModelPickerModels.length === 0 && (
-                                                            <div className="settings-note settings-note--muted">
-                                                                No connected models matched this search.
-                                                            </div>
-                                                        )}
+                                                        <div className="settings-note settings-note--muted">
+                                                            No connected models matched this search.
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}

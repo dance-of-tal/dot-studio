@@ -8,162 +8,24 @@ import { LeftSidebar, CanvasArea, ToastViewport, TerminalPanel } from './feature
 import { api, setApiWorkingDirContext } from './api';
 import { showToast } from './lib/toast';
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers';
-import type { ActNodeType, ActSessionLifetime, ActSessionPolicy, AssetCard, AssetRef, StageActNode } from './types';
+import type { ActNodeType, ActSessionLifetime, ActSessionPolicy } from './types';
 import type { StudioState } from './store';
 import { projectMcpServerNames } from '../shared/project-mcp';
 import { extractMcpServerNamesFromConfig } from '../shared/mcp-config';
-
-type DragPreview = {
-  kind: string;
-  label: string;
-};
-
-type DragAsset = Omit<Partial<AssetCard>, 'kind'> & {
-  kind?: AssetCard['kind'] | 'act-semantic';
-  label?: string;
-  source?: string;
-  slug?: string;
-  modelId?: string;
-  semanticType?: string;
-  value?: unknown;
-  mcpConfig?: Record<string, unknown> | null;
-  mcpBindingMap?: Record<string, string>;
-};
-
-type DropTargetData = {
-  type?: string;
-  performerId?: string | null;
-  editorId?: string;
-  actId?: string;
-  nodeId?: string;
-};
-
-type PerformerAssetPayload = Parameters<StudioState['addPerformerFromAsset']>[0];
-type ActOwnedPerformerSeed = Parameters<StudioState['createActOwnedPerformerForNode']>[2];
-
-function toDragPreview(asset: DragAsset): DragPreview {
-  return {
-    kind: asset?.kind || 'asset',
-    label: asset?.label || asset?.name || asset?.modelId || 'Asset',
-  };
-}
-
-function assetRefFromDragAsset(asset: DragAsset): AssetRef | null {
-  if (asset?.source === 'draft' && typeof asset.draftId === 'string') {
-    return { kind: 'draft' as const, draftId: asset.draftId };
-  }
-  if (typeof asset?.urn === 'string' && asset.urn.length > 0) {
-    return { kind: 'registry' as const, urn: asset.urn };
-  }
-  return null;
-}
-
-function isInstalledAsset(asset: DragAsset) {
-  return asset.source === 'stage' || asset.source === 'global';
-}
-
-function getAssetAuthor(asset: DragAsset) {
-  return String(asset.author || '').replace(/^@/, '');
-}
-
-function getAssetSlug(asset: DragAsset) {
-  return asset.slug || asset.name || '';
-}
-
-function findActNode(store: StudioState, actId: string, nodeId: string) {
-  const act = store.acts.find((item) => item.id === actId);
-  const node = act?.nodes.find((item: StageActNode) => item.id === nodeId) || null;
-  return { act, node };
-}
-
-function ensureActNodePerformer(
-  store: StudioState,
-  actId: string,
-  nodeId: string,
-  seededAsset?: ActOwnedPerformerSeed,
-) {
-  const { act, node } = findActNode(store, actId, nodeId);
-  if (!act || !node || node.type === 'parallel') {
-    return null;
-  }
-  if (node.performerId) {
-    return node.performerId;
-  }
-  return store.createActOwnedPerformerForNode(actId, nodeId, seededAsset || null);
-}
-
-function applyTalToPerformer(store: StudioState, performerId: string, asset: DragAsset) {
-  const ref = assetRefFromDragAsset(asset);
-  if (ref) {
-    store.setPerformerTalRef(performerId, ref);
-    return;
-  }
-  store.setPerformerTal(performerId, asset as AssetCard);
-}
-
-function applyDanceToPerformer(store: StudioState, performerId: string, asset: DragAsset) {
-  const ref = assetRefFromDragAsset(asset);
-  if (ref) {
-    store.addPerformerDanceRef(performerId, ref);
-    return;
-  }
-  store.addPerformerDance(performerId, asset as AssetCard);
-}
-
-function applyModelToPerformer(
-  store: StudioState,
-  performerId: string,
-  asset: DragAsset,
-  showDropWarning: (message: string) => void,
-) {
-  store.setPerformerModel(performerId, {
-    provider: asset.provider as string,
-    modelId: asset.modelId as string,
-  });
-  if (asset.connected === false) {
-    showDropWarning(`${asset.providerName || asset.provider} is not connected in Settings yet. The performer can keep this model selection, but it will not run until provider access is configured.`);
-  }
-}
-
-function applyMcpToPerformer(store: StudioState, performerId: string, asset: DragAsset) {
-  store.addPerformerMcp(performerId, asset as Parameters<StudioState['addPerformerMcp']>[1]);
-}
-
-async function applyAssetToPerformerTarget(
-  store: StudioState,
-  performerId: string,
-  dropType: string | undefined,
-  asset: DragAsset,
-  showDropWarning: (message: string) => void,
-  resolvePerformerAssetForStudio: (asset: DragAsset) => Promise<PerformerAssetPayload>,
-) {
-  if (asset.kind === 'performer') {
-    store.applyPerformerAsset(performerId, await resolvePerformerAssetForStudio(asset));
-    return true;
-  }
-
-  if (dropType === 'tal' && asset.kind === 'tal') {
-    applyTalToPerformer(store, performerId, asset);
-    return true;
-  }
-
-  if (dropType === 'dance' && asset.kind === 'dance') {
-    applyDanceToPerformer(store, performerId, asset);
-    return true;
-  }
-
-  if (dropType === 'model' && asset.kind === 'model') {
-    applyModelToPerformer(store, performerId, asset, showDropWarning);
-    return true;
-  }
-
-  if (dropType === 'mcp' && asset.kind === 'mcp') {
-    applyMcpToPerformer(store, performerId, asset);
-    return true;
-  }
-
-  return false;
-}
+import {
+  toDragPreview,
+  isInstalledAsset,
+  getAssetAuthor,
+  getAssetSlug,
+  findActNode,
+  ensureActNodePerformer,
+  applyTalToPerformer,
+  applyDanceToPerformer,
+  applyModelToPerformer,
+  applyMcpToPerformer,
+  applyAssetToPerformerTarget,
+} from './lib/dnd-handlers';
+import type { DragAsset, DropTargetData, PerformerAssetPayload } from './lib/dnd-handlers';
 
 export default function App() {
   const theme = useStudioStore(s => s.theme);
