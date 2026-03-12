@@ -33,7 +33,7 @@
 
 .figma-modal__header h3 {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--font-lg);
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -50,7 +50,7 @@
 
 .lsp-section h4 {
     margin: 0 0 10px 0;
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
@@ -83,15 +83,15 @@
 }
 
 .server-name {
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 500;
     color: var(--text-primary);
 }
 
 .server-status.badge {
-    font-size: 10px;
+    font-size: var(--font-sm);
     padding: 2px 6px;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     background: rgba(20, 174, 92, 0.1);
     color: #14AE5C;
     border: 1px solid rgba(20, 174, 92, 0.2);
@@ -105,7 +105,7 @@
 }
 
 .diagnostic-item {
-    font-size: 12px;
+    font-size: var(--font-md);
     padding: 10px;
     border-radius: var(--radius);
     background: var(--bg-panel);
@@ -138,14 +138,14 @@
 
 .diagnostic-line {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: var(--font-base);
 }
 
 .diagnostic-message {
     color: var(--text-secondary);
     line-height: 1.4;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: var(--font-base);
     white-space: pre-wrap;
     word-break: break-all;
 }
@@ -153,7 +153,7 @@
 .diagnostic-source {
     display: inline-block;
     margin-top: 6px;
-    font-size: 10px;
+    font-size: var(--font-sm);
     padding: 2px 6px;
     background: var(--bg-hover);
     border-radius: var(--radius-sm);

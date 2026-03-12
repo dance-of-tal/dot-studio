@@ -5,7 +5,7 @@
     flex-direction: column;
     background: #000000;
     border: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
     min-width: 400px;
@@ -37,7 +37,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 600;
     color: #a0a0b8;
     flex: 1;
@@ -56,10 +56,10 @@
 }
 
 .canvas-terminal-frame__status {
-    font-size: 9px;
+    font-size: var(--font-xs);
     font-weight: 500;
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: rgba(74, 222, 128, 0.15);
     color: #4ade80;
     flex-shrink: 0;
@@ -76,7 +76,7 @@
     color: #4a4a6a;
     cursor: pointer;
     padding: 4px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     flex-shrink: 0;
@@ -145,6 +145,6 @@
     justify-content: center;
     background: rgba(0, 0, 0, 0.9);
     color: #6a6a8a;
-    font-size: 12px;
+    font-size: var(--font-md);
     gap: 6px;
 }

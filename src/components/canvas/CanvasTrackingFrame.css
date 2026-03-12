@@ -19,13 +19,13 @@
 }
 
 .canvas-tracking-frame__title {
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 600;
     color: var(--text-primary);
 }
 
 .canvas-tracking-frame__status {
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
 }
 
@@ -39,7 +39,7 @@
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
 }
 
 .canvas-tracking-frame__close:hover {
@@ -59,7 +59,7 @@
     justify-content: center;
     min-height: 120px;
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 .canvas-tracking-frame__list {
@@ -76,7 +76,7 @@
     align-items: flex-start;
     gap: 10px;
     padding: 8px 10px;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     border: 1px solid color-mix(in srgb, var(--border-light) 85%, transparent);
     background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
 }
@@ -108,7 +108,7 @@
 }
 
 .canvas-tracking-frame__path {
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--text-primary);
     overflow: hidden;
@@ -117,7 +117,7 @@
 }
 
 .canvas-tracking-frame__dir {
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -129,7 +129,7 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 600;
 }
 

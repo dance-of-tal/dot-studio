@@ -13,7 +13,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 500;
     color: var(--text-secondary);
 }
@@ -72,8 +72,8 @@
     color: var(--text-main);
     text-align: left;
     padding: 8px 10px;
-    border-radius: 8px;
-    font-size: 11px;
+    border-radius: var(--radius-lg);
+    font-size: var(--font-base);
     cursor: pointer;
 }
 

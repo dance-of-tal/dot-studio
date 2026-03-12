@@ -32,7 +32,7 @@
 
 .publish-modal__header p {
     margin: 4px 0 0;
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-secondary);
 }
 
@@ -54,7 +54,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-secondary);
 }
 
@@ -69,7 +69,7 @@
 }
 
 .publish-modal__preflight strong {
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-main);
 }
 
@@ -78,7 +78,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-secondary);
 }
 
@@ -93,8 +93,8 @@
 
 .publish-modal__status {
     padding: 10px 12px;
-    border-radius: 10px;
-    font-size: 11px;
+    border-radius: var(--radius-lg);
+    font-size: var(--font-base);
     background: color-mix(in srgb, var(--bg-card) 94%, white 6%);
 }
 
@@ -119,13 +119,13 @@
 
 .publish-modal__auth-callout strong {
     display: block;
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-main);
 }
 
 .publish-modal__auth-callout p {
     margin: 4px 0 0;
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-secondary);
 }
 
@@ -147,7 +147,7 @@
     color: var(--text-main);
     border-radius: 999px;
     padding: 8px 12px;
-    font-size: 11px;
+    font-size: var(--font-base);
     cursor: pointer;
 }
 
@@ -169,7 +169,7 @@
 .publish-modal__empty {
     padding: 24px 18px;
     color: var(--text-secondary);
-    font-size: 12px;
+    font-size: var(--font-md);
 }
 
 /* ── Asset Picker ──────────────────────────────────── */
@@ -181,7 +181,7 @@
 }
 
 .publish-modal__picker-section-title {
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -196,10 +196,10 @@
     width: 100%;
     padding: 8px 10px;
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     background: transparent;
     color: var(--text-main);
-    font-size: 12px;
+    font-size: var(--font-md);
     cursor: pointer;
     text-align: left;
     transition: background 0.12s, border-color 0.12s;
@@ -225,14 +225,14 @@
 
 .publish-modal__picker-item-badge {
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     opacity: 0.7;
 }
 
 .publish-modal__picker-item-issue {
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--tal-color);
 }
 

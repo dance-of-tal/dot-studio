@@ -60,7 +60,7 @@
 }
 
 .figma-explorer__title {
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
@@ -79,7 +79,7 @@
 }
 
 .figma-explorer__context-label {
-    font-size: 9px;
+    font-size: var(--font-xs);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -87,12 +87,12 @@
 }
 
 .figma-explorer__context strong {
-    font-size: 12px;
+    font-size: var(--font-md);
     color: var(--text-primary);
 }
 
 .figma-explorer__context-path {
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -116,7 +116,7 @@
     background: transparent;
     text-align: left;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: var(--radius);
     transition: background 0.1s ease;
 }
 
@@ -149,7 +149,7 @@
 }
 
 .figma-layer-row__label {
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -157,7 +157,7 @@
 }
 
 .figma-layer-row__meta {
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -226,7 +226,7 @@
     padding: 5px 8px 5px 4px;
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius);
     cursor: pointer;
     transition: background 0.1s ease;
 }
@@ -258,7 +258,7 @@
     transition: transform 0.15s ease;
     cursor: pointer;
     flex-shrink: 0;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
 }
 
 .figma-thread-card__chevron:hover {
@@ -298,7 +298,7 @@
 }
 
 .figma-thread-card__name {
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -346,7 +346,7 @@
 }
 
 .figma-thread-card__delete-label {
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 600;
     color: var(--tal-color);
     padding-right: 2px;
@@ -364,25 +364,25 @@
 
 .figma-thread-children .figma-layer-row {
     padding: 4px 8px;
-    border-radius: 5px;
+    border-radius: var(--radius);
 }
 
 .figma-thread-children .figma-layer-row__label {
-    font-size: 11px;
+    font-size: var(--font-base);
 }
 
 .figma-thread-children .figma-layer-row__meta {
-    font-size: 9px;
+    font-size: var(--font-xs);
 }
 
 .figma-thread-inline-input {
     width: 100%;
     min-width: 0;
     border: 1px solid var(--border-main);
-    border-radius: 6px;
+    border-radius: var(--radius);
     background: var(--bg-panel);
     color: var(--text-primary);
-    font-size: 11px;
+    font-size: var(--font-base);
     padding: 4px 6px;
 }
 
@@ -398,7 +398,7 @@
 
 .figma-badge {
     margin-left: auto;
-    font-size: 9px;
+    font-size: var(--font-xs);
     padding: 2px 5px;
     background: var(--border-light);
     border-radius: 999px;
@@ -406,7 +406,7 @@
 }
 
 .figma-empty {
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-muted);
     padding: 20px 16px;
     text-align: center;
@@ -416,7 +416,7 @@
 .figma-empty--tight {
     padding: 6px 12px;
     text-align: left;
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     opacity: 0.7;
 }
@@ -426,8 +426,8 @@
     padding: 6px 8px;
     border: 1px solid var(--border-light);
     background: transparent;
-    border-radius: 8px;
-    font-size: 10px;
+    border-radius: var(--radius-lg);
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     cursor: pointer;
     text-align: left;

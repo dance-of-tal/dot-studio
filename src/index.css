@@ -31,6 +31,21 @@
     --radius: 6px;
     --radius-lg: 8px;
 
+    /* Typography Scale */
+    --font-xs: 9px;
+    --font-sm: 10px;
+    --font-base: 11px;
+    --font-md: 12px;
+    --font-lg: 13px;
+
+    /* Spacing Scale (4px grid) */
+    --space-1: 4px;
+    --space-2: 6px;
+    --space-3: 8px;
+    --space-4: 10px;
+    --space-5: 12px;
+    --space-6: 16px;
+
     --tal-color: #F24822;
     --tal-bg: rgba(242, 72, 34, 0.1);
     --dance-color: #FFA629;
@@ -123,7 +138,7 @@ html {
 
 ::-webkit-scrollbar-thumb {
     background: var(--border-strong);
-    border-radius: 6px;
+    border-radius: var(--radius);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -188,7 +203,7 @@ html {
 }
 
 .canvas-drop-overlay__title {
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -197,7 +212,7 @@ html {
 }
 
 .canvas-drop-overlay__body {
-    font-size: 13px;
+    font-size: var(--font-lg);
     color: var(--text-primary);
     line-height: 1.5;
 }
@@ -267,7 +282,7 @@ html {
     backdrop-filter: blur(10px);
     color: var(--text-primary);
     box-shadow: var(--shadow-window);
-    font-size: 11px;
+    font-size: var(--font-base);
 }
 
 .figma-compose-banner strong {
@@ -344,7 +359,7 @@ html {
 
 .text-btn {
     padding: 4px 8px;
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 500;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -366,7 +381,7 @@ html {
     border-radius: var(--radius-sm);
     padding: 4px 6px;
     color: var(--text-primary);
-    font-size: 11px;
+    font-size: var(--font-base);
     outline: none;
     transition: border-color 0.1s, background 0.1s;
 }
@@ -390,7 +405,7 @@ html {
     border: 1px solid var(--accent);
     border-radius: var(--radius);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
@@ -414,7 +429,7 @@ html {
     align-items: center;
     gap: 8px;
     min-width: 0;
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 500;
 }
 
@@ -440,22 +455,22 @@ html {
 }
 
 .asset-popover__urn {
-    font-size: 9px;
+    font-size: var(--font-xs);
     color: var(--text-muted);
     font-family: var(--font-mono, monospace);
     background: var(--bg-hover);
     padding: 2px 6px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     margin-bottom: 6px;
     word-break: break-all;
 }
 
 .asset-popover__content {
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-secondary);
     background: var(--bg-primary);
     border: 1px solid var(--border-light);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: 8px 10px;
     margin: 4px 0 0;
     max-height: 260px;
@@ -466,7 +481,7 @@ html {
 .asset-popover__content h1,
 .asset-popover__content h2,
 .asset-popover__content h3 {
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 700;
     color: var(--text-primary);
     margin: 8px 0 4px;
@@ -494,15 +509,15 @@ html {
 
 .asset-popover__content code {
     font-family: var(--font-mono, monospace);
-    font-size: 10px;
+    font-size: var(--font-sm);
     background: var(--bg-hover);
     padding: 1px 4px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
 }
 
 .asset-popover__content pre {
     background: var(--bg-secondary);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: 6px 8px;
     overflow-x: auto;
     margin: 4px 0;
@@ -511,7 +526,7 @@ html {
 .asset-popover__content pre code {
     background: none;
     padding: 0;
-    font-size: 10px;
+    font-size: var(--font-sm);
 }
 
 @keyframes popover-in {
@@ -527,20 +542,20 @@ html {
 }
 
 .asset-popover__title {
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 4px;
 }
 
 .asset-popover__meta {
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-muted);
     margin-bottom: 8px;
 }
 
 .asset-popover__desc {
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.4;
     margin-bottom: 8px;
@@ -553,9 +568,9 @@ html {
 }
 
 .asset-popover__tag {
-    font-size: 9px;
+    font-size: var(--font-xs);
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: var(--border-light);
     color: var(--text-muted);
 }
@@ -567,7 +582,7 @@ html {
 }
 
 .asset-popover__section-title {
-    font-size: 9px;
+    font-size: var(--font-xs);
     font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -576,7 +591,7 @@ html {
 }
 
 .asset-popover__section-item {
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
     padding: 2px 0;
 }
@@ -593,11 +608,11 @@ html {
 .scope-btn {
     flex: 1;
     padding: 4px 0;
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 600;
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.15s;
@@ -632,9 +647,9 @@ html {
 
 .sub-scope-tag {
     padding: 2px 8px;
-    font-size: 9px;
+    font-size: var(--font-xs);
     font-weight: 600;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     border: 1px solid var(--border-light);
     background: transparent;
     color: var(--text-muted);
@@ -657,9 +672,9 @@ html {
 
 /* ── Source Badge on Asset Cards ──────────────────── */
 .source-badge {
-    font-size: 8px;
+    font-size: var(--font-xs);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.3px;

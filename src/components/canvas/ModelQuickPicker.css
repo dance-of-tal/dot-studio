@@ -18,14 +18,14 @@
 
 .model-quick-picker__header strong {
     display: block;
-    font-size: 12px;
+    font-size: var(--font-md);
     color: var(--text-primary);
 }
 
 .model-quick-picker__header span {
     display: block;
     margin-top: 3px;
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
 }
 
@@ -54,7 +54,7 @@
     border: 1px solid var(--border-main);
     background: transparent;
     color: var(--text-secondary);
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 600;
     cursor: pointer;
 }
@@ -99,7 +99,7 @@
     justify-content: center;
     width: 24px;
     height: 24px;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--bg-hover);
     color: var(--text-secondary);
     flex-shrink: 0;
@@ -113,12 +113,12 @@
 }
 
 .model-quick-picker__item-copy strong {
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-primary);
 }
 
 .model-quick-picker__item-copy span,
 .model-quick-picker__empty {
-    font-size: 10px;
+    font-size: var(--font-sm);
     color: var(--text-secondary);
 }

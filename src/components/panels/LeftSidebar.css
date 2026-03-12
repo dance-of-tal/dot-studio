@@ -107,7 +107,7 @@
 }
 
 .drawer-header__title {
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 700;
     color: var(--text-secondary);
     text-transform: uppercase;
@@ -124,10 +124,10 @@
     padding: 7px 10px;
     background: var(--bg-elevated, rgba(13, 153, 255, 0.04));
     border: 1px solid var(--border-main);
-    border-radius: 6px;
+    border-radius: var(--radius);
     cursor: pointer;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 600;
     letter-spacing: 0.3px;
     transition: all 0.15s ease;
@@ -169,7 +169,7 @@
 .figma-tab {
     flex: 1;
     padding: 10px 0;
-    font-size: 11px;
+    font-size: var(--font-base);
     font-weight: 500;
     color: var(--text-muted);
     background: transparent;

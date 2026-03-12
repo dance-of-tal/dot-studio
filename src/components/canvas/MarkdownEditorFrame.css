@@ -16,7 +16,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 12px;
+    font-size: var(--font-md);
     font-weight: 600;
 }
 
@@ -25,7 +25,7 @@
     border-radius: 999px;
     background: rgba(242, 72, 34, 0.12);
     color: var(--tal-color);
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 600;
 }
 
@@ -56,7 +56,7 @@
 }
 
 .markdown-editor-frame__field-label {
-    font-size: 9px;
+    font-size: var(--font-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -86,7 +86,7 @@
 .markdown-editor-frame__pane-label {
     display: block;
     padding: 6px 14px 4px;
-    font-size: 9px;
+    font-size: var(--font-xs);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -118,14 +118,14 @@
 
 .markdown-editor-frame__preview-empty {
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--font-md);
     font-style: italic;
 }
 
 .markdown-editor-frame__status {
     padding: 8px 12px;
     border-top: 1px solid var(--border-main);
-    font-size: 11px;
+    font-size: var(--font-base);
     color: var(--text-secondary);
 }
 
@@ -166,10 +166,10 @@
     align-items: center;
     gap: 2px;
     padding: 1px 6px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     background: var(--bg-hover);
     color: var(--text-secondary);
-    font-size: 10px;
+    font-size: var(--font-sm);
     font-weight: 500;
     line-height: 1.4;
     white-space: nowrap;
@@ -187,7 +187,7 @@
     border-radius: 2px;
     background: transparent;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: var(--font-md);
     line-height: 1;
     cursor: pointer;
     transition: color 0.1s, background 0.1s;
@@ -204,7 +204,7 @@
     border: none;
     background: transparent;
     color: var(--text-primary);
-    font-size: 11px;
+    font-size: var(--font-base);
     outline: none;
     padding: 2px 0;
 }
