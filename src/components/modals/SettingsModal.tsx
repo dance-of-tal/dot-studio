@@ -25,6 +25,45 @@ import {
     isProjectDraftEqual,
 } from './settings-utils'
 
+function filterProvidersByListFilter(providers: ProviderCard[], providerFilter: ProviderListFilter) {
+    if (providerFilter === 'all') {
+        return providers
+    }
+    if (providerFilter === 'connected') {
+        return providers.filter((provider) => provider.connected)
+    }
+    return providers.filter((provider) => provider.connected || isPopularProvider(provider.id))
+}
+
+function buildProviderFilterOptions(providers: ProviderCard[]) {
+    return [
+        { key: 'popular' as const, label: 'Popular', count: providers.filter((provider) => provider.connected || isPopularProvider(provider.id)).length },
+        { key: 'connected' as const, label: 'Connected', count: providers.filter((provider) => provider.connected).length },
+        { key: 'all' as const, label: 'All', count: providers.length },
+    ]
+}
+
+function sortConnectedModels(models: ConnectedModel[], providerId: string) {
+    return models
+        .filter((model) => model.provider === providerId && model.connected)
+        .sort((left, right) => {
+            const leftName = left.name || left.id
+            const rightName = right.name || right.id
+            if (left.toolCall !== right.toolCall) {
+                return left.toolCall ? -1 : 1
+            }
+            return leftName.localeCompare(rightName)
+        })
+}
+
+function filterModelPickerModels(modelPicker: ModelPickerState) {
+    const query = modelPicker.query.trim().toLowerCase()
+    return modelPicker.models.filter((model) => {
+        if (!query) return true
+        return `${model.name} ${model.id}`.toLowerCase().includes(query)
+    })
+}
+
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     const queryClient = useQueryClient()
     const workingDir = useStudioStore((state) => state.workingDir)
@@ -57,14 +96,18 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     )
 
     const filteredProviders = useMemo(() => {
-        if (providerFilter === 'all') {
-            return providers
-        }
-        if (providerFilter === 'connected') {
-            return providers.filter((provider) => provider.connected)
-        }
-        return providers.filter((provider) => provider.connected || isPopularProvider(provider.id))
+        return filterProvidersByListFilter(providers, providerFilter)
     }, [providerFilter, providers])
+
+    const providerFilterOptions = useMemo(
+        () => buildProviderFilterOptions(providers),
+        [providers],
+    )
+
+    const visibleModelPickerModels = useMemo(
+        () => modelPicker ? filterModelPickerModels(modelPicker) : [],
+        [modelPicker],
+    )
 
     useEffect(() => {
         projectDirtyRef.current = projectDirty
@@ -161,6 +204,19 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         })
     }
 
+    function updateProviderFlow(providerId: string, updater: (flow: OauthFlow) => OauthFlow) {
+        setOauthFlows((current) => {
+            const flow = current[providerId]
+            if (!flow) {
+                return current
+            }
+            return {
+                ...current,
+                [providerId]: updater(flow),
+            }
+        })
+    }
+
     async function refreshProviderState() {
         queryClient.invalidateQueries({ queryKey: ['models'] })
         refreshSettings()
@@ -169,16 +225,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     async function openModelPicker(providerId: string, providerName: string) {
         const performer = selectedPerformer
         const models = await api.models.list()
-        const connectedModels = models
-            .filter((model) => model.provider === providerId && model.connected)
-            .sort((left, right) => {
-                const leftName = left.name || left.id
-                const rightName = right.name || right.id
-                if (left.toolCall !== right.toolCall) {
-                    return left.toolCall ? -1 : 1
-                }
-                return leftName.localeCompare(rightName)
-            })
+        const connectedModels = sortConnectedModels(models, providerId)
 
         setModelPicker({
             providerId,
@@ -207,20 +254,11 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             await handleAuthSuccess(providerId, provider?.name || providerId)
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
-            setOauthFlows((current) => {
-                const flow = current[providerId]
-                if (!flow) {
-                    return current
-                }
-                return {
-                    ...current,
-                    [providerId]: {
-                        ...flow,
-                        submitting: false,
-                        error: message,
-                    },
-                }
-            })
+            updateProviderFlow(providerId, (flow) => ({
+                ...flow,
+                submitting: false,
+                error: message,
+            }))
         }
     }
 
@@ -285,13 +323,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             return
         }
 
-        setOauthFlows((current) => ({
-            ...current,
-            [providerId]: {
-                ...flow,
-                submitting: true,
-                error: undefined,
-            },
+        updateProviderFlow(providerId, (currentFlow) => ({
+            ...currentFlow,
+            submitting: true,
+            error: undefined,
         }))
 
         try {
@@ -300,13 +335,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             await handleAuthSuccess(providerId, provider?.name || providerId)
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
-            setOauthFlows((current) => ({
-                ...current,
-                [providerId]: {
-                    ...flow,
-                    submitting: false,
-                    error: message,
-                },
+            updateProviderFlow(providerId, (currentFlow) => ({
+                ...currentFlow,
+                submitting: false,
+                error: message,
             }))
         }
     }
@@ -317,13 +349,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             return
         }
 
-        setOauthFlows((current) => ({
-            ...current,
-            [providerId]: {
-                ...flow,
-                submitting: true,
-                error: undefined,
-            },
+        updateProviderFlow(providerId, (currentFlow) => ({
+            ...currentFlow,
+            submitting: true,
+            error: undefined,
         }))
 
         try {
@@ -335,13 +364,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             await handleAuthSuccess(providerId, provider?.name || providerId)
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
-            setOauthFlows((current) => ({
-                ...current,
-                [providerId]: {
-                    ...flow,
-                    submitting: false,
-                    error: message,
-                },
+            updateProviderFlow(providerId, (currentFlow) => ({
+                ...currentFlow,
+                submitting: false,
+                error: message,
             }))
         }
     }
@@ -383,13 +409,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         }
 
         setError(null)
-        setOauthFlows((current) => ({
-            ...current,
-            [providerId]: {
-                ...flow,
-                submitting: true,
-                error: undefined,
-            },
+        updateProviderFlow(providerId, (currentFlow) => ({
+            ...currentFlow,
+            submitting: true,
+            error: undefined,
         }))
 
         void waitForBrowserOauth(providerId, flow.methodIndex)
@@ -689,11 +712,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                 </div>
 
                                 <div className="settings-filter-row" role="tablist" aria-label="Provider filters">
-                                    {([
-                                        { key: 'popular', label: 'Popular', count: providers.filter((provider) => provider.connected || isPopularProvider(provider.id)).length },
-                                        { key: 'connected', label: 'Connected', count: providers.filter((provider) => provider.connected).length },
-                                        { key: 'all', label: 'All', count: providers.length },
-                                    ] as Array<{ key: ProviderListFilter; label: string; count: number }>).map((filter) => (
+                                    {providerFilterOptions.map((filter) => (
                                         <button
                                             key={filter.key}
                                             className={`settings-filter-chip ${providerFilter === filter.key ? 'active' : ''}`}
@@ -725,12 +744,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                     placeholder={`Search ${modelPicker.providerName} models`}
                                                 />
                                                 <div className="provider-model-picker__list">
-                                                    {modelPicker.models
-                                                        .filter((model) => {
-                                                            const q = modelPicker.query.trim().toLowerCase()
-                                                            if (!q) return true
-                                                            return `${model.name} ${model.id}`.toLowerCase().includes(q)
-                                                        })
+                                                    {visibleModelPickerModels
                                                         .slice(0, 16)
                                                         .map((model) => (
                                                             <button
@@ -746,11 +760,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                                                 </span>
                                                             </button>
                                                         ))}
-                                                    {modelPicker.models.filter((model) => {
-                                                        const q = modelPicker.query.trim().toLowerCase()
-                                                        if (!q) return true
-                                                        return `${model.name} ${model.id}`.toLowerCase().includes(q)
-                                                    }).length === 0 && (
+                                                    {visibleModelPickerModels.length === 0 && (
                                                             <div className="settings-note settings-note--muted">
                                                                 No connected models matched this search.
                                                             </div>
