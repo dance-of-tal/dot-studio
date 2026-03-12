@@ -9,7 +9,7 @@
 
 <p align="center">
   <strong>The visual workspace for composing and orchestrating AI agents.</strong><br />
-  Build Performers. Wire Act graphs. Watch them run — node by node.
+  Build Performers. Wire experimental Act graphs. Watch them run — node by node.
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@ Most AI tools bury agent behavior behind hidden prompts and opaque configs. DOT 
 Website: [danceoftal.com](https://danceoftal.com)
 
 - 🎨 **Performers are workspace objects** — not hidden prompt presets
-- 🔀 **Acts are first-class graphs** — not ad-hoc routing conventions
+- 🔀 **Acts are first-class graphs (experimental)** — not ad-hoc routing conventions
 - 👁️ **Everything stays visible** — execution history, thread sessions, performer bindings
 - 🔌 **MCP assignment is explicit** — project-scoped and inspectable
 
@@ -49,7 +49,7 @@ Connect **Tal** (identity layer) and **Dance** (skill context) assets, choose mo
   </td>
     <td width="50%">
 
-### 🔀 Act Editor
+### 🔀 Act Editor (Experimental)
 
 Build multi-node AI workflows with **worker**, **orchestrator**, and **parallel** nodes. Set entry points, wire flow and branch edges, and inspect everything directly on the graph.
 
@@ -58,7 +58,7 @@ Build multi-node AI workflows with **worker**, **orchestrator**, and **parallel*
   <tr>
     <td width="50%">
 
-### 🧵 Thread Runner
+### 🧵 Act Thread Runner (Experimental)
 
 Execute acts and watch output unfold **node-by-node** in real time. Keep node sessions alive across a thread for iterative workflows.
 
@@ -82,7 +82,7 @@ Create Tal and Dance drafts on the canvas, save them locally, and publish throug
 | **Tal** | The always-on instruction layer — identity, rules, and baseline behavior |
 | **Dance** | Optional skill or capability context, loaded on demand |
 | **Performer** | A runnable composition of Tal + Dance + model + agent mode + MCP bindings |
-| **Act** | A directed workflow graph of worker, orchestrator, and parallel nodes |
+| **Act** | An experimental directed workflow graph of worker, orchestrator, and parallel nodes |
 | **Stage** | The saved Studio workspace state for a project |
 
 ---
