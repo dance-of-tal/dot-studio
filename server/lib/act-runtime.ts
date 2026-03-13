@@ -646,6 +646,8 @@ export async function runActRuntime(input: RunActRuntimeInput) {
         runId: makeId('run'),
         actSessionId: input.actSessionId,
         cwd: input.cwd,
+        baseWorkingDir: input.baseWorkingDir || input.cwd,
+        executionMode: input.executionMode || 'direct',
         act: resolved.act,
         performersById,
         drafts: resolved.drafts,

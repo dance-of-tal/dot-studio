@@ -57,7 +57,7 @@ export async function computeActAutoLayout(act: Pick<StageAct, 'bounds' | 'nodes
             height: ACT_LAYOUT_NODE_HEIGHT,
         })),
         edges: edges.map((edge) => ({
-            id: edge.id,
+            id: edge.id || `${edge.from}:${edge.to}:${edge.role || 'flow'}:${edge.condition || 'always'}`,
             sources: [edge.from],
             targets: [edge.to],
         })),

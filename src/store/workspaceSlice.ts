@@ -316,6 +316,7 @@ export const createWorkspaceSlice: StateCreator<
             focusedActId: null,
             selectedActId: null,
             chats: {},
+            chatPrefixes: {},
             actChats: {},
             actPerformerChats: {},
             actPerformerBindings: {},
@@ -330,6 +331,7 @@ export const createWorkspaceSlice: StateCreator<
             inspectorFocus: null,
             lspServers: [],
             lspDiagnostics: {},
+            safeSummaries: {},
             trackingWindow: null,
             isTrackingOpen: false,
             stageDirty: true,
@@ -419,6 +421,24 @@ export const createWorkspaceSlice: StateCreator<
 
     setPerformerAutoCompact: (id, enabled) => setPerformerAutoCompactImpl(set, id, enabled),
 
+    setPerformerExecutionMode: (performerId, mode) => {
+        set((state) => ({
+            performers: state.performers.map((performer) => (
+                performer.id === performerId
+                    ? { ...performer, executionMode: mode }
+                    : performer
+            )),
+            stageDirty: true,
+        }))
+        get().clearSafeOwner('performer', performerId)
+        get().detachPerformerSession(
+            performerId,
+            mode === 'safe'
+                ? 'Switched to Safe mode. The next turn will start a new thread lineage in the safe workspace.'
+                : 'Switched to Direct mode. The next turn will start a new thread lineage in the project workspace.',
+        )
+    },
+
     toggleActVisibility: (id) => set((s) => ({
         acts: s.acts.map((act) => (
             act.id === id
@@ -427,6 +447,24 @@ export const createWorkspaceSlice: StateCreator<
         )),
         stageDirty: true,
     })),
+
+    setActExecutionMode: (actId, mode) => {
+        set((state) => ({
+            acts: state.acts.map((act) => (
+                act.id === actId
+                    ? { ...act, executionMode: mode }
+                    : act
+            )),
+            stageDirty: true,
+        }))
+        get().clearSafeOwner('act', actId)
+        get().detachActSession(
+            actId,
+            mode === 'safe'
+                ? 'Switched this act to Safe mode. The next run will start in a safe workspace.'
+                : 'Switched this act to Direct mode. The next run will start in the project workspace.',
+        )
+    },
 
     addCanvasTerminal: () => {
         canvasTerminalIdCounter.value++

@@ -472,6 +472,7 @@ export function DraggableMcp({
                     dragHandle
                 />
                 <div className="asset-card__author">
+                    <span className={`asset-mcp-editor__status-dot asset-mcp-editor__status-dot--${mcp.status || 'disconnected'}`} style={{ display: 'inline-block', marginRight: 4, verticalAlign: 'middle' }} />
                     {mcp.status}
                     {mcp.configType ? ` · ${mcp.configType}` : ''}
                     {mcp.enabled === false ? ' · disabled' : ''}

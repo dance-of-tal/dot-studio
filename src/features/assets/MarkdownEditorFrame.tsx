@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react';
-import { NodeResizer } from '@xyflow/react';
+
 import { FileText, Eye, Save, Upload, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import MarkdownRenderer from '../shared/MarkdownRenderer';
+import MarkdownRenderer from '../../components/shared/MarkdownRenderer';
 import { useStudioStore } from '../../store';
 import { api } from '../../api';
 import { formatStudioApiErrorMessage } from '../../lib/api-errors';
 
 import { queryKeys, useDotAuthUser } from '../../hooks/queries';
-import CanvasWindowFrame from './CanvasWindowFrame';
-import useTransformChrome from './useTransformChrome';
+import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame';
+
 import './MarkdownEditorFrame.css';
 
 
@@ -95,19 +95,7 @@ export default function MarkdownEditorFrame({ id, data, selected }: any) {
     const draft = drafts[data.draftId];
     const [status, setStatus] = useState<null | { tone: 'success' | 'error'; message: string }>(null);
     const [action, setAction] = useState<null | 'draft' | 'local' | 'publish'>(null);
-    const {
-        isTransformChromeActive,
-        showResizeChrome,
-        activateTransformChrome,
-        handleFramePointerDownCapture,
-        handleResizeStart,
-        handleResizeEnd,
-    } = useTransformChrome({
-        active: !!data.transformActive,
-        onActivate: data.onActivateTransform as (() => void) | undefined,
-        onDeactivate: data.onDeactivateTransform as (() => void) | undefined,
-    });
-    const hasFrameChrome = !!selected || showResizeChrome;
+
     const stopCanvasEvent = (event: React.SyntheticEvent) => {
         event.stopPropagation();
     };
@@ -266,26 +254,15 @@ export default function MarkdownEditorFrame({ id, data, selected }: any) {
 
     return (
         <CanvasWindowFrame
-            className={`${hasFrameChrome ? 'canvas-frame--active' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''} markdown-editor-frame`}
+            className={`markdown-editor-frame`}
             width={Number(data.width || 560)}
             height={Number(data.height || 380)}
-            onPointerDownCapture={handleFramePointerDownCapture}
-            chrome={(
-                <>
-                    <NodeResizer
-                        color="var(--text-muted)"
-                        lineStyle={{ borderWidth: 0 }}
-                        isVisible={showResizeChrome}
-                        minWidth={420}
-                        minHeight={280}
-                        handleStyle={{ width: 8, height: 8, background: 'var(--bg-panel)', border: '1px solid var(--border-strong)' }}
-                        onResizeStart={handleResizeStart}
-                        onResizeEnd={handleResizeEnd}
-                    />
-                </>
-            )}
-            dragHandleActive={isTransformChromeActive}
-            onActivateTransform={activateTransformChrome}
+            transformActive={!!data.transformActive}
+            onActivateTransform={data.onActivateTransform as (() => void) | undefined}
+            onDeactivateTransform={data.onDeactivateTransform as (() => void) | undefined}
+            selected={!!selected}
+            minWidth={420}
+            minHeight={280}
             headerStart={(
                 <div className="markdown-editor-frame__title">
                     <FileText size={13} />

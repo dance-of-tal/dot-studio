@@ -4,16 +4,32 @@ import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/cha
 import { compileStudioPrompt } from './compile-service.js'
 import { buildEnabledToolMap, describeUnavailableRuntimeTools, resolveRuntimeTools } from '../lib/runtime-tools.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
+import { getSafeOwnerExecutionDir } from '../lib/safe-mode.js'
+import { registerSessionExecutionContext } from '../lib/session-execution.js'
 
 export async function createStudioChatSession(
     cwd: string,
     request: ChatSessionCreateRequest,
 ) {
     const oc = await getOpencode()
+    const executionDir = await getSafeOwnerExecutionDir(
+        cwd,
+        'performer',
+        request.performerId,
+        request.executionMode || 'direct',
+    )
     const session = unwrapOpencodeResult<{ id: string; title: string }>(await oc.session.create({
-        directory: cwd,
+        directory: executionDir,
         title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash),
     }))
+    await registerSessionExecutionContext({
+        sessionId: session.id,
+        ownerKind: 'performer',
+        ownerId: request.performerId,
+        mode: request.executionMode || 'direct',
+        workingDir: cwd,
+        executionDir,
+    })
     return {
         sessionId: session.id,
         title: session.title,

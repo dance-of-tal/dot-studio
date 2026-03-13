@@ -71,6 +71,13 @@
     color: var(--text-primary);
 }
 
+.user-input-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
 .user-input-text {
     flex: 1;
     white-space: pre-wrap;
@@ -89,6 +96,10 @@
     transition: opacity 0.2s, color 0.2s;
 }
 
+.user-input-revert.is-visible {
+    opacity: 1;
+}
+
 .user-input-box:hover .user-input-revert {
     opacity: 1;
 }
@@ -96,6 +107,34 @@
 .user-input-revert:hover {
     color: var(--text-primary);
     background: rgba(255, 255, 255, 0.06);
+}
+
+.thread-msg__body-with-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.thread-msg__body-with-actions > *:first-child {
+    flex: 1;
+    min-width: 0;
+}
+
+.thread-msg__icon-btn {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--border-light);
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.thread-msg__icon-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--border-main);
+    background: var(--bg-hover);
 }
 
 /* ── Assistant Body (plain, no wrapper) ── */
@@ -446,4 +485,3 @@
     border-top: 1px solid var(--border-light);
     white-space: pre-wrap;
 }
-

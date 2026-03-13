@@ -87,6 +87,7 @@ export function createStageAct(name = 'New Act', index = 0): StageAct {
         name,
         description: '',
         hidden: false,
+        executionMode: 'direct',
         sessionMode: defaultActSessionMode(),
         bounds: defaultBounds(index),
         entryNodeId: null,

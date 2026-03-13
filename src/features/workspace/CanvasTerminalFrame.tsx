@@ -5,7 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import { Terminal as TerminalIcon, X } from 'lucide-react';
 import { useStudioStore } from '../../store';
-import CanvasWindowFrame from './CanvasWindowFrame';
+import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame';
 import './CanvasTerminalFrame.css';
 
 const termTheme = {
@@ -54,7 +54,10 @@ interface CanvasTerminalFrameProps {
 }
 
 export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) {
-    const { title, width, height, onClose, onResize, onSessionChange } = data;
+    const { title, width, height, onClose, onSessionChange } = data;
+    const transformActive = !!(data as any).transformActive;
+    const onActivateTransform = (data as any).onActivateTransform as (() => void) | undefined;
+    const onDeactivateTransform = (data as any).onDeactivateTransform as (() => void) | undefined;
     const termRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
@@ -207,46 +210,30 @@ export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) 
         };
     }, []);
 
-    // Resize handle
-    const handleResizeStart = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const startX = e.clientX;
-        const startY = e.clientY;
-        const startW = width;
-        const startH = height;
-
-        const onMove = (me: MouseEvent) => {
-            const newW = Math.max(400, startW + (me.clientX - startX));
-            const newH = Math.max(250, startH + (me.clientY - startY));
-            onResize(Math.round(newW), Math.round(newH));
-        };
-
-        const onUp = () => {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            setTimeout(() => {
-                fitRef.current?.fit();
-                if (wsRef.current?.readyState === WebSocket.OPEN && xtermRef.current) {
-                    wsRef.current.send(JSON.stringify({
-                        type: 'resize',
-                        cols: xtermRef.current.cols,
-                        rows: xtermRef.current.rows,
-                    }));
-                }
-            }, 50);
-        };
-
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    }, [width, height, onResize]);
+    const handleResizeEnd = useCallback(() => {
+        setTimeout(() => {
+            fitRef.current?.fit();
+            if (wsRef.current?.readyState === WebSocket.OPEN && xtermRef.current) {
+                wsRef.current.send(JSON.stringify({
+                    type: 'resize',
+                    cols: xtermRef.current.cols,
+                    rows: xtermRef.current.rows,
+                }));
+            }
+        }, 50);
+    }, []);
 
     return (
         <CanvasWindowFrame
             className="canvas-terminal-frame"
             width={width}
             height={height}
-            dragHandleActive
+            transformActive={transformActive}
+            onActivateTransform={onActivateTransform}
+            onDeactivateTransform={onDeactivateTransform}
+            onResizeEnd={handleResizeEnd}
+            minWidth={400}
+            minHeight={250}
             headerStart={(
                 <>
                     <TerminalIcon size={12} />
@@ -265,6 +252,7 @@ export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) 
                     <X size={12} />
                 </button>
             )}
+            customResizeHandle={<div className="canvas-terminal-frame__resize" />}
         >
             <div className="canvas-terminal-frame__body" ref={termRef} />
             {exited && (
@@ -273,10 +261,6 @@ export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) 
                     <span>Process exited</span>
                 </div>
             )}
-            <div
-                className="canvas-terminal-frame__resize"
-                onMouseDown={handleResizeStart}
-            />
         </CanvasWindowFrame>
     );
 }

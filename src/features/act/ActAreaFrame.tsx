@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { useStore } from '@xyflow/react'
-import { Workflow, ArrowLeft, Plus, Trash2, Bot, Hexagon, Zap, Cpu, Server, Pencil, EyeOff, Save, X } from 'lucide-react'
+import { Workflow, ArrowLeft, Plus, Trash2, Bot, Hexagon, Zap, Cpu, Server, Pencil, EyeOff, Save, Shield, X } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { useAssets, useMcpServers } from '../../hooks/queries'
 
 import ActThreadPanel from './ActThreadPanel'
-import CanvasWindowFrame from './CanvasWindowFrame'
-import useTransformChrome from './useTransformChrome'
-import PerformerComposeCards from './PerformerComposeCards'
-import PerformerAdvancedSettings from './PerformerAdvancedSettings'
+import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
+
+import PerformerComposeCards from '../performer/PerformerComposeCards'
+import PerformerAdvancedSettings from '../performer/PerformerAdvancedSettings'
 import ActCanvasNode from './ActCanvasNode'
-import ModelVariantSelect from './ModelVariantSelect'
+import ModelVariantSelect from '../performer/ModelVariantSelect'
 
-import AgentSelect from './AgentSelect'
+import AgentSelect from '../performer/AgentSelect'
+import SafeReviewModal from '../../components/modals/SafeReviewModal'
 
-import type { ActPerformerSessionBinding, ActSessionMode, ChatMessage, PerformerNode } from '../../types'
+import type { ActPerformerSessionBinding, ActSessionMode, ChatMessage } from '../../types'
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
 import {
     edgePath,
@@ -47,11 +48,19 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     const actPerformerChats = useStudioStore((state) => state.actPerformerChats)
     const actPerformerBindings = useStudioStore((state) => state.actPerformerBindings)
     const setPerformerMcpBinding = useStudioStore((state) => state.setPerformerMcpBinding)
+    const setActExecutionMode = useStudioStore((state) => state.setActExecutionMode)
+    const safeSummary = useStudioStore((state) => state.safeSummaries[`act:${id}`] || null)
+    const refreshSafeOwner = useStudioStore((state) => state.refreshSafeOwner)
+    const applySafeOwner = useStudioStore((state) => state.applySafeOwner)
+    const discardSafeOwnerFile = useStudioStore((state) => state.discardSafeOwnerFile)
+    const discardAllSafeOwner = useStudioStore((state) => state.discardAllSafeOwner)
+    const undoLastSafeApply = useStudioStore((state) => state.undoLastSafeApply)
+    const detachActSession = useStudioStore((state) => state.detachActSession)
     const width = Number(data.width || 420)
     const height = Number(data.height || 280)
     const rfWidth = useStore((state) => state.width)
     const rfHeight = useStore((state) => state.height)
-    const onResizeFrame = data.onResizeFrame as ((width: number, height: number) => void) | undefined
+
     const nodes = (data.nodes || []) as ActAreaNodeView[]
     const edges = (data.edges || []) as ActAreaEdgeView[]
     const onConnectNodes = data.onConnectNodes as ((from: string, to: string) => void) | undefined
@@ -93,24 +102,15 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
     const [threadInput, setThreadInput] = useState('')
     const [inlineEditor, setInlineEditor] = useState<InlineEditorState | null>(null)
+    const [showSafeReview, setShowSafeReview] = useState(false)
+    const [safeBusy, setSafeBusy] = useState(false)
+    const [pendingModeSwitch, setPendingModeSwitch] = useState<'direct' | null>(null)
     const threadEndRef = useRef<HTMLDivElement | null>(null)
-    const [resizeDraft, setResizeDraft] = useState<{ width: number; height: number } | null>(null)
-    const {
-        isTransformChromeActive,
-        showResizeChrome,
-        activateTransformChrome,
-        handleFramePointerDownCapture,
-        handleResizeStart,
-        handleResizeEnd,
-    } = useTransformChrome({
-        active: !!data.transformActive,
-        onActivate: data.onActivateTransform as (() => void) | undefined,
-        onDeactivate: data.onDeactivateTransform as (() => void) | undefined,
-    })
-    const hasFrameChrome = !!selected || showResizeChrome
+
+
     const isFocused = !!data.focused
-    const frameWidth = resizeDraft?.width ?? (isFocused ? Math.max(rfWidth - 40, 420) : width)
-    const frameHeight = resizeDraft?.height ?? (isFocused ? Math.max(rfHeight - 140, 320) : height)
+    const frameWidth = isFocused ? Math.max(rfWidth - 40, 420) : width
+    const frameHeight = isFocused ? Math.max(rfHeight - 140, 320) : height
 
     const { isOver, setNodeRef } = useDroppable({
         id: `act-area-${id}`,
@@ -122,14 +122,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
 
     const [connectFromId, setConnectFromId] = useState<string | null>(null)
     const skipClickNodeIdRef = useRef<string | null>(null)
-    const resizeRef = useRef<{
-        startX: number
-        startY: number
-        startWidth: number
-        startHeight: number
-        nextWidth: number
-        nextHeight: number
-    } | null>(null)
+
     const canvasRef = useRef<HTMLDivElement | null>(null)
     const [connectPreviewPoint, setConnectPreviewPoint] = useState<{ x: number; y: number } | null>(null)
 
@@ -285,6 +278,53 @@ export default function ActAreaFrame({ data, id, selected }: any) {
         }
     }, [focusedPerformerId, focusedPerformerNode?.mcpBindingMap, mcpServers, setPerformerMcpBinding])
 
+    useEffect(() => {
+        if (data.executionMode !== 'safe') {
+            return
+        }
+        if (!(selected || editMode || showSafeReview)) {
+            return
+        }
+        void refreshSafeOwner('act', id)
+    }, [data.executionMode, editMode, id, refreshSafeOwner, selected, showSafeReview])
+
+    const handleToggleExecutionMode = async () => {
+        if (data.executionMode === 'safe') {
+            const summary = safeSummary || await refreshSafeOwner('act', id)
+            if (summary && summary.pendingCount > 0) {
+                setPendingModeSwitch('direct')
+                setShowSafeReview(true)
+                return
+            }
+            setActExecutionMode(id, 'direct')
+            return
+        }
+
+        setActExecutionMode(id, 'safe')
+        void refreshSafeOwner('act', id)
+    }
+
+    const runSafeAction = async (
+        task: () => Promise<void>,
+        nextMode?: 'direct',
+        notice = 'Updated the safe workspace and reset the act thread lineage.',
+    ) => {
+        setSafeBusy(true)
+        try {
+            await task()
+            if (nextMode) {
+                setActExecutionMode(id, nextMode)
+            } else {
+                detachActSession(id, notice)
+            }
+            void refreshSafeOwner('act', id)
+            setShowSafeReview(false)
+            setPendingModeSwitch(null)
+        } finally {
+            setSafeBusy(false)
+        }
+    }
+
     const { isOver: isPerformerOver, setNodeRef: setPerformerDropRef } = useDroppable({
         id: focusedNode ? `act-node-performer-${id}-${focusedNode.id}` : `act-node-performer-${id}-idle`,
         data: focusedNode ? { type: 'act-node-performer', actId: id, nodeId: focusedNode.id } : { type: 'act-node-performer' },
@@ -322,51 +362,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
         return findOrphanedNodeIds(nodes, edges, data.entryNodeId)
     }, [nodes, edges, data.entryNodeId])
 
-    useEffect(() => {
-        const handleMove = (event: MouseEvent) => {
-            const resize = resizeRef.current
-            if (!resize) {
-                return
-            }
 
-            const nextWidth = Math.max(320, Math.round(resize.startWidth + (event.clientX - resize.startX)))
-            const nextHeight = Math.max(220, Math.round(resize.startHeight + (event.clientY - resize.startY)))
-
-            resize.nextWidth = nextWidth
-            resize.nextHeight = nextHeight
-            setResizeDraft({ width: nextWidth, height: nextHeight })
-        }
-
-        const handleUp = () => {
-            const resize = resizeRef.current
-            if (!resize) {
-                return
-            }
-
-            resizeRef.current = null
-            onResizeFrame?.(resize.nextWidth, resize.nextHeight)
-            setResizeDraft(null)
-            handleResizeEnd()
-            window.setTimeout(() => {
-                activateTransformChrome()
-            }, 0)
-            window.removeEventListener('mousemove', handleMove)
-            window.removeEventListener('mouseup', handleUp)
-            document.body.style.userSelect = ''
-        }
-
-        if (resizeRef.current) {
-            window.addEventListener('mousemove', handleMove)
-            window.addEventListener('mouseup', handleUp)
-            document.body.style.userSelect = 'none'
-        }
-
-        return () => {
-            window.removeEventListener('mousemove', handleMove)
-            window.removeEventListener('mouseup', handleUp)
-            document.body.style.userSelect = ''
-        }
-    }, [activateTransformChrome, handleResizeEnd, onResizeFrame])
 
     const canSendThread = !!threadInput.trim() && !!data.entryNodeId && !loading
     const focusedNodeSemantics = useMemo(
@@ -375,35 +371,18 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     )
 
     return (
+        <>
         <div ref={setNodeRef}>
             <CanvasWindowFrame
-                className={`act-area-frame nowheel ${hasFrameChrome ? 'canvas-frame--active' : ''} ${isFocused ? 'canvas-frame--focused' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''} ${showResizeChrome ? 'act-area-frame--transform-active' : ''} ${isOver ? 'act-area-frame--drop' : ''}`}
+                className={`act-area-frame nowheel ${isFocused ? 'canvas-frame--focused' : ''} ${data.transformActive ? 'act-area-frame--transform-active' : ''} ${isOver ? 'act-area-frame--drop' : ''}`}
                 width={frameWidth}
                 height={frameHeight}
-                onPointerDownCapture={handleFramePointerDownCapture}
-                chrome={showResizeChrome ? (
-                    <button
-                        type="button"
-                        className="canvas-resize-control act-area-frame__resize-grip"
-                        aria-label="Resize act"
-                        title="Resize act"
-                        onMouseDown={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            handleResizeStart()
-                            resizeRef.current = {
-                                startX: event.clientX,
-                                startY: event.clientY,
-                                startWidth: frameWidth,
-                                startHeight: frameHeight,
-                                nextWidth: frameWidth,
-                                nextHeight: frameHeight,
-                            }
-                        }}
-                    />
-                ) : null}
-                dragHandleActive={isTransformChromeActive}
-                onActivateTransform={activateTransformChrome}
+                transformActive={!!data.transformActive}
+                onActivateTransform={data.onActivateTransform as (() => void) | undefined}
+                onDeactivateTransform={data.onDeactivateTransform as (() => void) | undefined}
+                selected={!!selected}
+                minWidth={320}
+                minHeight={220}
                 headerStart={(
                     <div className="act-area-frame__title">
                         <Workflow size={13} />
@@ -420,8 +399,38 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                 )}
                 headerEnd={(
                     <div className="act-area-frame__meta">
+                        <span className="canvas-frame__badge">
+                            {data.executionMode === 'safe' ? 'Safe' : 'Direct'}
+                        </span>
+                        {safeSummary?.conflictCount ? (
+                            <span className="canvas-frame__badge">
+                                Conflict
+                            </span>
+                        ) : null}
+                        {safeSummary?.pendingCount ? (
+                            <span className="canvas-frame__badge">
+                                {safeSummary.pendingCount} change{safeSummary.pendingCount === 1 ? '' : 's'}
+                            </span>
+                        ) : null}
                         {editMode ? (
                             <div className="act-area-frame__header-actions">
+                                <button type="button" className="act-area-frame__toolbar-btn" onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handleToggleExecutionMode()
+                                }}>
+                                    <Shield size={10} />
+                                    <span>{data.executionMode === 'safe' ? 'Safe' : 'Direct'}</span>
+                                </button>
+                                {data.executionMode === 'safe' ? (
+                                    <button type="button" className="act-area-frame__toolbar-btn" onClick={(event) => {
+                                        event.stopPropagation()
+                                        setPendingModeSwitch(null)
+                                        setShowSafeReview(true)
+                                    }}>
+                                        <Save size={10} />
+                                        <span>Review</span>
+                                    </button>
+                                ) : null}
                                 <button type="button" className="act-area-frame__toolbar-btn" onClick={(event) => {
                                     event.stopPropagation()
                                     onCloseEdit?.()
@@ -432,6 +441,33 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                             </div>
                         ) : (
                             <>
+                                <button
+                                    type="button"
+                                    className="icon-btn"
+                                    onClick={(event) => {
+                                        event.stopPropagation()
+                                        void handleToggleExecutionMode()
+                                    }}
+                                    title={data.executionMode === 'safe' ? 'Switch to Direct mode' : 'Switch to Safe mode'}
+                                    style={{ padding: '0 6px', opacity: 0.8 }}
+                                >
+                                    {data.executionMode === 'safe' ? 'Safe' : 'Direct'}
+                                </button>
+                                {data.executionMode === 'safe' ? (
+                                    <button
+                                        type="button"
+                                        className="icon-btn"
+                                        onClick={(event) => {
+                                            event.stopPropagation()
+                                            setPendingModeSwitch(null)
+                                            setShowSafeReview(true)
+                                        }}
+                                        title="Review safe mode changes"
+                                        style={{ padding: '0 6px', opacity: 0.8 }}
+                                    >
+                                        Review
+                                    </button>
+                                ) : null}
                                 <button
                                     type="button"
                                     className="icon-btn"
@@ -1155,5 +1191,37 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                 </div>
             </CanvasWindowFrame>
         </div>
+        {showSafeReview ? (
+            <SafeReviewModal
+                title={pendingModeSwitch === 'direct' ? `${data.name} · Review before switching to Direct` : `${data.name} · Safe Mode Review`}
+                summary={safeSummary}
+                busy={safeBusy}
+                onClose={() => {
+                    setShowSafeReview(false)
+                    setPendingModeSwitch(null)
+                }}
+                onApply={() => {
+                    void runSafeAction(() => applySafeOwner('act', id), pendingModeSwitch || undefined)
+                }}
+                onDiscardAll={() => {
+                    void runSafeAction(() => discardAllSafeOwner('act', id), pendingModeSwitch || undefined)
+                }}
+                onDiscardFile={(filePath) => {
+                    void runSafeAction(
+                        () => discardSafeOwnerFile('act', id, filePath),
+                        undefined,
+                        `Discarded ${filePath} from the safe workspace and reset the act thread lineage.`,
+                    )
+                }}
+                onUndoLastApply={() => {
+                    void runSafeAction(
+                        () => undoLastSafeApply('act', id),
+                        undefined,
+                        'Undid the last apply and reset the act thread lineage.',
+                    )
+                }}
+            />
+        ) : null}
+        </>
     )
 }

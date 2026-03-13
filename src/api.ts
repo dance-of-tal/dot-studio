@@ -14,6 +14,7 @@ import type { AdapterViewActionRequest, AdapterViewProjection } from '../shared/
 import type { RunActRequest } from '../shared/act-contracts'
 import type { AssetListItem } from '../shared/asset-contracts'
 import type { ChatSendRequest, ChatSessionCreateResponse, CompilePromptRequest } from '../shared/chat-contracts'
+import type { ExecutionMode, SafeOwnerKind, SafeOwnerSummary } from '../shared/safe-mode'
 import type { DotAuthUserResponse, DotInitResponse, DotInstallRequest, DotLoginResponse, DotPublishRequest, DotSaveLocalRequest, DotStatusResponse } from '../shared/dot-contracts'
 import { StudioApiError } from './lib/api-errors'
 
@@ -191,8 +192,8 @@ export const api = {
 
     // ── Chat ────────────────────────────────────────────
     chat: {
-        createSession: (performerId: string, performerName: string, configHash: string) =>
-            postJSON<ChatSessionCreateResponse>('/api/chat/sessions', { performerId, performerName, configHash }),
+        createSession: (performerId: string, performerName: string, configHash: string, executionMode: ExecutionMode) =>
+            postJSON<ChatSessionCreateResponse>('/api/chat/sessions', { performerId, performerName, configHash, executionMode }),
 
         deleteSession: (id: string) =>
             deleteJSON<{ ok: boolean }>(`/api/chat/sessions/${id}`),
@@ -253,13 +254,27 @@ export const api = {
         revert: (id: string, messageId: string, partId?: string) =>
             postJSON<any>(`/api/chat/sessions/${id}/revert`, { messageId, partId }),
 
-        unrevert: (id: string) =>
-            postJSON<any>(`/api/chat/sessions/${id}/unrevert`),
-
         list: () =>
             fetchJSON<any[]>('/api/chat/sessions'),
 
         events: () => createApiEventSource('/api/chat/events'),
+    },
+
+    safe: {
+        summary: (ownerKind: SafeOwnerKind, ownerId: string) =>
+            fetchJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}`),
+
+        apply: (ownerKind: SafeOwnerKind, ownerId: string) =>
+            postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/apply`),
+
+        discardFile: (ownerKind: SafeOwnerKind, ownerId: string, filePath: string) =>
+            postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/discard`, { filePath }),
+
+        discardAll: (ownerKind: SafeOwnerKind, ownerId: string) =>
+            postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/discard-all`),
+
+        undoLastApply: (ownerKind: SafeOwnerKind, ownerId: string) =>
+            postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/undo-last-apply`),
     },
 
     act: {

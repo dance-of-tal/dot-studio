@@ -223,6 +223,9 @@ export async function sendActMessage(
         })
     } finally {
         set({ loadingActId: null })
+        if (act.executionMode === 'safe') {
+            void get().refreshSafeOwner('act', actId)
+        }
     }
 }
 

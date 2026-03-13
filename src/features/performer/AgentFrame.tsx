@@ -1,25 +1,26 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { NodeResizer, useStore } from '@xyflow/react';
+import { useStore } from '@xyflow/react';
 import { useStudioStore } from '../../store';
 import { useSlashCommands } from '../../hooks/useSlashCommands';
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions';
 import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries';
-import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil } from 'lucide-react';
-import ThreadBody from './ThreadBody';
+import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil, Shield } from 'lucide-react';
+import ThreadBody from '../chat/ThreadBody';
 import { assetRefKey, hasModelConfig, resolvePerformerAgentId } from '../../lib/performers';
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation';
 import { api } from '../../api';
 import { showToast } from '../../lib/toast';
 import { loadMaterialFileIconForPath } from '../../lib/material-file-icons';
-import CanvasWindowFrame from './CanvasWindowFrame';
-import ChatMessageContent from './ChatMessageContent';
-import useTransformChrome from './useTransformChrome';
+import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame';
+import ChatMessageContent from '../chat/ChatMessageContent';
+
 import PerformerComposeCards from './PerformerComposeCards';
 import PerformerAdvancedSettings from './PerformerAdvancedSettings';
 import ModelVariantSelect from './ModelVariantSelect';
 import ModelQuickPicker from './ModelQuickPicker';
 import AgentSelect from './AgentSelect';
+import SafeReviewModal from '../../components/modals/SafeReviewModal';
 import './AgentFrame.css';
 import './AgentChat.css';
 import './AgentInput.css';
@@ -38,14 +39,33 @@ function PerformerHeaderMeta({
     modelTitle,
     talLabel,
     danceSummary,
+    executionMode,
+    pendingCount,
+    conflictCount,
 }: {
     modelLabel: string | null
     modelTitle: string | null
     talLabel: string | null
     danceSummary: string | null
+    executionMode: 'direct' | 'safe'
+    pendingCount: number
+    conflictCount: number
 }) {
     return (
         <div className="canvas-frame__badges">
+            <span className="canvas-frame__badge" title={executionMode === 'safe' ? 'Safe mode enabled' : 'Direct mode enabled'}>
+                {executionMode === 'safe' ? 'Safe' : 'Direct'}
+            </span>
+            {conflictCount > 0 ? (
+                <span className="canvas-frame__badge" title={`${conflictCount} conflict${conflictCount === 1 ? '' : 's'} require review`}>
+                    Conflict
+                </span>
+            ) : null}
+            {pendingCount > 0 ? (
+                <span className="canvas-frame__badge" title={`${pendingCount} pending change${pendingCount === 1 ? '' : 's'}`}>
+                    {pendingCount} change{pendingCount === 1 ? '' : 's'}
+                </span>
+            ) : null}
             {talLabel ? (
                 <span className="canvas-frame__badge" title={`Tal: ${talLabel}`}>
                     {talLabel}
@@ -112,6 +132,16 @@ export default function AgentFrame({ data, id }: any) {
         setPerformerMcpBinding,
         removePerformerDance,
         setPerformerAutoCompact,
+        setPerformerExecutionMode,
+        sessionMap,
+        safeSummaries,
+        refreshSafeOwner,
+        applySafeOwner,
+        discardSafeOwnerFile,
+        discardAllSafeOwner,
+        undoLastSafeApply,
+        undoLastTurn,
+        detachPerformerSession,
     } = useStudioStore();
 
     const [input, setInput] = useState('');
@@ -120,33 +150,27 @@ export default function AgentFrame({ data, id }: any) {
     const [danceSearchIndex, setDanceSearchIndex] = useState(0);
     const [editTab, setEditTab] = useState<'basic' | 'advanced'>('basic');
     const [showModelPicker, setShowModelPicker] = useState(false);
+    const [showSafeReview, setShowSafeReview] = useState(false);
+    const [safeBusy, setSafeBusy] = useState(false);
+    const [pendingModeSwitch, setPendingModeSwitch] = useState<'direct' | null>(null);
 
     const chatEndRef = useRef<HTMLDivElement>(null);
     const bodyRef = useRef<HTMLDivElement>(null);
     const isSelected = selectedPerformerId === id;
     const isFocused = focusedPerformerId === id;
     const isLoading = loadingPerformerId === id;
-    const messages = chats[id] || [];
+    const messages = useMemo(() => chats[id] || [], [chats, id]);
     const modelConfigured = hasModelConfig(data.model);
     const isEditMode = editingTarget?.type === 'performer' && editingTarget.id === id;
     const performer = performers.find((item) => item.id === id) || null;
+    const safeSummary = safeSummaries[`performer:${id}`] || null;
+    const hasActiveSession = !!sessionMap[id];
+    const lastMessageId = messages[messages.length - 1]?.id || null;
     const { data: agents = [] } = useAgents(isSelected || isEditMode);
     const { data: danceAssets = [] } = useAssetKind('dance', isSelected || isFocused || isEditMode);
     const { data: assetInventory = [] } = useAssets(isSelected || isEditMode);
     const { data: mcpServers = [] } = useMcpServers(isSelected || isEditMode);
-    const {
-        isTransformChromeActive,
-        showResizeChrome,
-        activateTransformChrome,
-        handleFramePointerDownCapture,
-        handleResizeStart,
-        handleResizeEnd,
-    } = useTransformChrome({
-        active: !!data.transformActive,
-        onActivate: data.onActivateTransform as (() => void) | undefined,
-        onDeactivate: data.onDeactivateTransform as (() => void) | undefined,
-    });
-    const hasFrameChrome = isSelected || showResizeChrome;
+
 
     const { isOver: isTalOver, setNodeRef: setTalRef } = useDroppable({
         id: `performer-edit-tal-${id}`,
@@ -222,6 +246,61 @@ export default function AgentFrame({ data, id }: any) {
             setPerformerMcpBinding(id, placeholderName, null);
         }
     }, [id, mcpServers, performer?.mcpBindingMap, setPerformerMcpBinding]);
+
+    useEffect(() => {
+        if (performer?.executionMode !== 'safe') {
+            return;
+        }
+        if (!(isSelected || isFocused || isEditMode || showSafeReview)) {
+            return;
+        }
+        void refreshSafeOwner('performer', id);
+    }, [id, isEditMode, isFocused, isSelected, performer?.executionMode, refreshSafeOwner, showSafeReview]);
+
+    const canUndoLastTurn = useMemo(
+        () => hasActiveSession && messages.some((message) => message.role === 'user') && !isLoading,
+        [hasActiveSession, isLoading, messages],
+    );
+
+    const handleToggleExecutionMode = useCallback(async () => {
+        if (!performer) {
+            return;
+        }
+        if (performer.executionMode === 'safe') {
+            const summary = safeSummary || await refreshSafeOwner('performer', id);
+            if (summary && summary.pendingCount > 0) {
+                setPendingModeSwitch('direct');
+                setShowSafeReview(true);
+                return;
+            }
+            setPerformerExecutionMode(id, 'direct');
+            return;
+        }
+
+        setPerformerExecutionMode(id, 'safe');
+        void refreshSafeOwner('performer', id);
+    }, [id, performer, refreshSafeOwner, safeSummary, setPerformerExecutionMode]);
+
+    const runSafeAction = useCallback(async (
+        task: () => Promise<void>,
+        nextMode?: 'direct',
+        notice = 'Updated the safe workspace and started a new thread lineage.',
+    ) => {
+        setSafeBusy(true);
+        try {
+            await task();
+            if (nextMode) {
+                setPerformerExecutionMode(id, nextMode);
+            } else {
+                detachPerformerSession(id, notice);
+            }
+            void refreshSafeOwner('performer', id);
+            setShowSafeReview(false);
+            setPendingModeSwitch(null);
+        } finally {
+            setSafeBusy(false);
+        }
+    }, [detachPerformerSession, id, refreshSafeOwner, setPerformerExecutionMode]);
 
     const openAssetEditor = useCallback(async (
         kind: 'tal' | 'dance',
@@ -301,7 +380,7 @@ export default function AgentFrame({ data, id }: any) {
                 },
             });
         }
-    }, [createMarkdownEditor, drafts, performer]);
+    }, [createMarkdownEditor, drafts, id, performer]);
 
     const {
         showSlashMenu,
@@ -391,7 +470,15 @@ export default function AgentFrame({ data, id }: any) {
         setShowSlashMenu(false);
         setIsMentioning(false);
 
-        const cmdPattern = /^\/(undo|redo|share|compact)$/;
+        if (text === '/undo' || text === '/redo') {
+            showToast('Use the Undo Last Turn button for performer undo.', 'info', {
+                title: 'Undo moved',
+                dedupeKey: `performer-undo-moved:${id}`,
+            });
+            return;
+        }
+
+        const cmdPattern = /^\/(share|compact)$/;
         if (cmdPattern.test(text)) {
             executeSlashCommand(id, text);
             return;
@@ -524,27 +611,17 @@ export default function AgentFrame({ data, id }: any) {
     };
 
     return (
+        <>
         <CanvasWindowFrame
-            className={`nowheel ${hasFrameChrome ? 'canvas-frame--active' : ''} ${isFocused ? 'canvas-frame--focused' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''}`}
+            className={`nowheel ${isFocused ? 'canvas-frame--focused' : ''}`}
             width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}
             height={isFocused ? Math.max(rfHeight - 140, 400) : (data.height || 400)}
-            onPointerDownCapture={handleFramePointerDownCapture}
-            chrome={(
-                <>
-                    <NodeResizer
-                        color="var(--text-muted)"
-                        lineStyle={{ borderWidth: 0 }}
-                        isVisible={showResizeChrome}
-                        minWidth={280}
-                        minHeight={320}
-                        handleStyle={{ width: 8, height: 8, background: 'var(--bg-panel)', border: '1px solid var(--border-strong)' }}
-                        onResizeStart={handleResizeStart}
-                        onResizeEnd={handleResizeEnd}
-                    />
-                </>
-            )}
-            dragHandleActive={isTransformChromeActive}
-            onActivateTransform={activateTransformChrome}
+            transformActive={!!data.transformActive}
+            onActivateTransform={data.onActivateTransform as (() => void) | undefined}
+            onDeactivateTransform={data.onDeactivateTransform as (() => void) | undefined}
+            selected={isSelected}
+            minWidth={280}
+            minHeight={320}
             headerStart={<span className="canvas-frame__name">{data.name}</span>}
             headerEnd={(
                 <div className="canvas-frame__header-actions">
@@ -553,6 +630,9 @@ export default function AgentFrame({ data, id }: any) {
                         modelTitle={data.modelTitle || null}
                         talLabel={data.talLabel || null}
                         danceSummary={data.danceSummary || null}
+                        executionMode={performer?.executionMode === 'safe' ? 'safe' : 'direct'}
+                        pendingCount={safeSummary?.pendingCount || 0}
+                        conflictCount={safeSummary?.conflictCount || 0}
                     />
                     {!isEditMode && (
                         <button
@@ -775,24 +855,52 @@ export default function AgentFrame({ data, id }: any) {
                             <p className="empty-subtitle">Send a message to begin</p>
                         </div>
                     )}
-                    renderMessage={(msg) => (
+                    renderMessage={(msg) => {
+                        const showUndoAction = canUndoLastTurn && msg.id === lastMessageId;
+                        return (
                         <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`}>
                             {msg.role === 'user' ? (
                                 <div className="user-input-box">
                                     <span className="user-input-text">{msg.content}</span>
-                                    <button
-                                        className="user-input-revert"
-                                        onClick={() => setInput(msg.content)}
-                                        title="Re-use this message"
-                                    >
-                                        <RotateCcw size={12} />
-                                    </button>
+                                    <div className="user-input-actions">
+                                        <button
+                                            className="user-input-revert"
+                                            onClick={() => setInput(msg.content)}
+                                            title="Re-use this message"
+                                        >
+                                            <RotateCcw size={12} />
+                                        </button>
+                                        {showUndoAction ? (
+                                            <button
+                                                className="user-input-revert is-visible"
+                                                onClick={() => {
+                                                    void undoLastTurn(id);
+                                                }}
+                                                title="Undo the last turn"
+                                            >
+                                                <ArrowLeft size={12} />
+                                            </button>
+                                        ) : null}
+                                    </div>
                                 </div>
                             ) : (
-                                <ChatMessageContent message={msg} />
+                                <div className="thread-msg__body-with-actions">
+                                    <ChatMessageContent message={msg} />
+                                    {showUndoAction ? (
+                                        <button
+                                            className="thread-msg__icon-btn"
+                                            onClick={() => {
+                                                void undoLastTurn(id);
+                                            }}
+                                            title="Undo the last turn"
+                                        >
+                                            <ArrowLeft size={12} />
+                                        </button>
+                                    ) : null}
+                                </div>
                             )}
                         </div>
-                    )}
+                    )}}
                     renderLoading={() => (
                         <div className="thread-msg thread-msg--assistant">
                             <div className="assistant-body">
@@ -1003,11 +1111,71 @@ export default function AgentFrame({ data, id }: any) {
                                 >
                                     <Sparkles size={12} />
                                 </button>
+                                <div className="chat-input__safe-group">
+                                <button
+                                    className={`mode-toggle mode-safe ${performer?.executionMode === 'safe' ? 'is-active' : ''}`}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        void handleToggleExecutionMode();
+                                    }}
+                                    title={performer?.executionMode === 'safe' ? 'Switch to Direct mode' : 'Switch to Safe mode'}
+                                    type="button"
+                                >
+                                    <Shield size={12} />
+                                    <span>Safe</span>
+                                </button>
+                                {performer?.executionMode === 'safe' ? (
+                                    <button
+                                        className={`mode-toggle ${safeSummary?.pendingCount || safeSummary?.conflictCount ? 'is-active' : ''}`}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            setPendingModeSwitch(null);
+                                            setShowSafeReview(true);
+                                        }}
+                                        title="Review safe mode changes"
+                                        type="button"
+                                    >
+                                        <span>Review</span>
+                                    </button>
+                                ) : null}
+                                </div>
                             </div>
                         </div>
                     )}
                 />
             )}
         </CanvasWindowFrame>
+        {showSafeReview ? (
+            <SafeReviewModal
+                title={pendingModeSwitch === 'direct' ? `${data.name} · Review before switching to Direct` : `${data.name} · Safe Mode Review`}
+                summary={safeSummary}
+                busy={safeBusy}
+                onClose={() => {
+                    setShowSafeReview(false);
+                    setPendingModeSwitch(null);
+                }}
+                onApply={() => {
+                    void runSafeAction(() => applySafeOwner('performer', id), pendingModeSwitch || undefined);
+                }}
+                onDiscardAll={() => {
+                    void runSafeAction(() => discardAllSafeOwner('performer', id), pendingModeSwitch || undefined);
+                }}
+                onDiscardFile={(filePath) => {
+                    void runSafeAction(
+                        () => discardSafeOwnerFile('performer', id, filePath),
+                        undefined,
+                        `Discarded ${filePath} from the safe workspace and started a new thread lineage.`,
+                    );
+                }}
+                onUndoLastApply={() => {
+                    void runSafeAction(
+                        () => undoLastSafeApply('performer', id),
+                        undefined,
+                        'Undid the last apply and started a new thread lineage.',
+                    );
+                }}
+            />
+        ) : null}
+        </>
     );
 }

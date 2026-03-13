@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Activity, FileCode, X } from 'lucide-react'
 import { api } from '../../api'
 import type { FileStatus } from '../../types'
-import CanvasWindowFrame from './CanvasWindowFrame'
+import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
 import './CanvasTrackingFrame.css'
 
 interface CanvasTrackingFrameProps {
@@ -16,7 +16,10 @@ interface CanvasTrackingFrameProps {
 }
 
 export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) {
-    const { title, width, height, onClose, onResize } = data
+    const { title, width, height, onClose } = data
+    const transformActive = !!(data as any).transformActive
+    const onActivateTransform = (data as any).onActivateTransform as (() => void) | undefined
+    const onDeactivateTransform = (data as any).onDeactivateTransform as (() => void) | undefined
     const [files, setFiles] = useState<FileStatus[]>([])
 
     useEffect(() => {
@@ -33,35 +36,16 @@ export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) 
         return () => clearInterval(interval)
     }, [])
 
-    const handleResizeStart = (e: React.MouseEvent) => {
-        e.preventDefault()
-        e.stopPropagation()
-        const startX = e.clientX
-        const startY = e.clientY
-        const startW = width
-        const startH = height
-
-        const onMove = (me: MouseEvent) => {
-            const newW = Math.max(360, startW + (me.clientX - startX))
-            const newH = Math.max(240, startH + (me.clientY - startY))
-            onResize(Math.round(newW), Math.round(newH))
-        }
-
-        const onUp = () => {
-            document.removeEventListener('mousemove', onMove)
-            document.removeEventListener('mouseup', onUp)
-        }
-
-        document.addEventListener('mousemove', onMove)
-        document.addEventListener('mouseup', onUp)
-    }
-
     return (
         <CanvasWindowFrame
             className="canvas-tracking-frame"
             width={width}
             height={height}
-            dragHandleActive
+            transformActive={transformActive}
+            onActivateTransform={onActivateTransform}
+            onDeactivateTransform={onDeactivateTransform}
+            minWidth={360}
+            minHeight={240}
             headerStart={(
                 <>
                     <Activity size={12} />
@@ -81,6 +65,7 @@ export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) 
                 </button>
             )}
             bodyClassName="scroll-area"
+            customResizeHandle={<div className="canvas-tracking-frame__resize" />}
         >
             {files.length === 0 ? (
                 <div className="canvas-tracking-frame__empty">No uncommitted files detected.</div>
@@ -107,7 +92,6 @@ export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) 
                     ))}
                 </ul>
             )}
-            <div className="canvas-tracking-frame__resize" onMouseDown={handleResizeStart} />
         </CanvasWindowFrame>
     )
 }

@@ -4,6 +4,7 @@ import type { RunActRequest } from '../../shared/act-contracts.js'
 import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import { runActRuntime } from '../lib/act-runtime.js'
 import { abortActRuntime, subscribeActRuntimeEvents } from '../lib/act-runtime-events.js'
+import { getSafeOwnerExecutionDir } from '../lib/safe-mode.js'
 import {
     StudioValidationError,
     jsonOpencodeError,
@@ -39,12 +40,19 @@ compile.post('/api/act/run', async (c) => {
     try {
         const body = await c.req.json<RunActRequest>()
 
-        const cwd = resolveRequestWorkingDir(c)
+        const workingDir = resolveRequestWorkingDir(c)
+        const stageAct = body.stageAct as any
+        const executionMode = stageAct?.executionMode === 'safe' ? 'safe' : 'direct'
+        const cwd = stageAct?.id
+            ? await getSafeOwnerExecutionDir(workingDir, 'act', stageAct.id, executionMode)
+            : workingDir
         const result = await runActRuntime({
             cwd,
+            baseWorkingDir: workingDir,
+            executionMode,
             actSessionId: body.actSessionId,
             actUrn: body.actUrn,
-            stageAct: body.stageAct as any,
+            stageAct,
             performers: body.performers as any,
             drafts: body.drafts as any,
             input: body.input,

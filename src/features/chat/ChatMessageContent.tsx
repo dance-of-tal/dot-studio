@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, Wrench } from 'lucide-react'
-import MarkdownRenderer from '../shared/MarkdownRenderer'
+import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import type { ChatMessage, ChatMessagePart, ChatMessageToolInfo } from '../../types'
 
 function formatToolDuration(time: ChatMessageToolInfo['time']) {

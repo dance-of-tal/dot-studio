@@ -1,3 +1,5 @@
+import type { ExecutionMode } from './safe-mode.js'
+
 export type SharedAssetRef =
     | { kind: 'registry'; urn: string }
     | { kind: 'draft'; draftId: string }
@@ -30,6 +32,7 @@ export type ChatSessionCreateRequest = {
     performerId: string
     performerName: string
     configHash: string
+    executionMode?: ExecutionMode
 }
 
 export type ChatSessionCreateResponse = {

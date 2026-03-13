@@ -1,5 +1,6 @@
 import type { DanceDeliveryMode, ModelSelection } from './prompt.js'
 import { getOpencode } from './opencode.js'
+import type { ExecutionMode } from '../../shared/safe-mode.js'
 
 // Re-export shared types
 export type {
@@ -62,6 +63,7 @@ export type StageActInput = {
     id: string
     name: string
     description: string
+    executionMode?: ExecutionMode
     sessionMode?: ActSessionMode
     bounds?: {
         x: number
@@ -137,6 +139,8 @@ export type ActMachineContext = {
     runId: string
     actSessionId?: string | null
     cwd: string
+    baseWorkingDir?: string
+    executionMode?: ExecutionMode
     act: StageActInput
     performersById: Record<string, RuntimePerformer>
     drafts: Record<string, RuntimeDraftAsset>
@@ -190,6 +194,8 @@ export type StepResult = {
 
 export type RunActRuntimeInput = {
     cwd: string
+    baseWorkingDir?: string
+    executionMode?: ExecutionMode
     actSessionId?: string
     actUrn?: string
     stageAct?: StageActInput

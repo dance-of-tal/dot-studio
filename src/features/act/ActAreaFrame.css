@@ -25,20 +25,7 @@
     z-index: 20 !important;
 }
 
-.act-area-frame__resize-grip {
-    position: absolute;
-    right: -5px;
-    bottom: -5px;
-    width: 12px;
-    height: 12px;
-    padding: 0;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--bg-panel);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg-panel) 72%, transparent);
-    cursor: nwse-resize;
-    z-index: 30;
-}
+
 
 .act-area-frame__title {
     display: inline-flex;
@@ -683,4 +670,3 @@
         transform: scale(1.03);
     }
 }
-

@@ -17,6 +17,7 @@ import {
     getOrchestratorRoutes,
     summarizeText,
 } from './act-runtime-routing.js'
+import { registerSessionExecutionContext } from './session-execution.js'
 import type {
     ActMachineContext,
     ActSessionLifetime,
@@ -123,6 +124,20 @@ export async function createSession(cwd: string, title: string) {
     }
 }
 
+async function registerActSessionContext(
+    context: ActMachineContext,
+    sessionId: string,
+) {
+    await registerSessionExecutionContext({
+        sessionId,
+        ownerKind: 'act',
+        ownerId: context.act.id,
+        mode: context.executionMode || 'direct',
+        workingDir: context.baseWorkingDir || context.cwd,
+        executionDir: context.cwd,
+    })
+}
+
 export async function deleteSession(cwd: string, sessionId: string) {
     const oc = await getOpencode()
     await Promise.race([
@@ -173,6 +188,7 @@ export async function resolveSession(
 
     if (directive?.mode === 'fresh') {
         const fresh = await createSession(context.cwd, title)
+        await registerActSessionContext(context, fresh.sessionId)
         const persistentHandle = buildPersistentHandle(context.act, lifetime, policy, nodeId, performerId)
         return {
             ...fresh,
@@ -186,6 +202,7 @@ export async function resolveSession(
     const scopeKey = buildSessionScopeKey(context, policy, lifetime, nodeId, performerId)
     if (!scopeKey) {
         const fresh = await createSession(context.cwd, title)
+        await registerActSessionContext(context, fresh.sessionId)
         return {
             ...fresh,
             configKey,
@@ -223,6 +240,7 @@ export async function resolveSession(
     }
 
     const created = await createSession(context.cwd, title)
+    await registerActSessionContext(context, created.sessionId)
     context.sessionPool.set(scopeKey, {
         scopeKey,
         sessionId: created.sessionId,

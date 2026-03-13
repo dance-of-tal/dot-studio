@@ -2,6 +2,12 @@
 
 import type { RuntimeModelVariant } from '../../shared/model-variants'
 import type {
+    ExecutionMode,
+    SafeOwnerKind,
+    SafeOwnerFile,
+    SafeOwnerSummary,
+} from '../../shared/safe-mode'
+import type {
     ActSessionPolicy,
     ActSessionLifetime,
     ActSessionMode,
@@ -27,6 +33,12 @@ export type {
     StageActEdge,
     ActHistoryEntry,
     ActThreadResumeSummary,
+}
+export type {
+    ExecutionMode,
+    SafeOwnerKind,
+    SafeOwnerFile,
+    SafeOwnerSummary,
 }
 
 export type AssetKind = 'tal' | 'dance' | 'act' | 'performer' | 'model' | 'mcp'
@@ -173,6 +185,7 @@ export interface PerformerNode {
     configHash: string
     activeSessionId?: string
     danceDeliveryMode: DanceDeliveryMode
+    executionMode?: ExecutionMode
     // Legacy fallback for older saved stages. Runtime code should prefer agentId.
     planMode?: boolean
     hidden?: boolean
@@ -202,6 +215,7 @@ export interface StageAct {
     name: string
     description: string
     hidden?: boolean
+    executionMode?: ExecutionMode
     sessionMode?: ActSessionMode
     bounds: {
         x: number
@@ -242,7 +256,7 @@ export interface CanvasTrackingWindow {
 }
 
 export interface Stage {
-    schemaVersion: 3
+    schemaVersion: 4
     workingDir: string
     performers: PerformerNode[]
     performerLinks: PerformerLink[]

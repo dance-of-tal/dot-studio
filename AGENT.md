@@ -5,6 +5,7 @@ Internal guide for working in `/Users/junhoyoon/windsurfpjt/dance-of-tal/studio`
 ## Boundary
 
 - Studio owns stage state, canvas UX, drafts, and composition.
+- Studio also owns safe-mode shadow workspace orchestration, pending diff review, and apply/discard flows.
 - OpenCode owns model execution, sessions, provider auth, tools, and live MCP runtime.
 - DOT owns local/global asset formats and registry semantics.
 - Hono is the BFF/application boundary, not the execution authority.
@@ -92,6 +93,11 @@ type AssetRef =
   - `mcpServerNames`
 - `declaredMcpConfig` is imported provenance, not runtime authority.
 - Acts reference performers by `performerId`. Act-owned performers are cloned bindings.
+- Performer and Act both support `executionMode: 'direct' | 'safe'`.
+- Safe mode ownership is owner-first:
+  - performer safe mode is performer-scoped
+  - act safe mode is act-scoped
+  - safe state is not thread-scoped
 
 ## Runtime Rules
 
@@ -100,6 +106,43 @@ type AssetRef =
 - Dance is cataloged first and loaded on demand through `read`.
 - Performer chat and act runtime are separate session models.
 - Changing Tal, Dance, model, or MCP selection rolls the OpenCode session.
+- OpenCode remains the execution authority in both direct and safe modes.
+- Safe mode changes the execution directory, not the execution engine.
+
+## Safe Mode Rules
+
+- Direct mode runs against the real `workingDir`.
+- Safe mode runs against a server-managed shadow workspace under `~/.dot-studio/safe-mode`.
+- Safe mode shadow workspaces are Git-backed private workspaces created from the current real workspace snapshot.
+- Do not copy the source repo `.git` into the shadow workspace.
+- Performer safe mode:
+  - one performer owns one shadow workspace
+  - all performer sessions share that shadow workspace
+  - only the current active performer session is treated as the undo-capable lineage
+- Act safe mode:
+  - one act owns one shadow workspace
+  - all act sessions share that shadow workspace
+  - act v1 does not expose undo; review/apply/discard only
+- Diff review compares `base` snapshot vs `shadow` workspace.
+- Apply compares `real` vs `base` vs `shadow` and may auto-merge non-overlapping text changes.
+- Conflict state is file-scoped. Clean files may still apply when another file conflicts.
+- Safe-mode apply/discard/reset operations should invalidate the current owner lineage and force the next run into a new OpenCode session lineage.
+
+## Session Routing Rules
+
+- Session-bound OpenCode routes must prefer Studio's session execution registry over raw request `workingDir` when a session has a registered execution directory.
+- Forked performer sessions inherit the same execution directory as the source session.
+- Chat event subscriptions and session lists should include both the real workspace directory and any registered performer execution directories for that stage.
+- Act-created OpenCode sessions should register as `ownerKind='act'`.
+
+## Undo Rules
+
+- Studio does not expose generic chat-only undo.
+- Performer undo is exactly OpenCode `session.revert`.
+- `Undo Last Turn` should revert both chat history and file state to the previous turn boundary.
+- In performer UI, undo belongs to the last visible turn affordance, not global header chrome.
+- Act does not expose undo in v1 safe mode.
+- Direct mode undo is only as reliable as OpenCode's underlying Git-based revert support for the real workspace.
 
 ## MCP Rules
 
@@ -180,6 +223,15 @@ This repository should remain compatible with a future `Performer Adapter View` 
 - MCP CRUD lives in Asset Library, not Settings.
 - Threads sidebar child rows are renameable inline.
 - Selected MCP bindings can be removed from performer cards. Imported placeholders cannot; they must be mapped.
+- Safe mode controls should use the existing runtime control / modal design system.
+- Do not introduce a separate visual language for safe mode.
+- Performer UI:
+  - safe/direct toggle belongs in the runtime control row
+  - `Undo Last Turn` belongs on the last message turn affordance
+  - safe review uses modal patterns already used elsewhere in Studio
+- Act UI:
+  - safe/direct toggle and review affordances may live in existing act header/runtime controls
+  - do not add act undo controls in v1
 
 ## Publish Rules
 
@@ -277,11 +329,17 @@ Session reuse requires matching `configKey` (model + tal + dance + mcp + agent c
 - [src/types/index.ts](./src/types/index.ts)
 - [src/store/workspaceSlice.ts](./src/store/workspaceSlice.ts)
 - [src/store/chatSlice.ts](./src/store/chatSlice.ts)
+- [src/store/safeModeSlice.ts](./src/store/safeModeSlice.ts)
 - [src/lib/performers.ts](./src/lib/performers.ts)
 - [src/lib/acts.ts](./src/lib/acts.ts)
 - [src/components/panels/AssetLibrary.tsx](./src/components/panels/AssetLibrary.tsx)
-- [src/components/canvas/AgentFrame.tsx](./src/components/canvas/AgentFrame.tsx)
-- [src/components/canvas/ActAreaFrame.tsx](./src/components/canvas/ActAreaFrame.tsx)
-- [server/routes/opencode.ts](./server/routes/opencode.ts)
+- [src/features/performer/AgentFrame.tsx](./src/features/performer/AgentFrame.tsx)
+- [src/features/act/ActAreaFrame.tsx](./src/features/act/ActAreaFrame.tsx)
+- [src/components/modals/SafeReviewModal.tsx](./src/components/modals/SafeReviewModal.tsx)
+- [server/routes/chat.ts](./server/routes/chat.ts)
+- [server/routes/compile.ts](./server/routes/compile.ts)
+- [server/routes/safe.ts](./server/routes/safe.ts)
 - [server/lib/act-runtime.ts](./server/lib/act-runtime.ts)
+- [server/lib/safe-mode.ts](./server/lib/safe-mode.ts)
+- [server/lib/session-execution.ts](./server/lib/session-execution.ts)
 - [server/lib/runtime-tools.ts](./server/lib/runtime-tools.ts)

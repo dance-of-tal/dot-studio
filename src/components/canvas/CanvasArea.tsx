@@ -7,9 +7,9 @@ import '@xyflow/react/dist/style.css';
 import { useStudioStore } from '../../store';
 import { AgentFrame } from '../../features/performer';
 import { ActAreaFrame } from '../../features/act';
-import MarkdownEditorFrame from './MarkdownEditorFrame';
-import CanvasTerminalFrame from './CanvasTerminalFrame';
-import CanvasTrackingFrame from './CanvasTrackingFrame';
+import MarkdownEditorFrame from '../../features/assets/MarkdownEditorFrame';
+import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
+import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
 import { hasModelConfig, resolvePerformerAgentId, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { resolveActNodeLabel, resolveEffectiveActNodeSession } from '../../lib/acts';
 import { computeActAutoLayout } from '../../lib/act-layout';
@@ -361,6 +361,7 @@ export default function CanvasArea() {
                 runtimeSummary: currentSession?.resumeSummary || null,
                 loading: loadingActId === act.id,
                 entryNodeId: act.entryNodeId,
+                executionMode: act.executionMode === 'safe' ? 'safe' : 'direct',
                 sessionMode: act.sessionMode || 'all_nodes_thread',
                 transformActive: isActTransforming,
                 onActivateTransform: () => activateTransformTarget('actArea', act.id),
@@ -371,10 +372,7 @@ export default function CanvasArea() {
                 onUpdateDescription: (description: string) => updateActMeta(act.id, { description }),
                 onUpdateMaxIterations: (maxIterations: number) => updateActMeta(act.id, { maxIterations }),
                 onUpdateSessionMode: (sessionMode: 'default' | 'all_nodes_thread') => updateActMeta(act.id, { sessionMode }),
-                onResizeFrame: (width: number, height: number) => updateActBounds(act.id, {
-                    width: Math.round(width),
-                    height: Math.round(height),
-                }),
+
                 onFocusNode: (nodeId: string | null) => setInspectorFocus(nodeId ? `act-node:${nodeId}` : null),
                 onAddNode: (type: 'worker' | 'orchestrator' | 'parallel') => addActNode(act.id, type),
                 onAutoArrange: async () => {
@@ -537,11 +535,14 @@ export default function CanvasArea() {
             title: terminal.title,
             width: terminal.width,
             height: terminal.height,
+            transformActive: transformTarget?.type === 'canvasTerminal' && transformTarget.id === terminal.id,
+            onActivateTransform: () => activateTransformTarget('canvasTerminal', terminal.id),
+            onDeactivateTransform: () => deactivateTransformTarget('canvasTerminal', terminal.id),
             onClose: () => removeCanvasTerminal(terminal.id),
             onResize: (width: number, height: number) => updateCanvasTerminalSize(terminal.id, width, height),
             onSessionChange: (sessionId: string | null, connected: boolean) => updateCanvasTerminalSession(terminal.id, sessionId, connected),
         } as Record<string, unknown>,
-    })), [canvasTerminals, transformTarget, removeCanvasTerminal, updateCanvasTerminalSize, updateCanvasTerminalSession])
+    })), [canvasTerminals, transformTarget, removeCanvasTerminal, updateCanvasTerminalSize, updateCanvasTerminalSession, activateTransformTarget, deactivateTransformTarget])
 
     const buildTrackingNodes = useCallback(() => trackingWindow ? [{
         id: trackingWindow.id,
@@ -555,10 +556,13 @@ export default function CanvasArea() {
             title: trackingWindow.title,
             width: trackingWindow.width,
             height: trackingWindow.height,
+            transformActive: transformTarget?.type === 'stageTracking' && transformTarget.id === trackingWindow.id,
+            onActivateTransform: () => activateTransformTarget('stageTracking', trackingWindow.id),
+            onDeactivateTransform: () => deactivateTransformTarget('stageTracking', trackingWindow.id),
             onClose: () => closeTrackingWindow(),
             onResize: (width: number, height: number) => updateTrackingWindowSize(width, height),
         } as Record<string, unknown>,
-    }] : [], [trackingWindow, transformTarget, closeTrackingWindow, updateTrackingWindowSize])
+    }] : [], [trackingWindow, transformTarget, closeTrackingWindow, updateTrackingWindowSize, activateTransformTarget, deactivateTransformTarget])
 
     // Sync from store to local state when performers change
     useEffect(() => {

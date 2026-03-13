@@ -1,11 +1,17 @@
 // Chat Session Routes (OpenCode proxy)
 
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { getOpencode } from '../lib/opencode.js'
 import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/chat-contracts.js'
-import { requestDirectoryQuery, resolveRequestWorkingDir } from '../lib/request-context.js'
+import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import { normalizeIncompleteToolParts, uniqueAssetRefs, waitForSessionToSettle } from '../lib/chat-session.js'
 import { createStudioChatSession, sendStudioChatMessage } from '../services/chat-service.js'
+import {
+    cloneSessionExecutionContext,
+    listSessionExecutionContextsForWorkingDir,
+    resolveSessionExecutionContext,
+    unregisterSessionExecutionContext,
+} from '../lib/session-execution.js'
 import {
     StudioValidationError,
     jsonOpencodeError,
@@ -14,6 +20,13 @@ import {
 import { createSSEResponse, sseEncode } from '../lib/sse.js'
 
 const chat = new Hono()
+
+async function directoryQueryForSession(c: Context, sessionId: string) {
+    const context = await resolveSessionExecutionContext(sessionId)
+    return {
+        directory: context?.executionDir || resolveRequestWorkingDir(c),
+    }
+}
 
 // ── Create Session ──────────────────────────────────────
 chat.post('/api/chat/sessions', async (c) => {
@@ -29,10 +42,12 @@ chat.post('/api/chat/sessions', async (c) => {
 chat.delete('/api/chat/sessions/:id', async (c) => {
     try {
         const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         unwrapOpencodeResult(await oc.session.delete({
             sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
+            ...directoryQuery,
         }))
+        await unregisterSessionExecutionContext(c.req.param('id'))
         return c.json({ ok: true })
     } catch (err) {
         return jsonOpencodeError(c, err)
@@ -51,9 +66,10 @@ chat.put('/api/chat/sessions/:id', async (c) => {
 
     try {
         const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         const updated = unwrapOpencodeResult(await oc.session.update({
             sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
+            ...directoryQuery,
             title: title.trim(),
         }))
         return c.json(updated)
@@ -77,7 +93,7 @@ chat.post('/api/chat/sessions/:id/send', async (c) => {
     }
 
     try {
-        const cwd = resolveRequestWorkingDir(c)
+        const cwd = (await resolveSessionExecutionContext(c.req.param('id')))?.executionDir || resolveRequestWorkingDir(c)
         const normalizedBody: ChatSendRequest = {
             ...body,
             performer: {
@@ -97,7 +113,7 @@ chat.post('/api/chat/sessions/:id/send', async (c) => {
 chat.post('/api/chat/sessions/:id/abort', async (c) => {
     try {
         const oc = await getOpencode()
-        const directoryQuery = requestDirectoryQuery(c)
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         unwrapOpencodeResult(await oc.session.abort({
             sessionID: c.req.param('id'),
             ...directoryQuery,
@@ -113,17 +129,52 @@ chat.post('/api/chat/sessions/:id/abort', async (c) => {
 chat.get('/api/chat/events', async (c) => {
     try {
         const oc = await getOpencode()
-        const events = await oc.event.subscribe(requestDirectoryQuery(c))
+        const workingDir = resolveRequestWorkingDir(c)
+        const extraDirs = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
+        const directories = Array.from(new Set([
+            workingDir,
+            ...extraDirs.map((context) => context.executionDir),
+        ]))
+        const subscriptions = await Promise.all(
+            directories.map((directory) => oc.event.subscribe({ directory })),
+        )
 
         const stream = new ReadableStream({
             async start(controller) {
-                try {
-                    for await (const event of events.stream) {
-                        const data = JSON.stringify(event)
-                        controller.enqueue(sseEncode(data))
+                let active = true
+                let completed = 0
+                const close = () => {
+                    if (!active) {
+                        return
                     }
-                } catch {
-                    controller.close()
+                    active = false
+                    try {
+                        controller.close()
+                    } catch {
+                        // Stream may already be closed.
+                    }
+                }
+
+                c.req.raw.signal?.addEventListener('abort', close, { once: true })
+
+                for (const events of subscriptions) {
+                    void (async () => {
+                        try {
+                            for await (const event of events.stream) {
+                                if (!active) {
+                                    return
+                                }
+                                controller.enqueue(sseEncode(JSON.stringify(event)))
+                            }
+                        } catch {
+                            // Ignore broken subscriptions and keep the stream alive for the rest.
+                        } finally {
+                            completed += 1
+                            if (completed === subscriptions.length) {
+                                close()
+                            }
+                        }
+                    })()
                 }
             },
         })
@@ -138,7 +189,7 @@ chat.get('/api/chat/events', async (c) => {
 chat.get('/api/chat/sessions/:id/messages', async (c) => {
     try {
         const oc = await getOpencode()
-        const directoryQuery = requestDirectoryQuery(c)
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         const sessionId = c.req.param('id')
         const data = unwrapOpencodeResult<any[]>(await oc.session.messages({
             sessionID: sessionId,
@@ -161,9 +212,10 @@ chat.get('/api/chat/sessions/:id/messages', async (c) => {
 chat.get('/api/chat/sessions/:id/diff', async (c) => {
     try {
         const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         const data = unwrapOpencodeResult<any[]>(await oc.session.diff({
             sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
+            ...directoryQuery,
         }))
         return c.json(data || [])
     } catch (err) {
@@ -175,9 +227,10 @@ chat.get('/api/chat/sessions/:id/diff', async (c) => {
 chat.get('/api/chat/sessions/:id/todo', async (c) => {
     try {
         const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         const data = unwrapOpencodeResult<any[]>(await oc.session.todo({
             sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
+            ...directoryQuery,
         }))
         return c.json(data || [])
     } catch (err) {
@@ -190,11 +243,16 @@ chat.post('/api/chat/sessions/:id/fork', async (c) => {
     const { messageId } = await c.req.json<{ messageId: string }>()
     try {
         const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         const data = unwrapOpencodeResult<any>(await oc.session.fork({
             sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
+            ...directoryQuery,
             messageID: messageId,
         }))
+        const nextSessionId = data?.id || data?.sessionId
+        if (typeof nextSessionId === 'string' && nextSessionId) {
+            await cloneSessionExecutionContext(c.req.param('id'), nextSessionId)
+        }
         return c.json(data)
     } catch (err) {
         return jsonOpencodeError(c, err)
@@ -205,9 +263,10 @@ chat.post('/api/chat/sessions/:id/fork', async (c) => {
 chat.post('/api/chat/sessions/:id/share', async (c) => {
     try {
         const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         const data = unwrapOpencodeResult<any>(await oc.session.share({
             sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
+            ...directoryQuery,
         }))
         return c.json(data)
     } catch (err) {
@@ -224,9 +283,10 @@ chat.post('/api/chat/sessions/:id/summarize', async (c) => {
     }>()
     try {
         const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         const data = unwrapOpencodeResult<boolean>(await oc.session.summarize({
             sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
+            ...directoryQuery,
             ...(providerID && modelID ? { providerID, modelID } : {}),
             ...(typeof auto === 'boolean' ? { auto } : {}),
         }))
@@ -241,25 +301,12 @@ chat.post('/api/chat/sessions/:id/revert', async (c) => {
     const { messageId, partId } = await c.req.json<{ messageId: string; partId?: string }>()
     try {
         const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
         const data = unwrapOpencodeResult<any>(await oc.session.revert({
             sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
+            ...directoryQuery,
             messageID: messageId,
             ...(partId ? { partID: partId } : {}),
-        }))
-        return c.json(data)
-    } catch (err) {
-        return jsonOpencodeError(c, err)
-    }
-})
-
-// ── Unrevert ────────────────────────────────────────────
-chat.post('/api/chat/sessions/:id/unrevert', async (c) => {
-    try {
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.session.unrevert({
-            sessionID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
         }))
         return c.json(data)
     } catch (err) {
@@ -271,8 +318,25 @@ chat.post('/api/chat/sessions/:id/unrevert', async (c) => {
 chat.get('/api/chat/sessions', async (c) => {
     try {
         const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any[]>(await oc.session.list(requestDirectoryQuery(c)))
-        return c.json(data || [])
+        const workingDir = resolveRequestWorkingDir(c)
+        const executionContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
+        const directories = Array.from(new Set([
+            workingDir,
+            ...executionContexts.map((context) => context.executionDir),
+        ]))
+        const lists = await Promise.all(
+            directories.map(async (directory) => unwrapOpencodeResult<any[]>(await oc.session.list({ directory }))),
+        )
+        const sessions = new Map<string, any>()
+        for (const list of lists) {
+            for (const session of list || []) {
+                if (!session?.id) {
+                    continue
+                }
+                sessions.set(session.id, session)
+            }
+        }
+        return c.json(Array.from(sessions.values()))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

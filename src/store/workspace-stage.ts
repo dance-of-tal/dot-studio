@@ -68,6 +68,7 @@ export async function newStage(get: GetFn, set: SetFn) {
                 selectedActSessionId: null,
                 inspectorFocus: null,
                 chats: {},
+                chatPrefixes: {},
                 actChats: {},
                 actPerformerChats: {},
                 actPerformerBindings: {},
@@ -75,6 +76,7 @@ export async function newStage(get: GetFn, set: SetFn) {
                 sessionMap: {},
                 sessionConfigMap: {},
                 actSessionMap: {},
+                safeSummaries: {},
                 sessions: [],
                 actSessions: [],
                 loadingActId: null,
@@ -134,7 +136,7 @@ export async function saveStage(get: GetFn, set: SetFn) {
         }
     })
     const saved = await api.stages.save({
-        schemaVersion: 3,
+        schemaVersion: 4,
         workingDir: normalizePath(workingDir),
         performers: performersWithSessions,
         performerLinks: edges,
@@ -183,6 +185,7 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
                 mcpBindingMap: performer.mcpBindingMap || {},
                 declaredMcpConfig: performer.declaredMcpConfig || null,
                 danceDeliveryMode: performer.danceDeliveryMode || 'auto',
+                executionMode: performer.executionMode === 'safe' ? 'safe' : 'direct',
                 planMode: performer.planMode || false,
                 hidden: performer.hidden || false,
                 activeSessionId: performer.activeSessionId,
@@ -352,6 +355,7 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
                 name: act.name,
                 description: act.description || '',
                 hidden: !!act.hidden,
+                executionMode: act.executionMode === 'safe' ? 'safe' : 'direct',
                 sessionMode: act.sessionMode === 'default' ? 'default' : defaultActSessionMode(),
                 bounds: act.bounds || {
                     x: 120,
@@ -416,8 +420,10 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             inspectorFocus: null,
             activeChatPerformerId: null,
             chats: {},
+            chatPrefixes: {},
             sessionMap: rehydratedSessionMap,
             sessionConfigMap: rehydratedSessionConfigMap,
+            safeSummaries: {},
             sessions: [],
             actChats: loadedActChats,
             actPerformerChats: loadedActPerformerChats,

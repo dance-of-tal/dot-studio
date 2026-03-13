@@ -1,6 +1,7 @@
 import type {
     AssetRef,
     DraftAsset,
+    ExecutionMode,
     MarkdownEditorKind,
     MarkdownEditorNode,
     PerformerNode,
@@ -18,6 +19,8 @@ import type {
     CanvasTerminalNode,
     CanvasTrackingWindow,
     ActPerformerSessionBinding,
+    SafeOwnerKind,
+    SafeOwnerSummary,
 } from '../types'
 import type { AdapterViewProjection } from '../../shared/adapter-view'
 
@@ -113,7 +116,9 @@ export interface WorkspaceSlice {
     updatePerformerAuthoringMeta: (performerId: string, patch: { slug?: string; description?: string; tags?: string[] }) => void
     togglePerformerVisibility: (id: string) => void
     setPerformerAutoCompact: (id: string, enabled: boolean) => void
+    setPerformerExecutionMode: (performerId: string, mode: ExecutionMode) => void
     toggleActVisibility: (id: string) => void
+    setActExecutionMode: (actId: string, mode: ExecutionMode) => void
     addCanvasTerminal: () => void
     removeCanvasTerminal: (id: string) => void
     updateCanvasTerminalPosition: (id: string, x: number, y: number) => void
@@ -187,6 +192,7 @@ export interface WorkspaceSlice {
 
 export interface ChatSlice {
     chats: Record<string, ChatMessage[]>
+    chatPrefixes: Record<string, ChatMessage[]>
     actChats: Record<string, ChatMessage[]>
     actPerformerChats: Record<string, Record<string, ChatMessage[]>>
     actPerformerBindings: Record<string, ActPerformerSessionBinding[]>
@@ -215,6 +221,7 @@ export interface ChatSlice {
     startNewActSession: (actId: string) => void
     abortChat: (performerId: string) => Promise<void>
     summarizeSession: (performerId: string) => Promise<void>
+    undoLastTurn: (performerId: string) => Promise<void>
     rehydrateSessions: () => Promise<void>
     forkSession: (performerId: string, messageId: string) => Promise<void>
     revertSession: (performerId: string, messageId: string) => Promise<void>
@@ -223,6 +230,8 @@ export interface ChatSlice {
     deleteSession: (sessionId: string) => Promise<void>
     deleteActSession: (sessionId: string) => void
     renameActSession: (sessionId: string, title: string) => void
+    detachPerformerSession: (performerId: string, notice?: string) => void
+    detachActSession: (actId: string, notice?: string) => void
 }
 
 export interface IntegrationSlice {
@@ -244,4 +253,14 @@ export interface AdapterViewSlice {
     clearAdapterViewsForPerformer: (performerId: string) => void
 }
 
-export type StudioState = WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice
+export interface SafeModeSlice {
+    safeSummaries: Record<string, SafeOwnerSummary>
+    refreshSafeOwner: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<SafeOwnerSummary | null>
+    clearSafeOwner: (ownerKind: SafeOwnerKind, ownerId: string) => void
+    applySafeOwner: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<void>
+    discardSafeOwnerFile: (ownerKind: SafeOwnerKind, ownerId: string, filePath: string) => Promise<void>
+    discardAllSafeOwner: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<void>
+    undoLastSafeApply: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<void>
+}
+
+export type StudioState = WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice

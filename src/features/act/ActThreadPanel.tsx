@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Loader2, Plus, Send, Square } from 'lucide-react'
 import type { ActPerformerSessionBinding, ChatMessage } from '../../types'
-import ChatMessageContent from './ChatMessageContent'
-import ThreadBody from './ThreadBody'
+import ChatMessageContent from '../chat/ChatMessageContent'
+import ThreadBody from '../chat/ThreadBody'
 
 type ActThreadNode = {
     id: string

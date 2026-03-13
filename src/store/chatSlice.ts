@@ -31,12 +31,19 @@ export const createChatSlice: StateCreator<
 
     const syncPerformerMessages = async (performerId: string, sessionId: string) => {
         const messages = await api.chat.messages(sessionId)
+        const mapped = mapSessionMessagesToChatMessages(messages)
         set((state) => ({
             chats: {
                 ...state.chats,
-                [performerId]: mapSessionMessagesToChatMessages(messages),
+                [performerId]: [
+                    ...(state.chatPrefixes[performerId] || []),
+                    ...mapped,
+                ],
             },
         }))
+        if (getPerformerById(performerId)?.executionMode === 'safe') {
+            void get().refreshSafeOwner('performer', performerId)
+        }
         return messages
     }
 
@@ -68,7 +75,12 @@ export const createChatSlice: StateCreator<
             }
         }
 
-        const res = await api.chat.createSession(performerId, name, configHash)
+        const res = await api.chat.createSession(
+            performerId,
+            name,
+            configHash,
+            performer?.executionMode === 'safe' ? 'safe' : 'direct',
+        )
         const sessionId = res.sessionId
 
         set((state: any) => {
@@ -86,6 +98,10 @@ export const createChatSlice: StateCreator<
             if (options?.resetMessages) {
                 nextState.chats = {
                     ...state.chats,
+                    [performerId]: options.resetMessages,
+                }
+                nextState.chatPrefixes = {
+                    ...state.chatPrefixes,
                     [performerId]: options.resetMessages,
                 }
             }
@@ -116,6 +132,68 @@ export const createChatSlice: StateCreator<
                 ],
             },
         }))
+    }
+
+    const detachPerformerSessionInternal = (performerId: string, notice?: string) => {
+        set((state) => {
+            const nextSessionMap = { ...state.sessionMap }
+            delete nextSessionMap[performerId]
+            const nextConfigMap = { ...state.sessionConfigMap }
+            delete nextConfigMap[performerId]
+            const nextChatContent = notice
+                ? [
+                    ...(state.chats[performerId] || []),
+                    {
+                        id: `msg-${Date.now()}`,
+                        role: 'system' as const,
+                        content: notice,
+                        timestamp: Date.now(),
+                    },
+                ]
+                : (state.chats[performerId] || [])
+
+            return {
+                chats: {
+                    ...state.chats,
+                    [performerId]: nextChatContent,
+                },
+                chatPrefixes: {
+                    ...state.chatPrefixes,
+                    [performerId]: nextChatContent,
+                },
+                sessionMap: nextSessionMap,
+                sessionConfigMap: nextConfigMap,
+                selectedPerformerSessionId: state.selectedPerformerId === performerId ? null : state.selectedPerformerSessionId,
+            }
+        })
+    }
+
+    const detachActSessionInternal = (actId: string, notice?: string) => {
+        const currentSessionId = get().actSessionMap[actId]
+        set((state) => {
+            const nextActSessionMap = { ...state.actSessionMap }
+            delete nextActSessionMap[actId]
+            return {
+                actSessionMap: nextActSessionMap,
+                actChats: currentSessionId && notice
+                    ? {
+                        ...state.actChats,
+                        [currentSessionId]: [
+                            ...(state.actChats[currentSessionId] || []),
+                            {
+                                id: `act-system-${Date.now()}`,
+                                role: 'system' as const,
+                                content: notice,
+                                timestamp: Date.now(),
+                            },
+                        ],
+                    }
+                    : state.actChats,
+                selectedActSessionId: state.actSessionMap[actId] === state.selectedActSessionId ? null : state.selectedActSessionId,
+                loadingActId: state.loadingActId === actId ? null : state.loadingActId,
+                stageDirty: true,
+            }
+        })
     }
 
     const scheduleSessionFallbackSync = (
@@ -171,6 +249,7 @@ export const createChatSlice: StateCreator<
 
     return {
         chats: {},
+        chatPrefixes: {},
         actChats: {},
         actPerformerChats: {},
         actPerformerBindings: {},
@@ -213,25 +292,55 @@ export const createChatSlice: StateCreator<
             const configChanged = !!sessionId && sessionConfigMap[performerId] !== currentConfigHash
 
             // Ensure session exists
-            if (!sessionId || configChanged) {
+            if (!sessionId) {
                 try {
-                    const freshSession = await createFreshSession(performerId, configChanged ? {
-                        resetMessages: [{
-                            id: `system-${Date.now()}`,
-                            role: 'system',
-                            content: 'Performer configuration changed. Started a new OpenCode session with the updated Tal, Dances, model, and tools.',
-                            timestamp: Date.now(),
-                        }],
-                    } : undefined)
+                    const freshSession = await createFreshSession(performerId)
                     sessionId = freshSession.sessionId || undefined
                 } catch (err) {
                     console.error("Failed to create session", err)
                     appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
                     return
                 }
+            } else if (configChanged) {
+                set({ loadingPerformerId: performerId })
+                try {
+                    // Find the last assistant or user message to fork from
+                    const msgs = get().chats[performerId] || []
+                    const lastValidMessage = [...msgs].reverse().find(
+                        msg => msg.role === 'assistant' || msg.role === 'user'
+                    )
+
+                    const res = await api.chat.fork(
+                        sessionId,
+                        lastValidMessage ? ((lastValidMessage as any).info?.id || lastValidMessage.id) : ''
+                    )
+                    
+                    sessionId = res.id || res.sessionId
+                    if (sessionId) {
+                        set((state: any) => {
+                            const newMap = { ...state.sessionMap }
+                            newMap[performerId] = sessionId
+                            const newConfigMap = { ...state.sessionConfigMap }
+                            newConfigMap[performerId] = currentConfigHash
+                            return { sessionMap: newMap, sessionConfigMap: newConfigMap }
+                        })
+                        appendPerformerSystemMessage(
+                            performerId,
+                            'Performer configuration changed. Started a new OpenCode session branch with the updated Tal, Dances, model, and tools.'
+                        )
+                        // Refresh list in background
+                        get().listSessions().catch(() => {})
+                    }
+                } catch (err) {
+                    console.error("Failed to fork session on config change", err)
+                    appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
+                    set({ loadingPerformerId: null })
+                    return
+                }
             }
 
             if (!sessionId) {
+                set({ loadingPerformerId: null })
                 return
             }
 
@@ -288,15 +397,7 @@ export const createChatSlice: StateCreator<
 
             set({ loadingPerformerId: performerId })
             try {
-                if (cmd === '/undo') {
-                    const msgs = await api.chat.messages(sessionId)
-                    const lastUser = [...msgs].reverse().find((m: any) => (m.info?.role || m.role) === 'user')
-                    if (lastUser) {
-                        await api.chat.revert(sessionId, lastUser.info?.id || lastUser.id)
-                    }
-                } else if (cmd === '/redo') {
-                    await api.chat.unrevert(sessionId)
-                } else if (cmd === '/share') {
+                if (cmd === '/share') {
                     const shareRes = await api.chat.share(sessionId)
                     state.addChatMessage(performerId, {
                         id: `msg-${Date.now()}`,
@@ -306,11 +407,6 @@ export const createChatSlice: StateCreator<
                     })
                 } else if (cmd === '/compact') {
                     await get().summarizeSession(performerId)
-                }
-
-                // Re-sync messages for undo/redo
-                if (cmd === '/undo' || cmd === '/redo') {
-                    await syncPerformerMessages(performerId, sessionId)
                 }
             } catch (e: any) {
                 state.addChatMessage(performerId, {
@@ -327,12 +423,15 @@ export const createChatSlice: StateCreator<
         clearSession: (performerId) => set((s) => {
             const newChats = { ...s.chats }
             delete newChats[performerId]
+            const newChatPrefixes = { ...s.chatPrefixes }
+            delete newChatPrefixes[performerId]
             const newSessionMap = { ...s.sessionMap }
             delete newSessionMap[performerId]
             const newConfigMap = { ...s.sessionConfigMap }
             delete newConfigMap[performerId]
             return {
                 chats: newChats,
+                chatPrefixes: newChatPrefixes,
                 sessionMap: newSessionMap,
                 sessionConfigMap: newConfigMap,
                 selectedPerformerSessionId: s.selectedPerformerId === performerId ? null : s.selectedPerformerSessionId,
@@ -356,6 +455,14 @@ export const createChatSlice: StateCreator<
 
         startNewActSession: (actId) => {
             startNewActSessionHelper(get, set, actId)
+        },
+
+        detachPerformerSession: (performerId, notice) => {
+            detachPerformerSessionInternal(performerId, notice)
+        },
+
+        detachActSession: (actId, notice) => {
+            detachActSessionInternal(actId, notice)
         },
 
         abortChat: async (performerId) => {
@@ -396,6 +503,31 @@ export const createChatSlice: StateCreator<
                 appendPerformerSystemMessage(performerId, 'Thread compacted.')
             } catch (e: any) {
                 appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(e))
+            } finally {
+                set({ loadingPerformerId: null })
+            }
+        },
+
+        undoLastTurn: async (performerId) => {
+            const sessionId = getPerformerSessionId(performerId)
+            if (!sessionId) {
+                return
+            }
+            const lastUser = [...(get().chats[performerId] || [])]
+                .reverse()
+                .find((message) => message.role === 'user') as any
+            if (!lastUser) {
+                appendPerformerSystemMessage(performerId, 'No prior turn is available to undo.')
+                return
+            }
+
+            set({ loadingPerformerId: performerId })
+            try {
+                await api.chat.revert(sessionId, lastUser.info?.id || lastUser.id)
+                await syncPerformerMessages(performerId, sessionId)
+                appendPerformerSystemMessage(performerId, 'Undid the last turn.')
+            } catch (err) {
+                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
             } finally {
                 set({ loadingPerformerId: null })
             }
