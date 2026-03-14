@@ -4,7 +4,8 @@
 import { Hono } from 'hono'
 import { getOpencode } from '../lib/opencode.js'
 import { cached, invalidate, TTL } from '../lib/cache.js'
-import type { ModelSelection } from '../lib/prompt.js'
+
+type ModelSelection = { provider: string; modelId: string } | null
 import { resolveRuntimeTools } from '../lib/runtime-tools.js'
 import { requestDirectoryQuery, resolveRequestWorkingDir } from '../lib/request-context.js'
 import { restartOpencodeSidecar, isManagedOpencode } from '../lib/opencode-sidecar.js'

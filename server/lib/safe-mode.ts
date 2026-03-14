@@ -141,7 +141,7 @@ async function copyWorkspaceSnapshot(
     const entries = await fs.readdir(sourceDir, { withFileTypes: true }).catch(() => [])
 
     for (const entry of entries) {
-        if (entry.name === '.git' || entry.name === '.dot-studio') {
+        if (entry.name === '.git' || entry.name === '.dot-studio' || entry.name === '.opencode') {
             continue
         }
         const sourcePath = path.join(sourceDir, entry.name)
@@ -394,7 +394,6 @@ function makeApplyTransactionId() {
 
 async function finalizeManualShadowOperation(meta: SafeOwnerMeta) {
     await writeMeta(meta)
-    await initializeGitWorkspace(meta.shadowDir)
     return buildSummary(meta)
 }
 

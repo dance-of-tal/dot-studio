@@ -43,6 +43,7 @@ export type ChatSessionCreateResponse = {
 export type ChatSendRequest = {
     message: string
     performer: {
+        performerId: string
         talRef: SharedAssetRef | null
         danceRefs: SharedAssetRef[]
         extraDanceRefs?: SharedAssetRef[]
@@ -57,6 +58,7 @@ export type ChatSendRequest = {
         danceDeliveryMode?: 'auto' | 'tool' | 'inline'
         planMode?: boolean
         configHash?: string
+        description?: string
     }
     attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
 }

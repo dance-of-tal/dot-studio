@@ -206,6 +206,7 @@ export const api = {
             payload: {
                 message: string
                 performer: {
+                    performerId: string
                     talRef: AssetRef | null
                     danceRefs: AssetRef[]
                     extraDanceRefs?: AssetRef[]
@@ -217,6 +218,7 @@ export const api = {
                     danceDeliveryMode?: DanceDeliveryMode
                     planMode?: boolean
                     configHash?: string
+                    description?: string
                 }
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
             }

@@ -1,11 +1,15 @@
 import { getOpencode } from '../lib/opencode.js'
 import { buildStudioSessionTitle } from '../../shared/session-metadata.js'
 import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/chat-contracts.js'
-import { compileStudioPrompt } from './compile-service.js'
-import { buildEnabledToolMap, describeUnavailableRuntimeTools, resolveRuntimeTools } from '../lib/runtime-tools.js'
+import { describeUnavailableRuntimeTools, resolveRuntimeTools } from '../lib/runtime-tools.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { getSafeOwnerExecutionDir } from '../lib/safe-mode.js'
 import { registerSessionExecutionContext } from '../lib/session-execution.js'
+import {
+    ensureProjection,
+    getProjectedAgentName,
+    type PerformerProjectionInput,
+} from './opencode-projection/stage-projection-service.js'
 
 export async function createStudioChatSession(
     cwd: string,
@@ -49,18 +53,23 @@ export async function sendStudioChatMessage(
         )
     }
 
-    const preview = await compileStudioPrompt(cwd, {
-        talRef: performer.talRef,
+    // Ensure projection is up-to-date
+    const projectionInput: PerformerProjectionInput = {
+        performerId: performer.performerId || 'default',
+        talRef: performer.talRef || null,
         danceRefs: [...(performer.danceRefs || []), ...(performer.extraDanceRefs || [])],
-        drafts: performer.drafts,
         model: performer.model,
         modelVariant: performer.modelVariant || null,
-        agentId: performer.agentId || null,
         mcpServerNames: performer.mcpServerNames || [],
-        planMode: performer.planMode || false,
-        danceDeliveryMode: performer.danceDeliveryMode || 'auto',
-    })
+        description: performer.description,
+    }
+    await ensureProjection(cwd, cwd, [projectionInput], performer.drafts || {})
 
+    // Resolve projected agent name
+    const posture = (performer.planMode ? 'plan' : 'build') as 'build' | 'plan'
+    const agentName = getProjectedAgentName(cwd, projectionInput.performerId, posture)
+
+    // MCP tool resolution — UX-only validation (preemptive warning)
     const toolResolution = await resolveRuntimeTools(
         cwd,
         performer.model,
@@ -74,14 +83,9 @@ export async function sendStudioChatMessage(
         )
     }
 
+    // Build message parts
     const parts: any[] = [{ type: 'text', text: request.message }]
     if (request.attachments && request.attachments.length > 0) {
-        if (preview.capabilitySnapshot && !preview.capabilitySnapshot.attachment) {
-            throw new StudioValidationError(
-                'Selected model does not support attachments. Remove the files or choose a model that supports them.',
-                'choose_model',
-            )
-        }
         for (const attachment of request.attachments) {
             parts.push({
                 type: 'file',
@@ -92,20 +96,12 @@ export async function sendStudioChatMessage(
         }
     }
 
-    const tools = buildEnabledToolMap([
-        ...toolResolution.resolvedTools,
-        ...(preview.toolName ? [preview.toolName] : []),
-    ])
-
+    // PRD §9.1: compiled agent name만 전달. system/model/tools inline override 제거.
     const oc = await getOpencode()
     unwrapOpencodeResult(await oc.session.promptAsync({
         sessionID: sessionId,
         directory: cwd,
-        model: { providerID: performer.model.provider, modelID: performer.model.modelId },
-        agent: performer.agentId || (performer.planMode ? 'plan' : 'build'),
-        system: preview.system,
-        ...(performer.modelVariant ? { variant: performer.modelVariant } : {}),
-        ...(tools ? { tools } : {}),
+        agent: agentName,
         parts,
     }))
 

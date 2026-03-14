@@ -356,6 +356,7 @@ export const createChatSlice: StateCreator<
                 await api.chat.send(sessionId, {
                     message: text,
                     performer: {
+                        performerId,
                         talRef: runtimeConfig.talRef,
                         danceRefs: runtimeConfig.danceRefs,
                         extraDanceRefs,
@@ -513,21 +514,75 @@ export const createChatSlice: StateCreator<
             if (!sessionId) {
                 return
             }
-            const lastUser = [...(get().chats[performerId] || [])]
-                .reverse()
-                .find((message) => message.role === 'user') as any
-            if (!lastUser) {
+
+            let serverMessageId: string | null = null
+            let messagesFetchError: unknown = null
+            try {
+                const messages = await api.chat.messages(sessionId)
+                const lastUser = [...messages]
+                    .reverse()
+                    .find((message: any) => (message?.info?.role || message?.role) === 'user')
+                serverMessageId = lastUser?.info?.id || lastUser?.id || null
+            } catch (err) {
+                messagesFetchError = err
+            }
+
+            if (messagesFetchError) {
+                const errMessage = formatStudioApiErrorMessage(messagesFetchError)
+                if (/\b(not a git repository|git\b.*\bnot found)\b/i.test(errMessage)) {
+                    const notice = 'Direct mode undo is available only when the project workspace is a Git repository.'
+                    appendPerformerSystemMessage(performerId, notice)
+                    showToast(notice, 'error', {
+                        title: 'Undo unavailable',
+                        dedupeKey: `performer:undo:no-git:${performerId}`,
+                    })
+                } else {
+                    appendPerformerSystemMessage(performerId, errMessage)
+                }
+                return
+            }
+
+            if (!serverMessageId) {
                 appendPerformerSystemMessage(performerId, 'No prior turn is available to undo.')
                 return
             }
 
             set({ loadingPerformerId: performerId })
             try {
-                await api.chat.revert(sessionId, lastUser.info?.id || lastUser.id)
+                await api.chat.revert(sessionId, serverMessageId)
                 await syncPerformerMessages(performerId, sessionId)
                 appendPerformerSystemMessage(performerId, 'Undid the last turn.')
+                const performer = getPerformerById(performerId)
+                if (!performer || performer.executionMode !== 'safe') {
+                    api.vcs.get().then((vcs) => {
+                        if (!vcs?.branch) {
+                            appendPerformerSystemMessage(
+                                performerId,
+                                '⚠️ This project has no Git repository. Chat history was reverted, but file changes may not have been restored.',
+                            )
+                            showToast(
+                                'Chat was reverted, but file changes may not have been restored. Use Safe mode for reliable undo.',
+                                'warning',
+                                {
+                                    title: 'Undo — files may not be restored',
+                                    dedupeKey: `performer:undo:partial:${performerId}`,
+                                },
+                            )
+                        }
+                    }).catch(() => {})
+                }
             } catch (err) {
-                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
+                const message = formatStudioApiErrorMessage(err)
+                if (/\b(not a git repository|git\b.*\bnot found)\b/i.test(message)) {
+                    const notice = 'Direct mode undo is available only when the project workspace is a Git repository.'
+                    appendPerformerSystemMessage(performerId, notice)
+                    showToast(notice, 'error', {
+                        title: 'Undo unavailable',
+                        dedupeKey: `performer:undo:no-git:${performerId}`,
+                    })
+                } else {
+                    appendPerformerSystemMessage(performerId, message)
+                }
             } finally {
                 set({ loadingPerformerId: null })
             }
