@@ -61,4 +61,5 @@ export type ChatSendRequest = {
         description?: string
     }
     attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
+    mentions?: Array<{ performerId: string }>
 }

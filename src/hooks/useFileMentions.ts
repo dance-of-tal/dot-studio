@@ -15,7 +15,7 @@ export function useFileMentions() {
     const [isMentioning, setIsMentioning] = useState(false)
     const inputRef = useRef<HTMLTextAreaElement>(null)
 
-    const mentionRegex = /@([a-zA-Z0-9_\-\.\/]*)$/
+    const mentionRegex = /#([a-zA-Z0-9_\-\.\/]*)$/
 
     const checkMention = useCallback((value?: string, cursorPosition?: number | null) => {
         const input = inputRef.current

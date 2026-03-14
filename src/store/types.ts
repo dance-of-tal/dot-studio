@@ -212,6 +212,7 @@ export interface ChatSlice {
         message: string,
         attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
         extraDanceRefs?: AssetRef[],
+        mentions?: Array<{ performerId: string }>,
     ) => Promise<void>
     sendActMessage: (actId: string, message: string) => Promise<void>
     abortAct: (actId: string) => Promise<void>

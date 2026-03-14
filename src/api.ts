@@ -220,6 +220,7 @@ export const api = {
                     description?: string
                 }
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
+                mentions?: Array<{ performerId: string }>
             }
         ) =>
             postJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, payload satisfies ChatSendRequest),

@@ -4,8 +4,9 @@ import { useStore } from '@xyflow/react';
 import { useStudioStore } from '../../store';
 import { useSlashCommands } from '../../hooks/useSlashCommands';
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions';
+import { usePerformerMention } from '../../hooks/usePerformerMention';
 import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries';
-import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil, Shield } from 'lucide-react';
+import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil, Shield, AtSign } from 'lucide-react';
 import ThreadBody from '../chat/ThreadBody';
 import { assetRefKey, hasModelConfig, resolvePerformerAgentId } from '../../lib/performers';
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation';
@@ -146,6 +147,7 @@ export default function AgentFrame({ data, id }: any) {
 
     const [input, setInput] = useState('');
     const [attachments, setAttachments] = useState<FileMention[]>([]);
+    const [pendingMentions, setPendingMentions] = useState<Array<{ performerId: string; name: string }>>([]);
     const [turnDanceSelections, setTurnDanceSelections] = useState<TurnDanceSelection[]>([]);
     const [danceSearchIndex, setDanceSearchIndex] = useState(0);
     const [editTab, setEditTab] = useState<'basic' | 'advanced'>('basic');
@@ -404,15 +406,26 @@ export default function AgentFrame({ data, id }: any) {
     } = useSlashCommands(id, input, setInput);
 
     const {
-        inputRef,
-        isMentioning,
-        mentionResults,
-        mentionIndex,
-        setMentionIndex,
-        checkMention,
-        extractMentionText,
-        setIsMentioning
+        inputRef: _fileInputRef,
+        isMentioning: isFileMentioning,
+        mentionResults: fileMentionResults,
+        mentionIndex: fileMentionIndex,
+        setMentionIndex: setFileMentionIndex,
+        checkMention: checkFileMention,
+        extractMentionText: extractFileMentionText,
+        setIsMentioning: setIsFileMentioning
     } = useFileMentions();
+
+    const {
+        inputRef,
+        isMentioning: isPerformerMentioning,
+        mentionResults: performerMentionResults,
+        mentionIndex: performerMentionIndex,
+        setMentionIndex: setPerformerMentionIndex,
+        checkMention: checkPerformerMention,
+        selectMention: selectPerformerMention,
+        setIsMentioning: setIsPerformerMentioning,
+    } = usePerformerMention(id);
 
     const danceSlashMatch = useMemo(() => {
         const trimmed = input.trimStart();
@@ -480,7 +493,8 @@ export default function AgentFrame({ data, id }: any) {
         const text = input.trim();
         setInput('');
         setShowSlashMenu(false);
-        setIsMentioning(false);
+        setIsFileMentioning(false);
+        setIsPerformerMentioning(false);
 
         if (text === '/undo' || text === '/redo') {
             showToast('Use the Undo Last Turn button for performer undo.', 'info', {
@@ -521,14 +535,20 @@ export default function AgentFrame({ data, id }: any) {
             );
         }
 
-        sendMessage(id, text, formattedAttachments, turnDanceSelections.map((selection) => selection.ref));
+        const mentionPayload = pendingMentions.length > 0
+            ? pendingMentions.map((m) => ({ performerId: m.performerId }))
+            : undefined;
+        sendMessage(id, text, formattedAttachments, turnDanceSelections.map((selection) => selection.ref), mentionPayload);
         setAttachments([]);
         setTurnDanceSelections([]);
-    }, [input, isLoading, modelConfigured, danceSlashMatch, id, executeSlashCommand, setShowSlashMenu, attachments, sendMessage, setIsMentioning, turnDanceSelections, runtimeTools]);
+        setPendingMentions([]);
+    }, [input, isLoading, modelConfigured, danceSlashMatch, id, executeSlashCommand, setShowSlashMenu, attachments, sendMessage, setIsFileMentioning, setIsPerformerMentioning, turnDanceSelections, runtimeTools, pendingMentions]);
 
     const handleInputChange = (val: string) => {
         onSlashInputChange(val);
-        checkMention(val, inputRef.current?.selectionStart ?? val.length);
+        const cursor = inputRef.current?.selectionStart ?? val.length;
+        checkFileMention(val, cursor);
+        checkPerformerMention(val, cursor);
     };
 
     const handleKeyDownWrapper = (e: React.KeyboardEvent) => {
@@ -561,21 +581,51 @@ export default function AgentFrame({ data, id }: any) {
             }
         }
 
-        if (isMentioning && mentionResults.length > 0) {
+        if (isPerformerMentioning && performerMentionResults.length > 0) {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setMentionIndex((i) => (i < mentionResults.length - 1 ? i + 1 : i));
+                setPerformerMentionIndex((i) => (i < performerMentionResults.length - 1 ? i + 1 : i));
                 return;
             }
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setMentionIndex((i) => (i > 0 ? i - 1 : i));
+                setPerformerMentionIndex((i) => (i > 0 ? i - 1 : i));
                 return;
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
-                const selectedFile = mentionResults[mentionIndex];
-                const newText = extractMentionText();
+                const result = selectPerformerMention(performerMentionResults[performerMentionIndex]);
+                if (result) {
+                    setInput(result.newText);
+                    setPendingMentions((prev) => {
+                        if (prev.some((m) => m.performerId === result.mention.performerId)) return prev;
+                        return [...prev, { performerId: result.mention.performerId, name: performerMentionResults[performerMentionIndex].name }];
+                    });
+                }
+                inputRef.current?.focus();
+                return;
+            }
+            if (e.key === 'Escape') {
+                setIsPerformerMentioning(false);
+                return;
+            }
+        }
+
+        if (isFileMentioning && fileMentionResults.length > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setFileMentionIndex((i) => (i < fileMentionResults.length - 1 ? i + 1 : i));
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setFileMentionIndex((i) => (i > 0 ? i - 1 : i));
+                return;
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const selectedFile = fileMentionResults[fileMentionIndex];
+                const newText = extractFileMentionText();
                 if (newText !== null) {
                     setInput(newText);
                     setAttachments(prev => [...prev, selectedFile]);
@@ -583,7 +633,7 @@ export default function AgentFrame({ data, id }: any) {
                 return;
             }
             if (e.key === 'Escape') {
-                setIsMentioning(false);
+                setIsFileMentioning(false);
                 return;
             }
         }
@@ -930,7 +980,7 @@ export default function AgentFrame({ data, id }: any) {
                             onDrop={handleDrop}
                             onDragOver={e => e.preventDefault()}
                         >
-                            {(attachments.length > 0 || turnDanceSelections.length > 0) && (
+                            {(attachments.length > 0 || turnDanceSelections.length > 0 || pendingMentions.length > 0) && (
                                 <div style={{ display: 'flex', gap: '4px', padding: '4px 8px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-main)' }}>
                                     {turnDanceSelections.map((selection, idx) => (
                                         <div key={`${selection.scope}:${assetRefKey(selection.ref) || idx}`} className="turn-option-pill">
@@ -946,6 +996,18 @@ export default function AgentFrame({ data, id }: any) {
                                             />
                                         </div>
                                     ))}
+                                    {pendingMentions.map((mention, idx) => (
+                                        <div key={`mention-${mention.performerId}`} className="turn-option-pill">
+                                            <AtSign size={10} style={{ marginRight: '4px' }} />
+                                            <span>{mention.name}</span>
+                                            <span className="turn-option-pill__scope turn-option-pill__scope--local">performer</span>
+                                            <X
+                                                size={10}
+                                                style={{ marginLeft: '4px', cursor: 'pointer' }}
+                                                onClick={() => setPendingMentions((current) => current.filter((_, currentIndex) => currentIndex !== idx))}
+                                            />
+                                        </div>
+                                    ))}
                                     {attachments.map((att, idx) => (
                                         <div key={idx} style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px' }}>
                                             <FileIcon size={10} style={{ marginRight: '4px' }} />
@@ -956,14 +1018,47 @@ export default function AgentFrame({ data, id }: any) {
                                 </div>
                             )}
 
-                            {isMentioning && mentionResults.length > 0 ? (
+                            {isPerformerMentioning && performerMentionResults.length > 0 ? (
                                 <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                    {mentionResults.map((file, i) => (
+                                    {performerMentionResults.map((result, i) => (
+                                        <div
+                                            key={result.performerId}
+                                            className={`slash-menu-item mention-menu-item ${i === performerMentionIndex ? 'active' : ''}`}
+                                            onClick={() => {
+                                                const selection = selectPerformerMention(result);
+                                                if (selection) {
+                                                    setInput(selection.newText);
+                                                    setPendingMentions((prev) => {
+                                                        if (prev.some((m) => m.performerId === selection.mention.performerId)) return prev;
+                                                        return [...prev, { performerId: selection.mention.performerId, name: result.name }];
+                                                    });
+                                                }
+                                                inputRef.current?.focus();
+                                            }}
+                                        >
+                                            <AtSign size={12} style={{ opacity: 0.5, marginRight: '4px', flexShrink: 0 }} />
+                                            <span className="mention-result__content">
+                                                <span className="mention-result__name">{result.name}</span>
+                                                <span className="mention-result__path">
+                                                    {result.modelLabel || 'No model'}
+                                                    {' · '}
+                                                    {result.executionMode === 'safe' ? 'Safe' : 'Direct'}
+                                                    {' · Runs in caller workspace'}
+                                                </span>
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : null}
+
+                            {isFileMentioning && fileMentionResults.length > 0 ? (
+                                <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
+                                    {fileMentionResults.map((file, i) => (
                                         <div
                                             key={file.absolute}
-                                            className={`slash-menu-item mention-menu-item ${i === mentionIndex ? 'active' : ''}`}
+                                            className={`slash-menu-item mention-menu-item ${i === fileMentionIndex ? 'active' : ''}`}
                                             onClick={() => {
-                                                const newText = extractMentionText();
+                                                const newText = extractFileMentionText();
                                                 if (newText !== null) {
                                                     setInput(newText);
                                                     setAttachments(prev => [...prev, file]);
@@ -1046,14 +1141,14 @@ export default function AgentFrame({ data, id }: any) {
                                         e.target.style.height = `${e.target.scrollHeight}px`;
                                         e.target.style.overflowY = e.target.scrollHeight > 102 ? 'auto' : 'hidden';
                                     }}
-                                    onKeyUp={() => checkMention()}
-                                    onMouseUp={() => checkMention()}
+                                    onKeyUp={() => { checkFileMention(); checkPerformerMention(); }}
+                                    onMouseUp={() => { checkFileMention(); checkPerformerMention(); }}
                                     onKeyDown={handleKeyDownWrapper}
                                     placeholder={!modelConfigured
                                         ? 'Select a model before chatting'
                                         : isPlanAgent
                                             ? 'Plan mode — ask for a plan...'
-                                            : 'Message... (@ files, / to use dance for this turn)'}
+                                            : 'Message... (@ performer, # files, / dance)'}
                                     disabled={isLoading}
                                     rows={1}
                                     className="text-input"

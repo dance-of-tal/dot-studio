@@ -265,7 +265,7 @@ export const createChatSlice: StateCreator<
             }
         })),
 
-        sendMessage: async (performerId, text, attachments, extraDanceRefs = []) => {
+        sendMessage: async (performerId, text, attachments, extraDanceRefs = [], mentions) => {
             const { sessionMap, sessionConfigMap, addChatMessage } = get()
             let sessionId: string | undefined = sessionMap[performerId]
             const performer = getPerformerById(performerId)
@@ -364,6 +364,7 @@ export const createChatSlice: StateCreator<
                         configHash: currentConfigHash,
                     },
                     attachments,
+                    mentions: mentions && mentions.length > 0 ? mentions : undefined,
                 })
                 scheduleSessionFallbackSync(performerId, sessionId, Date.now())
             } catch (err: any) {
