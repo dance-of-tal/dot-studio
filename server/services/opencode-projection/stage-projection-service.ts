@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { compilePerformer, agentName, type PerformerCompileInput, type CompiledPerformer, type Posture } from './performer-compiler.js'
 import { writeManifest, cleanStaleFiles, updateGitExclude, type ProjectionManifest } from './projection-manifest.js'
+import type { PerformerRelationInput } from './relation-compiler.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -48,6 +49,7 @@ export async function ensureProjection(
     workingDir: string,
     performers: PerformerProjectionInput[],
     drafts: Record<string, DraftAsset>,
+    relations: PerformerRelationInput[] = [],
 ): Promise<void> {
     const stageHash = computeStageHash(workingDir)
 
@@ -58,6 +60,15 @@ export async function ensureProjection(
 
     const allFiles: string[] = []
     const compiledMap = new Map<string, CompiledPerformer>()
+
+    // Build relation context — performer names and projected agent names
+    const relationNames: Record<string, string> = {}
+    const relationAgentNames: Record<string, string> = {}
+    for (const p of performers) {
+        relationNames[p.performerId] = p.description || p.performerId
+        relationAgentNames[p.performerId] = agentName(stageHash, p.performerId, 'build')
+    }
+    const relationContext = { names: relationNames, agentNames: relationAgentNames }
 
     for (const performer of performers) {
         const input: PerformerCompileInput = {
@@ -72,6 +83,8 @@ export async function ensureProjection(
             cwd,
             workingDir,
             stageHash,
+            relations,
+            relationContext,
         }
 
         const compiled = await compilePerformer(input)

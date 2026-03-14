@@ -6,6 +6,7 @@ import { resolveRuntimeModel } from '../../lib/model-catalog.js'
 import { findRuntimeModelVariant } from '../../../shared/model-variants.js'
 import { compileDance, type CompiledSkill } from './dance-compiler.js'
 import { agentProjectionDir, toRelativePath } from './projection-manifest.js'
+import { compileRelations, buildPermissionTaskFrontmatter, type PerformerRelationInput, type PerformerRelationContext } from './relation-compiler.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -40,6 +41,10 @@ export interface PerformerCompileInput {
     cwd: string
     workingDir: string
     stageHash: string
+    /** Performer relations (edges) for this performer */
+    relations?: PerformerRelationInput[]
+    /** Context for resolving relation target names and agent names */
+    relationContext?: PerformerRelationContext
 }
 
 export interface CompiledPerformer {
@@ -89,6 +94,7 @@ function buildAgentFrontmatter(input: {
     description: string
     model: ModelSelection
     posture: Posture
+    taskAllowlist?: string[]
 }): string {
     const lines = ['---']
     lines.push(`description: ${input.description || 'DOT Studio performer'}`)
@@ -102,6 +108,11 @@ function buildAgentFrontmatter(input: {
         lines.push('  write: false')
         lines.push('  edit: false')
         lines.push('  bash: false')
+    }
+
+    // Permission.task allowlist from relations
+    if (input.taskAllowlist && input.taskAllowlist.length > 0) {
+        lines.push(...buildPermissionTaskFrontmatter(input.taskAllowlist))
     }
 
     lines.push('---')
@@ -145,11 +156,13 @@ function buildAgentBody(input: {
     talContent: string | null
     variantId: string | null
     variantSummary: string | null
+    relationPromptSection?: string | null
 }): string {
     const sections = [
         buildSystemPreamble(),
         buildTalSection(input.talContent),
         buildRuntimePreferencesSection(input.variantId, input.variantSummary),
+        input.relationPromptSection || null,
     ]
     return sections.filter(Boolean).join('\n\n')
 }
@@ -190,10 +203,18 @@ export async function compilePerformer(input: PerformerCompileInput): Promise<Co
         }
     }
 
+    // Compile relations (edges) for this performer
+    const compiledRelations = compileRelations(
+        input.performerId,
+        input.relations || [],
+        input.relationContext || { names: {}, agentNames: {} },
+    )
+
     const body = buildAgentBody({
         talContent,
         variantId: resolvedVariantId,
         variantSummary,
+        relationPromptSection: compiledRelations.promptSection,
     })
 
     // Compile Dance → Skills
@@ -218,6 +239,7 @@ export async function compilePerformer(input: PerformerCompileInput): Promise<Co
             description: input.description || 'DOT Studio performer',
             model: input.model,
             posture,
+            taskAllowlist: compiledRelations.taskAllowlist,
         })
         const fullContent = frontmatter + '\n\n' + body
         hashInput += fullContent

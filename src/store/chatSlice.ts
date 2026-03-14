@@ -365,6 +365,13 @@ export const createChatSlice: StateCreator<
                     },
                     attachments,
                     mentions: mentions && mentions.length > 0 ? mentions : undefined,
+                    relations: get().edges.map(e => ({
+                        id: e.id,
+                        from: e.from,
+                        to: e.to,
+                        interaction: e.interaction,
+                        description: e.description,
+                    })),
                 })
                 scheduleSessionFallbackSync(performerId, sessionId, Date.now())
             } catch (err: any) {

@@ -63,7 +63,7 @@ export async function sendStudioChatMessage(
         mcpServerNames: performer.mcpServerNames || [],
         description: performer.description,
     }
-    await ensureProjection(cwd, cwd, [projectionInput], performer.drafts || {})
+    await ensureProjection(cwd, cwd, [projectionInput], performer.drafts || {}, request.relations || [])
 
     // Resolve projected agent name
     const posture = (performer.planMode ? 'plan' : 'build') as 'build' | 'plan'
