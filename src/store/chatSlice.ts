@@ -11,6 +11,16 @@ import { mapSessionMessagesToChatMessages } from '../lib/chat-messages'
 import { formatStudioApiErrorMessage } from '../lib/api-errors'
 // Act helpers removed — will be reimplemented in Phase 2
 
+/**
+ * PRD §9.1: Build a projection-aware config hash that includes performer config + edge relations.
+ * Session invalidates when performer config OR edge relations change.
+ */
+function buildProjectionAwareHash(configHash: string, edges: Array<{ id: string; from: string; to: string; interaction: string; description: string }>): string {
+    if (edges.length === 0) return configHash
+    const edgeKey = edges.map(e => `${e.from}>${e.to}:${e.interaction}:${e.description}`).sort().join('|')
+    return `${configHash}+e:${edgeKey.length}`
+}
+
 export const createChatSlice: StateCreator<
     StudioState,
     [],
@@ -50,6 +60,9 @@ export const createChatSlice: StateCreator<
         const performer = getPerformerById(performerId)
         const name = performer?.name || 'Untitled Performer'
         const configHash = performer ? buildPerformerConfigHash(performer) : ''
+        const projectionHash = buildProjectionAwareHash(configHash, get().edges.map(e => ({
+            id: e.id, from: e.from, to: e.to, interaction: e.interaction, description: e.description,
+        })))
         const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
             talRef: null,
             danceRefs: [],
@@ -72,7 +85,7 @@ export const createChatSlice: StateCreator<
         const res = await api.chat.createSession(
             performerId,
             name,
-            configHash,
+            projectionHash,
             performer?.executionMode === 'safe' ? 'safe' : 'direct',
         )
         const sessionId = res.sessionId
@@ -85,7 +98,7 @@ export const createChatSlice: StateCreator<
                 },
                 sessionConfigMap: {
                     ...state.sessionConfigMap,
-                    [performerId]: configHash,
+                    [performerId]: projectionHash,
                 },
             }
 
@@ -106,7 +119,7 @@ export const createChatSlice: StateCreator<
         await get().listSessions()
         return {
             sessionId,
-            configHash,
+            configHash: projectionHash,
             runtimeConfig,
         }
     }
@@ -270,6 +283,9 @@ export const createChatSlice: StateCreator<
             let sessionId: string | undefined = sessionMap[performerId]
             const performer = getPerformerById(performerId)
             const currentConfigHash = performer ? buildPerformerConfigHash(performer) : ''
+            const currentProjectionHash = buildProjectionAwareHash(currentConfigHash, get().edges.map(e => ({
+                id: e.id, from: e.from, to: e.to, interaction: e.interaction, description: e.description,
+            })))
             const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
                 talRef: null,
                 danceRefs: [],
@@ -283,7 +299,7 @@ export const createChatSlice: StateCreator<
             if (!hasModelConfig(runtimeConfig.model)) {
                 return
             }
-            const configChanged = !!sessionId && sessionConfigMap[performerId] !== currentConfigHash
+            const configChanged = !!sessionId && sessionConfigMap[performerId] !== currentProjectionHash
 
             // Ensure session exists
             if (!sessionId) {
@@ -315,7 +331,7 @@ export const createChatSlice: StateCreator<
                             const newMap = { ...state.sessionMap }
                             newMap[performerId] = sessionId
                             const newConfigMap = { ...state.sessionConfigMap }
-                            newConfigMap[performerId] = currentConfigHash
+                            newConfigMap[performerId] = currentProjectionHash
                             return { sessionMap: newMap, sessionConfigMap: newConfigMap }
                         })
                         appendPerformerSystemMessage(

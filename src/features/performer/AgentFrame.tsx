@@ -54,7 +54,7 @@ function PerformerHeaderMeta({
 }) {
     return (
         <div className="canvas-frame__badges">
-            <span className="canvas-frame__badge" title={executionMode === 'safe' ? 'Safe mode enabled' : 'Direct mode enabled'}>
+            <span className="canvas-frame__badge" title={executionMode === 'safe' ? 'Default run mode: Safe (when mentioned, runs in caller workspace)' : 'Default run mode: Direct (when mentioned, runs in caller workspace)'}>
                 {executionMode === 'safe' ? 'Safe' : 'Direct'}
             </span>
             {conflictCount > 0 ? (
@@ -1225,7 +1225,7 @@ export default function AgentFrame({ data, id }: any) {
                                         event.stopPropagation();
                                         void handleToggleExecutionMode();
                                     }}
-                                    title={performer?.executionMode === 'safe' ? 'Switch to Direct mode' : 'Switch to Safe mode'}
+                                    title={performer?.executionMode === 'safe' ? 'Default: Safe — switch to Direct' : 'Default: Direct — switch to Safe'}
                                     type="button"
                                 >
                                     <Shield size={12} />
