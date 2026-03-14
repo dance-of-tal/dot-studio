@@ -379,13 +379,18 @@ export const createWorkspaceSlice: StateCreator<
         get().listStages()
     },
 
-    addEdge: (from, to) => set((s) => ({
-        edges: [...s.edges, { id: genEdgeId(), from, to }],
+    addEdge: (from, to, interaction = 'request', description = '') => set((s) => ({
+        edges: [...s.edges, { id: genEdgeId(), from, to, interaction: interaction as any, description }],
         stageDirty: true,
     })),
 
     removeEdge: (id) => set((s) => ({
         edges: s.edges.filter(e => e.id !== id),
+        stageDirty: true,
+    })),
+
+    updateEdgeDescription: (id, description) => set((s) => ({
+        edges: s.edges.map(e => e.id === id ? { ...e, description } : e),
         stageDirty: true,
     })),
 

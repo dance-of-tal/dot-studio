@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { useStore } from '@xyflow/react';
+import { useStore, Handle, Position } from '@xyflow/react';
 import { useStudioStore } from '../../store';
 import { useSlashCommands } from '../../hooks/useSlashCommands';
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions';
@@ -1283,6 +1283,16 @@ export default function AgentFrame({ data, id }: any) {
                 }}
             />
         ) : null}
+        <Handle
+            type="source"
+            position={Position.Right}
+            style={{ width: 8, height: 8, background: 'var(--accent-primary, #6366f1)', border: '2px solid var(--bg-primary)', opacity: 0.6 }}
+        />
+        <Handle
+            type="target"
+            position={Position.Left}
+            style={{ width: 8, height: 8, background: 'var(--accent-primary, #6366f1)', border: '2px solid var(--bg-primary)', opacity: 0.6 }}
+        />
         </>
     );
 }

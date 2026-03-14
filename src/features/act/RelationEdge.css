@@ -1,0 +1,70 @@
+/* RelationEdge — Custom edge styles for performer relations */
+
+.relation-edge__path {
+    stroke: var(--accent-primary, #6366f1);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+    animation: relation-edge-dash 1.2s linear infinite;
+}
+
+@keyframes relation-edge-dash {
+    to {
+        stroke-dashoffset: -20;
+    }
+}
+
+.relation-edge__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-main);
+    border-radius: 4px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    cursor: default;
+}
+
+.relation-edge__label.is-hovered {
+    border-color: var(--accent-primary, #6366f1);
+    box-shadow: 0 0 0 1px var(--accent-primary, #6366f1);
+}
+
+.relation-edge__text {
+    cursor: default;
+    user-select: none;
+}
+
+.relation-edge__input {
+    font-size: 10px;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    width: 120px;
+    padding: 0;
+}
+
+.relation-edge__delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border: none;
+    background: var(--bg-hover);
+    border-radius: 2px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s;
+}
+
+.relation-edge__delete:hover {
+    background: var(--error, #ef4444);
+    color: white;
+}

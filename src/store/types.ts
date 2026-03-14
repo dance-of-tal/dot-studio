@@ -97,8 +97,9 @@ export interface WorkspaceSlice {
     loadStage: (stageId: string) => Promise<void>
     listStages: () => Promise<void>
     deleteStage: (stageId: string) => Promise<void>
-    addEdge: (from: string, to: string) => void
+    addEdge: (from: string, to: string, interaction?: string, description?: string) => void
     removeEdge: (id: string) => void
+    updateEdgeDescription: (id: string, description: string) => void
 
     setPerformerTal: (performerId: string, tal: AssetCard | null) => void
     setPerformerTalRef: (performerId: string, talRef: AssetRef | null) => void

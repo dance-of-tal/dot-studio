@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { ReactFlow, Background, useReactFlow, useNodesState } from '@xyflow/react';
-import type { Node, NodeChange, ReactFlowInstance, Viewport } from '@xyflow/react';
+import type { Node, NodeChange, ReactFlowInstance, Viewport, Edge, Connection } from '@xyflow/react';
 import { useDroppable } from '@dnd-kit/core';
 import { Maximize, Minimize, Maximize2, Minimize2 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
@@ -14,6 +14,7 @@ import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/perform
 // resolveActNodeLabel, computeActAutoLayout removed (Phase 2 pending)
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
 import StageToolbar from '../toolbar/StageToolbar';
+import RelationEdge from '../../features/act/RelationEdge';
 
 function assetRefLabel(
     ref: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null | undefined,
@@ -53,6 +54,10 @@ const nodeTypes = {
     markdownEditor: MarkdownEditorFrame,
     canvasTerminal: CanvasTerminalFrame,
     stageTracking: CanvasTrackingFrame,
+};
+
+const edgeTypes = {
+    relation: RelationEdge,
 };
 
 type CanvasNodeKind = 'performer' | 'actArea' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking';
@@ -167,6 +172,7 @@ export default function CanvasArea() {
         selectAct,
         setActiveChatPerformer,
         closeEditor,
+        addEdge: storeAddEdge,
     } = useStudioStore();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [transformTarget, setTransformTarget] = useState<{ id: string; type: CanvasNodeKind } | null>(null);
@@ -254,6 +260,26 @@ export default function CanvasArea() {
 
     // Act area nodes removed (Phase 2 pending — will be replaced by PerformerRelation edge model)
     const buildActAreaNodes = useCallback(() => [] as Node[], [])
+
+    // Edges from store performer relations
+    const edges = useStudioStore((s) => s.edges)
+    const reactFlowEdges = useMemo<Edge[]>(() => edges.map((link) => ({
+        id: link.id,
+        source: link.from,
+        target: link.to,
+        type: 'relation',
+        animated: true,
+        data: {
+            interaction: link.interaction || 'request',
+            description: link.description || '',
+        },
+    })), [edges])
+
+    const onConnect = useCallback((connection: Connection) => {
+        if (connection.source && connection.target && connection.source !== connection.target) {
+            storeAddEdge(connection.source, connection.target)
+        }
+    }, [storeAddEdge])
 
     const buildPerformerNodes = useCallback(() => performers.map((performer) => ({
         id: performer.id,
@@ -512,13 +538,15 @@ export default function CanvasArea() {
             )}
             <ReactFlow
                 nodes={nodes}
-                edges={[]}
+                edges={reactFlowEdges}
                 onInit={setReactFlowInstance}
                 onNodesChange={handleNodesChange}
                 onNodeDragStop={onNodeDragStop}
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
+                onConnect={onConnect}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 multiSelectionKeyCode={null}
                 selectionKeyCode={null}
                 proOptions={{ hideAttribution: true }}

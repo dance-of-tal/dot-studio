@@ -201,11 +201,14 @@ export interface PerformerNode {
     }
 }
 
+export type PerformerInteraction = 'request'  // v1; deferred: 'handoff' | 'notify' | 'fan_out'
+
 export interface PerformerLink {
     id: string
     from: string
-    to: string        // node ID or '$exit'
-    condition?: string
+    to: string
+    interaction: PerformerInteraction
+    description: string
 }
 
 

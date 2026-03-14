@@ -351,7 +351,11 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
         set({
             stageId,
             performers: loadedPerformers,
-            edges: data.performerLinks || [],
+            edges: (data.performerLinks || []).map((link: any) => ({
+                ...link,
+                interaction: link.interaction || 'request',
+                description: link.description || link.condition || '',
+            })),
             acts: (data.acts || []).map((act: any) => ({
                 id: act.id,
                 name: act.name,
