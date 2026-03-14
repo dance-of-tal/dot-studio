@@ -11,6 +11,7 @@ Internal guide for working in `/Users/junhoyoon/windsurfpjt/dance-of-tal/studio`
 - Hono is the BFF/application boundary, not the execution authority.
 
 If behavior depends on models, tools, or MCP availability, trust OpenCode or DOT over Studio-side guesses.
+Studio does not intercept OpenCode tool output or re-sequence performer execution at runtime. See PRD-001 for details.
 
 ## Architecture Direction
 
@@ -86,14 +87,13 @@ type AssetRef =
   | { kind: 'draft'; draftId: string }
 ```
 
-- Performer runtime inputs:
-  - `talRef`
-  - `danceRefs`
-  - `model` or `modelPlaceholder`
-  - `mcpServerNames`
-- `declaredMcpConfig` is imported provenance, not runtime authority.
-- Acts reference performers by `performerId`. Act-owned performers are cloned bindings.
 - Performer and Act both support `executionMode: 'direct' | 'safe'`.
+- Act copies performer config at edge creation (complete copy, not reference).
+  - Agent config (Tal, Dance, model, MCP) is owned by Act after copy. Standalone changes don't affect Act.
+  - `derivedFrom` metadata records original performer id/urn (provenance only, no runtime link).
+  - Sessions are Act-scoped (separate from the performer's standalone chat).
+  - Workspace (safe/direct) is Act-scoped (individual performer's mode is ignored in Act).
+  - To change Act performer config, edit directly inside Act.
 - Safe mode ownership is owner-first:
   - performer safe mode is performer-scoped
   - act safe mode is act-scoped
@@ -103,11 +103,17 @@ type AssetRef =
 
 - Current refs drive runtime.
 - Tal is always-on system context.
-- Dance is cataloged first and loaded on demand through `read`.
+- Dance is projected to OpenCode native skills.
+- Runtime projection is OpenCode-native:
+  - Tal -> generated agent prompt body
+  - Dance -> generated skill
+  - Performer -> generated agent
 - Performer chat and act runtime are separate session models.
-- Changing Tal, Dance, model, or MCP selection rolls the OpenCode session.
+- Changing Tal, Dance, model, or MCP selection invalidates the projection hash, which rolls the OpenCode session.
 - OpenCode remains the execution authority in both direct and safe modes.
 - Safe mode changes the execution directory, not the execution engine.
+- Studio compiles Performer config into OpenCode native agent/skill projections. See PRD-001 §6.
+- At chat send time, Studio passes only the compiled agent name. Large system prompt assembly is removed.
 
 ## Safe Mode Rules
 
@@ -134,6 +140,15 @@ type AssetRef =
 - Forked performer sessions inherit the same execution directory as the source session.
 - Chat event subscriptions and session lists should include both the real workspace directory and any registered performer execution directories for that stage.
 - Act-created OpenCode sessions should register as `ownerKind='act'`.
+
+## Execution Context Rules
+
+- Performer standalone chat: performer's own safe/direct setting applies.
+- @mention (performer → performer): callee runs in **caller's workspace**. Callee's own safe/direct setting is ignored.
+- Act thread: Act sets safe/direct for the whole thread. All participating performers run in **Act's workspace**. Individual performer safe/direct is ignored inside Act.
+- UI meaning:
+  - performer safe/direct is the default mode for standalone execution
+  - mention flows should clearly communicate "Runs in the caller's workspace"
 
 ## Undo Rules
 
@@ -242,90 +257,91 @@ This repository should remain compatible with a future `Performer Adapter View` 
 
 ## Act Architecture
 
-An Act is a directed graph of nodes connected by edges. Runtime executes nodes sequentially via an XState state machine (`act-runtime.ts`).
+An Act defines a performer relation graph. Performers are connected by edges that represent interaction contracts. Runtime execution is delegated to OpenCode's native `task` tool and custom tool system. See PRD-001 for full details.
 
-### Node Types
+### Act Entity
 
-| Type | Role | Has Performer | Key Fields |
-|------|------|:---:|------------|
-| **Worker** | Executes a single LLM call | ✅ | `performerId`, `sessionPolicy`, `sessionLifetime` |
-| **Orchestrator** | Routes to one outgoing flow edge via LLM JSON decision | ✅ | `maxDelegations`, `sessionPolicy` |
-| **Parallel** | Fork-join: runs all outgoing `role='branch'` edges concurrently, merges results | ❌ | `join: all\|any` |
+Act remains a first-class entity:
 
-### Edge Routing
+- DOT asset / publish target
+- Safe-mode owner (`ownerKind='act'`)
+- Thread owner
+- Canvas entity with visual edges
 
-```ts
-type StageActEdge = {
-    from: string      // source node ID
-    to: string        // target node ID or '$exit'
-    role?: 'branch'   // marks fan-out edges for parallel nodes
-    condition?: 'always' | 'on_success' | 'on_fail'
-}
-```
+### Performer Reference
 
-- `selectNextTarget()` priority: `on_success/on_fail` > `always` > no condition
-- No matching edge → Act exits (same as `$exit`)
-- Orchestrator selects among outgoing non-`branch` edges via LLM response `{next, input, session}`
-- Parallel starts one sub-run per outgoing `role='branch'` edge and uses regular edges for post-join transitions
+Act copies performer config at edge creation (not reference):
 
-### Data Invariants (`syncStageActStructure`)
+| Item | Owner | Notes |
+|------|-------|-------|
+| Agent config | Act (copied) | Standalone changes don't affect Act |
+| Session | Act | Act-scoped; independent from performer's standalone chat |
+| Workspace | Act | Act-scoped safe/direct; performer's own mode is ignored |
+| Provenance | metadata | `derivedFrom` records original performer id/urn (no runtime link) |
 
-- Orphan edges (referencing deleted nodes) are auto-cleaned
-- Edge dedup uses `from:to:role:condition`
-- `entryNodeId` falls back to first node if the referenced node is deleted
+### Interaction Primitives
+
+v1 supported primitive:
+
+| Primitive | Behavior | OpenCode Mapping |
+|-----------|----------|------------------|
+| **request** | Ask for work, get result back, continue | `task` tool → child session → result return |
+
+Deferred primitives:
+
+- `handoff`
+- `notify`
+- `fan_out`
+
+These may remain schema/UI concepts, but v1 runtime/compiler should not implement them until OpenCode-native semantics are validated without reintroducing a Studio coordinator.
+
+### Relation Projection
+
+Act relations are projected to OpenCode surfaces:
+
+1. Performer prompt body — relation semantics injected
+2. `permission.task` allowlist — callable targets constrained
+3. Optional generated custom tool — UX sugar only, must complete without Studio intercept
+
+Custom tools must not become a hidden Studio runtime bridge. They may improve discoverability or shorten repeated request calls, but execution authority remains with OpenCode task/subagent flow.
+
+### Safety
+
+| Guard | Implementation |
+|-------|----------------|
+| Infinite loop | Per-performer `steps` limit (OpenCode agent setting) |
+| Total budget | Act-wide tool call count monitoring |
+| Error propagation | `escalate` tool + max retry count |
 
 ## Act Runtime Rules
 
-### Execution Loop
+### Execution
 
-1. Start at `entryNodeId` with user input as `pendingInput`
-2. `advanceRuntimeStep()` executes the current node
-3. Output flows to the next node as `pendingInput`
-4. Loop until `$exit`, error, or `maxIterations` exceeded
+- Act runtime is no longer an XState state machine.
+- Execution is driven by OpenCode's native agent→subagent (`task` tool) mechanism.
+- Studio compiles Act relations into projection (tools, permissions, prompt additions) before execution.
+- Studio does not intercept tool output or re-sequence execution at runtime.
 
-### Worker Execution
+### Orchestrator Replacement
 
-`invokePerformer()` → text output → follow edges via `selectNextTarget(success/fail)`
+The orchestrator node pattern (LLM selects next target via JSON) is replaced by:
 
-### Orchestrator Execution
-
-`invokePerformer(orchestratorPrompt)` → JSON `{next, input, session}` → route to one outgoing non-`branch` edge target. `maxDelegations` limits how many times a single orchestrator can route before failing.
-
-### Parallel Execution
-
-1. All outgoing `role='branch'` edges run as independent sub-machines via `Promise.all`
-2. Each branch is an isolated sub-run (own `runId`, `sessionPool`, no UI events)
-3. `join: all` — all must succeed; outputs concatenated
-4. `join: any` — one success suffices; first successful branch's output used
-5. Branch history merges back into parent context
+- `task` tool + `permission.task` for target selection
+- Write tools disabled, read tools enabled for routing decisions
+- Standard tool call interface instead of JSON response parsing
 
 ### Session Management
 
-Two dimensions: **policy** (scope) × **lifetime** (persistence).
+Act sessions are simplified from the previous 2D model (policy × lifetime):
 
-| Policy | Scope |
-|--------|-------|
-| `fresh` | New session every invocation |
-| `node` | Shared across invocations of the same node |
-| `performer` | Shared across nodes using the same performer |
-| `act` | Single session for the entire Act |
-
-| Lifetime | Persistence |
-|----------|-------------|
-| `run` | Scoped to the current run only |
-| `thread` | Persists across runs in the same act thread |
-
-Session reuse requires matching `configKey` (model + tal + dance + mcp + agent combination). Config change → session invalidated.
-
-### Safety Invariants
-
-- `maxIterations` is the global safety net for the entire Act run
-- `maxDelegations` limits individual orchestrator routing count
-- Orchestrator route validation rejects targets that are not reachable via outgoing non-`branch` edges
-- Parallel branch runs cannot leak sessions to the parent thread (`actSessionId: null`)
+- No more fine-grained `fresh` / `node` / `performer` / `act` policy matrix
+- Standalone performer chat uses one standalone performer session model
+- Act keeps the act thread as owner and creates act-scoped performer sub-sessions
+- Standalone performer chat sessions are not shared with Act
 
 ## Read First
 
+- [prd/001-opencode-native-projection.md](./prd/001-opencode-native-projection.md)
 - [src/types/index.ts](./src/types/index.ts)
 - [src/store/workspaceSlice.ts](./src/store/workspaceSlice.ts)
 - [src/store/chatSlice.ts](./src/store/chatSlice.ts)
@@ -339,7 +355,6 @@ Session reuse requires matching `configKey` (model + tal + dance + mcp + agent c
 - [server/routes/chat.ts](./server/routes/chat.ts)
 - [server/routes/compile.ts](./server/routes/compile.ts)
 - [server/routes/safe.ts](./server/routes/safe.ts)
-- [server/lib/act-runtime.ts](./server/lib/act-runtime.ts)
 - [server/lib/safe-mode.ts](./server/lib/safe-mode.ts)
 - [server/lib/session-execution.ts](./server/lib/session-execution.ts)
 - [server/lib/runtime-tools.ts](./server/lib/runtime-tools.ts)

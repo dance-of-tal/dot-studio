@@ -10,6 +10,7 @@ client/
 .dance-of-tal/
 test-results/
 tmp-client-sourcemap/
+.opencode/
 
 # Environment and machine-local config
 .env
@@ -32,3 +33,5 @@ pnpm-debug.log*
 
 # Internal-only docs
 AGENT.md
+REFACTOR.md
+prd/
