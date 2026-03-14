@@ -252,7 +252,6 @@ export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) 
                     <X size={12} />
                 </button>
             )}
-            customResizeHandle={<div className="canvas-terminal-frame__resize" />}
         >
             <div className="canvas-terminal-frame__body" ref={termRef} />
             {exited && (

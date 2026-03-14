@@ -65,7 +65,6 @@ export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) 
                 </button>
             )}
             bodyClassName="scroll-area"
-            customResizeHandle={<div className="canvas-tracking-frame__resize" />}
         >
             {files.length === 0 ? (
                 <div className="canvas-tracking-frame__empty">No uncommitted files detected.</div>

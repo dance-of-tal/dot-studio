@@ -1,5 +1,6 @@
 import { getOpencode } from './opencode.js'
-import type { ModelSelection } from './prompt.js'
+
+type ModelSelection = { provider: string; modelId: string } | null
 import { projectMcpEntryEnabled, type ProjectMcpCatalog } from '../../shared/project-mcp.js'
 import { readProjectMcpCatalog } from './project-config.js'
 

@@ -8,7 +8,7 @@ import { LeftSidebar, CanvasArea, ToastViewport, TerminalPanel } from './feature
 import { api, setApiWorkingDirContext } from './api';
 import { showToast } from './lib/toast';
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers';
-import type { ActNodeType, ActSessionLifetime, ActSessionPolicy } from './types';
+import type { ActNodeType } from './types';
 import type { StudioState } from './store';
 import { projectMcpServerNames } from '../shared/project-mcp';
 import { extractMcpServerNamesFromConfig } from '../shared/mcp-config';
@@ -298,20 +298,6 @@ export default function App() {
       if (asset.semanticType === 'node-type') {
         store.setActNodeType(dropData.actId, dropData.nodeId, asset.value as ActNodeType);
         return true;
-      }
-
-      if (node.type === 'parallel') {
-        showDropWarning('Session reuse and lifetime apply only to performer-backed nodes.');
-        return true;
-      }
-
-      if (asset.semanticType === 'session-policy') {
-        store.updateActNode(dropData.actId, dropData.nodeId, { sessionPolicy: asset.value as ActSessionPolicy });
-        return true;
-      }
-
-      if (asset.semanticType === 'session-lifetime') {
-        store.updateActNode(dropData.actId, dropData.nodeId, { sessionLifetime: asset.value as ActSessionLifetime });
       }
 
       return true;

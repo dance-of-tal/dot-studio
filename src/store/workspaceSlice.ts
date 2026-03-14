@@ -6,8 +6,8 @@ import {
     createPerformerNodeFromAsset,
     normalizePerformerAssetInput,
 } from '../lib/performers'
-import { createActActions } from './actSlice'
-import { makeId } from '../lib/acts'
+import { createActActions, makeId } from './actSlice-stub'
+
 import {
     applyPerformerPatch,
     defaultMarkdownContent,

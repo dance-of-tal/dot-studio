@@ -274,6 +274,18 @@ export default function AgentFrame({ data, id }: any) {
                 return;
             }
             setPerformerExecutionMode(id, 'direct');
+            api.vcs.get().then((vcs) => {
+                if (!vcs?.branch) {
+                    showToast(
+                        'This project has no Git repository. Undo in Direct mode will only revert chat history, not file changes. Consider using Safe mode for reliable undo.',
+                        'info',
+                        {
+                            title: 'Direct mode — limited undo',
+                            dedupeKey: `performer:direct-no-git:${id}`,
+                        },
+                    );
+                }
+            }).catch(() => {});
             return;
         }
 

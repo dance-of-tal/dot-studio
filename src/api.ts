@@ -6,12 +6,11 @@ import type {
     DraftAsset,
     ModelConfig,
     PromptPreview,
-    ActRunState,
     SavedStageSummary,
 } from './types'
 import type { RuntimeModelCatalogEntry } from '../shared/model-variants'
 import type { AdapterViewActionRequest, AdapterViewProjection } from '../shared/adapter-view'
-import type { RunActRequest } from '../shared/act-contracts'
+
 import type { AssetListItem } from '../shared/asset-contracts'
 import type { ChatSendRequest, ChatSessionCreateResponse, CompilePromptRequest } from '../shared/chat-contracts'
 import type { ExecutionMode, SafeOwnerKind, SafeOwnerSummary } from '../shared/safe-mode'
@@ -279,16 +278,7 @@ export const api = {
             postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/undo-last-apply`),
     },
 
-    act: {
-        run: (payload: RunActRequest) =>
-            postJSON<ActRunState>('/api/act/run', payload),
-
-        abort: (actSessionId: string) =>
-            postJSON<{ ok: boolean }>(`/api/act/sessions/${actSessionId}/abort`),
-
-        events: (actSessionId: string) =>
-            createApiEventSource(`/api/act/events?actSessionId=${encodeURIComponent(actSessionId)}`),
-    },
+    // Act runtime removed (Phase 2 pending)
 
     // ── LSP (from OpenCode SDK) ───────────────────────────
     lsp: {

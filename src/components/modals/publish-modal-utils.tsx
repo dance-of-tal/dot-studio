@@ -9,7 +9,14 @@
 import type { PerformerNode, StageAct } from '../../types'
 import { useStudioStore } from '../../store'
 import { registryUrnFromRef } from '../../lib/performers'
-import { resolvePublishablePerformerUrn } from '../../lib/acts'
+// resolvePublishablePerformerUrn removed (Phase 2 pending)
+function resolvePublishablePerformerUrn(
+    _performer: PerformerNode | null | undefined,
+    _author: string | null,
+    _opts?: { savedPerformerUrns?: Set<string> },
+): string | null {
+    return null // stub — Act publish flow will be reimplemented
+}
 
 // ── Types ───────────────────────────────────────────────
 

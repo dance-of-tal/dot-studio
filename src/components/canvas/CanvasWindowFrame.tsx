@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from 'react'
-import { NodeResizer, NodeResizeControl } from '@xyflow/react'
+import { NodeResizer } from '@xyflow/react'
 import CanvasDragHandle from './CanvasDragHandle'
 import useTransformChrome from './useTransformChrome'
 import './CanvasWindowFrame.css'
@@ -21,8 +21,6 @@ type CanvasWindowFrameProps = {
     /** Callback fired when user finishes resizing. */
     onResizeEnd?: () => void
     selected?: boolean
-    /** If provided, standard NodeResizer is skipped and this custom handle is wrapped in a bottom-right NodeResizeControl */
-    customResizeHandle?: ReactNode
     headerStart: ReactNode
     headerEnd?: ReactNode
     bodyClassName?: string
@@ -43,7 +41,6 @@ export default function CanvasWindowFrame({
     onResizeStart,
     onResizeEnd,
     selected = false,
-    customResizeHandle,
     headerStart,
     headerEnd,
     bodyClassName = '',
@@ -81,7 +78,7 @@ export default function CanvasWindowFrame({
             style={{ width, height }}
             onPointerDownCapture={handleFramePointerDownCapture}
         >
-            {resizable && !customResizeHandle && (
+            {resizable && (
                 <NodeResizer
                     color="var(--text-muted)"
                     lineStyle={{ borderWidth: 0 }}
@@ -97,18 +94,6 @@ export default function CanvasWindowFrame({
                     onResizeStart={handleResizeStartCombined}
                     onResizeEnd={handleResizeEndCombined}
                 />
-            )}
-            {resizable && customResizeHandle && (
-                <NodeResizeControl
-                    position="bottom-right"
-                    minWidth={minWidth}
-                    minHeight={minHeight}
-                    onResizeStart={handleResizeStartCombined}
-                    onResizeEnd={handleResizeEndCombined}
-                    style={{ background: 'transparent', border: 'none', width: 'auto', height: 'auto' }}
-                >
-                    {customResizeHandle}
-                </NodeResizeControl>
             )}
             <div className="canvas-frame__header">
                 <CanvasDragHandle active={isTransformChromeActive} onActivate={activateTransformChrome} />

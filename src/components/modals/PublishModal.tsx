@@ -5,7 +5,11 @@ import { useStudioStore } from '../../store';
 import { api } from '../../api';
 import { formatStudioApiErrorMessage } from '../../lib/api-errors';
 import { buildPerformerAssetPayload, slugifyAssetName, unresolvedDeclaredMcpServerNames } from '../../lib/performers';
-import { buildActAssetPayload } from '../../lib/acts';
+// buildActAssetPayload removed (Phase 2 pending)
+function buildActAssetPayload(_act: any, _performers: any[], _author: string | null, _opts: any): any {
+    console.warn('[studio] buildActAssetPayload: Act publish flow removed (Phase 2 pending)')
+    return {}
+}
 import { queryKeys, useAssetKind } from '../../hooks/queries';
 import { useDotLogin } from '../../hooks/useDotLogin';
 import { DOT_TOS_URL } from '../../lib/dot-terms';

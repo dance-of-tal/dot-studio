@@ -9,13 +9,7 @@ import {
 } from '../lib/performers'
 import { mapSessionMessagesToChatMessages } from '../lib/chat-messages'
 import { formatStudioApiErrorMessage } from '../lib/api-errors'
-import {
-    sendActMessage as sendActMessageHelper,
-    abortAct as abortActHelper,
-    startNewActSession as startNewActSessionHelper,
-    deleteActSession as deleteActSessionHelper,
-    renameActSession as renameActSessionHelper,
-} from './chat-act-helpers'
+// Act helpers removed — will be reimplemented in Phase 2
 
 export const createChatSlice: StateCreator<
     StudioState,
@@ -383,12 +377,12 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        sendActMessage: async (actId, text) => {
-            await sendActMessageHelper(get, set, actId, text)
+        sendActMessage: async (_actId, _text) => {
+            console.warn('[studio] sendActMessage: Act runtime removed (Phase 2 pending)')
         },
 
-        abortAct: async (actId) => {
-            await abortActHelper(get, set, actId)
+        abortAct: async (_actId) => {
+            console.warn('[studio] abortAct: Act runtime removed (Phase 2 pending)')
         },
 
         executeSlashCommand: async (performerId, cmd) => {
@@ -454,8 +448,8 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        startNewActSession: (actId) => {
-            startNewActSessionHelper(get, set, actId)
+        startNewActSession: (_actId) => {
+            console.warn('[studio] startNewActSession: Act runtime removed (Phase 2 pending)')
         },
 
         detachPerformerSession: (performerId, notice) => {
@@ -699,12 +693,12 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        deleteActSession: (sessionId) => {
-            deleteActSessionHelper(get, set, sessionId)
+        deleteActSession: (_sessionId) => {
+            console.warn('[studio] deleteActSession: Act runtime removed (Phase 2 pending)')
         },
 
-        renameActSession: (sessionId, title) => {
-            renameActSessionHelper(set, sessionId, title)
+        renameActSession: (_sessionId, _title) => {
+            console.warn('[studio] renameActSession: Act runtime removed (Phase 2 pending)')
         },
     }
 }

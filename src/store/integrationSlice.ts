@@ -133,82 +133,9 @@ export const createIntegrationSlice: StateCreator<
         })
     }
 
+    // Act event source removed (Phase 2 pending)
     const reconnectActEventSource = () => {
-        const actSessionId = resolveCurrentActSessionId(get())
-
-        reconnectManagedEventSource({
-            slot: actSlot,
-            resolveWorkingDir: () => get().workingDir || null,
-            resolveExtraKey: () => actSessionId,
-            createEventSource: () => actSessionId ? api.act.events(actSessionId) : null,
-            onMessage: (data: any) => {
-                if (!actSessionId || data.actSessionId !== actSessionId) {
-                    return
-                }
-
-                if (data.type === 'act.performer.binding') {
-                    set((state) => {
-                        const currentBindings = state.actPerformerBindings[actSessionId] || []
-                        const nextBinding = {
-                            sessionId: data.sessionId,
-                            nodeId: data.nodeId,
-                            nodeLabel: data.nodeLabel,
-                            performerId: data.performerId || null,
-                            performerName: data.performerName || null,
-                        }
-                        const existingIndex = currentBindings.findIndex((binding) => binding.sessionId === data.sessionId)
-                        const nextBindings = existingIndex === -1
-                            ? [...currentBindings, nextBinding]
-                            : currentBindings.map((binding, index) => index === existingIndex ? nextBinding : binding)
-
-                        return {
-                            actPerformerBindings: {
-                                ...state.actPerformerBindings,
-                                [actSessionId]: nextBindings,
-                            },
-                            actPerformerChats: {
-                                ...state.actPerformerChats,
-                                [actSessionId]: {
-                                    ...(state.actPerformerChats[actSessionId] || {}),
-                                    [data.sessionId]: state.actPerformerChats[actSessionId]?.[data.sessionId] || [],
-                                },
-                            },
-                        }
-                    })
-                    void syncSessionMessages(
-                        { kind: 'act-performer', actSessionId, performerSessionId: data.sessionId },
-                        data.sessionId,
-                    )
-                    return
-                }
-
-                if (data.type !== 'act.runtime') {
-                    return
-                }
-
-                set((state) => ({
-                    actSessions: state.actSessions.map((session) => (
-                        session.id === data.actSessionId
-                            ? {
-                                ...session,
-                                status: data.status,
-                                updatedAt: data.summary?.updatedAt || Date.now(),
-                                lastRunId: data.runId || session.lastRunId,
-                                resumeSummary: data.summary || session.resumeSummary,
-                            }
-                            : session
-                    )),
-                }))
-
-                if (data.status === 'completed' || data.status === 'failed') {
-                    set((state) => ({
-                        loadingActId: state.selectedActId && state.actSessionMap[state.selectedActId] === data.actSessionId
-                            ? null
-                            : state.loadingActId,
-                    }))
-                }
-            },
-        })
+        // no-op — Act runtime events were removed
     }
 
     const reconnectAdapterEventSource = () => {

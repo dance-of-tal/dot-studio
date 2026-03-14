@@ -14,7 +14,9 @@ import {
     registryAssetRef,
     registryAssetRefs,
 } from '../lib/performers'
-import { defaultActSessionMode } from '../lib/acts'
+
+// defaultActSessionMode inlined (was in deleted lib/acts.ts)
+const defaultActSessionMode = () => 'all_nodes_thread' as const
 import { coerceStudioApiError } from '../lib/api-errors'
 import {
     getMaxMarkdownEditorCounter,

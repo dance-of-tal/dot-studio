@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
-import type { ModelSelection } from './prompt.js'
+
+type ModelSelection = { provider: string; modelId: string } | null
 
 export type StudioOpencodeErrorCode =
     | 'validation'
