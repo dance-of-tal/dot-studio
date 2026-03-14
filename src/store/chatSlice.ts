@@ -388,6 +388,26 @@ export const createChatSlice: StateCreator<
                         interaction: e.interaction,
                         description: e.description,
                     })),
+                    // PRD §7.5: Include all edge-connected performer configs for multi-projection
+                    relatedPerformers: (() => {
+                        const edges = get().edges
+                        if (edges.length === 0) return undefined
+                        const targetIds = new Set(edges.flatMap(e => [e.from, e.to]).filter(id => id !== performerId))
+                        return [...targetIds].map(targetId => {
+                            const p = getPerformerById(targetId)
+                            if (!p) return null
+                            return {
+                                performerId: targetId,
+                                performerName: p.name,
+                                talRef: p.talRef || null,
+                                danceRefs: p.danceRefs || [],
+                                model: p.model || null,
+                                modelVariant: p.modelVariant || null,
+                                mcpServerNames: p.mcpServerNames || [],
+                                description: p.description,
+                            }
+                        }).filter(Boolean) as any[]
+                    })(),
                 })
                 scheduleSessionFallbackSync(performerId, sessionId, Date.now())
             } catch (err: any) {

@@ -63,4 +63,15 @@ export type ChatSendRequest = {
     attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
     mentions?: Array<{ performerId: string }>
     relations?: Array<{ id: string; from: string; to: string; interaction: string; description: string }>
+    /** Edge-connected performers that also need projection for task tool delegation */
+    relatedPerformers?: Array<{
+        performerId: string
+        performerName: string
+        talRef: SharedAssetRef | null
+        danceRefs: SharedAssetRef[]
+        model?: { provider: string; modelId: string } | null
+        modelVariant?: string | null
+        mcpServerNames?: string[]
+        description?: string
+    }>
 }

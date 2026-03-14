@@ -63,7 +63,22 @@ export async function sendStudioChatMessage(
         mcpServerNames: performer.mcpServerNames || [],
         description: performer.description,
     }
-    await ensureProjection(cwd, cwd, [projectionInput], performer.drafts || {}, request.relations || [])
+    // Build projection inputs: sender + all edge-connected performers
+    const projectionInputs: PerformerProjectionInput[] = [projectionInput]
+    for (const related of request.relatedPerformers || []) {
+        if (related.model && related.performerId !== projectionInput.performerId) {
+            projectionInputs.push({
+                performerId: related.performerId,
+                talRef: related.talRef || null,
+                danceRefs: related.danceRefs || [],
+                model: related.model,
+                modelVariant: related.modelVariant || null,
+                mcpServerNames: related.mcpServerNames || [],
+                description: related.description,
+            })
+        }
+    }
+    await ensureProjection(cwd, cwd, projectionInputs, performer.drafts || {}, request.relations || [])
 
     // Resolve projected agent name
     const posture = (performer.planMode ? 'plan' : 'build') as 'build' | 'plan'
