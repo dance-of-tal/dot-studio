@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef, type RefObject } from 'react'
 import { api } from '../api'
 
 export interface FileMention {
@@ -8,12 +8,13 @@ export interface FileMention {
     type: string
 }
 
-export function useFileMentions() {
+export function useFileMentions(externalInputRef?: RefObject<HTMLTextAreaElement | null>) {
     const [mentionQuery, setMentionQuery] = useState<string | null>(null)
     const [mentionResults, setMentionResults] = useState<FileMention[]>([])
     const [mentionIndex, setMentionIndex] = useState(0)
     const [isMentioning, setIsMentioning] = useState(false)
-    const inputRef = useRef<HTMLTextAreaElement>(null)
+    const fallbackRef = useRef<HTMLTextAreaElement>(null)
+    const inputRef = externalInputRef || fallbackRef
 
     const mentionRegex = /#([a-zA-Z0-9_\-\.\/]*)$/
 

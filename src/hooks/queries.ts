@@ -196,6 +196,8 @@ export function useInstallAsset() {
 export function useCompilePrompt() {
     return useMutation({
         mutationFn: ({
+            performerId,
+            performerName,
             talRef,
             danceRefs,
             model,
@@ -205,7 +207,10 @@ export function useCompilePrompt() {
             drafts,
             planMode,
             danceDeliveryMode,
+            relatedPerformers,
         }: {
+            performerId: string | null
+            performerName: string | null
             talRef: AssetRef | null
             danceRefs: AssetRef[]
             model: { provider: string; modelId: string } | null
@@ -215,6 +220,7 @@ export function useCompilePrompt() {
             drafts: Record<string, DraftAsset>
             planMode?: boolean
             danceDeliveryMode?: 'auto' | 'tool' | 'inline'
-        }) => api.compile(talRef, danceRefs, model, modelVariant, agentId, mcpServerNames, drafts, planMode || false, danceDeliveryMode || 'auto'),
+            relatedPerformers?: Array<{ performerId: string; performerName: string }>
+        }) => api.compile(performerId, performerName, talRef, danceRefs, model, modelVariant, agentId, mcpServerNames, drafts, planMode || false, danceDeliveryMode || 'auto', relatedPerformers),
     })
 }

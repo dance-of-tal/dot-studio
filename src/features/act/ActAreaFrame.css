@@ -1,0 +1,672 @@
+.act-area-frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.act-area-frame--drop {
+    border-color: color-mix(in srgb, var(--accent, #3b82f6) 65%, var(--border-strong));
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent, #3b82f6) 8%, var(--bg-panel)) 0%, color-mix(in srgb, var(--bg-panel) 98%, transparent) 100%);
+}
+
+.react-flow__node-actArea {
+    overflow: visible !important;
+}
+
+.react-flow__node-actArea .act-area-frame {
+    position: relative;
+    z-index: 1;
+}
+
+.react-flow__node-actArea .react-flow__resize-control,
+.act-area-frame .react-flow__resize-control {
+    z-index: 20 !important;
+}
+
+
+
+.act-area-frame__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.act-area-frame__meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+}
+
+.act-area-frame__body-shell {
+    padding: 0;
+}
+
+.act-area-frame__header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.act-area-frame__description {
+    padding: 8px 14px 0;
+    font-size: var(--font-base);
+    color: var(--text-secondary);
+    line-height: 1.35;
+}
+
+.act-area-frame__title-input {
+    min-width: 180px;
+    height: 28px;
+}
+
+.act-area-frame__settings {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 140px 180px;
+    gap: 10px;
+    padding: 8px 14px 0;
+}
+
+.act-area-frame__description-input {
+    min-height: 56px;
+    resize: vertical;
+}
+
+.act-area-frame__iterations {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+}
+
+@media (max-width: 1100px) {
+    .act-area-frame__settings {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.act-area-frame__hint {
+    padding: 8px 14px 0;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+}
+
+.act-area-frame__body {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 140px;
+    overflow: hidden;
+    padding: 8px 12px 0;
+    display: flex;
+    gap: 12px;
+}
+
+.act-area-frame__body--thread {
+    padding-top: 10px;
+    flex-direction: column;
+    container-type: size;
+    container-name: act-thread;
+}
+
+.act-area-frame__edit-layout {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    gap: 0;
+}
+
+/* ── Floating Add Toolbar (bottom-left of canvas) ── */
+.act-area-frame__add-rail {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--border-light) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 4px 16px color-mix(in srgb, black 12%, transparent);
+}
+
+/* ── Fixed Inspector (left column — always visible) ── */
+.act-area-frame__detail-panel {
+    width: 320px;
+    flex-shrink: 0;
+    border-right: 1px solid color-mix(in srgb, var(--border-light) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 95%, transparent);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.act-area-frame__add-rail-head,
+.act-area-frame__detail-section-head {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.act-area-frame__add-rail-head strong,
+.act-area-frame__detail-section-head strong {
+    font-size: var(--font-md);
+    color: var(--text-primary);
+}
+
+.act-area-frame__add-rail-head span,
+.act-area-frame__detail-section-head span {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.act-area-frame__add-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    font-size: var(--font-base);
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.act-area-frame__add-button:hover {
+    border-color: color-mix(in srgb, var(--accent, #3b82f6) 32%, var(--border-light));
+    background: color-mix(in srgb, var(--accent, #3b82f6) 10%, var(--bg-panel));
+}
+
+.act-area-frame__add-button strong {
+    font-size: var(--font-base);
+}
+
+.act-area-frame__add-button span {
+    display: none;
+}
+
+.act-area-frame__add-hint {
+    display: inline !important;
+    font-size: var(--font-sm);
+    font-weight: 400;
+    color: var(--text-tertiary);
+    opacity: 0.8;
+}
+
+.act-area-frame__add-rail-head {
+    display: none;
+}
+
+.act-area-frame__add-rail-note {
+    display: none;
+}
+
+.act-area-frame__detail-panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.act-area-frame__detail-card {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 12px;
+    gap: 12px;
+}
+
+.act-area-frame__detail-card--empty {
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.act-area-frame__detail-card--empty strong {
+    font-size: var(--font-lg);
+    color: var(--text-primary);
+}
+
+.act-area-frame__detail-card--empty span {
+    font-size: var(--font-base);
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.act-area-frame__detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--border-light) 92%, transparent);
+}
+
+.act-area-frame__thread-shell {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 12px;
+}
+
+.act-area-frame__thread-graph {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--border-light) 92%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--bg-panel) 95%, transparent);
+}
+
+.act-area-frame__thread-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.act-area-frame__thread-head-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.act-area-frame__thread-head-copy strong {
+    font-size: var(--font-lg);
+    color: var(--text-primary);
+}
+
+.act-area-frame__thread-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+}
+
+.act-area-frame__thread-meta-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--font-sm);
+    font-weight: 500;
+    background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+    border: 1px solid var(--border-light);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.act-area-frame__thread-meta-pill--status {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 30%, var(--border-light));
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-hover));
+}
+
+.act-area-frame__thread-meta-pill--warn {
+    color: #f59e0b;
+    border-color: color-mix(in srgb, #f59e0b 30%, var(--border-light));
+    background: color-mix(in srgb, #f59e0b 8%, var(--bg-hover));
+}
+
+.act-area-frame__thread-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.act-area-frame__graph-minimap {
+    position: relative;
+    border: 1px dashed color-mix(in srgb, var(--border-strong) 68%, transparent);
+    border-radius: var(--radius-lg);
+    background:
+        radial-gradient(circle at top, color-mix(in srgb, var(--bg-canvas) 72%, transparent), transparent 70%),
+        color-mix(in srgb, var(--bg-panel) 92%, transparent);
+    overflow: hidden;
+    min-height: 40px;
+    max-height: 220px;
+    transition: height 0.2s ease;
+}
+
+.act-area-frame__graph-minimap-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+}
+
+.act-area-frame__graph-edges {
+    position: absolute;
+    inset: 0;
+    color: color-mix(in srgb, var(--border-strong) 82%, transparent);
+}
+
+.act-area-frame__graph-edge {
+    stroke: currentColor;
+    stroke-width: 1.4;
+    opacity: 0.65;
+}
+
+.act-area-frame__graph-edge.is-completed {
+    color: color-mix(in srgb, #10b981 82%, var(--border-strong));
+    opacity: 0.95;
+}
+
+.act-area-frame__graph-node {
+    position: absolute;
+    width: 92px;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 8px;
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--border-strong) 78%, transparent);
+    background: color-mix(in srgb, var(--bg-panel) 92%, white 8%);
+    color: var(--text-primary);
+    box-shadow: 0 8px 18px color-mix(in srgb, black 8%, transparent);
+    font-size: var(--font-sm);
+    text-align: center;
+}
+
+.act-area-frame__graph-node.is-entry {
+    border-color: color-mix(in srgb, #f59e0b 58%, var(--border-strong));
+}
+
+.act-area-frame__graph-node.is-active {
+    border-color: color-mix(in srgb, var(--accent, #3b82f6) 72%, var(--border-strong));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #3b82f6) 20%, transparent), 0 8px 18px color-mix(in srgb, black 8%, transparent);
+}
+
+.act-area-frame__graph-node.is-active span {
+    animation: act-runtime-pulse 1.2s ease-in-out infinite;
+}
+
+.act-area-frame__graph-node.is-completed {
+    border-color: color-mix(in srgb, #10b981 58%, var(--border-strong));
+    background: color-mix(in srgb, #10b981 8%, var(--bg-panel));
+}
+
+.act-area-frame__graph-node.is-failed {
+    border-color: color-mix(in srgb, #ef4444 58%, var(--border-strong));
+    background: color-mix(in srgb, #ef4444 8%, var(--bg-panel));
+}
+
+.act-area-frame__thread-messages {
+    flex: 1 1 auto;
+    min-height: 80px;
+    padding: 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-canvas) 72%, transparent);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.act-area-frame__thread-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 2px;
+}
+
+.act-area-frame__thread-filter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-main);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.act-area-frame__thread-filter:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.act-area-frame__thread-filter.is-active {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+    color: var(--text-primary);
+}
+
+.act-area-frame__thread-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 24px 16px;
+    font-size: var(--font-md);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.act-area-frame__thread-empty strong {
+    font-size: var(--font-lg);
+    color: var(--text-primary);
+}
+
+.act-area-frame__thread-empty span {
+    font-size: var(--font-base);
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.act-area-frame__thread-message {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.act-area-frame__thread-message-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.act-area-frame__thread-role {
+    font-size: var(--font-sm);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.act-area-frame__thread-subrole {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+}
+
+.act-area-frame__thread-body {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: var(--font-lg);
+    line-height: 1.65;
+}
+
+.act-area-frame__thread-message--assistant .act-area-frame__thread-body {
+    background: color-mix(in srgb, var(--bg-panel) 86%, transparent);
+}
+
+.act-area-frame__thread-message--system .act-area-frame__thread-body {
+    border-color: rgba(245, 158, 11, 0.28);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.act-area-frame__thread-body pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.act-area-frame__thread-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-md);
+    color: var(--text-secondary);
+}
+
+.act-area-frame__thread-composer {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    gap: 10px;
+    padding: 0 0 12px;
+}
+
+/* ── Act Chat Input (matches performer style) ── */
+
+.act-area-frame__chat-input {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--border-light);
+    background: var(--bg-card);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+    flex-shrink: 0;
+}
+
+.act-area-frame__chat-note {
+    padding: 8px 12px;
+    border: 1px solid color-mix(in srgb, #f59e0b 26%, var(--border-light));
+    border-radius: 12px;
+    background: color-mix(in srgb, #f59e0b 10%, var(--bg-panel));
+    color: var(--text-secondary);
+    font-size: var(--font-base);
+    line-height: 1.45;
+}
+
+.act-area-frame__chat-textarea {
+    min-height: 36px;
+    max-height: 120px;
+    resize: none;
+    padding: 8px 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: 12px;
+    font-size: var(--font-lg);
+    line-height: 1.5;
+    color: var(--text-primary);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    flex: 1;
+}
+
+.act-area-frame__chat-textarea:focus {
+    background: var(--bg-panel);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
+    outline: none;
+}
+
+.act-area-frame__chat-textarea::placeholder {
+    color: var(--text-muted);
+}
+
+/* ── Responsive: hide thread-graph when act card is small ── */
+
+@container act-thread (max-height: 380px) {
+    .act-area-frame__thread-graph {
+        display: none;
+    }
+}
+
+.act-area-frame__thread-send {
+    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+    min-width: 108px;
+    padding: 10px 16px;
+    border-radius: var(--radius-lg);
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    font-size: var(--font-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.act-area-frame__thread-send:hover:not(:disabled) {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.act-area-frame__thread-send:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: var(--text-muted);
+    box-shadow: none;
+}
+
+.act-area-frame__thread-send.is-stop {
+    background: #ef4444;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.24);
+}
+
+.act-area-frame__thread-send.is-stop:hover:not(:disabled) {
+    filter: brightness(1.04);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.32);
+}
+
+@keyframes act-runtime-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.72;
+        transform: scale(1.03);
+    }
+}

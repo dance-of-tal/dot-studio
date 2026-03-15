@@ -13,7 +13,6 @@ import type {
     StageAct,
     StageActEdge,
     StageActNode,
-    ActNodeType,
     SavedStageSummary,
     ActSessionRecord,
     CanvasTerminalNode,
@@ -24,10 +23,16 @@ import type {
 } from '../types'
 import type { AdapterViewProjection } from '../../shared/adapter-view'
 
+export interface PerformerRelationSlice {
+    edges: PerformerLink[]
+    addEdge: (from: string, to: string) => void
+    removeEdge: (id: string) => void
+    updateEdgeDescription: (id: string, description: string) => void
+}
+
 export interface WorkspaceSlice {
     stageId: string | null
     performers: PerformerNode[]
-    edges: PerformerLink[]
     acts: StageAct[]
     drafts: Record<string, DraftAsset>
     markdownEditors: MarkdownEditorNode[]
@@ -97,9 +102,6 @@ export interface WorkspaceSlice {
     loadStage: (stageId: string) => Promise<void>
     listStages: () => Promise<void>
     deleteStage: (stageId: string) => Promise<void>
-    addEdge: (from: string, to: string, interaction?: string, description?: string) => void
-    removeEdge: (id: string) => void
-    updateEdgeDescription: (id: string, description: string) => void
 
     setPerformerTal: (performerId: string, tal: AssetCard | null) => void
     setPerformerTalRef: (performerId: string, talRef: AssetRef | null) => void
@@ -151,10 +153,10 @@ export interface WorkspaceSlice {
     addAct: (name?: string) => void
     importActFromAsset: (asset: any) => Promise<void>
     removeAct: (actId: string) => void
-    updateActMeta: (actId: string, patch: Partial<Pick<StageAct, 'name' | 'description' | 'entryNodeId' | 'maxIterations' | 'sessionMode'>>) => void
+    updateActMeta: (actId: string, patch: Partial<Pick<StageAct, 'name' | 'description' | 'entryNodeId' | 'maxIterations'>>) => void
     updateActAuthoringMeta: (actId: string, patch: { slug?: string; description?: string; tags?: string[] }) => void
     updateActBounds: (actId: string, bounds: Partial<StageAct['bounds']>) => void
-    addActNode: (actId: string, type: ActNodeType) => void
+    addActNode: (actId: string) => void
     addPerformerAssetToAct: (actId: string, asset: {
         name: string
         urn?: string | null
@@ -184,7 +186,6 @@ export interface WorkspaceSlice {
         positions: Record<string, { x: number; y: number }>,
         bounds?: Partial<StageAct['bounds']>,
     ) => void
-    setActNodeType: (actId: string, nodeId: string, type: ActNodeType) => void
     removeActNode: (actId: string, nodeId: string) => void
     addActEdge: (actId: string, from?: string, to?: string) => void
     updateActEdge: (actId: string, edgeId: string, patch: Partial<StageActEdge>) => void
@@ -213,7 +214,7 @@ export interface ChatSlice {
         message: string,
         attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
         extraDanceRefs?: AssetRef[],
-        mentions?: Array<{ performerId: string }>,
+        mentionedPerformers?: Array<{ performerId: string; name: string }>,
     ) => Promise<void>
     sendActMessage: (actId: string, message: string) => Promise<void>
     abortAct: (actId: string) => Promise<void>
@@ -265,4 +266,4 @@ export interface SafeModeSlice {
     undoLastSafeApply: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<void>
 }
 
-export type StudioState = WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice
+export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice

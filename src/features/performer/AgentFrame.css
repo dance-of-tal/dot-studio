@@ -403,7 +403,6 @@
     gap: 8px;
 }
 
-/* Legacy — keep for backward compat */
 .edit-advanced__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -477,4 +476,18 @@
     display: flex;
     align-items: center;
     gap: 4px;
+}
+
+.performer-node-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.performer-node-shell__handle {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-panel);
 }

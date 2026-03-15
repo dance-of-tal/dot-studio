@@ -1,20 +1,23 @@
-import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { ReactFlow, Background, useReactFlow, useNodesState } from '@xyflow/react';
-import type { Node, NodeChange, ReactFlowInstance, Viewport, Edge, Connection } from '@xyflow/react';
+import type { Connection, Edge, Node, NodeChange, ReactFlowInstance, Viewport } from '@xyflow/react';
 import { useDroppable } from '@dnd-kit/core';
 import { Maximize, Minimize, Maximize2, Minimize2 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
 import { useStudioStore } from '../../store';
 import { AgentFrame } from '../../features/performer';
-// ActAreaFrame removed (Phase 2 pending)
+import { ActAreaFrame } from '../../features/act';
 import MarkdownEditorFrame from '../../features/assets/MarkdownEditorFrame';
 import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
 import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
-import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
-// resolveActNodeLabel, computeActAutoLayout removed (Phase 2 pending)
+import PerformerRelationEdge from '../../features/performer/PerformerRelationEdge';
+import { hasModelConfig, resolvePerformerAgentId, resolvePerformerRuntimeConfig } from '../../lib/performers';
+import { resolveActNodeLabel } from '../../lib/acts';
+import { computeActAutoLayout } from '../../lib/act-layout';
+import { coerceStudioApiError } from '../../lib/api-errors';
+import { showToast } from '../../lib/toast';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
 import StageToolbar from '../toolbar/StageToolbar';
-import RelationEdge from '../../features/act/RelationEdge';
 
 function assetRefLabel(
     ref: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null | undefined,
@@ -51,13 +54,14 @@ function danceSummaryLabel(
 
 const nodeTypes = {
     performer: AgentFrame,
+    actArea: ActAreaFrame,
     markdownEditor: MarkdownEditorFrame,
     canvasTerminal: CanvasTerminalFrame,
     stageTracking: CanvasTrackingFrame,
 };
 
 const edgeTypes = {
-    relation: RelationEdge,
+    performerRelation: PerformerRelationEdge,
 };
 
 type CanvasNodeKind = 'performer' | 'actArea' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking';
@@ -144,14 +148,21 @@ function CustomControls() {
 export default function CanvasArea() {
     const {
         performers,
+        edges,
         acts,
         markdownEditors,
         canvasTerminals,
         trackingWindow,
         drafts,
         workingDir,
+        createMarkdownEditor,
+        actChats,
+        actSessionMap,
+        actSessions,
+        selectedActId,
         focusedActId,
         focusedPerformerId,
+        selectedActSessionId,
         selectedMarkdownEditorId,
         editingTarget,
         updatePerformerPosition,
@@ -165,14 +176,36 @@ export default function CanvasArea() {
         closeTrackingWindow,
         updateTrackingWindowPosition,
         updateTrackingWindowSize,
+        updateActMeta,
         updateActBounds,
+        addActNode,
+        updateActNode,
+        updateActNodePosition,
+        removeActNode,
+        addActEdge,
+        updateActEdge,
+        removeActEdge,
         selectedPerformerId,
         selectMarkdownEditor,
         selectPerformer,
         selectAct,
+        selectActSession,
         setActiveChatPerformer,
+        sendActMessage,
+        abortAct,
+        startNewActSession,
+        loadingActId,
+        inspectorFocus,
+        updatePerformerName,
+        setPerformerDanceDeliveryMode,
+        setPerformerModel,
+        setPerformerModelVariant,
+        setPerformerAgentId,
+        removePerformerDance,
+        removePerformerMcp,
+        addEdge,
+        setInspectorFocus,
         closeEditor,
-        addEdge: storeAddEdge,
     } = useStudioStore();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [transformTarget, setTransformTarget] = useState<{ id: string; type: CanvasNodeKind } | null>(null);
@@ -256,30 +289,169 @@ export default function CanvasArea() {
         return count ? `${count} server${count === 1 ? '' : 's'}` : null
     }, [])
 
-
-
-    // Act area nodes removed (Phase 2 pending — will be replaced by PerformerRelation edge model)
-    const buildActAreaNodes = useCallback(() => [] as Node[], [])
-
-    // Edges from store performer relations
-    const edges = useStudioStore((s) => s.edges)
-    const reactFlowEdges = useMemo<Edge[]>(() => edges.map((link) => ({
-        id: link.id,
-        source: link.from,
-        target: link.to,
-        type: 'relation',
-        animated: true,
-        data: {
-            interaction: link.interaction || 'request',
-            description: link.description || '',
-        },
-    })), [edges])
-
-    const onConnect = useCallback((connection: Connection) => {
-        if (connection.source && connection.target && connection.source !== connection.target) {
-            storeAddEdge(connection.source, connection.target)
+    const describeActNodePerformer = useCallback((performerId: string | null | undefined) => {
+        const performer = performers.find((item) => item.id === performerId) || null
+        if (!performer) {
+            return {
+                performerId: performerId || null,
+                performerName: null,
+                performerSummary: 'Unassigned performer',
+            }
         }
-    }, [storeAddEdge])
+        const parts = [
+            assetRefLabel(performer.talRef, drafts),
+            danceSummaryLabel(performer.danceRefs, drafts),
+            performer.model?.modelId || null,
+        ].filter(Boolean)
+        return {
+            performerId: performer.id,
+            performerName: performer.name,
+            performerSummary: parts.join(' · ') || 'No prompt assets yet',
+        }
+    }, [drafts, performers])
+
+    const performerDetailsById = useCallback(() => Object.fromEntries(
+        performers.map((performer) => [
+            performer.id,
+            {
+                id: performer.id,
+                name: performer.name,
+                talLabel: assetRefLabel(performer.talRef, drafts),
+                danceSummary: danceSummaryLabel(performer.danceRefs, drafts),
+                modelLabel: performer.model?.modelId || null,
+                agentLabel: resolvePerformerAgentId(performer),
+                mcpSummary: performerMcpSummary(performer),
+                planMode: !!performer.planMode,
+                scope: performer.scope,
+            },
+        ]),
+    ), [drafts, performerMcpSummary, performers])
+
+    const buildActAreaNodes = useCallback(() => acts.map((act) => {
+        const currentSessionId = (act.id === selectedActId ? selectedActSessionId : null) || actSessionMap[act.id] || null
+        const currentSession = currentSessionId
+            ? actSessions.find((session) => session.id === currentSessionId) || null
+            : null
+        const focusedNodeId = inspectorFocus?.startsWith('act-node:') ? inspectorFocus.slice('act-node:'.length) : null
+        const isActSelected = act.id === selectedActId
+        const isActFocused = focusedActId === act.id
+        const isActTransforming = transformTarget?.type === 'actArea' && transformTarget.id === act.id
+        const isActEditing = editingTarget?.type === 'act' && editingTarget.id === act.id
+        const entryNode = act.nodes.find((node) => node.id === act.entryNodeId) || null
+
+        return {
+            id: act.id,
+            type: 'actArea',
+            position: { x: act.bounds.x, y: act.bounds.y },
+            selected: isActSelected,
+            draggable: true,
+            dragHandle: '.canvas-frame__header',
+            hidden: act.hidden,
+            zIndex: getCanvasWindowZIndex({
+                selected: isActSelected,
+                focused: isActFocused,
+                editing: isActEditing,
+                transformActive: isActTransforming,
+            }),
+            data: {
+                threadMode: !isActEditing,
+                focused: isActFocused,
+                name: act.name,
+                description: act.description,
+                width: act.bounds.width,
+                height: act.bounds.height,
+                maxIterations: act.maxIterations,
+                sessionTitle: currentSession?.title || null,
+                sessionStatus: currentSession?.status || null,
+                threadMessages: currentSessionId ? (actChats[currentSessionId] || []) : [],
+                runtimeSummary: currentSession?.resumeSummary || null,
+                loading: loadingActId === act.id,
+                entryNodeId: act.entryNodeId,
+                executionMode: act.executionMode === 'safe' ? 'safe' : 'direct',
+                transformActive: isActTransforming,
+                onActivateTransform: () => activateTransformTarget('actArea', act.id),
+                onDeactivateTransform: () => deactivateTransformTarget('actArea', act.id),
+                editMode: isActEditing,
+                focusedNodeId,
+                onUpdateName: (name: string) => updateActMeta(act.id, { name }),
+                onUpdateDescription: (description: string) => updateActMeta(act.id, { description }),
+                onUpdateMaxIterations: (maxIterations: number) => updateActMeta(act.id, { maxIterations }),
+
+                onFocusNode: (nodeId: string | null) => setInspectorFocus(nodeId ? `act-node:${nodeId}` : null),
+                onAddNode: () => addActNode(act.id),
+                onAutoArrange: async () => {
+                    try {
+                        const layout = await computeActAutoLayout(act)
+                        useStudioStore.getState().applyActAutoLayout(act.id, layout.positions, layout.bounds)
+                    } catch (error) {
+                        console.warn('[act-layout] auto arrange failed', error)
+                        showToast(coerceStudioApiError(error).message, 'error', {
+                            title: 'Auto arrange failed',
+                            dedupeKey: `act-layout:${act.id}`,
+                        })
+                    }
+                },
+                onUpdateNode: (nodeId: string, patch: Record<string, unknown>) => updateActNode(act.id, nodeId, patch),
+                onRemoveNode: (nodeId: string) => removeActNode(act.id, nodeId),
+                onEditAct: () => useStudioStore.getState().openActEditor(act.id, 'act-structure'),
+                onCloseEdit: () => closeEditor(),
+                onSend: (message: string) => sendActMessage(act.id, message),
+                onStop: () => abortAct(act.id),
+                onNewSession: () => {
+                    startNewActSession(act.id)
+                    selectActSession(null)
+                },
+                performerDetailsById: performerDetailsById(),
+                performersById: Object.fromEntries(
+                    performers.map((performer) => [performer.id, performer]),
+                ),
+                onCreatePerformerForNode: (nodeId: string, seededAsset?: Record<string, unknown> | null) =>
+                    useStudioStore.getState().createActOwnedPerformerForNode(act.id, nodeId, seededAsset || null),
+                onCreateTalDraft: (performerId: string) => createMarkdownEditor('tal', {
+                    attachTarget: {
+                        performerId,
+                        mode: 'tal',
+                    },
+                }),
+                onCreateDanceDraft: (performerId: string) => createMarkdownEditor('dance', {
+                    attachTarget: {
+                        performerId,
+                        mode: 'dance-new',
+                    },
+                }),
+                onUpdatePerformerName: (performerId: string, name: string) => updatePerformerName(performerId, name),
+                onUpdatePerformerDanceDeliveryMode: (performerId: string, mode: 'auto' | 'tool' | 'inline') => setPerformerDanceDeliveryMode(performerId, mode),
+                onSetPerformerModel: (performerId: string, model: { provider: string; modelId: string } | null) => setPerformerModel(performerId, model),
+                onSetPerformerModelVariant: (performerId: string, variant: string | null) => setPerformerModelVariant(performerId, variant),
+                onSetPerformerAgentId: (performerId: string, agentId: string | null) => setPerformerAgentId(performerId, agentId),
+                onRemovePerformerDance: (performerId: string, danceRefKey: string) => removePerformerDance(performerId, danceRefKey),
+                onRemovePerformerMcp: (performerId: string, serverName: string) => removePerformerMcp(performerId, serverName),
+                edges: act.edges,
+                onAddEdge: () => addActEdge(act.id),
+                onUpdateEdge: (edgeId: string, patch: Record<string, unknown>) => updateActEdge(act.id, edgeId, patch),
+                onNodeMove: (nodeId: string, x: number, y: number) => updateActNodePosition(act.id, nodeId, x, y),
+                onConnectNodes: (from: string, to: string) => addActEdge(act.id, from, to),
+                onRemoveEdge: (edgeId: string) => removeActEdge(act.id, edgeId),
+                onSetEntry: (nodeId: string) => updateActMeta(act.id, { entryNodeId: nodeId }),
+                entryLabel: entryNode ? resolveActNodeLabel(entryNode as any, performers) : null,
+                nodes: act.nodes.map((node) => {
+                    const performerData = describeActNodePerformer(node.performerId)
+
+                    return {
+                        id: node.id,
+                        type: node.type,
+                        position: node.position,
+                        label: resolveActNodeLabel(node, performers),
+                        entry: act.entryNodeId === node.id,
+                        modelVariant: node.modelVariant || null,
+                        performerId: performerData.performerId ?? node.performerId,
+                        performerName: performerData.performerName,
+                        performerSummary: performerData.performerSummary,
+                    }
+                }),
+            } as Record<string, unknown>,
+        }
+    }), [acts, selectedActId, selectedActSessionId, actSessionMap, actSessions, inspectorFocus, focusedActId, transformTarget, editingTarget, actChats, loadingActId, activateTransformTarget, deactivateTransformTarget, updateActMeta, updateActBounds, setInspectorFocus, addActNode, updateActNode, removeActNode, closeEditor, sendActMessage, abortAct, startNewActSession, selectActSession, performerDetailsById, performers, createMarkdownEditor, updatePerformerName, setPerformerDanceDeliveryMode, setPerformerModel, setPerformerModelVariant, setPerformerAgentId, removePerformerDance, removePerformerMcp, addActEdge, updateActEdge, updateActNodePosition, removeActEdge, describeActNodePerformer, drafts])
 
     const buildPerformerNodes = useCallback(() => performers.map((performer) => ({
         id: performer.id,
@@ -394,6 +566,21 @@ export default function CanvasArea() {
         ]);
     }, [buildActAreaNodes, buildPerformerNodes, buildMarkdownEditorNodes, buildCanvasTerminalNodes, buildTrackingNodes, setNodes]);
 
+    const relationEdges = useCallback((): Edge[] => (
+        edges
+            .filter((edge) => performers.some((performer) => performer.id === edge.from) && performers.some((performer) => performer.id === edge.to))
+            .map((edge) => ({
+                id: edge.id,
+                source: edge.from,
+                target: edge.to,
+                type: 'performerRelation',
+                data: {
+                    description: edge.description,
+                    interaction: edge.interaction,
+                },
+            }))
+    ), [edges, performers])
+
     const onNodeDragStop = useCallback(
         (_: any, node: import('@xyflow/react').Node) => {
             if (node.type === 'actArea') {
@@ -441,7 +628,7 @@ export default function CanvasArea() {
             if (node.type === 'markdownEditor') {
                 const attachPerformerId = (node.data as any)?.attachTarget?.performerId || null;
                 const attachedAct = attachPerformerId
-                    ? acts.find((act) => act.nodes.some((item) => item.type !== 'parallel' && item.performerId === attachPerformerId)) || null
+                    ? acts.find((act) => act.nodes.some((item) => item.performerId === attachPerformerId)) || null
                     : null;
                 if (!attachedAct) {
                     closeEditor();
@@ -480,6 +667,13 @@ export default function CanvasArea() {
         selectAct(null);
         selectMarkdownEditor(null);
     }, [clearTransformTarget, closeEditor, selectAct, selectMarkdownEditor, selectPerformer]);
+
+    const onConnect = useCallback((connection: Connection) => {
+        if (!connection.source || !connection.target || connection.source === connection.target) {
+            return;
+        }
+        addEdge(connection.source, connection.target);
+    }, [addEdge]);
 
     const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
         // Filter out 'select' changes — selection is driven externally by Zustand selectedPerformerId
@@ -538,13 +732,13 @@ export default function CanvasArea() {
             )}
             <ReactFlow
                 nodes={nodes}
-                edges={reactFlowEdges}
+                edges={relationEdges()}
                 onInit={setReactFlowInstance}
                 onNodesChange={handleNodesChange}
                 onNodeDragStop={onNodeDragStop}
                 onNodeClick={onNodeClick}
-                onPaneClick={onPaneClick}
                 onConnect={onConnect}
+                onPaneClick={onPaneClick}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
                 multiSelectionKeyCode={null}

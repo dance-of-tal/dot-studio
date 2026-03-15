@@ -14,6 +14,8 @@ export type SharedDraftAsset = {
 }
 
 export type CompilePromptRequest = {
+    performerId?: string
+    performerName?: string
     talRef: SharedAssetRef | null
     danceRefs: SharedAssetRef[]
     drafts?: Record<string, SharedDraftAsset>
@@ -26,6 +28,11 @@ export type CompilePromptRequest = {
     mcpServerNames?: string[]
     planMode?: boolean
     danceDeliveryMode?: 'auto' | 'tool' | 'inline'
+    relatedPerformers?: Array<{
+        performerId: string
+        performerName: string
+        description?: string
+    }>
 }
 
 export type ChatSessionCreateRequest = {
@@ -44,6 +51,7 @@ export type ChatSendRequest = {
     message: string
     performer: {
         performerId: string
+        performerName: string
         talRef: SharedAssetRef | null
         danceRefs: SharedAssetRef[]
         extraDanceRefs?: SharedAssetRef[]
@@ -58,20 +66,21 @@ export type ChatSendRequest = {
         danceDeliveryMode?: 'auto' | 'tool' | 'inline'
         planMode?: boolean
         configHash?: string
-        description?: string
     }
     attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
     mentions?: Array<{ performerId: string }>
-    relations?: Array<{ id: string; from: string; to: string; interaction: string; description: string }>
-    /** Edge-connected performers that also need projection for task tool delegation */
     relatedPerformers?: Array<{
         performerId: string
         performerName: string
+        description?: string
         talRef: SharedAssetRef | null
         danceRefs: SharedAssetRef[]
-        model?: { provider: string; modelId: string } | null
+        drafts?: Record<string, SharedDraftAsset>
+        model?: {
+            provider: string
+            modelId: string
+        } | null
         modelVariant?: string | null
         mcpServerNames?: string[]
-        description?: string
     }>
 }

@@ -71,18 +71,17 @@ export function isActPublishable(a: StageAct): boolean {
 }
 
 export function getActIssue(a: StageAct, allPerformers: PerformerNode[]): string | undefined {
-    const workerNodes = a.nodes.filter((n) => n.type !== 'parallel')
-    if (workerNodes.length === 0) {
+    if (a.nodes.length === 0) {
         return 'No nodes'
     }
     if (a.nodes.length < 2) {
         return 'Needs at least 2 nodes'
     }
-    const unbound = workerNodes.filter((n: any) => !n.performerId)
-    if (unbound.length === workerNodes.length) {
+    const unbound = a.nodes.filter((n: any) => !n.performerId)
+    if (unbound.length === a.nodes.length) {
         return 'No performers assigned'
     }
-    const allEmpty = workerNodes.every((n: any) => {
+    const allEmpty = a.nodes.every((n: any) => {
         if (!n.performerId) return true
         const p = allPerformers.find((perf) => perf.id === n.performerId)
         return p ? !!getPerformerIssue(p) : true
@@ -186,7 +185,6 @@ export function buildActPreflight(
     )
 
     return act.nodes
-        .filter((node: any) => node.type !== 'parallel')
         .map((node: any) => {
             const boundPerformer = performers.find((item) => item.id === node.performerId)
             const performerUrn = resolvePublishablePerformerUrn(boundPerformer, author, {

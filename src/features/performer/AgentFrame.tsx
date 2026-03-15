@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
-import { useStore, Handle, Position } from '@xyflow/react';
+import { Handle, Position, useStore } from '@xyflow/react';
 import { useStudioStore } from '../../store';
 import { useSlashCommands } from '../../hooks/useSlashCommands';
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions';
-import { usePerformerMention } from '../../hooks/usePerformerMention';
+import { usePerformerMention, type PerformerMention } from '../../hooks/usePerformerMention';
 import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries';
-import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil, Shield, AtSign } from 'lucide-react';
+import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil, Shield } from 'lucide-react';
 import ThreadBody from '../chat/ThreadBody';
 import { assetRefKey, hasModelConfig, resolvePerformerAgentId } from '../../lib/performers';
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation';
@@ -54,7 +54,7 @@ function PerformerHeaderMeta({
 }) {
     return (
         <div className="canvas-frame__badges">
-            <span className="canvas-frame__badge" title={executionMode === 'safe' ? 'Default run mode: Safe (when mentioned, runs in caller workspace)' : 'Default run mode: Direct (when mentioned, runs in caller workspace)'}>
+            <span className="canvas-frame__badge" title={executionMode === 'safe' ? 'Safe mode enabled' : 'Direct mode enabled'}>
                 {executionMode === 'safe' ? 'Safe' : 'Direct'}
             </span>
             {conflictCount > 0 ? (
@@ -122,6 +122,7 @@ export default function AgentFrame({ data, id }: any) {
         togglePerformerVisibility,
         closeEditor,
         performers,
+        edges,
         drafts,
         createMarkdownEditor,
         updatePerformerName,
@@ -147,7 +148,7 @@ export default function AgentFrame({ data, id }: any) {
 
     const [input, setInput] = useState('');
     const [attachments, setAttachments] = useState<FileMention[]>([]);
-    const [pendingMentions, setPendingMentions] = useState<Array<{ performerId: string; name: string }>>([]);
+    const [mentionedPerformers, setMentionedPerformers] = useState<PerformerMention[]>([]);
     const [turnDanceSelections, setTurnDanceSelections] = useState<TurnDanceSelection[]>([]);
     const [danceSearchIndex, setDanceSearchIndex] = useState(0);
     const [editTab, setEditTab] = useState<'basic' | 'advanced'>('basic');
@@ -158,6 +159,7 @@ export default function AgentFrame({ data, id }: any) {
 
     const chatEndRef = useRef<HTMLDivElement>(null);
     const bodyRef = useRef<HTMLDivElement>(null);
+    const composerInputRef = useRef<HTMLTextAreaElement>(null);
     const isSelected = selectedPerformerId === id;
     const isFocused = focusedPerformerId === id;
     const isLoading = loadingPerformerId === id;
@@ -215,6 +217,15 @@ export default function AgentFrame({ data, id }: any) {
         mcpServers,
         drafts,
         { enableTools: (isSelected || isEditMode) },
+    );
+    const requestRelations = useMemo(
+        () => edges
+            .filter((edge) => edge.from === id)
+            .map((edge) => ({
+                targetName: performers.find((item) => item.id === edge.to)?.name || edge.to,
+                description: edge.description,
+            })),
+        [edges, id, performers],
     );
     const mcpBindingRows = useMemo(
         () => (performerPresentation.declaredMcpServerNames || [])
@@ -276,18 +287,6 @@ export default function AgentFrame({ data, id }: any) {
                 return;
             }
             setPerformerExecutionMode(id, 'direct');
-            api.vcs.get().then((vcs) => {
-                if (!vcs?.branch) {
-                    showToast(
-                        'This project has no Git repository. Undo in Direct mode will only revert chat history, not file changes. Consider using Safe mode for reliable undo.',
-                        'info',
-                        {
-                            title: 'Direct mode — limited undo',
-                            dedupeKey: `performer:direct-no-git:${id}`,
-                        },
-                    );
-                }
-            }).catch(() => {});
             return;
         }
 
@@ -406,26 +405,25 @@ export default function AgentFrame({ data, id }: any) {
     } = useSlashCommands(id, input, setInput);
 
     const {
-        inputRef: _fileInputRef,
+        inputRef,
         isMentioning: isFileMentioning,
         mentionResults: fileMentionResults,
         mentionIndex: fileMentionIndex,
         setMentionIndex: setFileMentionIndex,
         checkMention: checkFileMention,
         extractMentionText: extractFileMentionText,
-        setIsMentioning: setIsFileMentioning
-    } = useFileMentions();
+        setIsMentioning: setIsFileMentioning,
+    } = useFileMentions(composerInputRef);
 
     const {
-        inputRef,
         isMentioning: isPerformerMentioning,
         mentionResults: performerMentionResults,
         mentionIndex: performerMentionIndex,
         setMentionIndex: setPerformerMentionIndex,
         checkMention: checkPerformerMention,
-        selectMention: selectPerformerMention,
+        extractMentionText: extractPerformerMentionText,
         setIsMentioning: setIsPerformerMentioning,
-    } = usePerformerMention(id);
+    } = usePerformerMention(id, composerInputRef);
 
     const danceSlashMatch = useMemo(() => {
         const trimmed = input.trimStart();
@@ -535,20 +533,22 @@ export default function AgentFrame({ data, id }: any) {
             );
         }
 
-        const mentionPayload = pendingMentions.length > 0
-            ? pendingMentions.map((m) => ({ performerId: m.performerId }))
-            : undefined;
-        sendMessage(id, text, formattedAttachments, turnDanceSelections.map((selection) => selection.ref), mentionPayload);
+        sendMessage(
+            id,
+            text,
+            formattedAttachments,
+            turnDanceSelections.map((selection) => selection.ref),
+            mentionedPerformers,
+        );
         setAttachments([]);
+        setMentionedPerformers([]);
         setTurnDanceSelections([]);
-        setPendingMentions([]);
-    }, [input, isLoading, modelConfigured, danceSlashMatch, id, executeSlashCommand, setShowSlashMenu, attachments, sendMessage, setIsFileMentioning, setIsPerformerMentioning, turnDanceSelections, runtimeTools, pendingMentions]);
+    }, [input, isLoading, modelConfigured, danceSlashMatch, id, executeSlashCommand, setShowSlashMenu, attachments, sendMessage, setIsFileMentioning, setIsPerformerMentioning, turnDanceSelections, runtimeTools, mentionedPerformers]);
 
     const handleInputChange = (val: string) => {
         onSlashInputChange(val);
-        const cursor = inputRef.current?.selectionStart ?? val.length;
-        checkFileMention(val, cursor);
-        checkPerformerMention(val, cursor);
+        checkPerformerMention(val, inputRef.current?.selectionStart ?? val.length);
+        checkFileMention(val, inputRef.current?.selectionStart ?? val.length);
     };
 
     const handleKeyDownWrapper = (e: React.KeyboardEvent) => {
@@ -594,15 +594,16 @@ export default function AgentFrame({ data, id }: any) {
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
-                const result = selectPerformerMention(performerMentionResults[performerMentionIndex]);
-                if (result) {
-                    setInput(result.newText);
-                    setPendingMentions((prev) => {
-                        if (prev.some((m) => m.performerId === result.mention.performerId)) return prev;
-                        return [...prev, { performerId: result.mention.performerId, name: performerMentionResults[performerMentionIndex].name }];
-                    });
+                const selectedPerformer = performerMentionResults[performerMentionIndex];
+                const newText = extractPerformerMentionText();
+                if (newText !== null) {
+                    setInput(newText);
+                    setMentionedPerformers((current) => (
+                        current.some((item) => item.performerId === selectedPerformer.performerId)
+                            ? current
+                            : [...current, selectedPerformer]
+                    ));
                 }
-                inputRef.current?.focus();
                 return;
             }
             if (e.key === 'Escape') {
@@ -642,7 +643,8 @@ export default function AgentFrame({ data, id }: any) {
             if (!modelConfigured) {
                 return;
             }
-            sendMessage(id, text, [], turnDanceSelections.map((selection) => selection.ref));
+            sendMessage(id, text, [], turnDanceSelections.map((selection) => selection.ref), mentionedPerformers);
+            setMentionedPerformers([]);
             setTurnDanceSelections([]);
         });
         if (!handled && e.key === 'Enter' && !e.shiftKey) {
@@ -673,7 +675,9 @@ export default function AgentFrame({ data, id }: any) {
     };
 
     return (
-        <>
+        <div className="performer-node-shell">
+        <Handle type="target" position={Position.Left} className="performer-node-shell__handle" />
+        <Handle type="source" position={Position.Right} className="performer-node-shell__handle" />
         <CanvasWindowFrame
             className={`nowheel ${isFocused ? 'canvas-frame--focused' : ''}`}
             width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}
@@ -903,6 +907,14 @@ export default function AgentFrame({ data, id }: any) {
                                     {runtimeTools.unavailableDetails.length > 0 ? ` Unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.` : ''}
                                 </div>
                             ) : null}
+                            executionModeSummary={(
+                                <div className="adv-section__summary">
+                                    Default Run Mode: {performer?.executionMode === 'safe' ? 'Safe' : 'Direct'}.
+                                    {' '}
+                                    Mention requests always run in the caller workspace.
+                                </div>
+                            )}
+                            requestRelations={requestRelations}
                         />
                     ) : null}
                 </>
@@ -980,8 +992,28 @@ export default function AgentFrame({ data, id }: any) {
                             onDrop={handleDrop}
                             onDragOver={e => e.preventDefault()}
                         >
-                            {(attachments.length > 0 || turnDanceSelections.length > 0 || pendingMentions.length > 0) && (
+                            {mentionedPerformers.length > 0 ? (
+                                <div className="chat-input__warning">
+                                    <strong>Performer request</strong>
+                                    <span>Mentioned performers use their own identity, but run in your current workspace.</span>
+                                </div>
+                            ) : null}
+                            {(attachments.length > 0 || turnDanceSelections.length > 0) && (
                                 <div style={{ display: 'flex', gap: '4px', padding: '4px 8px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-main)' }}>
+                                    {mentionedPerformers.map((mention, idx) => (
+                                        <div key={`${mention.performerId}:${idx}`} className="turn-option-pill">
+                                            <Sparkles size={10} style={{ marginRight: '4px' }} />
+                                            <span>{mention.name}</span>
+                                            <span className="turn-option-pill__scope turn-option-pill__scope--local">
+                                                performer
+                                            </span>
+                                            <X
+                                                size={10}
+                                                style={{ marginLeft: '4px', cursor: 'pointer' }}
+                                                onClick={() => setMentionedPerformers((current) => current.filter((item) => item.performerId !== mention.performerId))}
+                                            />
+                                        </div>
+                                    ))}
                                     {turnDanceSelections.map((selection, idx) => (
                                         <div key={`${selection.scope}:${assetRefKey(selection.ref) || idx}`} className="turn-option-pill">
                                             <Zap size={10} style={{ marginRight: '4px' }} />
@@ -993,18 +1025,6 @@ export default function AgentFrame({ data, id }: any) {
                                                 size={10}
                                                 style={{ marginLeft: '4px', cursor: 'pointer' }}
                                                 onClick={() => setTurnDanceSelections((current) => current.filter((_, currentIndex) => currentIndex !== idx))}
-                                            />
-                                        </div>
-                                    ))}
-                                    {pendingMentions.map((mention, idx) => (
-                                        <div key={`mention-${mention.performerId}`} className="turn-option-pill">
-                                            <AtSign size={10} style={{ marginRight: '4px' }} />
-                                            <span>{mention.name}</span>
-                                            <span className="turn-option-pill__scope turn-option-pill__scope--local">performer</span>
-                                            <X
-                                                size={10}
-                                                style={{ marginLeft: '4px', cursor: 'pointer' }}
-                                                onClick={() => setPendingMentions((current) => current.filter((_, currentIndex) => currentIndex !== idx))}
                                             />
                                         </div>
                                     ))}
@@ -1020,31 +1040,26 @@ export default function AgentFrame({ data, id }: any) {
 
                             {isPerformerMentioning && performerMentionResults.length > 0 ? (
                                 <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                    {performerMentionResults.map((result, i) => (
+                                    {performerMentionResults.map((performerMention, i) => (
                                         <div
-                                            key={result.performerId}
+                                            key={performerMention.performerId}
                                             className={`slash-menu-item mention-menu-item ${i === performerMentionIndex ? 'active' : ''}`}
                                             onClick={() => {
-                                                const selection = selectPerformerMention(result);
-                                                if (selection) {
-                                                    setInput(selection.newText);
-                                                    setPendingMentions((prev) => {
-                                                        if (prev.some((m) => m.performerId === selection.mention.performerId)) return prev;
-                                                        return [...prev, { performerId: selection.mention.performerId, name: result.name }];
-                                                    });
+                                                const newText = extractPerformerMentionText();
+                                                if (newText !== null) {
+                                                    setInput(newText);
+                                                    setMentionedPerformers((current) => (
+                                                        current.some((item) => item.performerId === performerMention.performerId)
+                                                            ? current
+                                                            : [...current, performerMention]
+                                                    ));
                                                 }
                                                 inputRef.current?.focus();
                                             }}
                                         >
-                                            <AtSign size={12} style={{ opacity: 0.5, marginRight: '4px', flexShrink: 0 }} />
                                             <span className="mention-result__content">
-                                                <span className="mention-result__name">{result.name}</span>
-                                                <span className="mention-result__path">
-                                                    {result.modelLabel || 'No model'}
-                                                    {' · '}
-                                                    {result.executionMode === 'safe' ? 'Safe' : 'Direct'}
-                                                    {' · Runs in caller workspace'}
-                                                </span>
+                                                <span className="mention-result__name">{performerMention.name}</span>
+                                                <span className="mention-result__path">Runs in this workspace</span>
                                             </span>
                                         </div>
                                     ))}
@@ -1141,14 +1156,20 @@ export default function AgentFrame({ data, id }: any) {
                                         e.target.style.height = `${e.target.scrollHeight}px`;
                                         e.target.style.overflowY = e.target.scrollHeight > 102 ? 'auto' : 'hidden';
                                     }}
-                                    onKeyUp={() => { checkFileMention(); checkPerformerMention(); }}
-                                    onMouseUp={() => { checkFileMention(); checkPerformerMention(); }}
+                                    onKeyUp={() => {
+                                        checkPerformerMention();
+                                        checkFileMention();
+                                    }}
+                                    onMouseUp={() => {
+                                        checkPerformerMention();
+                                        checkFileMention();
+                                    }}
                                     onKeyDown={handleKeyDownWrapper}
                                     placeholder={!modelConfigured
                                         ? 'Select a model before chatting'
                                         : isPlanAgent
                                             ? 'Plan mode — ask for a plan...'
-                                            : 'Message... (@ performer, # files, / dance)'}
+                                            : 'Message... (@ performers, # files, / to use dance for this turn)'}
                                     disabled={isLoading}
                                     rows={1}
                                     className="text-input"
@@ -1225,7 +1246,9 @@ export default function AgentFrame({ data, id }: any) {
                                         event.stopPropagation();
                                         void handleToggleExecutionMode();
                                     }}
-                                    title={performer?.executionMode === 'safe' ? 'Default: Safe — switch to Direct' : 'Default: Direct — switch to Safe'}
+                                    title={performer?.executionMode === 'safe'
+                                        ? 'Switch default standalone run mode to Direct'
+                                        : 'Switch default standalone run mode to Safe'}
                                     type="button"
                                 >
                                     <Shield size={12} />
@@ -1283,16 +1306,6 @@ export default function AgentFrame({ data, id }: any) {
                 }}
             />
         ) : null}
-        <Handle
-            type="source"
-            position={Position.Right}
-            style={{ width: 8, height: 8, background: 'var(--accent-primary, #6366f1)', border: '2px solid var(--bg-primary)', opacity: 0.6 }}
-        />
-        <Handle
-            type="target"
-            position={Position.Left}
-            style={{ width: 8, height: 8, background: 'var(--accent-primary, #6366f1)', border: '2px solid var(--bg-primary)', opacity: 0.6 }}
-        />
-        </>
+        </div>
     );
 }

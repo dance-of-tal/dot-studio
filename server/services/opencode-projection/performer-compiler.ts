@@ -1,12 +1,10 @@
-import fs from 'fs/promises'
 import path from 'path'
 import { createHash } from 'crypto'
 import { getAssetPayload } from 'dance-of-tal/lib/registry'
 import { resolveRuntimeModel } from '../../lib/model-catalog.js'
 import { findRuntimeModelVariant } from '../../../shared/model-variants.js'
-import { compileDance, type CompiledSkill } from './dance-compiler.js'
 import { agentProjectionDir, toRelativePath } from './projection-manifest.js'
-import { compileRelations, buildPermissionTaskFrontmatter, type PerformerRelationInput, type PerformerRelationContext } from './relation-compiler.js'
+import type { CompiledSkill } from './dance-compiler.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -30,52 +28,47 @@ export type Posture = 'build' | 'plan'
 
 export interface PerformerCompileInput {
     performerId: string
+    performerName: string
     talRef: AssetRef | null
-    danceRefs: AssetRef[]
     drafts: Record<string, DraftAsset>
     model: ModelSelection
     modelVariant?: string | null
-    mcpServerNames: string[]
-    description?: string
-    /** cwd may differ from workingDir in safe mode */
-    cwd: string
-    workingDir: string
     stageHash: string
-    /** Performer relations (edges) for this performer */
-    relations?: PerformerRelationInput[]
-    /** Context for resolving relation target names and agent names */
-    relationContext?: PerformerRelationContext
+    executionDir: string
+    scope?: 'stage' | 'act'
+    actId?: string
+    skillNames: string[]
+    toolMap: Record<string, boolean>
+    taskAllowlist?: string[]
+    relationPromptSection?: string | null
+}
+
+type AgentFile = {
+    agentName: string
+    filePath: string
+    relativePath: string
+    content: string
 }
 
 export interface CompiledPerformer {
     performerId: string
     agentNames: Record<Posture, string>
     agentPaths: Record<Posture, string>
+    agentContents: Record<Posture, string>
     skills: CompiledSkill[]
     projectionHash: string
     allFiles: string[]
 }
 
-// ── Tal Resolution ─────────────────────────────────────
-
-async function resolveTalContent(
-    cwd: string,
-    ref: AssetRef | null,
-    drafts: Record<string, DraftAsset>,
-): Promise<string | null> {
-    if (!ref) {
-        return null
-    }
-    if (ref.kind === 'registry') {
-        return getAssetPayload(cwd, ref.urn)
-    }
-    const draft = drafts[ref.draftId]
+function extractDraftTextContent(draft: DraftAsset | undefined | null): string | null {
     if (!draft) {
         return null
     }
+
     if (typeof draft.content === 'string') {
         return draft.content
     }
+
     if (draft.content && typeof draft.content === 'object') {
         const content = draft.content as Record<string, unknown>
         if (typeof content.content === 'string') {
@@ -85,110 +78,189 @@ async function resolveTalContent(
             return content.body
         }
     }
+
     return null
 }
 
-// ── Prompt Body Builder ────────────────────────────────
-
-function buildAgentFrontmatter(input: {
-    description: string
-    model: ModelSelection
-    posture: Posture
-    taskAllowlist?: string[]
-}): string {
-    const lines = ['---']
-    lines.push(`description: ${input.description || 'DOT Studio performer'}`)
-
-    if (input.model) {
-        lines.push(`model: ${input.model.provider}/${input.model.modelId}`)
+async function resolveTalContent(
+    cwd: string,
+    ref: AssetRef | null,
+    drafts: Record<string, DraftAsset>,
+): Promise<string | null> {
+    if (!ref) {
+        return null
     }
 
-    if (input.posture === 'plan') {
-        lines.push('tools:')
-        lines.push('  write: false')
-        lines.push('  edit: false')
-        lines.push('  bash: false')
+    if (ref.kind === 'registry') {
+        return getAssetPayload(cwd, ref.urn)
     }
 
-    // Permission.task allowlist from relations
-    if (input.taskAllowlist && input.taskAllowlist.length > 0) {
-        lines.push(...buildPermissionTaskFrontmatter(input.taskAllowlist))
-    }
-
-    lines.push('---')
-    return lines.join('\n')
+    return extractDraftTextContent(drafts[ref.draftId])
 }
 
-function buildSystemPreamble(): string {
+function buildSystemPreamble() {
     return [
         '# Runtime Instructions',
         'The section named Core Instructions is the always-on instruction layer for your role, rules, and operating logic.',
-        'Do not mention internal runtime wiring, capability loading, or system sections unless the user asks about them directly.',
+        'Use only the minimum context and tools needed to complete the task well.',
+        'Do not mention internal runtime wiring unless the user asks about it directly.',
     ].join('\n')
 }
 
-function buildTalSection(talContent: string | null): string {
+function buildTalSection(talContent: string | null) {
     if (!talContent) {
         return [
             '# Core Instructions',
             'No core instruction asset is configured. Follow the user request directly and stay consistent with the current session context.',
         ].join('\n')
     }
-    return ['# Core Instructions', '', talContent].join('\n')
+
+    return [
+        '# Core Instructions',
+        '',
+        talContent,
+    ].join('\n')
 }
 
 function buildRuntimePreferencesSection(variantId: string | null, variantSummary: string | null): string | null {
     if (!variantId) {
         return null
     }
+
     const lines = [
         '# Runtime Preferences',
         `Preferred model variant: ${variantId}`,
     ]
+
     if (variantSummary) {
         lines.push(`Variant settings: ${variantSummary}`)
     }
+
     lines.push('Apply this preferred runtime profile when supported by the current host and model.')
     return lines.join('\n')
 }
 
-function buildAgentBody(input: {
+function buildBody(input: {
     talContent: string | null
     variantId: string | null
     variantSummary: string | null
     relationPromptSection?: string | null
-}): string {
-    const sections = [
+}) {
+    return [
         buildSystemPreamble(),
         buildTalSection(input.talContent),
         buildRuntimePreferencesSection(input.variantId, input.variantSummary),
         input.relationPromptSection || null,
-    ]
-    return sections.filter(Boolean).join('\n\n')
+    ].filter(Boolean).join('\n\n')
 }
 
-// ── Projection Hash ────────────────────────────────────
-
-function computeProjectionHash(content: string): string {
-    return createHash('sha256').update(content).digest('hex').slice(0, 16)
+function agentName(stageHash: string, performerId: string, posture: Posture, scope: 'stage' | 'act', actId?: string) {
+    if (scope === 'act' && actId) {
+        return `dot-studio/act/${stageHash}/${actId}/${performerId}--${posture}`
+    }
+    return `dot-studio/${stageHash}/${performerId}--${posture}`
 }
 
-// ── Agent Name ─────────────────────────────────────────
-
-export function agentName(stageHash: string, performerId: string, posture: Posture): string {
-    return `dot-studio/stage/${stageHash}/${performerId}--${posture}`
+function buildSkillPermissionLines(skillNames: string[]) {
+    const lines = ['permission:', '  skill:', '    "*": "deny"']
+    for (const skillName of skillNames) {
+        lines.push(`    ${JSON.stringify(skillName)}: "allow"`)
+    }
+    return lines
 }
 
-// ── Main Compiler ──────────────────────────────────────
+function buildTaskPermissionLines(taskAllowlist: string[]) {
+    if (taskAllowlist.length === 0) {
+        return []
+    }
+    const lines = ['  task:', '    "*": "deny"']
+    for (const agentName of taskAllowlist) {
+        lines.push(`    ${JSON.stringify(agentName)}: "allow"`)
+    }
+    return lines
+}
 
-export async function compilePerformer(input: PerformerCompileInput): Promise<CompiledPerformer> {
-    const talContent = await resolveTalContent(input.cwd, input.talRef, input.drafts)
+function buildToolsLines(toolMap: Record<string, boolean>, posture: Posture) {
+    const pairs = Object.entries(toolMap).sort(([left], [right]) => left.localeCompare(right))
+    if (posture === 'plan') {
+        pairs.push(['bash', false], ['edit', false], ['write', false])
+    }
+    if (pairs.length === 0) {
+        return []
+    }
 
-    // Resolve model variant
+    const lines = ['tools:']
+    for (const [tool, enabled] of pairs) {
+        lines.push(`  ${JSON.stringify(tool)}: ${enabled ? 'true' : 'false'}`)
+    }
+    return lines
+}
+
+function buildFrontmatter(input: {
+    performerName: string
+    model: ModelSelection
+    posture: Posture
+    skillNames: string[]
+    toolMap: Record<string, boolean>
+    taskAllowlist?: string[]
+}) {
+    const lines = ['---']
+    lines.push(`description: ${JSON.stringify(`DOT Studio performer: ${input.performerName}`)}`)
+    lines.push('mode: primary')
+    if (input.model) {
+        lines.push(`model: ${JSON.stringify(`${input.model.provider}/${input.model.modelId}`)}`)
+    }
+    lines.push(...buildSkillPermissionLines(input.skillNames))
+    lines.push(...buildTaskPermissionLines(input.taskAllowlist || []))
+    lines.push(...buildToolsLines(input.toolMap, input.posture))
+    lines.push('---')
+    return lines.join('\n')
+}
+
+function buildAgentFile(input: {
+    stageHash: string
+    performerId: string
+    performerName: string
+    executionDir: string
+    scope: 'stage' | 'act'
+    actId?: string
+    model: ModelSelection
+    posture: Posture
+    skillNames: string[]
+    toolMap: Record<string, boolean>
+    taskAllowlist?: string[]
+    body: string
+}): AgentFile {
+    const fileName = `${input.performerId}--${input.posture}.md`
+    const filePath = path.join(agentProjectionDir(input.executionDir, input.stageHash, input.scope, input.actId), fileName)
+    const frontmatter = buildFrontmatter({
+        performerName: input.performerName,
+        model: input.model,
+        posture: input.posture,
+        skillNames: input.skillNames,
+        toolMap: input.toolMap,
+        taskAllowlist: input.taskAllowlist,
+    })
+    const content = `${frontmatter}\n\n${input.body}`
+    return {
+        agentName: agentName(input.stageHash, input.performerId, input.posture, input.scope, input.actId),
+        filePath,
+        relativePath: toRelativePath(input.executionDir, filePath),
+        content,
+    }
+}
+
+export async function compilePerformer(
+    cwd: string,
+    input: PerformerCompileInput,
+    skills: CompiledSkill[],
+): Promise<CompiledPerformer> {
+    const talContent = await resolveTalContent(cwd, input.talRef, input.drafts)
+
     let resolvedVariantId: string | null = null
     let variantSummary: string | null = null
     if (input.model) {
-        const runtimeModel = await resolveRuntimeModel(input.cwd, input.model)
+        const runtimeModel = await resolveRuntimeModel(cwd, input.model)
         if (runtimeModel) {
             const selectedVariant = findRuntimeModelVariant(
                 [runtimeModel],
@@ -203,69 +275,70 @@ export async function compilePerformer(input: PerformerCompileInput): Promise<Co
         }
     }
 
-    // Compile relations (edges) for this performer
-    const compiledRelations = compileRelations(
-        input.performerId,
-        input.relations || [],
-        input.relationContext || { names: {}, agentNames: {} },
-    )
-
-    const body = buildAgentBody({
+    const body = buildBody({
         talContent,
         variantId: resolvedVariantId,
         variantSummary,
-        relationPromptSection: compiledRelations.promptSection,
+        relationPromptSection: input.relationPromptSection || null,
     })
 
-    // Compile Dance → Skills
-    const skills: CompiledSkill[] = []
-    for (const ref of input.danceRefs) {
-        const skill = await compileDance(input.cwd, ref, input.drafts, input.stageHash, input.workingDir)
-        skills.push(skill)
-    }
+    const buildFile = buildAgentFile({
+        stageHash: input.stageHash,
+        performerId: input.performerId,
+        performerName: input.performerName,
+        executionDir: input.executionDir,
+        scope: input.scope || 'stage',
+        actId: input.actId,
+        model: input.model,
+        posture: 'build',
+        skillNames: input.skillNames,
+        toolMap: input.toolMap,
+        taskAllowlist: input.taskAllowlist,
+        body,
+    })
 
-    // Generate posture-specific agent files
-    const dir = agentProjectionDir(input.workingDir, 'stage', input.stageHash)
-    await fs.mkdir(dir, { recursive: true })
+    const planFile = buildAgentFile({
+        stageHash: input.stageHash,
+        performerId: input.performerId,
+        performerName: input.performerName,
+        executionDir: input.executionDir,
+        scope: input.scope || 'stage',
+        actId: input.actId,
+        model: input.model,
+        posture: 'plan',
+        skillNames: input.skillNames,
+        toolMap: input.toolMap,
+        taskAllowlist: input.taskAllowlist,
+        body,
+    })
 
-    const postures: Posture[] = ['build', 'plan']
-    const agentNames: Record<string, string> = {}
-    const agentPaths: Record<string, string> = {}
-    const allFiles: string[] = []
-    let hashInput = ''
-
-    for (const posture of postures) {
-        const frontmatter = buildAgentFrontmatter({
-            description: input.description || 'DOT Studio performer',
-            model: input.model,
-            posture,
-            taskAllowlist: compiledRelations.taskAllowlist,
-        })
-        const fullContent = frontmatter + '\n\n' + body
-        hashInput += fullContent
-
-        const fileName = `${input.performerId}--${posture}.md`
-        const filePath = path.join(dir, fileName)
-        await fs.writeFile(filePath, fullContent, 'utf-8')
-
-        agentNames[posture] = agentName(input.stageHash, input.performerId, posture)
-        agentPaths[posture] = filePath
-        allFiles.push(toRelativePath(input.workingDir, filePath))
-    }
-
-    // Add skill files to allFiles
-    for (const skill of skills) {
-        allFiles.push(toRelativePath(input.workingDir, skill.filePath))
-    }
-
-    const projectionHash = computeProjectionHash(hashInput)
+    const hashInput = [
+        buildFile.content,
+        planFile.content,
+        ...skills.map((skill) => skill.content),
+    ].join('\n\n')
+    const projectionHash = createHash('sha256').update(hashInput).digest('hex').slice(0, 16)
 
     return {
         performerId: input.performerId,
-        agentNames: agentNames as Record<Posture, string>,
-        agentPaths: agentPaths as Record<Posture, string>,
+        agentNames: {
+            build: buildFile.agentName,
+            plan: planFile.agentName,
+        },
+        agentPaths: {
+            build: buildFile.filePath,
+            plan: planFile.filePath,
+        },
+        agentContents: {
+            build: buildFile.content,
+            plan: planFile.content,
+        },
         skills,
         projectionHash,
-        allFiles,
+        allFiles: [
+            buildFile.relativePath,
+            planFile.relativePath,
+            ...skills.map((skill) => skill.relativePath),
+        ],
     }
 }

@@ -1,7 +1,6 @@
-import fs from 'fs/promises'
 import path from 'path'
 import { getAssetPayload, readAsset } from 'dance-of-tal/lib/registry'
-import { skillProjectionDir } from './projection-manifest.js'
+import { localSkillProjectionDir, toRelativePath } from './projection-manifest.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -17,39 +16,31 @@ type DraftAsset = {
 }
 
 export interface CompiledSkill {
-    /** Skill logical name, e.g. dot-studio-local-abc123-acme-review-standard */
     logicalName: string
-    /** Absolute path to generated SKILL.md */
+    description: string
     filePath: string
+    relativePath: string
+    content: string
 }
 
-
-function slugifyUrn(urn: string): string {
-    // tal/@acme/senior-engineer → acme-senior-engineer
-    return urn
-        .replace(/^(tal|dance|performer|act)\//, '')
-        .replace(/@/g, '')
-        .replace(/[/_]/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '')
+function sanitizeSegment(value: string) {
+    return value
+        .trim()
         .toLowerCase()
-}
-
-function buildSkillLogicalName(scope: 'global' | 'local' | 'draft', stageHash: string, slug: string): string {
-    const name = `dot-studio-${scope}-${stageHash}-${slug}`
-    if (name.length > 64) {
-        return name.slice(0, 64)
-    }
-    return name
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/-{2,}/g, '-')
+        .replace(/^-+|-+$/g, '')
 }
 
 function extractDraftTextContent(draft: DraftAsset | undefined | null): string | null {
     if (!draft) {
         return null
     }
+
     if (typeof draft.content === 'string') {
         return draft.content
     }
+
     if (draft.content && typeof draft.content === 'object') {
         const content = draft.content as Record<string, unknown>
         if (typeof content.content === 'string') {
@@ -59,6 +50,7 @@ function extractDraftTextContent(draft: DraftAsset | undefined | null): string |
             return content.body
         }
     }
+
     return null
 }
 
@@ -78,16 +70,22 @@ function extractDraftDescription(draft: DraftAsset | undefined | null): string {
     return ''
 }
 
-function buildSkillMarkdown(name: string, description: string, body: string): string {
-    const lines = [
+function parseUrn(urn: string) {
+    const [kind, author, slug] = urn.split('/')
+    return {
+        kind,
+        author: sanitizeSegment(author.replace(/^@/, '')),
+        slug: sanitizeSegment(slug),
+    }
+}
+
+function buildFrontmatter(name: string, description: string) {
+    return [
         '---',
-        `name: ${name}`,
-        `description: ${description || 'No description provided.'}`,
+        `name: ${JSON.stringify(name)}`,
+        `description: ${JSON.stringify(description || 'DOT Studio generated skill')}`,
         '---',
-        '',
-        body,
-    ]
-    return lines.join('\n')
+    ].join('\n')
 }
 
 export async function compileDance(
@@ -95,44 +93,71 @@ export async function compileDance(
     ref: AssetRef,
     drafts: Record<string, DraftAsset>,
     stageHash: string,
-    workingDir: string,
+    performerId: string,
+    executionDir: string,
+    scope: 'stage' | 'act' = 'stage',
+    actId?: string,
 ): Promise<CompiledSkill> {
     if (ref.kind === 'registry') {
         const asset = await readAsset(cwd, ref.urn)
         const body = await getAssetPayload(cwd, ref.urn)
         if (!body) {
-            throw new Error(`Dance asset '${ref.urn}' was not found or has no content.`)
+            throw new Error(`Dance '${ref.urn}' was not found or has no content.`)
         }
 
-        const slug = slugifyUrn(ref.urn)
-        const scope = 'local' as const
-        const logicalName = buildSkillLogicalName(scope, stageHash, slug)
-        const description = typeof asset?.description === 'string' ? asset.description : ''
+        const parsed = parseUrn(ref.urn)
+        const logicalName = [
+            'dot-studio',
+            'stage',
+            stageHash,
+            sanitizeSegment(performerId),
+            parsed.author,
+            parsed.slug,
+        ].join('-')
+        const description = typeof asset?.description === 'string' ? asset.description : parsed.slug
+        const filePath = path.join(
+            localSkillProjectionDir(executionDir, stageHash, performerId, scope, actId),
+            logicalName,
+            'SKILL.md',
+        )
+        const content = `${buildFrontmatter(logicalName, description)}\n\n${body}`
 
-        const dir = path.join(skillProjectionDir(workingDir, scope, stageHash), slug)
-        await fs.mkdir(dir, { recursive: true })
-        const filePath = path.join(dir, 'SKILL.md')
-        await fs.writeFile(filePath, buildSkillMarkdown(logicalName, description, body), 'utf-8')
-
-        return { logicalName, filePath }
+        return {
+            logicalName,
+            description,
+            filePath,
+            relativePath: toRelativePath(executionDir, filePath),
+            content,
+        }
     }
 
-    // Draft dance
     const draft = drafts[ref.draftId]
     const body = extractDraftTextContent(draft)
     if (!draft || !body) {
         throw new Error(`Dance draft '${ref.draftId}' was not found or has no content.`)
     }
 
-    const slug = `draft-${ref.draftId}`.toLowerCase().replace(/[^a-z0-9-]/g, '-')
-    const scope = 'local' as const
-    const logicalName = buildSkillLogicalName(scope, stageHash, slug)
-    const description = extractDraftDescription(draft) || draft.name || 'Draft capability'
+    const logicalName = [
+        'dot-studio',
+        'stage',
+        stageHash,
+        sanitizeSegment(performerId),
+        'draft',
+        sanitizeSegment(ref.draftId),
+    ].join('-')
+    const description = extractDraftDescription(draft) || draft.name || 'Draft dance'
+    const filePath = path.join(
+        localSkillProjectionDir(executionDir, stageHash, performerId, scope, actId),
+        logicalName,
+        'SKILL.md',
+    )
+    const content = `${buildFrontmatter(logicalName, description)}\n\n${body}`
 
-    const dir = path.join(skillProjectionDir(workingDir, scope, stageHash), slug)
-    await fs.mkdir(dir, { recursive: true })
-    const filePath = path.join(dir, 'SKILL.md')
-    await fs.writeFile(filePath, buildSkillMarkdown(logicalName, description, body), 'utf-8')
-
-    return { logicalName, filePath }
+    return {
+        logicalName,
+        description,
+        filePath,
+        relativePath: toRelativePath(executionDir, filePath),
+        content,
+    }
 }

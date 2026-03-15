@@ -8,51 +8,77 @@ export interface ProjectionManifest {
     version: 1
     owner: typeof NAMESPACE
     stageHash: string
-    files: string[]
+    groups: Record<string, string[]>
 }
 
-function manifestPath(workingDir: string): string {
-    return path.join(workingDir, '.opencode', MANIFEST_FILENAME)
+function manifestPath(executionDir: string) {
+    return path.join(executionDir, '.opencode', MANIFEST_FILENAME)
 }
 
-export async function readManifest(workingDir: string): Promise<ProjectionManifest | null> {
+export async function readManifest(executionDir: string): Promise<ProjectionManifest | null> {
     try {
-        const raw = await fs.readFile(manifestPath(workingDir), 'utf-8')
-        return JSON.parse(raw)
+        const raw = await fs.readFile(manifestPath(executionDir), 'utf-8')
+        return JSON.parse(raw) as ProjectionManifest
     } catch {
         return null
     }
 }
 
-export async function writeManifest(workingDir: string, manifest: ProjectionManifest): Promise<void> {
-    const filePath = manifestPath(workingDir)
+export async function writeManifest(executionDir: string, manifest: ProjectionManifest) {
+    const filePath = manifestPath(executionDir)
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, JSON.stringify(manifest, null, 2), 'utf-8')
 }
 
-export async function cleanStaleFiles(workingDir: string, currentFiles: string[]): Promise<void> {
-    const existing = await readManifest(workingDir)
+export async function cleanGroupFiles(
+    executionDir: string,
+    groupKey: string,
+    currentFiles: string[],
+) {
+    const existing = await readManifest(executionDir)
     if (!existing) {
         return
     }
 
     const currentSet = new Set(currentFiles)
-    for (const file of existing.files) {
+    for (const file of existing.groups[groupKey] || []) {
         if (!currentSet.has(file)) {
-            const absPath = path.join(workingDir, file)
-            await fs.rm(absPath, { force: true })
+            await fs.rm(path.join(executionDir, file), { force: true, recursive: true }).catch(() => {})
         }
     }
 }
 
-export async function updateGitExclude(workingDir: string): Promise<void> {
-    const excludePath = path.join(workingDir, '.git', 'info', 'exclude')
+export async function updateManifestGroup(
+    executionDir: string,
+    stageHash: string,
+    groupKey: string,
+    files: string[],
+) {
+    const current = (await readManifest(executionDir)) || {
+        version: 1 as const,
+        owner: NAMESPACE,
+        stageHash,
+        groups: {},
+    }
+
+    current.stageHash = stageHash
+    current.groups[groupKey] = files
+    await writeManifest(executionDir, current)
+}
+
+export async function updateGitExclude(executionDir: string) {
+    const gitDir = path.join(executionDir, '.git')
+    const gitStat = await fs.stat(gitDir).catch(() => null)
+    if (!gitStat?.isDirectory()) {
+        return
+    }
+
+    const excludePath = path.join(gitDir, 'info', 'exclude')
     const marker = '# dot-studio projection (auto-managed)'
     const patterns = [
         marker,
         '.opencode/agents/dot-studio/',
         '.opencode/skills/dot-studio/',
-        '.opencode/tools/dot_studio__*',
         '.opencode/dot-studio.manifest.json',
     ]
 
@@ -60,7 +86,7 @@ export async function updateGitExclude(workingDir: string): Promise<void> {
     try {
         content = await fs.readFile(excludePath, 'utf-8')
     } catch {
-        // .git/info/exclude may not exist
+        // ignore missing exclude file
     }
 
     if (content.includes(marker)) {
@@ -68,21 +94,35 @@ export async function updateGitExclude(workingDir: string): Promise<void> {
     }
 
     await fs.mkdir(path.dirname(excludePath), { recursive: true })
-    const separator = content.endsWith('\n') || content === '' ? '' : '\n'
+    const separator = content === '' || content.endsWith('\n') ? '' : '\n'
     await fs.writeFile(excludePath, content + separator + patterns.join('\n') + '\n', 'utf-8')
 }
 
-export function agentProjectionDir(workingDir: string, scope: 'stage' | 'act', stageHash: string, actId?: string): string {
+export function agentProjectionDir(
+    executionDir: string,
+    stageHash: string,
+    scope: 'stage' | 'act' = 'stage',
+    actId?: string,
+) {
     if (scope === 'act' && actId) {
-        return path.join(workingDir, '.opencode', 'agents', NAMESPACE, 'act', stageHash, actId)
+        return path.join(executionDir, '.opencode', 'agents', NAMESPACE, 'act', stageHash, actId)
     }
-    return path.join(workingDir, '.opencode', 'agents', NAMESPACE, 'stage', stageHash)
+    return path.join(executionDir, '.opencode', 'agents', NAMESPACE, 'stage', stageHash)
 }
 
-export function skillProjectionDir(workingDir: string, scope: 'global' | 'local', stageHash: string): string {
-    return path.join(workingDir, '.opencode', 'skills', NAMESPACE, scope, stageHash)
+export function localSkillProjectionDir(
+    executionDir: string,
+    stageHash: string,
+    performerId: string,
+    scope: 'stage' | 'act' = 'stage',
+    actId?: string,
+) {
+    if (scope === 'act' && actId) {
+        return path.join(executionDir, '.opencode', 'skills', NAMESPACE, 'act', stageHash, actId, performerId)
+    }
+    return path.join(executionDir, '.opencode', 'skills', NAMESPACE, 'stage', stageHash, performerId)
 }
 
-export function toRelativePath(workingDir: string, absPath: string): string {
-    return path.relative(workingDir, absPath)
+export function toRelativePath(executionDir: string, absPath: string) {
+    return path.relative(executionDir, absPath)
 }

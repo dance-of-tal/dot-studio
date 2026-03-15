@@ -14,9 +14,6 @@ import {
     registryAssetRef,
     registryAssetRefs,
 } from '../lib/performers'
-
-// defaultActSessionMode inlined (was in deleted lib/acts.ts)
-const defaultActSessionMode = () => 'all_nodes_thread' as const
 import { coerceStudioApiError } from '../lib/api-errors'
 import {
     getMaxMarkdownEditorCounter,
@@ -351,10 +348,12 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
         set({
             stageId,
             performers: loadedPerformers,
-            edges: (data.performerLinks || []).map((link: any) => ({
-                ...link,
-                interaction: link.interaction || 'request',
-                description: link.description || link.condition || '',
+            edges: (data.performerLinks || []).map((edge: any) => ({
+                id: edge.id,
+                from: edge.from,
+                to: edge.to,
+                interaction: edge.interaction === 'request' ? 'request' : 'request',
+                description: typeof edge.description === 'string' ? edge.description : '',
             })),
             acts: (data.acts || []).map((act: any) => ({
                 id: act.id,
@@ -362,7 +361,6 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
                 description: act.description || '',
                 hidden: !!act.hidden,
                 executionMode: act.executionMode === 'safe' ? 'safe' : 'direct',
-                sessionMode: act.sessionMode === 'default' ? 'default' : defaultActSessionMode(),
                 bounds: act.bounds || {
                     x: 120,
                     y: 120,
@@ -371,44 +369,20 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
                 },
                 entryNodeId: act.entryNodeId || act.entryNode || null,
                 nodes: (act.nodes || []).map((node: any) => {
-                    if (node.type === 'parallel') {
-                        return {
-                            id: node.id,
-                            type: 'parallel',
-                            position: node.position || { x: 28, y: 56 },
-                            join: node.join === 'any' ? 'any' : 'all',
-                        }
-                    }
-                    if (node.type === 'orchestrator') {
-                        return {
-                            id: node.id,
-                            type: 'orchestrator',
-                            performerId: node.performerId || null,
-                            modelVariant: node.modelVariant || null,
-                            position: node.position || { x: 28, y: 56 },
-                            maxDelegations: node.maxDelegations || 3,
-                            sessionPolicy: node.sessionPolicy || 'node',
-                            sessionLifetime: node.sessionLifetime || 'thread',
-                            sessionModeOverride: !!node.sessionModeOverride,
-                        }
-                    }
                     return {
                         id: node.id,
                         type: 'worker',
                         performerId: node.performerId || null,
                         modelVariant: node.modelVariant || null,
                         position: node.position || { x: 28, y: 56 },
-                        sessionPolicy: node.sessionPolicy || 'fresh',
-                        sessionLifetime: node.sessionLifetime || 'run',
-                        sessionModeOverride: !!node.sessionModeOverride,
+                        label: typeof node.label === 'string' ? node.label : undefined,
                     }
                 }),
                 edges: (act.edges || []).map((edge: any) => ({
                     id: edge.id,
                     from: edge.from,
                     to: edge.to,
-                    role: edge.role === 'branch' ? 'branch' : undefined,
-                    condition: edge.condition,
+                    description: typeof edge.description === 'string' ? edge.description : '',
                 })),
                 maxIterations: act.maxIterations || 10,
                 meta: act.meta || (act.sourceActUrn ? { derivedFrom: act.sourceActUrn } : undefined),

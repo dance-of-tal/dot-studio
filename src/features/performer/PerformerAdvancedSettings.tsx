@@ -23,6 +23,8 @@ type PerformerAdvancedSettingsProps = {
     mcpOptions?: Array<{ name: string; disabled?: boolean }>
     runtimeControls?: ReactNode
     runtimeStatus?: ReactNode
+    executionModeSummary?: ReactNode
+    requestRelations?: Array<{ targetName: string; description: string }>
 }
 
 function assetRefLabel(ref: AssetRef) {
@@ -51,6 +53,8 @@ export default function PerformerAdvancedSettings({
     mcpOptions,
     runtimeControls,
     runtimeStatus,
+    executionModeSummary,
+    requestRelations,
 }: PerformerAdvancedSettingsProps) {
     const unresolvedMcpPlaceholders = performer ? unresolvedDeclaredMcpServerNames(performer) : []
     return (
@@ -148,6 +152,7 @@ export default function PerformerAdvancedSettings({
                     <span className="adv-section__summary">
                         Model: {modelLabel || (performer?.modelPlaceholder ? `${performer.modelPlaceholder.provider}/${performer.modelPlaceholder.modelId} (placeholder)` : 'Not set')} · {agentLabel || 'Build'}
                     </span>
+                    {executionModeSummary ? executionModeSummary : null}
                     {runtimeControls ? (
                         <div className="adv-runtime-controls">
                             {runtimeControls}
@@ -165,6 +170,30 @@ export default function PerformerAdvancedSettings({
                         <span className="adv-toggle__label">Auto-Compact</span>
                         <span className="adv-toggle__hint">Compact when context fills</span>
                     </label>
+                </div>
+            </div>
+
+            {/* ── Requests ── */}
+            <div className="adv-section">
+                <div className="adv-section__head">
+                    <span className="section-title">Requests</span>
+                </div>
+                <div className="adv-section__body">
+                    {requestRelations && requestRelations.length > 0 ? (
+                        <div className="adv-list">
+                            {requestRelations.map((relation, index) => (
+                                <div key={`${relation.targetName}:${index}`} className="adv-list__item">
+                                    <Zap size={10} className="adv-list__icon" />
+                                    <span className="adv-list__label">{relation.targetName}</span>
+                                    <span className="adv-section__summary">
+                                        {relation.description || 'Request relation'}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <span className="adv-section__summary">No request relations configured</span>
+                    )}
                 </div>
             </div>
 

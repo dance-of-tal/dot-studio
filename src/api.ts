@@ -6,11 +6,12 @@ import type {
     DraftAsset,
     ModelConfig,
     PromptPreview,
+    ActRunState,
     SavedStageSummary,
 } from './types'
 import type { RuntimeModelCatalogEntry } from '../shared/model-variants'
 import type { AdapterViewActionRequest, AdapterViewProjection } from '../shared/adapter-view'
-
+import type { RunActRequest } from '../shared/act-contracts'
 import type { AssetListItem } from '../shared/asset-contracts'
 import type { ChatSendRequest, ChatSessionCreateResponse, CompilePromptRequest } from '../shared/chat-contracts'
 import type { ExecutionMode, SafeOwnerKind, SafeOwnerSummary } from '../shared/safe-mode'
@@ -167,6 +168,8 @@ export const api = {
 
     // ── Compile ─────────────────────────────────────────
     compile: (
+        performerId: string | null,
+        performerName: string | null,
         talRef: AssetRef | null,
         danceRefs: AssetRef[],
         model: ModelConfig | null,
@@ -176,8 +179,15 @@ export const api = {
         drafts: Record<string, DraftAsset>,
         planMode = false,
         danceDeliveryMode: DanceDeliveryMode = 'auto',
+        relatedPerformers?: Array<{
+            performerId: string
+            performerName: string
+            description?: string
+        }>,
     ) =>
         postJSON<PromptPreview>('/api/compile', {
+            performerId: performerId || undefined,
+            performerName: performerName || undefined,
             talRef,
             danceRefs,
             drafts,
@@ -187,6 +197,7 @@ export const api = {
             mcpServerNames,
             planMode,
             danceDeliveryMode,
+            relatedPerformers,
         } satisfies CompilePromptRequest),
 
     // ── Chat ────────────────────────────────────────────
@@ -206,6 +217,7 @@ export const api = {
                 message: string
                 performer: {
                     performerId: string
+                    performerName: string
                     talRef: AssetRef | null
                     danceRefs: AssetRef[]
                     extraDanceRefs?: AssetRef[]
@@ -217,20 +229,19 @@ export const api = {
                     danceDeliveryMode?: DanceDeliveryMode
                     planMode?: boolean
                     configHash?: string
-                    description?: string
                 }
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
                 mentions?: Array<{ performerId: string }>
-                relations?: Array<{ id: string; from: string; to: string; interaction: string; description: string }>
                 relatedPerformers?: Array<{
                     performerId: string
                     performerName: string
+                    description?: string
                     talRef: AssetRef | null
                     danceRefs: AssetRef[]
+                    drafts?: Record<string, DraftAsset>
                     model?: ModelConfig | null
                     modelVariant?: string | null
                     mcpServerNames?: string[]
-                    description?: string
                 }>
             }
         ) =>
@@ -290,7 +301,16 @@ export const api = {
             postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/undo-last-apply`),
     },
 
-    // Act runtime removed (Phase 2 pending)
+    act: {
+        run: (payload: RunActRequest) =>
+            postJSON<ActRunState>('/api/act/run', payload),
+
+        abort: (actSessionId: string) =>
+            postJSON<{ ok: boolean }>(`/api/act/sessions/${actSessionId}/abort`),
+
+        events: (actSessionId: string) =>
+            createApiEventSource(`/api/act/events?actSessionId=${encodeURIComponent(actSessionId)}`),
+    },
 
     // ── LSP (from OpenCode SDK) ───────────────────────────
     lsp: {

@@ -9,17 +9,13 @@ import {
 } from '../lib/performers'
 import { mapSessionMessagesToChatMessages } from '../lib/chat-messages'
 import { formatStudioApiErrorMessage } from '../lib/api-errors'
-// Act helpers removed — will be reimplemented in Phase 2
-
-/**
- * PRD §9.1: Build a projection-aware config hash that includes performer config + edge relations.
- * Session invalidates when performer config OR edge relations change.
- */
-function buildProjectionAwareHash(configHash: string, edges: Array<{ id: string; from: string; to: string; interaction: string; description: string }>): string {
-    if (edges.length === 0) return configHash
-    const edgeKey = edges.map(e => `${e.from}>${e.to}:${e.interaction}:${e.description}`).sort().join('|')
-    return `${configHash}+e:${edgeKey.length}`
-}
+import {
+    sendActMessage as sendActMessageHelper,
+    abortAct as abortActHelper,
+    startNewActSession as startNewActSessionHelper,
+    deleteActSession as deleteActSessionHelper,
+    renameActSession as renameActSessionHelper,
+} from './chat-act-helpers'
 
 export const createChatSlice: StateCreator<
     StudioState,
@@ -30,6 +26,29 @@ export const createChatSlice: StateCreator<
     const getPerformerById = (performerId: string) => (
         get().performers.find((item: any) => item.id === performerId) as any
     )
+
+    const buildPerformerSessionHash = (performerId: string) => {
+        const performer = getPerformerById(performerId)
+        if (!performer) {
+            return ''
+        }
+        const base = buildPerformerConfigHash(performer)
+        const relationSignature = JSON.stringify(
+            (get().edges || [])
+                .filter((edge) => edge.from === performerId)
+                .map((edge) => ({
+                    to: edge.to,
+                    interaction: edge.interaction || 'request',
+                    description: edge.description || '',
+                }))
+                .sort((left, right) => (
+                    left.to.localeCompare(right.to)
+                    || left.interaction.localeCompare(right.interaction)
+                    || left.description.localeCompare(right.description)
+                ))
+        )
+        return `${base}::rel:${relationSignature}`
+    }
 
     const getPerformerSessionId = (performerId: string) => get().sessionMap[performerId]
 
@@ -59,10 +78,7 @@ export const createChatSlice: StateCreator<
     ) => {
         const performer = getPerformerById(performerId)
         const name = performer?.name || 'Untitled Performer'
-        const configHash = performer ? buildPerformerConfigHash(performer) : ''
-        const projectionHash = buildProjectionAwareHash(configHash, get().edges.map(e => ({
-            id: e.id, from: e.from, to: e.to, interaction: e.interaction, description: e.description,
-        })))
+        const configHash = buildPerformerSessionHash(performerId)
         const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
             talRef: null,
             danceRefs: [],
@@ -85,7 +101,7 @@ export const createChatSlice: StateCreator<
         const res = await api.chat.createSession(
             performerId,
             name,
-            projectionHash,
+            configHash,
             performer?.executionMode === 'safe' ? 'safe' : 'direct',
         )
         const sessionId = res.sessionId
@@ -98,7 +114,7 @@ export const createChatSlice: StateCreator<
                 },
                 sessionConfigMap: {
                     ...state.sessionConfigMap,
-                    [performerId]: projectionHash,
+                    [performerId]: configHash,
                 },
             }
 
@@ -119,7 +135,7 @@ export const createChatSlice: StateCreator<
         await get().listSessions()
         return {
             sessionId,
-            configHash: projectionHash,
+            configHash,
             runtimeConfig,
         }
     }
@@ -278,14 +294,11 @@ export const createChatSlice: StateCreator<
             }
         })),
 
-        sendMessage: async (performerId, text, attachments, extraDanceRefs = [], mentions) => {
+        sendMessage: async (performerId, text, attachments, extraDanceRefs = [], mentionedPerformers = []) => {
             const { sessionMap, sessionConfigMap, addChatMessage } = get()
             let sessionId: string | undefined = sessionMap[performerId]
             const performer = getPerformerById(performerId)
-            const currentConfigHash = performer ? buildPerformerConfigHash(performer) : ''
-            const currentProjectionHash = buildProjectionAwareHash(currentConfigHash, get().edges.map(e => ({
-                id: e.id, from: e.from, to: e.to, interaction: e.interaction, description: e.description,
-            })))
+            const currentConfigHash = buildPerformerSessionHash(performerId)
             const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
                 talRef: null,
                 danceRefs: [],
@@ -299,7 +312,7 @@ export const createChatSlice: StateCreator<
             if (!hasModelConfig(runtimeConfig.model)) {
                 return
             }
-            const configChanged = !!sessionId && sessionConfigMap[performerId] !== currentProjectionHash
+            const configChanged = !!sessionId && sessionConfigMap[performerId] !== currentConfigHash
 
             // Ensure session exists
             if (!sessionId) {
@@ -331,7 +344,7 @@ export const createChatSlice: StateCreator<
                             const newMap = { ...state.sessionMap }
                             newMap[performerId] = sessionId
                             const newConfigMap = { ...state.sessionConfigMap }
-                            newConfigMap[performerId] = currentProjectionHash
+                            newConfigMap[performerId] = currentConfigHash
                             return { sessionMap: newMap, sessionConfigMap: newConfigMap }
                         })
                         appendPerformerSystemMessage(
@@ -363,10 +376,20 @@ export const createChatSlice: StateCreator<
                 get().initRealtimeEvents()
 
                 // Pass the prompt over proxy
+                const relationTargetIds = new Set(
+                    get().edges
+                        .filter((edge) => edge.from === performerId)
+                        .map((edge) => edge.to)
+                )
+                for (const mention of mentionedPerformers) {
+                    relationTargetIds.add(mention.performerId)
+                }
+
                 await api.chat.send(sessionId, {
                     message: text,
                     performer: {
                         performerId,
+                        performerName: performer?.name || 'Untitled Performer',
                         talRef: runtimeConfig.talRef,
                         danceRefs: runtimeConfig.danceRefs,
                         extraDanceRefs,
@@ -380,34 +403,27 @@ export const createChatSlice: StateCreator<
                         configHash: currentConfigHash,
                     },
                     attachments,
-                    mentions: mentions && mentions.length > 0 ? mentions : undefined,
-                    relations: get().edges.map(e => ({
-                        id: e.id,
-                        from: e.from,
-                        to: e.to,
-                        interaction: e.interaction,
-                        description: e.description,
-                    })),
-                    // PRD §7.5: Include all edge-connected performer configs for multi-projection
-                    relatedPerformers: (() => {
-                        const edges = get().edges
-                        if (edges.length === 0) return undefined
-                        const targetIds = new Set(edges.flatMap(e => [e.from, e.to]).filter(id => id !== performerId))
-                        return [...targetIds].map(targetId => {
-                            const p = getPerformerById(targetId)
-                            if (!p) return null
-                            return {
-                                performerId: targetId,
-                                performerName: p.name,
-                                talRef: p.talRef || null,
-                                danceRefs: p.danceRefs || [],
-                                model: p.model || null,
-                                modelVariant: p.modelVariant || null,
-                                mcpServerNames: p.mcpServerNames || [],
-                                description: p.description,
+                    mentions: mentionedPerformers.map((mention) => ({ performerId: mention.performerId })),
+                    relatedPerformers: [...relationTargetIds]
+                        .map((targetPerformerId) => {
+                            const related = getPerformerById(targetPerformerId)
+                            if (!related || !hasModelConfig(related.model)) {
+                                return null
                             }
-                        }).filter(Boolean) as any[]
-                    })(),
+                            const relatedConfig = resolvePerformerRuntimeConfig(related)
+                            return {
+                                performerId: related.id,
+                                performerName: related.name,
+                                description: get().edges.find((edge) => edge.from === performerId && edge.to === related.id)?.description || '',
+                                talRef: relatedConfig.talRef,
+                                danceRefs: relatedConfig.danceRefs,
+                                drafts: get().drafts,
+                                model: relatedConfig.model,
+                                modelVariant: relatedConfig.modelVariant,
+                                mcpServerNames: relatedConfig.mcpServerNames,
+                            }
+                        })
+                        .filter((value): value is NonNullable<typeof value> => value !== null),
                 })
                 scheduleSessionFallbackSync(performerId, sessionId, Date.now())
             } catch (err: any) {
@@ -421,12 +437,12 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        sendActMessage: async (_actId, _text) => {
-            console.warn('[studio] sendActMessage: Act runtime removed (Phase 2 pending)')
+        sendActMessage: async (actId, text) => {
+            await sendActMessageHelper(get, set, actId, text)
         },
 
-        abortAct: async (_actId) => {
-            console.warn('[studio] abortAct: Act runtime removed (Phase 2 pending)')
+        abortAct: async (actId) => {
+            await abortActHelper(get, set, actId)
         },
 
         executeSlashCommand: async (performerId, cmd) => {
@@ -492,8 +508,8 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        startNewActSession: (_actId) => {
-            console.warn('[studio] startNewActSession: Act runtime removed (Phase 2 pending)')
+        startNewActSession: (actId) => {
+            startNewActSessionHelper(get, set, actId)
         },
 
         detachPerformerSession: (performerId, notice) => {
@@ -552,75 +568,21 @@ export const createChatSlice: StateCreator<
             if (!sessionId) {
                 return
             }
-
-            let serverMessageId: string | null = null
-            let messagesFetchError: unknown = null
-            try {
-                const messages = await api.chat.messages(sessionId)
-                const lastUser = [...messages]
-                    .reverse()
-                    .find((message: any) => (message?.info?.role || message?.role) === 'user')
-                serverMessageId = lastUser?.info?.id || lastUser?.id || null
-            } catch (err) {
-                messagesFetchError = err
-            }
-
-            if (messagesFetchError) {
-                const errMessage = formatStudioApiErrorMessage(messagesFetchError)
-                if (/\b(not a git repository|git\b.*\bnot found)\b/i.test(errMessage)) {
-                    const notice = 'Direct mode undo is available only when the project workspace is a Git repository.'
-                    appendPerformerSystemMessage(performerId, notice)
-                    showToast(notice, 'error', {
-                        title: 'Undo unavailable',
-                        dedupeKey: `performer:undo:no-git:${performerId}`,
-                    })
-                } else {
-                    appendPerformerSystemMessage(performerId, errMessage)
-                }
-                return
-            }
-
-            if (!serverMessageId) {
+            const lastUser = [...(get().chats[performerId] || [])]
+                .reverse()
+                .find((message) => message.role === 'user') as any
+            if (!lastUser) {
                 appendPerformerSystemMessage(performerId, 'No prior turn is available to undo.')
                 return
             }
 
             set({ loadingPerformerId: performerId })
             try {
-                await api.chat.revert(sessionId, serverMessageId)
+                await api.chat.revert(sessionId, lastUser.info?.id || lastUser.id)
                 await syncPerformerMessages(performerId, sessionId)
                 appendPerformerSystemMessage(performerId, 'Undid the last turn.')
-                const performer = getPerformerById(performerId)
-                if (!performer || performer.executionMode !== 'safe') {
-                    api.vcs.get().then((vcs) => {
-                        if (!vcs?.branch) {
-                            appendPerformerSystemMessage(
-                                performerId,
-                                '⚠️ This project has no Git repository. Chat history was reverted, but file changes may not have been restored.',
-                            )
-                            showToast(
-                                'Chat was reverted, but file changes may not have been restored. Use Safe mode for reliable undo.',
-                                'warning',
-                                {
-                                    title: 'Undo — files may not be restored',
-                                    dedupeKey: `performer:undo:partial:${performerId}`,
-                                },
-                            )
-                        }
-                    }).catch(() => {})
-                }
             } catch (err) {
-                const message = formatStudioApiErrorMessage(err)
-                if (/\b(not a git repository|git\b.*\bnot found)\b/i.test(message)) {
-                    const notice = 'Direct mode undo is available only when the project workspace is a Git repository.'
-                    appendPerformerSystemMessage(performerId, notice)
-                    showToast(notice, 'error', {
-                        title: 'Undo unavailable',
-                        dedupeKey: `performer:undo:no-git:${performerId}`,
-                    })
-                } else {
-                    appendPerformerSystemMessage(performerId, message)
-                }
+                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
             } finally {
                 set({ loadingPerformerId: null })
             }
@@ -654,7 +616,7 @@ export const createChatSlice: StateCreator<
                         newMap[performerId] = newSessionId
                         const newConfigMap = { ...state.sessionConfigMap }
                         const performer = getPerformerById(performerId)
-                        newConfigMap[performerId] = performer ? buildPerformerConfigHash(performer) : ''
+                        newConfigMap[performerId] = performer ? buildPerformerSessionHash(performerId) : ''
                         return { sessionMap: newMap, sessionConfigMap: newConfigMap }
                     })
                     // Re-sync messages for the new branch
@@ -737,12 +699,12 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        deleteActSession: (_sessionId) => {
-            console.warn('[studio] deleteActSession: Act runtime removed (Phase 2 pending)')
+        deleteActSession: (sessionId) => {
+            deleteActSessionHelper(get, set, sessionId)
         },
 
-        renameActSession: (_sessionId, _title) => {
-            console.warn('[studio] renameActSession: Act runtime removed (Phase 2 pending)')
+        renameActSession: (sessionId, title) => {
+            renameActSessionHelper(set, sessionId, title)
         },
     }
 }

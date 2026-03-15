@@ -1,6 +1,6 @@
 import fs from 'fs/promises'
-import { createHash } from 'crypto'
 import path from 'path'
+import { createHash } from 'crypto'
 import { getOpencode } from '../../lib/opencode.js'
 import { resolveRuntimeModel } from '../../lib/model-catalog.js'
 import { resolveRuntimeTools, type RuntimeToolResolution } from '../../lib/runtime-tools.js'
@@ -42,7 +42,8 @@ type CapabilitySnapshot = {
     }
 } | null
 
-export interface PerformerProjectionInput {
+export interface ActPerformerProjectionInput {
+    actId: string
     performerId: string
     performerName: string
     talRef: AssetRef | null
@@ -60,7 +61,7 @@ export interface PerformerProjectionInput {
     }>
 }
 
-export interface EnsuredPerformerProjection {
+export interface EnsuredActPerformerProjection {
     compiled: CompiledPerformer
     toolResolution: RuntimeToolResolution
     capabilitySnapshot: CapabilitySnapshot
@@ -70,8 +71,8 @@ function computeStageHash(workingDir: string) {
     return createHash('sha1').update(workingDir).digest('hex').slice(0, 12)
 }
 
-function groupKey(performerId: string) {
-    return `performer:${performerId}`
+function actGroupKey(actId: string, performerId: string) {
+    return `act:${actId}:performer:${performerId}`
 }
 
 async function writeIfChanged(filePath: string, content: string) {
@@ -121,7 +122,17 @@ async function resolveCapabilitySnapshot(cwd: string, model: ModelSelection): Pr
     }
 }
 
-export async function ensurePerformerProjection(input: PerformerProjectionInput): Promise<EnsuredPerformerProjection> {
+export function getProjectedActAgentName(
+    workingDir: string,
+    actId: string,
+    performerId: string,
+    posture: Posture,
+) {
+    const stageHash = computeStageHash(workingDir)
+    return `dot-studio/act/${stageHash}/${actId}/${performerId}--${posture}`
+}
+
+export async function ensureActPerformerProjection(input: ActPerformerProjectionInput): Promise<EnsuredActPerformerProjection> {
     const stageHash = computeStageHash(input.workingDir)
     const toolResolution = await resolveRuntimeTools(input.executionDir, input.model, input.mcpServerNames)
     const toolMap = buildProjectedToolMap(
@@ -138,14 +149,15 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             stageHash,
             input.performerId,
             input.executionDir,
-            'stage',
+            'act',
+            input.actId,
         ))
     }
 
     const requestTargets: RequestRelationTarget[] = (input.requestTargets || []).map((target) => ({
         performerId: target.performerId,
         performerName: target.performerName,
-        agentName: getProjectedAgentName(input.workingDir, target.performerId, 'build'),
+        agentName: getProjectedActAgentName(input.workingDir, input.actId, target.performerId, 'build'),
         description: target.description || '',
     }))
     const requestProjection = compileRequestRelations(requestTargets)
@@ -161,7 +173,8 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             modelVariant: input.modelVariant || null,
             stageHash,
             executionDir: input.executionDir,
-            scope: 'stage',
+            scope: 'act',
+            actId: input.actId,
             skillNames: skills.map((skill) => skill.logicalName),
             toolMap,
             taskAllowlist: requestProjection.taskAllowlist,
@@ -170,7 +183,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         skills,
     )
 
-    await cleanGroupFiles(input.executionDir, groupKey(input.performerId), compiled.allFiles)
+    await cleanGroupFiles(input.executionDir, actGroupKey(input.actId, input.performerId), compiled.allFiles)
 
     let changed = false
     for (const skill of skills) {
@@ -182,7 +195,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
     await updateManifestGroup(
         input.executionDir,
         stageHash,
-        groupKey(input.performerId),
+        actGroupKey(input.actId, input.performerId),
         compiled.allFiles,
     )
     await updateGitExclude(input.executionDir)
@@ -197,13 +210,4 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         toolResolution,
         capabilitySnapshot: await resolveCapabilitySnapshot(input.executionDir, input.model),
     }
-}
-
-export function getProjectedAgentName(
-    workingDir: string,
-    performerId: string,
-    posture: Posture,
-) {
-    const stageHash = computeStageHash(workingDir)
-    return `dot-studio/${stageHash}/${performerId}--${posture}`
 }
