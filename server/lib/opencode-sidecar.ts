@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process'
 import path from 'path'
-import { DEFAULT_PROJECT_DIR, OPENCODE_MANAGED, OPENCODE_URL } from './config.js'
+import { DEFAULT_PROJECT_DIR, OPENCODE_MANAGED, OPENCODE_URL, STUDIO_DIR } from './config.js'
 import { resolvePackageBin } from './package-bin.js'
 
 const STARTUP_TIMEOUT_MS = 15_000
@@ -125,7 +125,10 @@ export async function ensureOpencodeSidecar(): Promise<void> {
             ['--port', String(resolvePort()), path.resolve(DEFAULT_PROJECT_DIR)],
             {
                 cwd: path.resolve(DEFAULT_PROJECT_DIR),
-                env: process.env,
+                env: {
+                    ...process.env,
+                    OPENCODE_CONFIG_DIR: path.join(STUDIO_DIR, 'opencode'),
+                },
                 stdio: 'ignore',
             },
         )

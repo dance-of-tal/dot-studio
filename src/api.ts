@@ -168,6 +168,8 @@ export const api = {
 
     // ── Compile ─────────────────────────────────────────
     compile: (
+        performerId: string | null,
+        performerName: string | null,
         talRef: AssetRef | null,
         danceRefs: AssetRef[],
         model: ModelConfig | null,
@@ -177,8 +179,15 @@ export const api = {
         drafts: Record<string, DraftAsset>,
         planMode = false,
         danceDeliveryMode: DanceDeliveryMode = 'auto',
+        relatedPerformers?: Array<{
+            performerId: string
+            performerName: string
+            description?: string
+        }>,
     ) =>
         postJSON<PromptPreview>('/api/compile', {
+            performerId: performerId || undefined,
+            performerName: performerName || undefined,
             talRef,
             danceRefs,
             drafts,
@@ -188,6 +197,7 @@ export const api = {
             mcpServerNames,
             planMode,
             danceDeliveryMode,
+            relatedPerformers,
         } satisfies CompilePromptRequest),
 
     // ── Chat ────────────────────────────────────────────
@@ -206,6 +216,8 @@ export const api = {
             payload: {
                 message: string
                 performer: {
+                    performerId: string
+                    performerName: string
                     talRef: AssetRef | null
                     danceRefs: AssetRef[]
                     extraDanceRefs?: AssetRef[]
@@ -219,6 +231,18 @@ export const api = {
                     configHash?: string
                 }
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
+                mentions?: Array<{ performerId: string }>
+                relatedPerformers?: Array<{
+                    performerId: string
+                    performerName: string
+                    description?: string
+                    talRef: AssetRef | null
+                    danceRefs: AssetRef[]
+                    drafts?: Record<string, DraftAsset>
+                    model?: ModelConfig | null
+                    modelVariant?: string | null
+                    mcpServerNames?: string[]
+                }>
             }
         ) =>
             postJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, payload satisfies ChatSendRequest),

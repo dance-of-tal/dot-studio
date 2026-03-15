@@ -1,80 +1,74 @@
-import { useState, useCallback, useEffect, useRef, type RefObject } from 'react'
-import { api } from '../api'
+import { useCallback, useMemo, useRef, useState, type RefObject } from 'react'
+import { useStudioStore } from '../store'
 
-export interface FileMention {
+export interface PerformerMention {
+    performerId: string
     name: string
-    path: string
-    absolute: string
-    type: string
 }
 
-export function useFileMentions(externalInputRef?: RefObject<HTMLTextAreaElement | null>) {
+export function usePerformerMention(currentPerformerId: string, externalInputRef?: RefObject<HTMLTextAreaElement | null>) {
+    const performers = useStudioStore((state) => state.performers)
     const [mentionQuery, setMentionQuery] = useState<string | null>(null)
-    const [mentionResults, setMentionResults] = useState<FileMention[]>([])
     const [mentionIndex, setMentionIndex] = useState(0)
     const [isMentioning, setIsMentioning] = useState(false)
     const fallbackRef = useRef<HTMLTextAreaElement>(null)
     const inputRef = externalInputRef || fallbackRef
 
-    const mentionRegex = /#([a-zA-Z0-9_\-\.\/]*)$/
+    const mentionRegex = /@([a-zA-Z0-9_\-\.]*)$/
+
+    const mentionResults = useMemo(() => {
+        if (!mentionQuery && mentionQuery !== '') {
+            return []
+        }
+        const query = mentionQuery.toLowerCase()
+        return performers
+            .filter((performer) => performer.id !== currentPerformerId)
+            .filter((performer) => !query || performer.name.toLowerCase().includes(query))
+            .map((performer) => ({
+                performerId: performer.id,
+                name: performer.name,
+            }))
+            .slice(0, 8)
+    }, [currentPerformerId, mentionQuery, performers])
 
     const checkMention = useCallback((value?: string, cursorPosition?: number | null) => {
         const input = inputRef.current
         const sourceValue = typeof value === 'string' ? value : input?.value
         const cursor = typeof cursorPosition === 'number' ? cursorPosition : input?.selectionStart
-        if (typeof sourceValue !== 'string' || typeof cursor !== 'number') return
+        if (typeof sourceValue !== 'string' || typeof cursor !== 'number') {
+            return
+        }
+
         const textBeforeCursor = sourceValue.slice(0, cursor)
         const match = mentionRegex.exec(textBeforeCursor)
-
         if (match) {
             setIsMentioning(true)
             setMentionQuery(match[1])
-        } else {
-            setIsMentioning(false)
-            setMentionQuery(null)
-            setMentionResults([])
+            setMentionIndex(0)
+            return
         }
-    }, [])
-
-    useEffect(() => {
-        if (mentionQuery === null) return
-
-        let active = true
-        async function fetchFiles() {
-            try {
-                const res = await api.workspace.findFiles(mentionQuery || '')
-                if (active) {
-                    setMentionResults(res.filter(f => f.type === 'file'))
-                    setMentionIndex(0)
-                }
-            } catch (err) {
-                console.error("Mention search error", err)
-            }
-        }
-
-        const timer = setTimeout(fetchFiles, 150)
-        return () => {
-            active = false
-            clearTimeout(timer)
-        }
-    }, [mentionQuery])
-
-    const extractMentionText = useCallback(() => {
-        if (!inputRef.current) return null
-        const cursor = inputRef.current.selectionStart
-        const text = inputRef.current.value
-        const textBeforeCursor = text.slice(0, cursor)
-
-        const match = mentionRegex.exec(textBeforeCursor)
-        if (!match) return null
-
-        const startIndex = match.index
-        const newText = text.slice(0, startIndex) + text.slice(cursor)
 
         setIsMentioning(false)
         setMentionQuery(null)
-        setMentionResults([])
+    }, [])
 
+    const extractMentionText = useCallback(() => {
+        if (!inputRef.current) {
+            return null
+        }
+
+        const cursor = inputRef.current.selectionStart
+        const text = inputRef.current.value
+        const textBeforeCursor = text.slice(0, cursor)
+        const match = mentionRegex.exec(textBeforeCursor)
+        if (!match) {
+            return null
+        }
+
+        const startIndex = match.index
+        const newText = text.slice(0, startIndex) + text.slice(cursor)
+        setIsMentioning(false)
+        setMentionQuery(null)
         return newText
     }, [])
 
@@ -86,6 +80,6 @@ export function useFileMentions(externalInputRef?: RefObject<HTMLTextAreaElement
         setMentionIndex,
         checkMention,
         extractMentionText,
-        setIsMentioning
+        setIsMentioning,
     }
 }

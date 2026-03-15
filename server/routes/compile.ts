@@ -9,7 +9,7 @@ import {
     StudioValidationError,
     jsonOpencodeError,
 } from '../lib/opencode-errors.js'
-import { compileStudioPrompt } from '../services/compile-service.js'
+import { compileProjectionPreview } from '../services/opencode-projection/preview-service.js'
 import { createSSEResponse, sseEncode } from '../lib/sse.js'
 
 const compile = new Hono()
@@ -30,7 +30,7 @@ compile.post('/api/compile', async (c) => {
 
     try {
         const cwd = resolveRequestWorkingDir(c)
-        return c.json(await compileStudioPrompt(cwd, body))
+        return c.json(await compileProjectionPreview(cwd, body))
     } catch (err) {
         return jsonOpencodeError(c, err, { model })
     }

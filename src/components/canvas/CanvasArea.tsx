@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { ReactFlow, Background, useReactFlow, useNodesState } from '@xyflow/react';
-import type { Node, NodeChange, ReactFlowInstance, Viewport } from '@xyflow/react';
+import type { Connection, Edge, Node, NodeChange, ReactFlowInstance, Viewport } from '@xyflow/react';
 import { useDroppable } from '@dnd-kit/core';
 import { Maximize, Minimize, Maximize2, Minimize2 } from 'lucide-react';
 import '@xyflow/react/dist/style.css';
@@ -10,8 +10,9 @@ import { ActAreaFrame } from '../../features/act';
 import MarkdownEditorFrame from '../../features/assets/MarkdownEditorFrame';
 import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
 import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
+import PerformerRelationEdge from '../../features/performer/PerformerRelationEdge';
 import { hasModelConfig, resolvePerformerAgentId, resolvePerformerRuntimeConfig } from '../../lib/performers';
-import { resolveActNodeLabel, resolveEffectiveActNodeSession } from '../../lib/acts';
+import { resolveActNodeLabel } from '../../lib/acts';
 import { computeActAutoLayout } from '../../lib/act-layout';
 import { coerceStudioApiError } from '../../lib/api-errors';
 import { showToast } from '../../lib/toast';
@@ -57,6 +58,10 @@ const nodeTypes = {
     markdownEditor: MarkdownEditorFrame,
     canvasTerminal: CanvasTerminalFrame,
     stageTracking: CanvasTrackingFrame,
+};
+
+const edgeTypes = {
+    performerRelation: PerformerRelationEdge,
 };
 
 type CanvasNodeKind = 'performer' | 'actArea' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking';
@@ -143,6 +148,7 @@ function CustomControls() {
 export default function CanvasArea() {
     const {
         performers,
+        edges,
         acts,
         markdownEditors,
         canvasTerminals,
@@ -175,7 +181,6 @@ export default function CanvasArea() {
         addActNode,
         updateActNode,
         updateActNodePosition,
-        setActNodeType,
         removeActNode,
         addActEdge,
         updateActEdge,
@@ -198,6 +203,7 @@ export default function CanvasArea() {
         setPerformerAgentId,
         removePerformerDance,
         removePerformerMcp,
+        addEdge,
         setInspectorFocus,
         closeEditor,
     } = useStudioStore();
@@ -362,7 +368,6 @@ export default function CanvasArea() {
                 loading: loadingActId === act.id,
                 entryNodeId: act.entryNodeId,
                 executionMode: act.executionMode === 'safe' ? 'safe' : 'direct',
-                sessionMode: act.sessionMode || 'all_nodes_thread',
                 transformActive: isActTransforming,
                 onActivateTransform: () => activateTransformTarget('actArea', act.id),
                 onDeactivateTransform: () => deactivateTransformTarget('actArea', act.id),
@@ -371,10 +376,9 @@ export default function CanvasArea() {
                 onUpdateName: (name: string) => updateActMeta(act.id, { name }),
                 onUpdateDescription: (description: string) => updateActMeta(act.id, { description }),
                 onUpdateMaxIterations: (maxIterations: number) => updateActMeta(act.id, { maxIterations }),
-                onUpdateSessionMode: (sessionMode: 'default' | 'all_nodes_thread') => updateActMeta(act.id, { sessionMode }),
 
                 onFocusNode: (nodeId: string | null) => setInspectorFocus(nodeId ? `act-node:${nodeId}` : null),
-                onAddNode: (type: 'worker' | 'orchestrator' | 'parallel') => addActNode(act.id, type),
+                onAddNode: () => addActNode(act.id),
                 onAutoArrange: async () => {
                     try {
                         const layout = await computeActAutoLayout(act)
@@ -388,7 +392,6 @@ export default function CanvasArea() {
                     }
                 },
                 onUpdateNode: (nodeId: string, patch: Record<string, unknown>) => updateActNode(act.id, nodeId, patch),
-                onSetNodeType: (nodeId: string, type: 'worker' | 'orchestrator' | 'parallel') => setActNodeType(act.id, nodeId, type),
                 onRemoveNode: (nodeId: string) => removeActNode(act.id, nodeId),
                 onEditAct: () => useStudioStore.getState().openActEditor(act.id, 'act-structure'),
                 onCloseEdit: () => closeEditor(),
@@ -432,16 +435,7 @@ export default function CanvasArea() {
                 onSetEntry: (nodeId: string) => updateActMeta(act.id, { entryNodeId: nodeId }),
                 entryLabel: entryNode ? resolveActNodeLabel(entryNode as any, performers) : null,
                 nodes: act.nodes.map((node) => {
-                    const effectiveSession = node.type === 'parallel'
-                        ? null
-                        : resolveEffectiveActNodeSession(act, node)
-                    const performerData = node.type === 'parallel'
-                        ? {
-                            performerId: null,
-                            performerName: null,
-                            performerSummary: 'Parallel branch node',
-                        }
-                        : describeActNodePerformer(node.performerId)
+                    const performerData = describeActNodePerformer(node.performerId)
 
                     return {
                         id: node.id,
@@ -449,18 +443,15 @@ export default function CanvasArea() {
                         position: node.position,
                         label: resolveActNodeLabel(node, performers),
                         entry: act.entryNodeId === node.id,
-                        sessionPolicy: effectiveSession?.policy || null,
-                        sessionLifetime: effectiveSession?.lifetime || null,
-                        sessionModeOverride: node.type === 'parallel' ? null : !!node.sessionModeOverride,
-                        modelVariant: node.type === 'parallel' ? null : (node.modelVariant || null),
-                        performerId: performerData.performerId ?? (node.type === 'parallel' ? null : node.performerId),
+                        modelVariant: node.modelVariant || null,
+                        performerId: performerData.performerId ?? node.performerId,
                         performerName: performerData.performerName,
                         performerSummary: performerData.performerSummary,
                     }
                 }),
             } as Record<string, unknown>,
         }
-    }), [acts, selectedActId, selectedActSessionId, actSessionMap, actSessions, inspectorFocus, focusedActId, transformTarget, editingTarget, actChats, loadingActId, activateTransformTarget, deactivateTransformTarget, updateActMeta, updateActBounds, setInspectorFocus, addActNode, updateActNode, setActNodeType, removeActNode, closeEditor, sendActMessage, abortAct, startNewActSession, selectActSession, performerDetailsById, performers, createMarkdownEditor, updatePerformerName, setPerformerDanceDeliveryMode, setPerformerModel, setPerformerModelVariant, setPerformerAgentId, removePerformerDance, removePerformerMcp, addActEdge, updateActEdge, updateActNodePosition, removeActEdge, describeActNodePerformer, drafts])
+    }), [acts, selectedActId, selectedActSessionId, actSessionMap, actSessions, inspectorFocus, focusedActId, transformTarget, editingTarget, actChats, loadingActId, activateTransformTarget, deactivateTransformTarget, updateActMeta, updateActBounds, setInspectorFocus, addActNode, updateActNode, removeActNode, closeEditor, sendActMessage, abortAct, startNewActSession, selectActSession, performerDetailsById, performers, createMarkdownEditor, updatePerformerName, setPerformerDanceDeliveryMode, setPerformerModel, setPerformerModelVariant, setPerformerAgentId, removePerformerDance, removePerformerMcp, addActEdge, updateActEdge, updateActNodePosition, removeActEdge, describeActNodePerformer, drafts])
 
     const buildPerformerNodes = useCallback(() => performers.map((performer) => ({
         id: performer.id,
@@ -575,6 +566,21 @@ export default function CanvasArea() {
         ]);
     }, [buildActAreaNodes, buildPerformerNodes, buildMarkdownEditorNodes, buildCanvasTerminalNodes, buildTrackingNodes, setNodes]);
 
+    const relationEdges = useCallback((): Edge[] => (
+        edges
+            .filter((edge) => performers.some((performer) => performer.id === edge.from) && performers.some((performer) => performer.id === edge.to))
+            .map((edge) => ({
+                id: edge.id,
+                source: edge.from,
+                target: edge.to,
+                type: 'performerRelation',
+                data: {
+                    description: edge.description,
+                    interaction: edge.interaction,
+                },
+            }))
+    ), [edges, performers])
+
     const onNodeDragStop = useCallback(
         (_: any, node: import('@xyflow/react').Node) => {
             if (node.type === 'actArea') {
@@ -622,7 +628,7 @@ export default function CanvasArea() {
             if (node.type === 'markdownEditor') {
                 const attachPerformerId = (node.data as any)?.attachTarget?.performerId || null;
                 const attachedAct = attachPerformerId
-                    ? acts.find((act) => act.nodes.some((item) => item.type !== 'parallel' && item.performerId === attachPerformerId)) || null
+                    ? acts.find((act) => act.nodes.some((item) => item.performerId === attachPerformerId)) || null
                     : null;
                 if (!attachedAct) {
                     closeEditor();
@@ -661,6 +667,13 @@ export default function CanvasArea() {
         selectAct(null);
         selectMarkdownEditor(null);
     }, [clearTransformTarget, closeEditor, selectAct, selectMarkdownEditor, selectPerformer]);
+
+    const onConnect = useCallback((connection: Connection) => {
+        if (!connection.source || !connection.target || connection.source === connection.target) {
+            return;
+        }
+        addEdge(connection.source, connection.target);
+    }, [addEdge]);
 
     const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
         // Filter out 'select' changes — selection is driven externally by Zustand selectedPerformerId
@@ -719,13 +732,15 @@ export default function CanvasArea() {
             )}
             <ReactFlow
                 nodes={nodes}
-                edges={[]}
+                edges={relationEdges()}
                 onInit={setReactFlowInstance}
                 onNodesChange={handleNodesChange}
                 onNodeDragStop={onNodeDragStop}
                 onNodeClick={onNodeClick}
+                onConnect={onConnect}
                 onPaneClick={onPaneClick}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 multiSelectionKeyCode={null}
                 selectionKeyCode={null}
                 proOptions={{ hideAttribution: true }}

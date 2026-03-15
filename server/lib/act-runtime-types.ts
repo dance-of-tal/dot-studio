@@ -2,15 +2,9 @@ import type { DanceDeliveryMode, ModelSelection } from './prompt.js'
 import { getOpencode } from './opencode.js'
 import type { ExecutionMode } from '../../shared/safe-mode.js'
 
-// Re-export shared types
 export type {
-    ActSessionPolicy,
-    ActSessionLifetime,
-    ActSessionMode,
     ActNodeType,
     StageActWorkerNode,
-    StageActOrchestratorNode,
-    StageActParallelNode,
     StageActNode,
     StageActEdge,
     ActHistoryEntry,
@@ -18,16 +12,11 @@ export type {
 } from '../../shared/act-contracts.js'
 
 import type {
-    ActSessionPolicy,
-    ActSessionLifetime,
-    ActSessionMode,
     StageActNode,
     StageActEdge,
     ActHistoryEntry,
     ActThreadResumeSummary,
 } from '../../shared/act-contracts.js'
-
-// ── Server-Only Types ────────────────────────────────────────
 
 export type RuntimeAssetRef =
     | { kind: 'registry'; urn: string }
@@ -64,7 +53,6 @@ export type StageActInput = {
     name: string
     description: string
     executionMode?: ExecutionMode
-    sessionMode?: ActSessionMode
     bounds?: {
         x: number
         y: number
@@ -97,8 +85,6 @@ export type SessionRecord = {
     scopeKey: string
     sessionId: string
     configKey?: string
-    policy: ActSessionPolicy
-    lifetime?: ActSessionLifetime
     nodeId?: string | null
     performerId?: string | null
     persistentHandle?: string | null
@@ -109,21 +95,12 @@ export type ThreadSessionHandleRecord = {
     sessionId: string
     configKey?: string
     nodeId: string
-    nodeType: 'worker' | 'orchestrator'
+    nodeType: 'worker'
     performerId?: string | null
     status: 'warm'
     turnCount: number
     lastUsedAt: number
     summary?: string
-}
-
-
-
-
-export type PendingSessionDirective = {
-    nodeId: string
-    mode: 'fresh' | 'reuse'
-    handle?: string | null
 }
 
 export type ResolvedSession = {
@@ -132,7 +109,7 @@ export type ResolvedSession = {
     configKey: string
     scopeKey?: string
     ephemeral: boolean
-    source: 'fresh' | 'run' | 'thread'
+    source: 'fresh' | 'thread'
 }
 
 export type ActMachineContext = {
@@ -154,7 +131,6 @@ export type ActMachineContext = {
     resumeSummary?: ActThreadResumeSummary | null
     sessionPool: Map<string, SessionRecord>
     threadSessionHandles: Map<string, ThreadSessionHandleRecord>
-    pendingSessionDirective?: PendingSessionDirective | null
     finalOutput?: string
     error?: string
 }

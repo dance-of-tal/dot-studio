@@ -5,7 +5,6 @@ import type {
     ActRuntimeEvent,
     ActRuntimeProgressEvent,
     SessionRecord,
-    StageActOrchestratorNode,
     StageActWorkerNode,
     ThreadSessionHandleRecord,
     ActThreadResumeSummary,
@@ -77,8 +76,6 @@ export function serializeSessionRecord(session: SessionRecord) {
     return {
         scopeKey: session.scopeKey,
         sessionId: session.sessionId,
-        policy: session.policy,
-        lifetime: session.lifetime,
         nodeId: session.nodeId,
         performerId: session.performerId,
     }
@@ -125,7 +122,7 @@ export function emitActRuntimeProgress(context: ActMachineContext, status: 'runn
 export function emitActPerformerBinding(
     context: ActMachineContext,
     sessionId: string,
-    node: StageActWorkerNode | StageActOrchestratorNode,
+    node: StageActWorkerNode,
     performer: { id: string; name: string },
 ) {
     if (!context.actSessionId) {

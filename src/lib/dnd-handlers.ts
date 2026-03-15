@@ -17,7 +17,7 @@ export type DragPreview = {
 };
 
 export type DragAsset = Omit<Partial<AssetCard>, 'kind'> & {
-    kind?: AssetCard['kind'] | 'act-semantic';
+    kind?: AssetCard['kind'];
     label?: string;
     source?: string;
     slug?: string;
@@ -83,7 +83,7 @@ export function ensureActNodePerformer(
     seededAsset?: ActOwnedPerformerSeed,
 ) {
     const { act, node } = findActNode(store, actId, nodeId);
-    if (!act || !node || node.type === 'parallel') {
+    if (!act || !node) {
         return null;
     }
     if (node.performerId) {

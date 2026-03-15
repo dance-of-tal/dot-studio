@@ -8,7 +8,6 @@ import { LeftSidebar, CanvasArea, ToastViewport, TerminalPanel } from './feature
 import { api, setApiWorkingDirContext } from './api';
 import { showToast } from './lib/toast';
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers';
-import type { ActNodeType, ActSessionLifetime, ActSessionPolicy } from './types';
 import type { StudioState } from './store';
 import { projectMcpServerNames } from '../shared/project-mcp';
 import { extractMcpServerNamesFromConfig } from '../shared/mcp-config';
@@ -17,7 +16,6 @@ import {
   isInstalledAsset,
   getAssetAuthor,
   getAssetSlug,
-  findActNode,
   ensureActNodePerformer,
   applyTalToPerformer,
   applyDanceToPerformer,
@@ -280,43 +278,6 @@ export default function App() {
       return true;
     };
 
-    const handleActNodeSemanticDrop = () => {
-      if (dropData.type !== 'act-node-semantic' || asset.kind !== 'act-semantic' || !dropData.actId || !dropData.nodeId) {
-        return false;
-      }
-
-      const { act, node } = findActNode(store, dropData.actId, dropData.nodeId);
-      if (!act || !node) {
-        return true;
-      }
-
-      if (asset.semanticType === 'entry') {
-        store.updateActMeta(dropData.actId, { entryNodeId: dropData.nodeId });
-        return true;
-      }
-
-      if (asset.semanticType === 'node-type') {
-        store.setActNodeType(dropData.actId, dropData.nodeId, asset.value as ActNodeType);
-        return true;
-      }
-
-      if (node.type === 'parallel') {
-        showDropWarning('Session reuse and lifetime apply only to performer-backed nodes.');
-        return true;
-      }
-
-      if (asset.semanticType === 'session-policy') {
-        store.updateActNode(dropData.actId, dropData.nodeId, { sessionPolicy: asset.value as ActSessionPolicy });
-        return true;
-      }
-
-      if (asset.semanticType === 'session-lifetime') {
-        store.updateActNode(dropData.actId, dropData.nodeId, { sessionLifetime: asset.value as ActSessionLifetime });
-      }
-
-      return true;
-    };
-
     const handleActNodeAssetDrop = () => {
       if (!dropData.actId || !dropData.nodeId) {
         return false;
@@ -373,10 +334,6 @@ export default function App() {
       return;
     }
 
-    if (handleActNodeSemanticDrop()) {
-      return;
-    }
-
     if (handleActNodeAssetDrop()) {
       return;
     }
@@ -400,7 +357,6 @@ export default function App() {
       case 'model': return <Cpu size={12} className="asset-icon model" />;
       case 'mcp': return <Server size={12} className="asset-icon mcp" />;
       case 'performer': return <Package size={12} className="asset-icon performer" />;
-      case 'act-semantic': return <Package size={12} className="asset-icon performer" />;
       default: return <Package size={12} />;
     }
   };

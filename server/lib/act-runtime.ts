@@ -1,4 +1,3 @@
-import { createActor, fromPromise, setup, toPromise, assign } from 'xstate'
 import { readAsset } from 'dance-of-tal/lib/registry'
 import type { Act } from 'dance-of-tal/data/types'
 import { normalizeOpencodeError } from './opencode-errors.js'
@@ -7,19 +6,13 @@ import {
     emitActRuntimeProgress,
     getThreadRuntimeHandles,
     isAbortRequested,
-    isActRuntimeInterrupted,
     persistThreadRuntimeHandles,
     serializeSessionRecord,
     serializeThreadSessionHandle,
 } from './act-runtime-events.js'
 import {
     buildInitialSharedState,
-    cloneContext,
-    getOrchestratorRoutes,
-    getParallelBranches,
-    listAvailableSessionHandles,
-    parseOrchestratorDecision,
-    selectNextTarget,
+    getNextTargets,
 } from './act-runtime-routing.js'
 import {
     cleanupSessionPool,
@@ -29,66 +22,26 @@ import {
 } from './act-runtime-sessions.js'
 import type {
     ActMachineContext,
-    ActMachineOutput,
-    ActSessionMode,
     RunActRuntimeInput,
     RuntimePerformer,
     StageActInput,
-    StageActOrchestratorNode,
-    StageActParallelNode,
-    StageActWorkerNode,
     StagePerformerInput,
-    StepResult,
-    ThreadSessionHandleRecord,
+    StageActWorkerNode,
 } from './act-runtime-types.js'
-import type { ModelSelection } from './prompt.js'
 
 function makeId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
 
-function normalizeActSessionMode(mode: ActSessionMode | null | undefined): ActSessionMode {
-    return mode === 'default' ? 'default' : 'all_nodes_thread'
-}
-
-function buildOrchestratorPrompt(
-    input: string,
-    routes: string[],
-    availableSessions: ThreadSessionHandleRecord[],
-): string {
-    const sessionCatalog = availableSessions.length > 0
-        ? [
-            '',
-            'Available reusable session handles for this thread:',
-            ...availableSessions.map((session) => (
-                `- handle=${session.handle}; node=${session.nodeId}; type=${session.nodeType}; turns=${session.turnCount}; lastUsedAt=${new Date(session.lastUsedAt).toISOString()}; summary=${session.summary || ''}`
-            )),
-            'If the next node should continue prior memory, respond with session.mode="reuse" and one of the handles for that node.',
-            'If the next node should start fresh, respond with session.mode="fresh".',
-        ].join('\n')
-        : '\nNo reusable session handles are currently available for the allowed routes. Use session.mode="fresh" if you include a session field.'
-
-    return [
-        input,
-        '',
-        'You are an orchestrator. Your role is to read the input above and decide which node should handle it next.',
-        'Choose the next route.',
-        `Allowed next values: ${[...routes, '$exit'].join(', ')}`,
-        sessionCatalog,
-        'Respond with JSON only in this exact shape:',
-        '{"next":"<nodeId|$exit>","input":"<string>","session":{"mode":"fresh"|"reuse","handle":"<handle when reusing>"}}',
-    ].join('\n')
-}
-
-function describeActRuntimeError(
-    error: unknown,
-    context?: { model?: ModelSelection | null },
-) {
+function describeActRuntimeError(error: unknown, performer?: RuntimePerformer | null) {
     if (error instanceof Error && error.message.trim()) {
         return error.message
     }
 
-    const normalized = normalizeOpencodeError(error, context?.model ? { model: context.model } : {})
+    const normalized = normalizeOpencodeError(
+        error,
+        performer?.model ? { model: performer.model } : {},
+    )
     return normalized.error || normalized.detail || 'OpenCode request failed.'
 }
 
@@ -96,22 +49,23 @@ function stageActFromRegistryAct(act: Act): { stageAct: StageActInput; performer
     const performerIdByUrn = new Map<string, string>()
     const performers: StagePerformerInput[] = []
 
-    for (const node of Object.values(act.nodes || {})) {
-        if ((node.type === 'worker' || node.type === 'orchestrator') && typeof node.performer === 'string') {
-            const performerUrn = node.performer.trim()
-            if (!performerIdByUrn.has(performerUrn)) {
-                const id = makeId('performer')
-                performerIdByUrn.set(performerUrn, id)
-                performers.push({
-                    id,
-                    name: performerUrn.split('/').pop() || 'Performer',
-                    meta: { derivedFrom: performerUrn },
-                    agentId: null,
-                    modelVariant: null,
-                    danceDeliveryMode: 'auto',
-                    planMode: false,
-                })
-            }
+    for (const [nodeId, node] of Object.entries(act.nodes || {})) {
+        if (node.type !== 'worker' || typeof node.performer !== 'string') {
+            throw new Error(`Unsupported act asset node '${nodeId}'. PRD-001 only supports worker nodes.`)
+        }
+        const performerUrn = node.performer.trim()
+        if (!performerIdByUrn.has(performerUrn)) {
+            const id = makeId('performer')
+            performerIdByUrn.set(performerUrn, id)
+            performers.push({
+                id,
+                name: performerUrn.split('/').pop() || 'Performer',
+                meta: { derivedFrom: performerUrn },
+                agentId: null,
+                modelVariant: null,
+                danceDeliveryMode: 'auto',
+                planMode: false,
+            })
         }
     }
 
@@ -119,48 +73,27 @@ function stageActFromRegistryAct(act: Act): { stageAct: StageActInput; performer
         id: makeId('act'),
         name: act.name,
         description: act.description,
-        sessionMode: 'all_nodes_thread',
         meta: act.type.startsWith('act/') ? { derivedFrom: act.type } : undefined,
         entryNodeId: act.entryNode,
         nodes: Object.entries(act.nodes || {}).map(([id, node]) => {
-            if (node.type === 'parallel') {
-                return {
-                    id,
-                    type: 'parallel',
-                    position: { x: 28, y: 56 },
-                    join: node.join || 'all',
-                } satisfies StageActParallelNode
-            }
-            if (node.type === 'orchestrator') {
-                return {
-                    id,
-                    type: 'orchestrator',
-                    performerId: performerIdByUrn.get(node.performer) || null,
-                    modelVariant: null,
-                    position: { x: 28, y: 56 },
-                    maxDelegations: node.maxDelegations,
-                    sessionPolicy: 'node',
-                    sessionLifetime: 'thread',
-                    sessionModeOverride: false,
-                } satisfies StageActOrchestratorNode
+            if (node.type !== 'worker') {
+                throw new Error(`Unsupported act asset node '${id}'. PRD-001 only supports worker nodes.`)
             }
             return {
                 id,
-                type: 'worker',
+                type: 'worker' as const,
                 performerId: performerIdByUrn.get(node.performer) || null,
                 modelVariant: null,
                 position: { x: 28, y: 56 },
-                sessionPolicy: 'fresh',
-                sessionLifetime: 'run',
-                sessionModeOverride: false,
-            } satisfies StageActWorkerNode
+            }
         }),
         edges: (act.edges || []).map((edge, index) => ({
             id: `edge-${index + 1}`,
             from: edge.from,
             to: edge.to,
-            ...(((edge as { role?: unknown }).role === 'branch') ? { role: 'branch' as const } : {}),
-            condition: edge.condition,
+            description: typeof (edge as any).description === 'string'
+                ? (edge as any).description
+                : '',
         })),
         maxIterations: act.maxIterations || 10,
     }
@@ -196,22 +129,6 @@ async function resolvePerformer(_cwd: string, input: StagePerformerInput): Promi
     }
 }
 
-function normalizeStageActInput(act: StageActInput): StageActInput {
-    return {
-        ...act,
-        sessionMode: normalizeActSessionMode(act.sessionMode),
-        nodes: act.nodes.map((node) => {
-            if (node.type === 'parallel') {
-                return node
-            }
-            return {
-                ...node,
-                sessionModeOverride: !!node.sessionModeOverride,
-            }
-        }),
-    }
-}
-
 async function resolveActRuntimeInput(input: RunActRuntimeInput): Promise<{
     act: StageActInput
     performers: RuntimePerformer[]
@@ -230,410 +147,59 @@ async function resolveActRuntimeInput(input: RunActRuntimeInput): Promise<{
         throw new Error('Either stageAct or actUrn is required.')
     }
 
+    const nonWorkerNode = stageAct.nodes.find((node) => node.type !== 'worker')
+    if (nonWorkerNode) {
+        throw new Error(`Unsupported stage act node '${nonWorkerNode.id}'. PRD-001 only supports worker nodes.`)
+    }
+
     const performers = await Promise.all(performerInputs.map((performer) => resolvePerformer(input.cwd, performer)))
-    return { act: normalizeStageActInput(stageAct), performers, drafts: input.drafts || {} }
+    return { act: stageAct, performers, drafts: input.drafts || {} }
 }
 
 function buildNodeLookup(act: StageActInput) {
     return new Map(act.nodes.map((node) => [node.id, node]))
 }
 
-function transitionAfterNode(
-    context: ActMachineContext,
-    nodeId: string,
-    outcome: 'success' | 'fail',
-    output: string,
-): StepResult {
-    const next = selectNextTarget(context.act, nodeId, outcome)
+function buildStepTitle(actName: string, node: StageActWorkerNode, performer: RuntimePerformer) {
+    return `${actName} · ${performer.name || node.id}`
+}
+
+function nextNodeIdFromEdges(act: StageActInput, nodeId: string) {
+    const [next] = getNextTargets(act, nodeId)
     if (!next || next === '$exit') {
-        return {
-            status: outcome === 'success' ? 'completed' : 'failed',
-            context: {
-                ...context,
-                currentNodeId: null,
-                pendingInput: output,
-                finalOutput: output,
-            },
-        }
+        return null
     }
-
-    return {
-        status: 'continue',
-        context: {
-            ...context,
-            currentNodeId: next,
-            pendingInput: output,
-        },
-    }
+    return next
 }
 
-async function runBranchMachine(
+async function runWorkerStep(
     context: ActMachineContext,
-    startNodeId: string,
-    input: string,
-): Promise<ActMachineOutput> {
-    const branchContext: ActMachineContext = {
-        ...cloneContext(context),
-        runId: `${context.runId}:${startNodeId}`,
-        actSessionId: null,
-        currentNodeId: startNodeId,
-        pendingInput: input,
-        iterations: 0,
-        history: [],
-        nodeOutputs: {},
-        sessionPool: new Map(),
-        pendingSessionDirective: null,
-    }
-
-    const result = await runActMachine(branchContext)
-    await cleanupSessionPool(context.cwd, result.context.sessionPool, result.context.threadSessionHandles)
-    return result
-}
-
-async function advanceRuntimeStep(context: ActMachineContext): Promise<StepResult> {
-    const nextContext = cloneContext(context)
-    if (isAbortRequested(nextContext.actSessionId)) {
-        return {
-            status: 'interrupted',
-            context: {
-                ...nextContext,
-                currentNodeId: null,
-                error: 'Act run interrupted.',
-            },
-        }
-    }
-    if (!nextContext.currentNodeId) {
-        return {
-            status: 'failed',
-            context: {
-                ...nextContext,
-                error: 'No current Act node selected.',
-            },
-        }
-    }
-
-    if (nextContext.iterations >= nextContext.maxIterations) {
-        return {
-            status: 'failed',
-            context: {
-                ...nextContext,
-                currentNodeId: null,
-                error: `Act exceeded maxIterations (${nextContext.maxIterations}).`,
-            },
-        }
-    }
-
-    const node = buildNodeLookup(nextContext.act).get(nextContext.currentNodeId)
-    if (!node) {
-        return {
-            status: 'failed',
-            context: {
-                ...nextContext,
-                currentNodeId: null,
-                error: `Act node not found: ${nextContext.currentNodeId}`,
-            },
-        }
-    }
-
-    nextContext.iterations += 1
-    nextContext.sharedState.currentNodeId = node.id
-    nextContext.sharedState.iterations = nextContext.iterations
+    node: StageActWorkerNode,
+    performer: RuntimePerformer,
+) {
     const timestamp = Date.now()
+    const invocation = await invokePerformer(
+        context,
+        node,
+        performer,
+        context.pendingInput,
+        buildStepTitle(context.act.name, node, performer),
+    )
+    const output = invocation.output
+    const keepAlive = await rememberThreadHandle(context, node, invocation.session, output)
+    await releaseEphemeralSession(context.cwd, invocation.session, keepAlive)
 
-    if (node.type === 'parallel') {
-        const branches = getParallelBranches(nextContext.act, node.id)
-        const branchRuns = await Promise.all(branches.map(async (branch) => {
-            try {
-                const result = await runBranchMachine(nextContext, branch, nextContext.pendingInput)
-                return { result }
-            } catch (error) {
-                return { error: describeActRuntimeError(error) }
-            }
-        }))
-
-        for (const branch of branchRuns) {
-            if (branch.result) {
-                nextContext.iterations += branch.result.context.iterations
-                nextContext.history.push(...branch.result.context.history)
-            }
-        }
-
-        const successful = branchRuns.filter((branch) => branch.result?.status === 'completed')
-        const failed = branchRuns.filter((branch) => branch.error || branch.result?.status === 'failed')
-        const success = node.join === 'any' ? successful.length > 0 : failed.length === 0
-        const output = success
-            ? (node.join === 'any'
-                ? successful[0]?.result?.context.finalOutput || ''
-                : successful.map((branch) => branch.result?.context.finalOutput || '').filter(Boolean).join('\n\n'))
-            : failed.map((branch) => branch.error || branch.result?.context.error || branch.result?.context.finalOutput || 'Parallel branch failed').join('\n\n')
-
-        nextContext.history.push({
-            nodeId: node.id,
-            nodeType: 'parallel',
-            action: success ? `parallel.completed:${node.join}` : `parallel.failed:${node.join}`,
-            timestamp,
-        })
-        nextContext.nodeOutputs[node.id] = output
-        nextContext.sharedState.nodeOutputs = nextContext.nodeOutputs
-        return transitionAfterNode(nextContext, node.id, success ? 'success' : 'fail', output)
-    }
-
-    const performer = node.performerId ? nextContext.performersById[node.performerId] : null
-    if (!performer) {
-        const message = `Act node '${node.id}' does not have a resolved performer.`
-        nextContext.history.push({
-            nodeId: node.id,
-            nodeType: node.type,
-            action: `${node.type}.failed: ${message}`,
-            timestamp,
-        })
-        return transitionAfterNode(nextContext, node.id, 'fail', message)
-    }
-
-    const pendingDirective = nextContext.pendingSessionDirective?.nodeId === node.id
-        ? nextContext.pendingSessionDirective
-        : null
-    nextContext.pendingSessionDirective = null
-
-    if (node.type === 'worker') {
-        try {
-            const invocation = await invokePerformer(
-                nextContext,
-                node,
-                performer,
-                nextContext.pendingInput,
-                `Worker: ${node.id}`,
-                pendingDirective,
-            )
-            const output = invocation.output
-            const keepAlive = await rememberThreadHandle(nextContext, node, invocation.session, output)
-            nextContext.history.push({ nodeId: node.id, nodeType: 'worker', action: 'worker.completed', timestamp })
-            nextContext.nodeOutputs[node.id] = output
-            nextContext.sharedState.nodeOutputs = nextContext.nodeOutputs
-            nextContext.sharedState.sessionHandles = listAvailableSessionHandles(nextContext, nextContext.act.nodes.map((item) => item.id))
-            await releaseEphemeralSession(nextContext.cwd, invocation.session, keepAlive)
-            return transitionAfterNode(nextContext, node.id, 'success', output)
-        } catch (error) {
-            if (isActRuntimeInterrupted(error)) {
-                return {
-                    status: 'interrupted',
-                    context: {
-                        ...nextContext,
-                        currentNodeId: null,
-                        error: 'Act run interrupted.',
-                    },
-                }
-            }
-            const message = describeActRuntimeError(error, { model: performer.model })
-            nextContext.history.push({ nodeId: node.id, nodeType: 'worker', action: `worker.failed: ${message}`, timestamp })
-            return transitionAfterNode(nextContext, node.id, 'fail', `Worker '${node.id}' failed: ${message}`)
-        }
-    }
-
-    // Enforce maxDelegations for orchestrator nodes
-    if (typeof node.maxDelegations === 'number' && node.maxDelegations > 0) {
-        const priorDelegations = nextContext.history.filter(
-            (entry) => entry.nodeId === node.id && entry.action.startsWith('orchestrator.routed:'),
-        ).length
-        if (priorDelegations >= node.maxDelegations) {
-            const message = `Orchestrator '${node.id}' exceeded maxDelegations (${node.maxDelegations}).`
-            nextContext.history.push({
-                nodeId: node.id,
-                nodeType: 'orchestrator',
-                action: `orchestrator.failed: ${message}`,
-                timestamp,
-            })
-            return transitionAfterNode(nextContext, node.id, 'fail', message)
-        }
-    }
-
-    const orchestratorRoutes = getOrchestratorRoutes(nextContext.act, node.id)
-
-    try {
-        const invocation = await invokePerformer(
-            nextContext,
-            node,
-            performer,
-            buildOrchestratorPrompt(
-                nextContext.pendingInput,
-                orchestratorRoutes,
-                listAvailableSessionHandles(nextContext, orchestratorRoutes),
-            ),
-            `Orchestrator: ${node.id}`,
-            pendingDirective,
-        )
-        const response = invocation.output
-        const decision = parseOrchestratorDecision(response, orchestratorRoutes)
-        if (decision.next !== '$exit' && decision.session?.mode === 'reuse') {
-            const handle = decision.session.handle?.trim()
-            if (!handle) {
-                throw new Error(`Orchestrator selected session reuse for '${decision.next}' without a handle.`)
-            }
-            const handleRecord = nextContext.threadSessionHandles.get(handle)
-            if (!handleRecord) {
-                throw new Error(`Orchestrator selected unavailable session handle '${handle}'.`)
-            }
-            if (handleRecord.nodeId !== decision.next) {
-                throw new Error(`Session handle '${handle}' belongs to '${handleRecord.nodeId}', not '${decision.next}'.`)
-            }
-        }
-        const keepAlive = await rememberThreadHandle(nextContext, node, invocation.session, response)
-        await releaseEphemeralSession(nextContext.cwd, invocation.session, keepAlive)
-        nextContext.history.push({
-            nodeId: node.id,
-            nodeType: 'orchestrator',
-            action: `orchestrator.routed:${decision.next}`,
-            timestamp,
-        })
-        nextContext.nodeOutputs[node.id] = decision.input || nextContext.pendingInput
-        nextContext.sharedState.nodeOutputs = nextContext.nodeOutputs
-        nextContext.sharedState.sessionHandles = listAvailableSessionHandles(nextContext, nextContext.act.nodes.map((item) => item.id))
-
-        if (decision.next === '$exit') {
-            return {
-                status: 'completed',
-                context: {
-                    ...nextContext,
-                    currentNodeId: null,
-                    pendingSessionDirective: null,
-                    pendingInput: decision.input || nextContext.pendingInput,
-                    finalOutput: decision.input || nextContext.pendingInput,
-                },
-            }
-        }
-
-        return {
-            status: 'continue',
-            context: {
-                ...nextContext,
-                currentNodeId: decision.next,
-                pendingInput: decision.input || nextContext.pendingInput,
-                pendingSessionDirective: decision.next === '$exit' || !decision.session
-                    ? null
-                    : {
-                        nodeId: decision.next,
-                        mode: decision.session.mode,
-                        ...(decision.session.handle ? { handle: decision.session.handle } : {}),
-                    },
-            },
-        }
-    } catch (error) {
-        if (isActRuntimeInterrupted(error)) {
-            return {
-                status: 'interrupted',
-                context: {
-                    ...nextContext,
-                    currentNodeId: null,
-                    error: 'Act run interrupted.',
-                },
-            }
-        }
-        const message = describeActRuntimeError(error, { model: performer.model })
-        nextContext.history.push({
-            nodeId: node.id,
-            nodeType: 'orchestrator',
-            action: `orchestrator.failed: ${message}`,
-            timestamp,
-        })
-        return transitionAfterNode(nextContext, node.id, 'fail', `Orchestrator '${node.id}' failed: ${message}`)
-    }
-}
-
-const actRuntimeMachine = setup({
-    types: {
-        context: {} as ActMachineContext,
-        input: {} as ActMachineContext,
-        output: {} as ActMachineOutput,
-    },
-    actors: {
-        advance: fromPromise(async ({ input }: { input: ActMachineContext }) => advanceRuntimeStep(input)),
-    },
-}).createMachine({
-    id: 'act-runtime',
-    initial: 'executing',
-    context: ({ input }) => input,
-    states: {
-        executing: {
-            invoke: {
-                src: 'advance',
-                input: ({ context }) => context,
-                onDone: [
-                    {
-                        guard: ({ event }) => event.output.status === 'continue',
-                        actions: assign(({ event }) => event.output.context),
-                        target: 'executing',
-                        reenter: true,
-                    },
-                    {
-                        guard: ({ event }) => event.output.status === 'completed',
-                        actions: assign(({ event }) => event.output.context),
-                        target: 'completed',
-                    },
-                    {
-                        guard: ({ event }) => event.output.status === 'interrupted',
-                        actions: assign(({ event }) => event.output.context),
-                        target: 'interrupted',
-                    },
-                    {
-                        actions: assign(({ event }) => event.output.context),
-                        target: 'failed',
-                    },
-                ],
-            },
-        },
-        completed: {
-            type: 'final',
-            output: ({ context }) => ({ status: 'completed', context }),
-        },
-        interrupted: {
-            type: 'final',
-            output: ({ context }) => ({ status: 'interrupted', context }),
-        },
-        failed: {
-            type: 'final',
-            output: ({ context }) => ({ status: 'failed', context }),
-        },
-    },
-})
-
-async function runActMachine(
-    input: ActMachineContext,
-    onProgress?: (context: ActMachineContext) => void,
-): Promise<ActMachineOutput> {
-    const actor = createActor(actRuntimeMachine, { input })
-    let previousSignature = ''
-
-    actor.subscribe((snapshot) => {
-        if (!onProgress) {
-            return
-        }
-        const context = snapshot.context
-        const signature = [
-            context.currentNodeId || '',
-            context.iterations,
-            context.history.length,
-            context.finalOutput || '',
-            context.error || '',
-        ].join('::')
-
-        if (signature === previousSignature) {
-            return
-        }
-        previousSignature = signature
-        onProgress(context)
+    context.history.push({
+        nodeId: node.id,
+        nodeType: 'worker',
+        action: 'worker.completed',
+        timestamp,
     })
-
-    actor.start()
-    await toPromise(actor)
-    const snapshot = actor.getSnapshot()
-    return {
-        status: snapshot.value === 'completed'
-            ? 'completed'
-            : snapshot.value === 'interrupted'
-                ? 'interrupted'
-                : 'failed',
-        context: snapshot.context,
-    }
+    context.nodeOutputs[node.id] = output
+    context.finalOutput = output
+    context.pendingInput = output
+    context.currentNodeId = nextNodeIdFromEdges(context.act, node.id)
+    context.iterations += 1
 }
 
 export async function runActRuntime(input: RunActRuntimeInput) {
@@ -661,29 +227,104 @@ export async function runActRuntime(input: RunActRuntimeInput) {
         resumeSummary: coldStartResumeSummary,
         sessionPool: new Map(),
         threadSessionHandles,
-        pendingSessionDirective: null,
     }
 
     emitActRuntimeProgress(initialContext, 'running')
     try {
-        const result = await runActMachine(initialContext, (context) => {
-            emitActRuntimeProgress(context, 'running')
-        })
-        persistThreadRuntimeHandles(input.actSessionId, resolved.act.id, result.context.threadSessionHandles)
-        emitActRuntimeProgress(result.context, result.status)
-        const response = {
-            status: result.status,
-            currentNodeId: result.context.currentNodeId,
-            runId: result.context.runId,
-            finalOutput: result.context.finalOutput,
-            error: result.context.error,
-            history: result.context.history,
-            sharedState: result.context.sharedState,
-            sessions: Array.from(result.context.sessionPool.values()).map((session) => serializeSessionRecord(session)),
-            sessionHandles: Array.from(result.context.threadSessionHandles.values()).map((session) => serializeThreadSessionHandle(session)),
-            iterations: result.context.iterations,
+        const nodeLookup = buildNodeLookup(initialContext.act)
+
+        while (initialContext.currentNodeId && initialContext.iterations < initialContext.maxIterations) {
+            if (isAbortRequested(initialContext.actSessionId)) {
+                initialContext.currentNodeId = null
+                initialContext.error = 'Act run interrupted.'
+                persistThreadRuntimeHandles(input.actSessionId, resolved.act.id, initialContext.threadSessionHandles)
+                emitActRuntimeProgress(initialContext, 'interrupted')
+                return {
+                    status: 'interrupted' as const,
+                    currentNodeId: null,
+                    runId: initialContext.runId,
+                    finalOutput: initialContext.finalOutput,
+                    error: initialContext.error,
+                    history: initialContext.history,
+                    sharedState: initialContext.sharedState,
+                    sessions: Array.from(initialContext.sessionPool.values()).map((session) => serializeSessionRecord(session)),
+                    sessionHandles: Array.from(initialContext.threadSessionHandles.values()).map((session) => serializeThreadSessionHandle(session)),
+                    iterations: initialContext.iterations,
+                }
+            }
+
+            const node = nodeLookup.get(initialContext.currentNodeId)
+            if (!node) {
+                throw new Error(`Act entry or relation target '${initialContext.currentNodeId}' does not exist.`)
+            }
+            const performer = node.performerId ? initialContext.performersById[node.performerId] || null : null
+            if (!performer) {
+                throw new Error(`Act node '${node.id}' is missing a performer binding.`)
+            }
+
+            try {
+                await runWorkerStep(initialContext, node, performer)
+                emitActRuntimeProgress(initialContext, initialContext.currentNodeId ? 'running' : 'completed')
+            } catch (error) {
+                const message = describeActRuntimeError(error, performer)
+                initialContext.history.push({
+                    nodeId: node.id,
+                    nodeType: 'worker',
+                    action: `worker.failed: ${message}`,
+                    timestamp: Date.now(),
+                })
+                initialContext.currentNodeId = null
+                initialContext.error = message
+                persistThreadRuntimeHandles(input.actSessionId, resolved.act.id, initialContext.threadSessionHandles)
+                emitActRuntimeProgress(initialContext, 'failed')
+                await cleanupSessionPool(initialContext.cwd, initialContext.sessionPool, initialContext.threadSessionHandles)
+                return {
+                    status: 'failed' as const,
+                    currentNodeId: null,
+                    runId: initialContext.runId,
+                    finalOutput: initialContext.finalOutput,
+                    error: message,
+                    history: initialContext.history,
+                    sharedState: initialContext.sharedState,
+                    sessions: Array.from(initialContext.sessionPool.values()).map((session) => serializeSessionRecord(session)),
+                    sessionHandles: Array.from(initialContext.threadSessionHandles.values()).map((session) => serializeThreadSessionHandle(session)),
+                    iterations: initialContext.iterations,
+                }
+            }
         }
-        await cleanupSessionPool(initialContext.cwd, result.context.sessionPool, result.context.threadSessionHandles)
+
+        if (initialContext.currentNodeId) {
+            initialContext.error = `Act exceeded max iterations (${initialContext.maxIterations}).`
+            emitActRuntimeProgress(initialContext, 'failed')
+            return {
+                status: 'failed' as const,
+                currentNodeId: initialContext.currentNodeId,
+                runId: initialContext.runId,
+                finalOutput: initialContext.finalOutput,
+                error: initialContext.error,
+                history: initialContext.history,
+                sharedState: initialContext.sharedState,
+                sessions: Array.from(initialContext.sessionPool.values()).map((session) => serializeSessionRecord(session)),
+                sessionHandles: Array.from(initialContext.threadSessionHandles.values()).map((session) => serializeThreadSessionHandle(session)),
+                iterations: initialContext.iterations,
+            }
+        }
+
+        persistThreadRuntimeHandles(input.actSessionId, resolved.act.id, initialContext.threadSessionHandles)
+        emitActRuntimeProgress(initialContext, 'completed')
+        const response = {
+            status: 'completed' as const,
+            currentNodeId: null,
+            runId: initialContext.runId,
+            finalOutput: initialContext.finalOutput,
+            error: initialContext.error,
+            history: initialContext.history,
+            sharedState: initialContext.sharedState,
+            sessions: Array.from(initialContext.sessionPool.values()).map((session) => serializeSessionRecord(session)),
+            sessionHandles: Array.from(initialContext.threadSessionHandles.values()).map((session) => serializeThreadSessionHandle(session)),
+            iterations: initialContext.iterations,
+        }
+        await cleanupSessionPool(initialContext.cwd, initialContext.sessionPool, initialContext.threadSessionHandles)
         return response
     } finally {
         clearActRuntimeAbortRequest(input.actSessionId)

@@ -275,7 +275,23 @@ export const createIntegrationSlice: StateCreator<
                 return '// Prompt preview unavailable.'
             }
             try {
+                const relatedPerformers = (get().edges || [])
+                    .filter((edge) => edge.from === performerId)
+                    .map((edge) => {
+                        const related = get().performers.find((item) => item.id === edge.to) || null
+                        if (!related) {
+                            return null
+                        }
+                        return {
+                            performerId: related.id,
+                            performerName: related.name,
+                            description: edge.description || '',
+                        }
+                    })
+                    .filter((value): value is NonNullable<typeof value> => value !== null)
                 const res = await api.compile(
+                    performer.id,
+                    performer.name,
                     runtimeConfig.talRef,
                     runtimeConfig.danceRefs,
                     runtimeConfig.model,
@@ -285,6 +301,7 @@ export const createIntegrationSlice: StateCreator<
                     get().drafts,
                     runtimeConfig.planMode,
                     runtimeConfig.danceDeliveryMode,
+                    relatedPerformers,
                 )
                 const lines = [
                     `// OpenCode Agent: ${res.agent}`,

@@ -13,13 +13,11 @@ import {
 } from '../lib/performers'
 import {
     collectActPerformerUrns,
-    coerceStageActNodeType,
     createActNodeBinding,
     createStageAct,
     createStageActEdge,
     createStageActNode,
     humanizeActNodeName,
-    normalizeActSessionMode,
     syncStageActStructure,
     stageActFromAsset,
 } from '../lib/acts'
@@ -62,40 +60,6 @@ function normalizeActNodePosition(
     }
 }
 
-function normalizeNodeSessionOverride(
-    act: { sessionMode?: 'default' | 'all_nodes_thread' },
-    node: any,
-    patch: Record<string, unknown>,
-) {
-    const nextNode = {
-        ...node,
-        ...patch,
-    }
-
-    if (node.type === 'parallel') {
-        return nextNode
-    }
-
-    if (typeof patch.sessionModeOverride === 'boolean') {
-        return {
-            ...nextNode,
-            sessionModeOverride: patch.sessionModeOverride,
-        }
-    }
-
-    if (!('sessionPolicy' in patch) && !('sessionLifetime' in patch)) {
-        return nextNode
-    }
-    const shouldInherit = normalizeActSessionMode(act.sessionMode) === 'all_nodes_thread'
-        && nextNode.sessionPolicy === 'node'
-        && nextNode.sessionLifetime === 'thread'
-
-    return {
-        ...nextNode,
-        sessionModeOverride: shouldInherit ? false : true,
-    }
-}
-
 function resolveRequestedNodeId(nodeId: string, patch: Record<string, unknown>) {
     return typeof patch.id === 'string' && patch.id.trim() ? patch.id.trim() : nodeId
 }
@@ -127,20 +91,9 @@ function applyPatchedActNode(
         })),
         nodes: act.nodes.map((node: any) => (
             node.id === nodeId
-                ? normalizeNodeSessionOverride(act, { ...node, id: renamedNodeId }, patch) as typeof node
+                ? { ...node, id: renamedNodeId, ...patch } as typeof node
                 : node
         )),
-    })
-}
-
-function applyActNodeType(
-    act: any,
-    nodeId: string,
-    type: any,
-) {
-    return syncStageActStructure({
-        ...act,
-        nodes: act.nodes.map((node: any) => node.id === nodeId ? coerceStageActNodeType(node, type) : node),
     })
 }
 
@@ -149,7 +102,7 @@ export function pruneActOwnedPerformers(performers: any[], acts: any[]) {
     const referencedPerformerIds = new Set<string>()
     for (const act of acts) {
         for (const node of act.nodes || []) {
-            if (node.type !== 'parallel' && node.performerId) {
+            if (node.performerId) {
                 referencedPerformerIds.add(node.performerId)
             }
         }
@@ -230,7 +183,7 @@ export function createActActions(
                 if (
                     !node
                     || typeof node !== 'object'
-                    || (node.type !== 'worker' && node.type !== 'orchestrator')
+                    || node.type !== 'worker'
                     || typeof node.performer !== 'string'
                     || !node.performer.trim()
                 ) {
@@ -388,12 +341,12 @@ export function createActActions(
             stageDirty: true,
         })),
 
-        addActNode: (actId: string, type: any) => set((s) => ({
+        addActNode: (actId: string) => set((s) => ({
             acts: s.acts.map((act) => {
                 if (act.id !== actId) {
                     return act
                 }
-                const nextNode = createStageActNode(type, act.nodes.length + 1)
+                const nextNode = createStageActNode(act.nodes.length + 1)
                 return syncStageActStructure({
                     ...act,
                     nodes: [...act.nodes, nextNode],
@@ -402,7 +355,7 @@ export function createActActions(
             }),
             inspectorFocus: (() => {
                 const act = s.acts.find((item) => item.id === actId)
-                const nextNode = act ? createStageActNode(type, act.nodes.length + 1) : null
+                const nextNode = act ? createStageActNode(act.nodes.length + 1) : null
                 return nextNode ? `act-node:${nextNode.id}` : s.inspectorFocus
             })(),
             stageDirty: true,
@@ -431,7 +384,6 @@ export function createActActions(
                         }
                         const nextNode = createActNodeBinding(
                             performerId,
-                            'worker',
                             item.nodes.length + 1,
                             position ? normalizeActNodePosition(item, position) : performerNodePositionWithinAct(performer, item),
                         )
@@ -459,7 +411,7 @@ export function createActActions(
             set((s) => {
                 const act = s.acts.find((item) => item.id === actId)
                 const node = act?.nodes.find((item: any) => item.id === nodeId)
-                if (!act || !node || node.type === 'parallel') {
+                if (!act || !node) {
                     return {}
                 }
 
@@ -484,7 +436,7 @@ export function createActActions(
                     })
                     : createPerformerNode({
                         id: performerId,
-                        name: asset?.name || `${act.name} Performer ${act.nodes.filter((item: any) => item.type !== 'parallel').length + 1}`,
+                        name: asset?.name || `${act.name} Performer ${act.nodes.length + 1}`,
                         x: act.bounds.x + node.position.x,
                         y: act.bounds.y + node.position.y,
                         scope: 'act-owned',
@@ -502,7 +454,7 @@ export function createActActions(
                         return syncStageActStructure({
                             ...item,
                             nodes: item.nodes.map((currentNode: any) => (
-                                currentNode.id === nodeId && currentNode.type !== 'parallel'
+                                currentNode.id === nodeId
                                     ? { ...currentNode, performerId }
                                     : currentNode
                             )),
@@ -600,25 +552,6 @@ export function createActActions(
             stageDirty: true,
         })),
 
-        setActNodeType: (actId: string, nodeId: string, type: any) => set((s) => ({
-            acts: s.acts.map((act) => {
-                if (act.id !== actId) {
-                    return act
-                }
-                return applyActNodeType(act, nodeId, type)
-            }),
-            performers: pruneActOwnedPerformers(
-                s.performers,
-                s.acts.map((act) => {
-                    if (act.id !== actId) {
-                        return act
-                    }
-                    return applyActNodeType(act, nodeId, type)
-                }),
-            ),
-            stageDirty: true,
-        })),
-
         removeActNode: (actId: string, nodeId: string) => set((s) => {
             const acts = s.acts.map((act) => {
                 if (act.id !== actId) {
@@ -649,7 +582,6 @@ export function createActActions(
                 }
                 const fallbackFrom = from || act.nodes[0]?.id || ''
                 const fallbackTo = to || act.nodes.find((node: any) => node.id !== fallbackFrom)?.id || '$exit'
-                const sourceNode = act.nodes.find((node: any) => node.id === fallbackFrom)
                 if (from && to) {
                     if (from === to || act.edges.some((edge: any) => edge.from === from && edge.to === to)) {
                         return act
@@ -663,7 +595,6 @@ export function createActActions(
                             ...createStageActEdge(),
                             from: fallbackFrom,
                             to: fallbackTo,
-                            ...(sourceNode?.type === 'parallel' ? { role: 'branch' as const, condition: undefined } : {}),
                         },
                     ],
                 })
@@ -676,26 +607,13 @@ export function createActActions(
                 if (act.id !== actId) {
                     return act
                 }
-                const currentEdge = act.edges.find((edge: any) => edge.id === edgeId)
-                const nextFrom = typeof patch.from === 'string' ? patch.from : currentEdge?.from
-                const sourceNode = act.nodes.find((node: any) => node.id === nextFrom)
                 return syncStageActStructure({
                     ...act,
                     edges: act.edges.map((edge: any) => {
                         if (edge.id !== edgeId) {
                             return edge
                         }
-                        const nextEdge = { ...edge, ...patch }
-                        if (sourceNode?.type === 'parallel' && nextEdge.role !== 'branch') {
-                            nextEdge.role = 'branch'
-                        }
-                        if (sourceNode?.type !== 'parallel' && nextEdge.role === 'branch') {
-                            delete nextEdge.role
-                        }
-                        if (nextEdge.role === 'branch') {
-                            delete nextEdge.condition
-                        }
-                        return nextEdge
+                        return { ...edge, ...patch }
                     }),
                 })
             }),

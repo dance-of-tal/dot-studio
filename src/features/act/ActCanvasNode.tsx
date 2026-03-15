@@ -1,9 +1,9 @@
 import { useDroppable } from '@dnd-kit/core'
-import { Bot, Flag, AlertTriangle, Split, X } from 'lucide-react'
+import { Bot, Flag, AlertTriangle, X } from 'lucide-react'
 
 type ActCanvasNodeView = {
     id: string
-    type: 'worker' | 'orchestrator' | 'parallel'
+    type: 'worker'
     label: string
     position: { x: number; y: number }
     entry: boolean
@@ -40,16 +40,11 @@ export default function ActCanvasNode({
     onToggleConnectFrom,
     onRemoveNode,
 }: ActCanvasNodeProps) {
-    const typeLabel =
-        node.type === 'orchestrator'
-            ? 'Orchestrator'
-            : node.type === 'parallel'
-                ? 'Parallel'
-                : 'Worker'
+    const typeLabel = 'Performer'
 
     const { isOver, setNodeRef } = useDroppable({
-        id: `act-node-semantic-${actId}-${node.id}`,
-        data: { type: 'act-node-semantic', actId, nodeId: node.id },
+        id: `act-node-performer-${actId}-${node.id}`,
+        data: { type: 'act-node-performer', actId, nodeId: node.id },
         disabled: !allowGraphEditing,
     })
 
@@ -146,7 +141,7 @@ export default function ActCanvasNode({
             ) : null}
 
             <span className="act-area-node__icon">
-                {node.type === 'parallel' ? <Split size={10} /> : <Bot size={10} />}
+                <Bot size={10} />
             </span>
             <span className="act-area-node__content">
                 <span className="act-area-node__label">{node.label}</span>

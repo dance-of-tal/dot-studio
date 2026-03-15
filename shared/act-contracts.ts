@@ -1,15 +1,8 @@
-// ── Shared Act Contracts ─────────────────────────────────────
-// Canonical type definitions shared between client (src/) and server (server/).
-// Both sides re-export from this file.
+// Canonical Act contracts shared by client and server.
+// PRD-001 keeps Act as a first-class entity, but its runtime model is
+// intentionally narrow: worker nodes connected by request edges.
 
-// ── Session Types ────────────────────────────────────────────
-
-export type ActSessionPolicy = 'fresh' | 'node' | 'performer' | 'act'
-export type ActSessionLifetime = 'run' | 'thread'
-export type ActSessionMode = 'default' | 'all_nodes_thread'
-export type ActNodeType = 'worker' | 'orchestrator' | 'parallel'
-
-// ── Node Types ───────────────────────────────────────────────
+export type ActNodeType = 'worker'
 
 export type StageActWorkerNode = {
     id: string
@@ -17,50 +10,21 @@ export type StageActWorkerNode = {
     performerId: string | null
     modelVariant?: string | null
     position: { x: number; y: number }
-    sessionPolicy: ActSessionPolicy
-    sessionLifetime: ActSessionLifetime
-    sessionModeOverride?: boolean
     label?: string
 }
 
-export type StageActOrchestratorNode = {
-    id: string
-    type: 'orchestrator'
-    performerId: string | null
-    modelVariant?: string | null
-    position: { x: number; y: number }
-    maxDelegations?: number
-    sessionPolicy: ActSessionPolicy
-    sessionLifetime: ActSessionLifetime
-    sessionModeOverride?: boolean
-    label?: string
-}
-
-export type StageActParallelNode = {
-    id: string
-    type: 'parallel'
-    position: { x: number; y: number }
-    join: 'all' | 'any'
-    label?: string
-}
-
-export type StageActNode = StageActWorkerNode | StageActOrchestratorNode | StageActParallelNode
-
-// ── Edge Types ───────────────────────────────────────────────
+export type StageActNode = StageActWorkerNode
 
 export type StageActEdge = {
     id?: string
     from: string
     to: string
-    role?: 'branch'
-    condition?: 'always' | 'on_success' | 'on_fail'
+    description?: string
 }
-
-// ── History / Resume ─────────────────────────────────────────
 
 export type ActHistoryEntry = {
     nodeId: string
-    nodeType: ActNodeType
+    nodeType: 'worker'
     action: string
     timestamp: number
 }
@@ -77,7 +41,7 @@ export type ActThreadResumeSummary = {
     sessionHandles?: Array<{
         handle: string
         nodeId: string
-        nodeType: 'worker' | 'orchestrator'
+        nodeType: 'worker'
         performerId?: string | null
         status: 'warm'
         turnCount: number
@@ -85,8 +49,6 @@ export type ActThreadResumeSummary = {
         summary?: string
     }>
 }
-
-// ── Request/Response ─────────────────────────────────────────
 
 export type RunActRequest = {
     actSessionId?: string

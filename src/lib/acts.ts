@@ -1,52 +1,13 @@
 import type {
-    ActSessionMode,
-    ActSessionPolicy,
-    ActSessionLifetime,
     StageAct,
     StageActEdge,
     StageActNode,
-    ActNodeType,
     PerformerNode,
 } from '../types'
 import { unresolvedDeclaredMcpServerNames } from './performers'
 
 export function makeId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-}
-
-function defaultSessionPolicy(type: Extract<ActNodeType, 'worker' | 'orchestrator'>): ActSessionPolicy {
-    return type === 'orchestrator' ? 'node' : 'fresh'
-}
-
-function defaultSessionLifetime(type: Extract<ActNodeType, 'worker' | 'orchestrator'>): ActSessionLifetime {
-    return type === 'orchestrator' ? 'thread' : 'run'
-}
-
-export function defaultActSessionMode(): ActSessionMode {
-    return 'all_nodes_thread'
-}
-
-export function normalizeActSessionMode(mode: ActSessionMode | null | undefined): ActSessionMode {
-    return mode === 'default' ? 'default' : defaultActSessionMode()
-}
-
-export function resolveEffectiveActNodeSession(
-    act: Pick<StageAct, 'sessionMode'>,
-    node: Extract<StageActNode, { type: 'worker' | 'orchestrator' }>,
-): { policy: ActSessionPolicy; lifetime: ActSessionLifetime; inheritedFromAct: boolean } {
-    if (node.sessionModeOverride || normalizeActSessionMode(act.sessionMode) === 'default') {
-        return {
-            policy: node.sessionPolicy,
-            lifetime: node.sessionLifetime,
-            inheritedFromAct: false,
-        }
-    }
-
-    return {
-        policy: 'node',
-        lifetime: 'thread',
-        inheritedFromAct: true,
-    }
 }
 
 function defaultBounds(index = 0) {
@@ -73,7 +34,7 @@ export function humanizeActNodeName(value: string) {
         .replace(/[_-]+/g, ' ')
         .replace(/\s+/g, ' ')
     if (!normalized) {
-        return 'Node'
+        return 'Performer'
     }
     return normalized
         .split(' ')
@@ -88,7 +49,6 @@ export function createStageAct(name = 'New Act', index = 0): StageAct {
         description: '',
         hidden: false,
         executionMode: 'direct',
-        sessionMode: defaultActSessionMode(),
         bounds: defaultBounds(index),
         entryNodeId: null,
         nodes: [],
@@ -97,90 +57,26 @@ export function createStageAct(name = 'New Act', index = 0): StageAct {
     }
 }
 
-export function createStageActNode(type: ActNodeType, index: number): StageActNode {
-    const id = `${type}-${index}`
-    if (type === 'worker') {
-        return {
-            id,
-            type,
-            performerId: null,
-            modelVariant: null,
-            position: defaultNodePosition(index - 1),
-            sessionPolicy: defaultSessionPolicy(type),
-            sessionLifetime: defaultSessionLifetime(type),
-            sessionModeOverride: false,
-        }
-    }
-    if (type === 'orchestrator') {
-        return {
-            id,
-            type,
-            performerId: null,
-            modelVariant: null,
-            position: defaultNodePosition(index - 1),
-            maxDelegations: 3,
-            sessionPolicy: defaultSessionPolicy(type),
-            sessionLifetime: defaultSessionLifetime(type),
-            sessionModeOverride: false,
-        }
-    }
+export function createStageActNode(index: number): StageActNode {
     return {
-        id,
-        type,
+        id: `worker-${index}`,
+        type: 'worker',
+        performerId: null,
+        modelVariant: null,
         position: defaultNodePosition(index - 1),
-        join: 'all',
     }
 }
 
 export function createActNodeBinding(
     performerId: string,
-    type: Extract<ActNodeType, 'worker' | 'orchestrator'>,
     index: number,
     position?: { x: number; y: number },
 ): StageActNode {
-    const node = createStageActNode(type, index)
-    if (node.type === 'parallel') {
-        return node
-    }
+    const node = createStageActNode(index)
     return {
         ...node,
         performerId,
-        modelVariant: null,
         position: position || node.position,
-    }
-}
-
-export function coerceStageActNodeType(node: StageActNode, type: ActNodeType): StageActNode {
-    if (type === 'worker') {
-        return {
-            id: node.id,
-            type,
-            performerId: 'performerId' in node ? node.performerId : null,
-            modelVariant: 'modelVariant' in node ? node.modelVariant || null : null,
-            position: 'position' in node ? node.position : defaultNodePosition(0),
-            sessionPolicy: 'sessionPolicy' in node ? node.sessionPolicy : defaultSessionPolicy(type),
-            sessionLifetime: 'sessionLifetime' in node ? node.sessionLifetime : defaultSessionLifetime(type),
-            sessionModeOverride: 'sessionModeOverride' in node ? !!node.sessionModeOverride : false,
-        }
-    }
-    if (type === 'orchestrator') {
-        return {
-            id: node.id,
-            type,
-            performerId: 'performerId' in node ? node.performerId : null,
-            modelVariant: 'modelVariant' in node ? node.modelVariant || null : null,
-            position: 'position' in node ? node.position : defaultNodePosition(0),
-            maxDelegations: 'maxDelegations' in node ? node.maxDelegations : 3,
-            sessionPolicy: 'sessionPolicy' in node ? node.sessionPolicy : defaultSessionPolicy(type),
-            sessionLifetime: 'sessionLifetime' in node ? node.sessionLifetime : defaultSessionLifetime(type),
-            sessionModeOverride: 'sessionModeOverride' in node ? !!node.sessionModeOverride : false,
-        }
-    }
-    return {
-        id: node.id,
-        type,
-        position: 'position' in node ? node.position : defaultNodePosition(0),
-        join: 'join' in node ? node.join : 'all',
     }
 }
 
@@ -189,24 +85,8 @@ export function createStageActEdge(): StageActEdge {
         id: makeId('edge'),
         from: '',
         to: '$exit',
-        condition: 'always',
+        description: '',
     }
-}
-
-export function getActOutgoingEdges(act: Pick<StageAct, 'edges'>, nodeId: string) {
-    return act.edges.filter((edge) => edge.from === nodeId)
-}
-
-export function getOrchestratorTargets(act: Pick<StageAct, 'edges'>, nodeId: string) {
-    return getActOutgoingEdges(act, nodeId)
-        .filter((edge) => edge.role !== 'branch')
-        .map((edge) => edge.to)
-}
-
-export function getParallelBranchTargets(act: Pick<StageAct, 'edges'>, nodeId: string) {
-    return getActOutgoingEdges(act, nodeId)
-        .filter((edge) => edge.role === 'branch' && edge.to !== '$exit')
-        .map((edge) => edge.to)
 }
 
 export function syncStageActStructure(act: StageAct): StageAct {
@@ -227,7 +107,7 @@ export function syncStageActStructure(act: StageAct): StageAct {
     const dedupedEdges: StageActEdge[] = []
     const seenKeys = new Set<string>()
     for (const edge of nextEdges) {
-        const key = `${edge.from}:${edge.to}:${edge.role || 'flow'}:${edge.condition || 'always'}`
+        const key = `${edge.from}:${edge.to}`
         if (seenKeys.has(key)) {
             continue
         }
@@ -241,7 +121,6 @@ export function syncStageActStructure(act: StageAct): StageAct {
 
     return {
         ...act,
-        sessionMode: normalizeActSessionMode(act.sessionMode),
         entryNodeId,
         nodes: act.nodes,
         edges: dedupedEdges,
@@ -256,7 +135,7 @@ export function collectActPerformerUrns(asset: {
         if (
             node
             && typeof node === 'object'
-            && (node.type === 'worker' || node.type === 'orchestrator')
+            && node.type === 'worker'
             && typeof node.performer === 'string'
             && node.performer.trim()
         ) {
@@ -278,31 +157,8 @@ function stageActNodeFromAsset(
     index: number,
     resolvePerformerId: (nodeId: string, performerUrn: string) => string | null,
 ): StageActNode {
-    const position = defaultNodePosition(index)
-
-    if (node.type === 'orchestrator') {
-        return {
-            id,
-            type: 'orchestrator',
-            performerId: typeof node.performer === 'string' ? resolvePerformerId(id, node.performer) : null,
-            modelVariant: null,
-            position,
-            maxDelegations: typeof node.maxDelegations === 'number' ? node.maxDelegations : 3,
-            sessionPolicy: defaultSessionPolicy('orchestrator'),
-            sessionLifetime: defaultSessionLifetime('orchestrator'),
-            sessionModeOverride: false,
-            label: assetNodeLabel(id, node.label),
-        }
-    }
-
-    if (node.type === 'parallel') {
-        return {
-            id,
-            type: 'parallel',
-            position,
-            join: node.join === 'any' ? 'any' : 'all',
-            label: assetNodeLabel(id, node.label),
-        }
+    if (node.type !== 'worker') {
+        throw new Error(`Unsupported act node type '${String(node.type)}'. PRD-001 only supports worker nodes.`)
     }
 
     return {
@@ -310,10 +166,7 @@ function stageActNodeFromAsset(
         type: 'worker',
         performerId: typeof node.performer === 'string' ? resolvePerformerId(id, node.performer) : null,
         modelVariant: null,
-        position,
-        sessionPolicy: defaultSessionPolicy('worker'),
-        sessionLifetime: defaultSessionLifetime('worker'),
-        sessionModeOverride: false,
+        position: defaultNodePosition(index),
         label: assetNodeLabel(id, node.label),
     }
 }
@@ -324,13 +177,6 @@ function serializeActNodeForAsset(
     author: string | null,
     options?: { savedPerformerUrns?: Iterable<string> },
 ) {
-    if (node.type === 'parallel') {
-        return {
-            type: 'parallel' as const,
-            join: node.join,
-        }
-    }
-
     if (!node.performerId) {
         throw new Error(`Act node '${node.id}' is missing a performer binding.`)
     }
@@ -341,14 +187,6 @@ function serializeActNodeForAsset(
     })
     if (!performerUrn) {
         throw new Error(`Act node '${node.id}' does not have a publishable performer reference.`)
-    }
-
-    if (node.type === 'orchestrator') {
-        return {
-            type: 'orchestrator' as const,
-            performer: performerUrn,
-            ...(typeof node.maxDelegations === 'number' ? { maxDelegations: node.maxDelegations } : {}),
-        }
     }
 
     return {
@@ -364,7 +202,7 @@ export function stageActFromAsset(
         urn?: string
         entryNode?: string | null
         nodes?: Record<string, any>
-        edges?: Array<{ from: string; to: string; role?: 'branch'; condition?: 'always' | 'on_success' | 'on_fail' }>
+        edges?: Array<{ from: string; to: string; description?: string }>
         maxIterations?: number
     },
     resolvePerformerId: (nodeId: string, performerUrn: string) => string | null,
@@ -382,7 +220,6 @@ export function stageActFromAsset(
         name: asset.name,
         description: asset.description || '',
         hidden: false,
-        sessionMode: defaultActSessionMode(),
         bounds: defaultBounds(options?.index || 0),
         entryNodeId: asset.entryNode || nodes[0]?.id || null,
         nodes,
@@ -390,8 +227,7 @@ export function stageActFromAsset(
             id: makeId('edge'),
             from: edge.from,
             to: edge.to,
-            ...(edge.role ? { role: edge.role } : {}),
-            condition: edge.condition,
+            description: typeof edge.description === 'string' ? edge.description : '',
         })),
         maxIterations: asset.maxIterations || 10,
         ...(asset.urn ? { meta: { derivedFrom: asset.urn } } : {}),
@@ -399,10 +235,6 @@ export function stageActFromAsset(
 }
 
 export function resolveActNodeLabel(node: StageActNode, performers: PerformerNode[]): string {
-    if (node.type === 'parallel') {
-        return `${node.id} (parallel)`
-    }
-
     const performer = node.performerId
         ? performers.find((item) => item.id === node.performerId)
         : null
@@ -482,8 +314,7 @@ export function buildActAssetPayload(
         edges: act.edges.map((edge) => ({
             from: edge.from,
             to: edge.to,
-            ...(edge.role ? { role: edge.role } : {}),
-            ...(edge.condition ? { condition: edge.condition } : {}),
+            ...(edge.description ? { description: edge.description } : {}),
         })),
         maxIterations: act.maxIterations,
     }

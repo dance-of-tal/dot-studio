@@ -466,7 +466,7 @@ export default function ActThreadPanel({
                         <strong>No messages yet.</strong>
                         <span>
                             {entryNodeId
-                                ? 'Send a prompt to run this act. Performer outputs will appear here in real time.'
+                                ? 'Send a prompt to run this act. Act-owned performer copies can request one another through their configured relations.'
                                 : 'Open Edit and set an entry node before sending prompts.'}
                         </span>
                     </div>
@@ -514,7 +514,7 @@ export default function ActThreadPanel({
                                         submitThread()
                                     }
                                 }}
-                                placeholder={entryNodeId ? 'Start the prompt with the init node.' : 'Set an entry node in Edit mode to run this act.'}
+                                placeholder={entryNodeId ? 'Start the act with the entry performer.' : 'Set an entry node in Edit mode to run this act.'}
                                 disabled={!entryNodeId || loading}
                                 rows={1}
                             />

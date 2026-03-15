@@ -6,13 +6,10 @@ import { makeId } from '../../lib/acts'
 
 export type ActAreaNodeView = {
     id: string
-    type: 'worker' | 'orchestrator' | 'parallel'
+    type: 'worker'
     label: string
     position: { x: number; y: number }
     entry: boolean
-    sessionPolicy?: 'fresh' | 'node' | 'performer' | 'act' | null
-    sessionLifetime?: 'run' | 'thread' | null
-    sessionModeOverride?: boolean | null
     modelVariant?: string | null
     performerId?: string | null
     performerName?: string | null
@@ -23,8 +20,7 @@ export type ActAreaEdgeView = {
     id: string
     from: string
     to: string
-    role?: 'branch'
-    condition?: 'always' | 'on_success' | 'on_fail'
+    description?: string
 }
 
 export type ActAreaPerformerDetail = {
@@ -50,7 +46,7 @@ export type ActAreaMessage = {
 
 export type ActRuntimeHistoryEntry = {
     nodeId: string
-    nodeType: 'worker' | 'orchestrator' | 'parallel'
+    nodeType: 'worker'
     action: string
     timestamp: number
 }
@@ -197,15 +193,10 @@ export function buildFocusedNodeSemantics(focusedNode: ActAreaNodeView | null) {
     if (!focusedNode) {
         return null
     }
-    if (focusedNode.type === 'parallel') {
-        return `${focusedNode.type} structure node`
-    }
     return [
-        focusedNode.type,
-        focusedNode.sessionPolicy || 'fresh',
-        focusedNode.sessionLifetime || 'run',
-        focusedNode.sessionModeOverride ? 'node override' : 'act default',
+        'Act-owned performer copy',
         focusedNode.modelVariant ? `variant:${focusedNode.modelVariant}` : null,
+        focusedNode.performerName ? `performer:${focusedNode.performerName}` : null,
     ].filter(Boolean).join(' · ')
 }
 

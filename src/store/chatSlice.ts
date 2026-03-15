@@ -27,6 +27,29 @@ export const createChatSlice: StateCreator<
         get().performers.find((item: any) => item.id === performerId) as any
     )
 
+    const buildPerformerSessionHash = (performerId: string) => {
+        const performer = getPerformerById(performerId)
+        if (!performer) {
+            return ''
+        }
+        const base = buildPerformerConfigHash(performer)
+        const relationSignature = JSON.stringify(
+            (get().edges || [])
+                .filter((edge) => edge.from === performerId)
+                .map((edge) => ({
+                    to: edge.to,
+                    interaction: edge.interaction || 'request',
+                    description: edge.description || '',
+                }))
+                .sort((left, right) => (
+                    left.to.localeCompare(right.to)
+                    || left.interaction.localeCompare(right.interaction)
+                    || left.description.localeCompare(right.description)
+                ))
+        )
+        return `${base}::rel:${relationSignature}`
+    }
+
     const getPerformerSessionId = (performerId: string) => get().sessionMap[performerId]
 
     const syncPerformerMessages = async (performerId: string, sessionId: string) => {
@@ -55,7 +78,7 @@ export const createChatSlice: StateCreator<
     ) => {
         const performer = getPerformerById(performerId)
         const name = performer?.name || 'Untitled Performer'
-        const configHash = performer ? buildPerformerConfigHash(performer) : ''
+        const configHash = buildPerformerSessionHash(performerId)
         const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
             talRef: null,
             danceRefs: [],
@@ -271,11 +294,11 @@ export const createChatSlice: StateCreator<
             }
         })),
 
-        sendMessage: async (performerId, text, attachments, extraDanceRefs = []) => {
+        sendMessage: async (performerId, text, attachments, extraDanceRefs = [], mentionedPerformers = []) => {
             const { sessionMap, sessionConfigMap, addChatMessage } = get()
             let sessionId: string | undefined = sessionMap[performerId]
             const performer = getPerformerById(performerId)
-            const currentConfigHash = performer ? buildPerformerConfigHash(performer) : ''
+            const currentConfigHash = buildPerformerSessionHash(performerId)
             const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
                 talRef: null,
                 danceRefs: [],
@@ -353,9 +376,20 @@ export const createChatSlice: StateCreator<
                 get().initRealtimeEvents()
 
                 // Pass the prompt over proxy
+                const relationTargetIds = new Set(
+                    get().edges
+                        .filter((edge) => edge.from === performerId)
+                        .map((edge) => edge.to)
+                )
+                for (const mention of mentionedPerformers) {
+                    relationTargetIds.add(mention.performerId)
+                }
+
                 await api.chat.send(sessionId, {
                     message: text,
                     performer: {
+                        performerId,
+                        performerName: performer?.name || 'Untitled Performer',
                         talRef: runtimeConfig.talRef,
                         danceRefs: runtimeConfig.danceRefs,
                         extraDanceRefs,
@@ -369,6 +403,27 @@ export const createChatSlice: StateCreator<
                         configHash: currentConfigHash,
                     },
                     attachments,
+                    mentions: mentionedPerformers.map((mention) => ({ performerId: mention.performerId })),
+                    relatedPerformers: [...relationTargetIds]
+                        .map((targetPerformerId) => {
+                            const related = getPerformerById(targetPerformerId)
+                            if (!related || !hasModelConfig(related.model)) {
+                                return null
+                            }
+                            const relatedConfig = resolvePerformerRuntimeConfig(related)
+                            return {
+                                performerId: related.id,
+                                performerName: related.name,
+                                description: get().edges.find((edge) => edge.from === performerId && edge.to === related.id)?.description || '',
+                                talRef: relatedConfig.talRef,
+                                danceRefs: relatedConfig.danceRefs,
+                                drafts: get().drafts,
+                                model: relatedConfig.model,
+                                modelVariant: relatedConfig.modelVariant,
+                                mcpServerNames: relatedConfig.mcpServerNames,
+                            }
+                        })
+                        .filter((value): value is NonNullable<typeof value> => value !== null),
                 })
                 scheduleSessionFallbackSync(performerId, sessionId, Date.now())
             } catch (err: any) {
@@ -561,7 +616,7 @@ export const createChatSlice: StateCreator<
                         newMap[performerId] = newSessionId
                         const newConfigMap = { ...state.sessionConfigMap }
                         const performer = getPerformerById(performerId)
-                        newConfigMap[performerId] = performer ? buildPerformerConfigHash(performer) : ''
+                        newConfigMap[performerId] = performer ? buildPerformerSessionHash(performerId) : ''
                         return { sessionMap: newMap, sessionConfigMap: newConfigMap }
                     })
                     // Re-sync messages for the new branch

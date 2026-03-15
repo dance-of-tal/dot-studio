@@ -1,0 +1,44 @@
+.performer-relation-edge__path {
+    stroke: var(--text-muted);
+    stroke-width: 2;
+    stroke-dasharray: 6 4;
+}
+
+.performer-relation-edge__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: 999px;
+    padding: 2px 6px;
+    box-shadow: var(--shadow-window);
+}
+
+.performer-relation-edge__text {
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--font-xs);
+    cursor: pointer;
+    padding: 0;
+}
+
+.performer-relation-edge__input {
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--font-xs);
+    min-width: 110px;
+    outline: none;
+}
+
+.performer-relation-edge__delete {
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+}

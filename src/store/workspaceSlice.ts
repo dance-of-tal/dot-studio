@@ -43,7 +43,6 @@ export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
 export const canvasTerminalIdCounter = { value: 0 }
 const TRACKING_WINDOW_ID = 'stage-tracking-window'
-const genEdgeId = () => makeId('edge')
 
 export const createWorkspaceSlice: StateCreator<
     StudioState,
@@ -53,7 +52,6 @@ export const createWorkspaceSlice: StateCreator<
 > = (set, get) => ({
     stageId: null,
     performers: [],
-    edges: [],
     acts: [],
     drafts: {},
     markdownEditors: [],
@@ -165,7 +163,7 @@ export const createWorkspaceSlice: StateCreator<
         const acts = s.acts.map((act) => ({
             ...act,
             nodes: act.nodes.map((node) => (
-                node.type !== 'parallel' && node.performerId === id
+                node.performerId === id
                     ? { ...node, performerId: null }
                     : node
             )),
@@ -379,16 +377,6 @@ export const createWorkspaceSlice: StateCreator<
         get().listStages()
     },
 
-    addEdge: (from, to) => set((s) => ({
-        edges: [...s.edges, { id: genEdgeId(), from, to }],
-        stageDirty: true,
-    })),
-
-    removeEdge: (id) => set((s) => ({
-        edges: s.edges.filter(e => e.id !== id),
-        stageDirty: true,
-    })),
-
     setPerformerTal: (performerId, tal) => setPerformerTalImpl(set, performerId, tal),
 
     setPerformerTalRef: (performerId, talRef) => setPerformerTalRefImpl(set, performerId, talRef),
@@ -560,10 +548,10 @@ export const createWorkspaceSlice: StateCreator<
         }
         const attachPerformerId = options?.attachTarget?.performerId || null
         const attachedAct = attachPerformerId
-            ? get().acts.find((act) => act.nodes.some((node) => node.type !== 'parallel' && node.performerId === attachPerformerId)) || null
+            ? get().acts.find((act) => act.nodes.some((node) => node.performerId === attachPerformerId)) || null
             : null
         const attachedNodeId = attachPerformerId && attachedAct
-            ? attachedAct.nodes.find((node) => node.type !== 'parallel' && node.performerId === attachPerformerId)?.id || null
+            ? attachedAct.nodes.find((node) => node.performerId === attachPerformerId)?.id || null
             : null
 
         set((s) => ({

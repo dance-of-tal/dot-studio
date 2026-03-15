@@ -1,6 +1,5 @@
 import { getOpencode } from './opencode.js'
-import { buildPromptEnvelope } from './prompt.js'
-import { buildEnabledToolMap, describeUnavailableRuntimeTools, resolveRuntimeTools } from './runtime-tools.js'
+import { describeUnavailableRuntimeTools } from './runtime-tools.js'
 import { unwrapOpencodeResult, unwrapPromptResult } from './opencode-errors.js'
 import {
     ActRuntimeInterruptedError,
@@ -11,24 +10,18 @@ import {
 } from './act-runtime-events.js'
 import {
     buildActRuntimeSystem,
-    buildOrchestratorFormat,
     buildPersistentHandle,
     extractTextFromResponse,
-    getOrchestratorRoutes,
     summarizeText,
 } from './act-runtime-routing.js'
 import { registerSessionExecutionContext } from './session-execution.js'
+import { ensureActPerformerProjection } from '../services/opencode-projection/act-compiler.js'
 import type {
     ActMachineContext,
-    ActSessionLifetime,
-    ActSessionPolicy,
-    PendingSessionDirective,
     ResolvedSession,
     RuntimeAssetRef,
     RuntimePerformer,
     SessionRecord,
-    StageActInput,
-    StageActOrchestratorNode,
     StageActWorkerNode,
     ThreadSessionHandleRecord,
 } from './act-runtime-types.js'
@@ -40,39 +33,15 @@ export function runtimeAssetRefKey(ref: RuntimeAssetRef | null | undefined) {
     return ref.kind === 'registry' ? `registry:${ref.urn}` : `draft:${ref.draftId}`
 }
 
-export function resolveNodeSessionSettings(
-    act: Pick<StageActInput, 'sessionMode'>,
-    node: StageActWorkerNode | StageActOrchestratorNode,
-) {
-    if (node.sessionModeOverride || normalizeActSessionMode(act.sessionMode) === 'default') {
-        return {
-            policy: node.sessionPolicy,
-            lifetime: node.sessionLifetime,
-            inheritedFromAct: false,
-        }
-    }
-
-    return {
-        policy: 'node' as const,
-        lifetime: 'thread' as const,
-        inheritedFromAct: true,
-    }
-}
-
-function normalizeActSessionMode(mode: string | null | undefined): string {
-    return mode === 'default' ? 'default' : 'all_nodes_thread'
-}
-
 export function buildNodeRuntimeConfigKey(
-    act: StageActInput,
-    node: StageActWorkerNode | StageActOrchestratorNode,
+    context: ActMachineContext,
+    node: StageActWorkerNode,
     performer: RuntimePerformer,
     modelVariant: string | null,
 ) {
     const agentId = performer.agentId || (performer.planMode ? 'plan' : 'build')
-    const session = resolveNodeSessionSettings(act, node)
     return JSON.stringify({
-        nodeType: node.type,
+        nodeId: node.id,
         performerId: node.performerId || null,
         talRef: runtimeAssetRefKey(performer.talRef),
         danceRefs: performer.danceRefs.map((ref) => runtimeAssetRefKey(ref)).filter(Boolean).sort(),
@@ -83,45 +52,17 @@ export function buildNodeRuntimeConfigKey(
         modelVariant: modelVariant || null,
         mcpServerNames: [...performer.mcpServerNames].sort(),
         danceDeliveryMode: performer.danceDeliveryMode,
-        actSessionMode: normalizeActSessionMode(act.sessionMode),
-        sessionPolicy: session.policy,
-        sessionLifetime: session.lifetime,
-        sessionModeOverride: !!node.sessionModeOverride,
+        relationSignature: context.act.edges
+            .filter((edge) => edge.from === node.id)
+            .map((edge) => ({
+                to: edge.to,
+                description: edge.description || '',
+            }))
+            .sort((left, right) => (
+                left.to.localeCompare(right.to)
+                || left.description.localeCompare(right.description)
+            )),
     })
-}
-
-export function buildSessionScopeKey(
-    context: ActMachineContext,
-    policy: ActSessionPolicy,
-    lifetime: ActSessionLifetime,
-    nodeId: string,
-    performerId: string | null,
-) {
-    if (policy === 'fresh') {
-        return null
-    }
-    if (lifetime === 'thread') {
-        return buildPersistentHandle(context.act, lifetime, policy, nodeId, performerId)
-    }
-    if (policy === 'node') {
-        return `${context.runId}:node:${nodeId}`
-    }
-    if (policy === 'performer') {
-        return `${context.runId}:performer:${performerId || 'unassigned'}`
-    }
-    return `${context.runId}:act`
-}
-
-export async function createSession(cwd: string, title: string) {
-    const oc = await getOpencode()
-    const session = unwrapOpencodeResult<{ id: string }>(await oc.session.create({
-        directory: cwd,
-        title,
-    }))
-    return {
-        oc,
-        sessionId: session.id,
-    }
 }
 
 async function registerActSessionContext(
@@ -136,6 +77,18 @@ async function registerActSessionContext(
         workingDir: context.baseWorkingDir || context.cwd,
         executionDir: context.cwd,
     })
+}
+
+export async function createSession(cwd: string, title: string) {
+    const oc = await getOpencode()
+    const session = unwrapOpencodeResult<{ id: string }>(await oc.session.create({
+        directory: cwd,
+        title,
+    }))
+    return {
+        oc,
+        sessionId: session.id,
+    }
 }
 
 export async function deleteSession(cwd: string, sessionId: string) {
@@ -155,74 +108,22 @@ export async function deleteSession(cwd: string, sessionId: string) {
 
 export async function resolveSession(
     context: ActMachineContext,
-    policy: ActSessionPolicy,
-    lifetime: ActSessionLifetime,
-    nodeId: string,
-    performerId: string | null,
+    node: StageActWorkerNode,
+    performer: RuntimePerformer,
     configKey: string,
     title: string,
-    directive?: PendingSessionDirective | null,
 ): Promise<ResolvedSession> {
-    if (directive?.mode === 'reuse') {
-        const handle = directive.handle?.trim()
-        if (!handle) {
-            throw new Error(`Node '${nodeId}' requested session reuse without a handle.`)
-        }
-        const existingThreadHandle = context.threadSessionHandles.get(handle)
-        if (!existingThreadHandle) {
-            throw new Error(`Session handle '${handle}' is not available for this act thread.`)
-        }
-        if (existingThreadHandle.configKey && existingThreadHandle.configKey !== configKey) {
-            throw new Error(`Session handle '${handle}' no longer matches the current node runtime configuration.`)
-        }
+    const scopeKey = buildPersistentHandle(node.id)
+    const existingThreadHandle = context.threadSessionHandles.get(scopeKey)
+    if (existingThreadHandle && (!existingThreadHandle.configKey || existingThreadHandle.configKey === configKey)) {
         const oc = await getOpencode()
         return {
             oc,
             sessionId: existingThreadHandle.sessionId,
             configKey,
+            scopeKey,
             ephemeral: false,
             source: 'thread',
-            scopeKey: handle,
-        }
-    }
-
-    if (directive?.mode === 'fresh') {
-        const fresh = await createSession(context.cwd, title)
-        await registerActSessionContext(context, fresh.sessionId)
-        const persistentHandle = buildPersistentHandle(context.act, lifetime, policy, nodeId, performerId)
-        return {
-            ...fresh,
-            configKey,
-            ephemeral: !persistentHandle,
-            source: persistentHandle ? 'thread' : 'fresh',
-            ...(persistentHandle ? { scopeKey: persistentHandle } : {}),
-        }
-    }
-
-    const scopeKey = buildSessionScopeKey(context, policy, lifetime, nodeId, performerId)
-    if (!scopeKey) {
-        const fresh = await createSession(context.cwd, title)
-        await registerActSessionContext(context, fresh.sessionId)
-        return {
-            ...fresh,
-            configKey,
-            ephemeral: true,
-            source: 'fresh',
-        }
-    }
-
-    if (lifetime === 'thread') {
-        const existingThreadHandle = context.threadSessionHandles.get(scopeKey)
-        if (existingThreadHandle && (!existingThreadHandle.configKey || existingThreadHandle.configKey === configKey)) {
-            const oc = await getOpencode()
-            return {
-                oc,
-                sessionId: existingThreadHandle.sessionId,
-                configKey,
-                scopeKey,
-                ephemeral: false,
-                source: 'thread',
-            }
         }
     }
 
@@ -235,7 +136,7 @@ export async function resolveSession(
             configKey,
             scopeKey,
             ephemeral: false,
-            source: 'run',
+            source: 'thread',
         }
     }
 
@@ -245,27 +146,24 @@ export async function resolveSession(
         scopeKey,
         sessionId: created.sessionId,
         configKey,
-        policy,
-        lifetime,
-        nodeId,
-        performerId,
+        nodeId: node.id,
+        performerId: performer.id,
     })
     return {
         ...created,
         configKey,
         scopeKey,
         ephemeral: false,
-        source: 'run',
+        source: 'fresh',
     }
 }
 
 export async function invokePerformer(
     context: ActMachineContext,
-    node: StageActWorkerNode | StageActOrchestratorNode,
+    node: StageActWorkerNode,
     performer: RuntimePerformer,
     input: string,
     title: string,
-    directive?: PendingSessionDirective | null,
 ) {
     assertActNotAborted(context)
     if (!performer.model) {
@@ -273,46 +171,47 @@ export async function invokePerformer(
     }
 
     const selectedModelVariant = node.modelVariant || performer.modelVariant || null
-    const sessionSettings = resolveNodeSessionSettings(context.act, node)
-    const configKey = buildNodeRuntimeConfigKey(context.act, node, performer, selectedModelVariant)
+    const configKey = buildNodeRuntimeConfigKey(context, node, performer, selectedModelVariant)
+    const requestTargets = context.act.edges
+        .filter((edge) => edge.from === node.id && edge.to !== '$exit')
+        .map((edge) => ({
+            edge,
+            targetNode: context.act.nodes.find((candidate) => candidate.id === edge.to),
+        }))
+        .filter((item): item is { edge: typeof item.edge; targetNode: StageActWorkerNode } => !!item.targetNode)
+        .map(({ edge, targetNode }) => {
+            const targetPerformer = targetNode.performerId ? context.performersById[targetNode.performerId] || null : null
+            if (!targetNode.performerId || !targetPerformer) {
+                return null
+            }
+            return {
+                performerId: targetNode.performerId,
+                performerName: targetPerformer.name,
+                description: edge.description || '',
+            }
+        })
+        .filter((value): value is NonNullable<typeof value> => value !== null)
 
-    const envelope = await buildPromptEnvelope({
-        cwd: context.cwd,
+    const ensured = await ensureActPerformerProjection({
+        actId: context.act.id,
+        performerId: performer.id,
+        performerName: performer.name,
         talRef: performer.talRef,
         danceRefs: performer.danceRefs,
         drafts: context.drafts,
         model: performer.model,
         modelVariant: selectedModelVariant,
-        danceDeliveryMode: performer.danceDeliveryMode,
+        mcpServerNames: performer.mcpServerNames,
+        executionDir: context.cwd,
+        workingDir: context.baseWorkingDir || context.cwd,
+        requestTargets,
     })
-    const toolResolution = await resolveRuntimeTools(
-        context.cwd,
-        performer.model,
-        performer.mcpServerNames,
-    )
-    const unavailableSummary = describeUnavailableRuntimeTools(toolResolution)
-    if (toolResolution.selectedMcpServers.length > 0 && toolResolution.resolvedTools.length === 0 && unavailableSummary) {
+    const unavailableSummary = describeUnavailableRuntimeTools(ensured.toolResolution)
+    if (ensured.toolResolution.selectedMcpServers.length > 0 && ensured.toolResolution.resolvedTools.length === 0 && unavailableSummary) {
         throw new Error(`Selected MCP servers are unavailable: ${unavailableSummary}.`)
     }
-    const tools = buildEnabledToolMap([
-        ...toolResolution.resolvedTools,
-        ...(envelope.toolName ? [envelope.toolName] : []),
-    ])
-    const runtimeSystem = buildActRuntimeSystem(context, node)
-    const orchestratorRoutes = node.type === 'orchestrator'
-        ? getOrchestratorRoutes(context.act, node.id)
-        : []
 
-    const session = await resolveSession(
-        context,
-        sessionSettings.policy,
-        sessionSettings.lifetime,
-        node.id,
-        node.performerId,
-        configKey,
-        title,
-        directive,
-    )
+    const session = await resolveSession(context, node, performer, configKey, title)
     emitActPerformerBinding(context, session.sessionId, node, performer)
 
     try {
@@ -320,12 +219,8 @@ export async function invokePerformer(
         const result = unwrapPromptResult<{ info: unknown; parts: unknown[] }>(await session.oc.session.prompt({
             sessionID: session.sessionId,
             directory: context.cwd,
-            model: { providerID: performer.model.provider, modelID: performer.model.modelId },
-            agent: performer.agentId || (performer.planMode ? 'plan' : 'build'),
-            system: runtimeSystem ? `${envelope.system}\n\n${runtimeSystem}` : envelope.system,
-            ...(selectedModelVariant ? { variant: selectedModelVariant } : {}),
-            ...(tools ? { tools } : {}),
-            ...(node.type === 'orchestrator' ? { format: buildOrchestratorFormat(orchestratorRoutes) } : {}),
+            agent: ensured.compiled.agentNames[performer.planMode ? 'plan' : 'build'],
+            system: buildActRuntimeSystem(context, node),
             parts: [{ type: 'text', text: input }],
         }))
 
@@ -335,70 +230,39 @@ export async function invokePerformer(
         }
     } catch (error) {
         if (isAbortRequested(context.actSessionId)) {
-            await releaseEphemeralSession(context.cwd, session, false)
             throw new ActRuntimeInterruptedError()
         }
-        await releaseEphemeralSession(context.cwd, session, false)
         throw error
     }
 }
 
 export async function rememberThreadHandle(
     context: ActMachineContext,
-    node: StageActWorkerNode | StageActOrchestratorNode,
+    node: StageActWorkerNode,
     session: ResolvedSession,
     output: string,
 ) {
-    if (!context.actSessionId) {
+    if (!context.actSessionId || !session.scopeKey) {
         return false
     }
 
-    const sessionSettings = resolveNodeSessionSettings(context.act, node)
-    const handle = session.scopeKey || buildPersistentHandle(
-        context.act,
-        sessionSettings.lifetime,
-        sessionSettings.policy,
-        node.id,
-        node.performerId,
-    )
-    if (!handle) {
-        return false
-    }
-    const existing = context.threadSessionHandles.get(handle)
-    if (existing && existing.sessionId !== session.sessionId && session.source !== 'thread') {
-        return false
-    }
-    if (existing && existing.sessionId !== session.sessionId && session.source === 'thread') {
-        await deleteSession(context.cwd, existing.sessionId)
-    }
-
-    context.threadSessionHandles.set(handle, {
-        handle,
+    context.threadSessionHandles.set(session.scopeKey, {
+        handle: session.scopeKey,
         sessionId: session.sessionId,
         configKey: session.configKey,
         nodeId: node.id,
-        nodeType: node.type,
+        nodeType: 'worker',
         performerId: node.performerId,
         status: 'warm',
-        turnCount: (existing?.turnCount || 0) + 1,
+        turnCount: (context.threadSessionHandles.get(session.scopeKey)?.turnCount || 0) + 1,
         lastUsedAt: Date.now(),
         summary: summarizeText(output),
     })
-
-    if (session.scopeKey) {
-        const pooled = context.sessionPool.get(session.scopeKey)
-        if (pooled) {
-            pooled.persistentHandle = handle
-        }
-    }
-
     return true
 }
 
-export async function releaseEphemeralSession(cwd: string, session: ResolvedSession, keepAlive: boolean) {
-    if (session.ephemeral && !keepAlive) {
-        await deleteSession(cwd, session.sessionId)
-    }
+export async function releaseEphemeralSession(_cwd: string, _session: ResolvedSession, _keepAlive: boolean) {
+    return
 }
 
 export async function cleanupSessionPool(

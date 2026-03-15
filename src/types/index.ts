@@ -8,13 +8,8 @@ import type {
     SafeOwnerSummary,
 } from '../../shared/safe-mode'
 import type {
-    ActSessionPolicy,
-    ActSessionLifetime,
-    ActSessionMode,
     ActNodeType,
     StageActWorkerNode,
-    StageActOrchestratorNode,
-    StageActParallelNode,
     StageActNode,
     StageActEdge,
     ActHistoryEntry,
@@ -22,13 +17,8 @@ import type {
 } from '../../shared/act-contracts'
 
 export type {
-    ActSessionPolicy,
-    ActSessionLifetime,
-    ActSessionMode,
     ActNodeType,
     StageActWorkerNode,
-    StageActOrchestratorNode,
-    StageActParallelNode,
     StageActNode,
     StageActEdge,
     ActHistoryEntry,
@@ -186,7 +176,6 @@ export interface PerformerNode {
     activeSessionId?: string
     danceDeliveryMode: DanceDeliveryMode
     executionMode?: ExecutionMode
-    // Legacy fallback for older saved stages. Runtime code should prefer agentId.
     planMode?: boolean
     hidden?: boolean
     autoCompact?: boolean
@@ -205,7 +194,8 @@ export interface PerformerLink {
     id: string
     from: string
     to: string        // node ID or '$exit'
-    condition?: string
+    interaction: 'request'
+    description: string
 }
 
 
@@ -216,7 +206,6 @@ export interface StageAct {
     description: string
     hidden?: boolean
     executionMode?: ExecutionMode
-    sessionMode?: ActSessionMode
     bounds: {
         x: number
         y: number
@@ -371,15 +360,13 @@ export interface ActRunState {
     sessions: Array<{
         scopeKey: string;
         sessionId: string;
-        policy: ActSessionPolicy;
-        lifetime?: ActSessionLifetime;
         nodeId?: string | null;
         performerId?: string | null;
     }>;
     sessionHandles?: Array<{
         handle: string;
         nodeId: string;
-        nodeType: 'worker' | 'orchestrator';
+        nodeType: 'worker';
         performerId?: string | null;
         status: 'warm';
         turnCount: number;

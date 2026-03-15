@@ -16,7 +16,7 @@ import ModelVariantSelect from '../performer/ModelVariantSelect'
 import AgentSelect from '../performer/AgentSelect'
 import SafeReviewModal from '../../components/modals/SafeReviewModal'
 
-import type { ActPerformerSessionBinding, ActSessionMode, ChatMessage } from '../../types'
+import type { ActPerformerSessionBinding, ChatMessage } from '../../types'
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
 import {
     edgePath,
@@ -72,8 +72,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     const onUpdateName = data.onUpdateName as ((value: string) => void) | undefined
     const onUpdateDescription = data.onUpdateDescription as ((value: string) => void) | undefined
     const onUpdateMaxIterations = data.onUpdateMaxIterations as ((value: number) => void) | undefined
-    const onUpdateSessionMode = data.onUpdateSessionMode as ((value: ActSessionMode) => void) | undefined
-    const onAddNode = data.onAddNode as ((type: 'worker' | 'orchestrator' | 'parallel') => void) | undefined
+    const onAddNode = data.onAddNode as (() => void) | undefined
     const onAutoArrange = data.onAutoArrange as (() => Promise<void> | void) | undefined
     const onUpdateEdge = data.onUpdateEdge as ((edgeId: string, patch: Record<string, unknown>) => void) | undefined
     const performerDetailsById = (data.performerDetailsById || {}) as Record<string, ActAreaPerformerDetail>
@@ -91,7 +90,6 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     const sessionStatus = (data.sessionStatus || null) as 'idle' | 'running' | 'completed' | 'failed' | 'interrupted' | null
     const loading = !!data.loading
     const entryLabel = (data.entryLabel || null) as string | null
-    const sessionMode = ((data.sessionMode || 'all_nodes_thread') as ActSessionMode)
     const runtimeSummary = (data.runtimeSummary || null) as ActRuntimeSummary | null
     const onSend = data.onSend as ((message: string) => Promise<void> | void) | undefined
     const onNewSession = data.onNewSession as (() => void) | undefined
@@ -228,7 +226,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
     }, [runtimeNodesKey, runtimeEdgesKey, frameWidth])
     const focusedNode = focusedNodeId ? nodes.find((node) => node.id === focusedNodeId) || null : null
     const selectedEdge = selectedEdgeId ? edges.find((edge) => edge.id === selectedEdgeId) || null : null
-    const focusedPerformerId = focusedNode && focusedNode.type !== 'parallel' ? focusedNode.performerId || null : null
+    const focusedPerformerId = focusedNode ? focusedNode.performerId || null : null
     const focusedPerformer = focusedPerformerId ? performerDetailsById[focusedPerformerId] || null : null
     const focusedPerformerNode = focusedPerformerId ? performersById[focusedPerformerId] || null : null
     const openInlineDraftEditor = (
@@ -517,17 +515,6 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                 onChange={(event) => onUpdateMaxIterations?.(Math.max(1, Number(event.target.value) || 1))}
                             />
                         </label>
-                        <label className="act-area-frame__iterations">
-                            <span>Session mode</span>
-                            <select
-                                className="select nodrag nowheel"
-                                value={sessionMode}
-                                onChange={(event) => onUpdateSessionMode?.(event.target.value as ActSessionMode)}
-                            >
-                                <option value="all_nodes_thread">Keep all node sessions</option>
-                                <option value="default">Use node defaults</option>
-                            </select>
-                        </label>
                     </div>
                 ) : data.description ? (
                     <div className="act-area-frame__description">{data.description}</div>
@@ -536,7 +523,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                     <div className="act-area-frame__hint">
                         {connectFromId
                             ? `Choose a target node to connect from ${nodeMap[connectFromId]?.label || connectFromId}.`
-                            : 'Add nodes, drag from a node border to connect edges, and edit one selected node or edge at a time.'}
+                            : 'Add act-owned performers, drag from a node border to create request relations, and edit one selected node or edge at a time.'}
                     </div>
                 ) : null}
                 <div className={`act-area-frame__body nodrag nowheel ${threadMode ? 'act-area-frame__body--thread' : ''}`}>
@@ -617,34 +604,17 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                         </select>
                                                     </label>
                                                 </div>
-                                                <div className="act-area-frame__edge-row">
-                                                    <label className="act-area-frame__node-control">
-                                                        <span>Role</span>
-                                                        <select
-                                                            className="select nodrag nowheel"
-                                                            value={selectedEdge.role || 'flow'}
-                                                            onChange={(event) => onUpdateEdge?.(selectedEdge.id, {
-                                                                role: event.target.value === 'branch' ? 'branch' : undefined,
-                                                                ...(event.target.value === 'branch' ? { condition: undefined } : {}),
-                                                            })}
-                                                        >
-                                                            <option value="flow">Flow</option>
-                                                            <option value="branch" disabled={nodeMap[selectedEdge.from]?.type !== 'parallel'}>Branch</option>
-                                                        </select>
-                                                    </label>
-                                                    <label className="act-area-frame__node-control" title="When this edge activates after the source node completes">
-                                                        <span>Condition</span>
-                                                        <select
-                                                            className="select nodrag nowheel"
-                                                            value={selectedEdge.condition || 'always'}
-                                                            disabled={selectedEdge.role === 'branch'}
-                                                            onChange={(event) => onUpdateEdge?.(selectedEdge.id, { condition: event.target.value })}
-                                                        >
-                                                            <option value="always">Always</option>
-                                                            <option value="on_success">On Success</option>
-                                                            <option value="on_fail">On Failure</option>
-                                                        </select>
-                                                    </label>
+                                                <label className="act-area-frame__node-control">
+                                                    <span>Request</span>
+                                                    <input
+                                                        className="text-input nodrag nowheel"
+                                                        value={selectedEdge.description || ''}
+                                                        placeholder="Describe what this performer can request..."
+                                                        onChange={(event) => onUpdateEdge?.(selectedEdge.id, { description: event.target.value })}
+                                                    />
+                                                </label>
+                                                <div className="act-area-frame__rail-empty">
+                                                    This edge represents a request relation between two act-owned performers.
                                                 </div>
                                                 <div className="act-area-frame__focus-editor-actions">
                                                     <button
@@ -667,7 +637,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                         <div className="act-area-frame__focus-editor-head">
                                             <div>
                                                 <strong>{focusedNode.label}</strong>
-                                                <span>{focusedNode.type === 'parallel' ? 'Forks input through branch edges and joins results' : focusedNode.type === 'orchestrator' ? 'Uses LLM to choose one outgoing flow edge' : 'Executes a single LLM call and follows edges'}</span>
+                                                <span>Executes an act-owned performer copy and can request other performers through outgoing edges.</span>
                                             </div>
                                             <div className="act-area-frame__focus-editor-tabs">
                                                 <button
@@ -697,26 +667,7 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                 <span className="act-area-frame__pill">{focusedNodeSemantics || 'Node semantics'}</span>
                                                 {focusedNode.entry ? <span className="act-area-frame__pill">Entry</span> : null}
                                             </div>
-                                            {focusedNode.type === 'parallel' ? (
-                                                <div className="act-area-frame__focus-editor-advanced">
-                                                    <div className="act-area-frame__rail-empty">
-                                                        Parallel nodes do not bind a performer. Configure branch and flow edges directly on the canvas, then use the toolbar below to remove the node if needed.
-                                                    </div>
-                                                    <div className="act-area-frame__focus-editor-actions">
-                                                        <button
-                                                            type="button"
-                                                            className="act-area-frame__toolbar-btn act-area-frame__toolbar-btn--danger"
-                                                            onClick={(event) => {
-                                                                event.stopPropagation()
-                                                                onRemoveNode?.(focusedNode.id)
-                                                            }}
-                                                        >
-                                                            <Trash2 size={10} />
-                                                            <span>Remove node</span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : focusedEditorTab === 'basic' ? (
+                                            {focusedEditorTab === 'basic' ? (
                                                 <>
                                                     {focusedPerformerId && focusedPerformerNode ? (
                                                         <div className="act-area-frame__identity-row">
@@ -947,6 +898,11 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                                     {focusedRuntimeTools.unavailableDetails.length > 0 ? ` Unavailable: ${focusedRuntimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.` : ''}
                                                                 </div>
                                                             ) : null}
+                                                            executionModeSummary={(
+                                                                <div className="adv-section__summary">
+                                                                    Act-owned performer copy. Standalone performer changes do not affect this act.
+                                                                </div>
+                                                            )}
                                                             onRemoveMcp={(serverName) => {
                                                                 data.onRemovePerformerMcp?.(focusedPerformerId, serverName)
                                                             }}
@@ -981,11 +937,11 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                 ) : (
                                     <div style={{ padding: '20px 16px', color: 'var(--text-tertiary)', fontSize: '12px', lineHeight: '1.6' }}>
                                         <strong style={{ color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Inspector</strong>
-                                        Select a node to wire its performer, Tal, Dances, and session behavior.
+                                        Select a performer node to edit its copied Tal, Dances, Model, and runtime behavior.
                                         <br />
-                                        Select an edge to mark it as a normal flow or a parallel branch.
+                                        Select an edge to review or remove a request relation.
                                         <br />
-                                        Use the chips on the canvas nodes to set entry and connect the graph.
+                                        Use node handles to connect performers and define who can request work from whom.
                                     </div>
                                 )}
                             </div>
@@ -1004,48 +960,22 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                     <button
                                         type="button"
                                         className="act-area-frame__add-button"
-                                        title="Runs a single LLM call and follows edges"
+                                        title="Add an act-owned performer copy"
                                         onClick={(event) => {
                                             event.stopPropagation()
-                                            onAddNode?.('worker')
+                                            onAddNode?.()
                                         }}
                                     >
                                         <Plus size={12} />
-                                        <strong>Worker</strong>
-                                        <span className="act-area-frame__add-hint">Single LLM call</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="act-area-frame__add-button"
-                                        title="Uses LLM to pick one outgoing flow edge"
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            onAddNode?.('orchestrator')
-                                        }}
-                                    >
-                                        <Plus size={12} />
-                                        <strong>Orchestrator</strong>
-                                        <span className="act-area-frame__add-hint">Chooses a flow edge</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="act-area-frame__add-button"
-                                        title="Forks input through branch edges and joins their results"
-                                        onClick={(event) => {
-                                            event.stopPropagation()
-                                            onAddNode?.('parallel')
-                                        }}
-                                    >
-                                        <Plus size={12} />
-                                        <strong>Parallel</strong>
-                                        <span className="act-area-frame__add-hint">Branch edge fan-out</span>
+                                        <strong>Performer</strong>
+                                        <span className="act-area-frame__add-hint">Act-owned copy</span>
                                     </button>
                                 </div>
                                 {nodes.length === 0 ? (
                                     <div className="act-area-frame__empty">
-                                        <strong>Build your act graph</strong>
-                                        <span>Add nodes using the toolbar above, then drag between dots to connect them with edges.</span>
-                                        <span style={{ marginTop: 4, opacity: 0.7 }}>Worker — single LLM call &bull; Orchestrator — chooses a flow edge &bull; Parallel — fans out through branch edges</span>
+                                        <strong>Build your act</strong>
+                                        <span>Add act-owned performers using the toolbar above, then drag between dots to create request relations.</span>
+                                        <span style={{ marginTop: 4, opacity: 0.7 }}>Each act performer is a copied performer config with its own act-scoped session.</span>
                                     </div>
                                 ) : (
                                     <>
@@ -1063,25 +993,39 @@ export default function ActAreaFrame({ data, id, selected }: any) {
                                                 </marker>
                                             </defs>
                                             {edges.map((edge) => {
-                                                const path = edgePath(nodeMap[edge.from], nodeMap[edge.to])
-                                                if (!path) {
+                                                const fromNode = nodeMap[edge.from]
+                                                const toNode = nodeMap[edge.to]
+                                                const path = edgePath(fromNode, toNode)
+                                                if (!path || !fromNode || !toNode) {
                                                     return null
                                                 }
-                                                return (
-                                                    <path
-                                                        key={edge.id}
-                                                        d={path}
-                                                        className={`act-area-edge ${edge.role === 'branch' ? 'act-area-edge--branch' : ''} ${selectedEdgeId === edge.id ? 'is-selected' : ''}`}
-                                                        markerEnd={`url(#act-arrow-${id})`}
-                                                        onClick={(event) => {
-                                                            if (!allowGraphEditing) {
-                                                                return
-                                                            }
-                                                            event.stopPropagation()
-                                                            setSelectedEdgeId(edge.id)
-                                                            onFocusNode?.(null)
-                                                        }}
-                                                    />
+                                                const midX = ((fromNode.position.x + 180) + toNode.position.x) / 2
+                                                const midY = ((fromNode.position.y + 24) + (toNode.position.y + 24)) / 2
+                                                        return (
+                                                            <g key={edge.id}>
+                                                                <path
+                                                                    d={path}
+                                                                    className={`act-area-edge ${selectedEdgeId === edge.id ? 'is-selected' : ''}`}
+                                                                    markerEnd={`url(#act-arrow-${id})`}
+                                                                    onClick={(event) => {
+                                                                        if (!allowGraphEditing) {
+                                                                    return
+                                                                }
+                                                                event.stopPropagation()
+                                                                setSelectedEdgeId(edge.id)
+                                                                onFocusNode?.(null)
+                                                            }}
+                                                        />
+                                                        <text
+                                                            x={midX}
+                                                            y={midY}
+                                                            className={`act-area-edge__label ${selectedEdgeId === edge.id ? 'is-selected' : ''}`}
+                                                            textAnchor="middle"
+                                                            dominantBaseline="middle"
+                                                        >
+                                                            {edge.description || 'request'}
+                                                        </text>
+                                                    </g>
                                                 )
                                             })}
                                             {connectFromId ? (
