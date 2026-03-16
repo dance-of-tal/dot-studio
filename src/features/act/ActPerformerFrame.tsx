@@ -229,6 +229,7 @@ export default function ActPerformerFrame({ id, data: _data }: any) {
                         mcp: { isOver: mcpDrop.isOver, setNodeRef: mcpDrop.setNodeRef },
                     }}
                     onClose={() => selectActPerformer(null)}
+                    hideBackButton
                     onNameChange={handleNameChange}
                     onTalRefChange={handleTalRefChange}
                     onDanceDeliveryModeChange={handleDanceDeliveryModeChange}
