@@ -11,8 +11,6 @@ import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
 import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
 import ActFrame from '../../features/act/ActFrame';
 import ActPerformerFrame from '../../features/act/ActPerformerFrame';
-import ActPerformerInspector from '../../features/act/ActPerformerInspector';
-import ActInlineEditor from '../../features/act/ActInlineEditor';
 // PerformerRelationEdge removed — edges now live inside Act edit mode only
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
@@ -615,7 +613,25 @@ export default function CanvasArea() {
                                 className="act-edit-toolbar__btn"
                                 onClick={() => {
                                     const name = `Performer ${performerCount + 1}`;
-                                    useStudioStore.getState().addNewPerformerInAct(editingActId, name);
+                                    const store = useStudioStore.getState();
+                                    store.addNewPerformerInAct(editingActId, name);
+                                    // Re-position to viewport center
+                                    if (reactFlowInstance && canvasAreaRef.current) {
+                                        const rect = canvasAreaRef.current.getBoundingClientRect();
+                                        const center = reactFlowInstance.screenToFlowPosition({
+                                            x: rect.left + rect.width / 2,
+                                            y: rect.top + rect.height / 2,
+                                        });
+                                        // Find the newly added performer key
+                                        const updatedAct = useStudioStore.getState().acts.find(a => a.id === editingActId);
+                                        if (updatedAct) {
+                                            const keys = Object.keys(updatedAct.performers);
+                                            const newKey = keys[keys.length - 1];
+                                            if (newKey) {
+                                                store.updateActPerformerPosition(editingActId, newKey, Math.round(center.x - 170), Math.round(center.y - 240));
+                                            }
+                                        }
+                                    }
                                 }}
                             >
                                 + Add Performer
@@ -630,12 +646,6 @@ export default function CanvasArea() {
                     </div>
                 );
             })()}
-            {isActEditFocus && selectedActPerformerKey && (
-                <ActPerformerInspector />
-            )}
-            {isActEditFocus && selectedActPerformerKey && (
-                <ActInlineEditor />
-            )}
             {canvasDropLabel && (
                 <div className={`canvas-drop-overlay ${isCanvasDropOver ? 'is-active' : ''}`}>
                     <div className="canvas-drop-overlay__card">
