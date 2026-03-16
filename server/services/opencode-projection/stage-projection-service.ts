@@ -12,7 +12,7 @@ import {
 } from './projection-manifest.js'
 import { compileDance, type CompiledSkill } from './dance-compiler.js'
 import { compilePerformer, type CompiledPerformer, type PerformerCompileInput, type Posture } from './performer-compiler.js'
-import { compileRequestRelations, type RequestRelationTarget } from './relation-compiler.js'
+import { compileMentionRelations, type RequestRelationTarget } from './relation-compiler.js'
 import type { ModelSelection } from '../../../shared/model-types.js'
 
 type AssetRef =
@@ -158,7 +158,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         agentName: getProjectedAgentName(input.workingDir, target.performerId, 'build', input.scope, input.actId),
         description: target.description || '',
     }))
-    const requestProjection = compileRequestRelations(requestTargets)
+    const requestProjection = compileMentionRelations(requestTargets)
 
     const compiled = await compilePerformer(
         input.executionDir,

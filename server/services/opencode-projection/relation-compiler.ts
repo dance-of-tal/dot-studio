@@ -193,7 +193,7 @@ export interface CompiledRequestRelations {
     promptSection: string | null
 }
 
-export function compileRequestRelations(targets: RequestRelationTarget[]): CompiledRequestRelations {
+export function compileMentionRelations(targets: RequestRelationTarget[]): CompiledRequestRelations {
     if (targets.length === 0) {
         return { taskAllowlist: [], promptSection: null }
     }

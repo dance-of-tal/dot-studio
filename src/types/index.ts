@@ -171,15 +171,6 @@ export interface PerformerNode {
     }
 }
 
-/** @deprecated kept for schema migration only */
-export interface PerformerLink {
-    id: string
-    from: string
-    to: string
-    interaction: 'request'
-    description: string
-}
-
 /** Act-internal relation between two Act performers (Edge Attribute Model) */
 export interface ActRelation {
     id: string

@@ -134,51 +134,19 @@ export async function saveStage(get: GetFn, set: SetFn) {
 }
 
 /**
- * Migrate acts from schema v4 → v5.
- * v4 acts have edgeIds referencing global performerLinks.
- * v5 acts store relations inline + have position/size.
+ * Parse acts from loaded stage data.
+ * Ensures each act has required position/size fields.
  */
-function migrateActs(data: any): any[] {
+function parseActs(data: any): any[] {
     if (!Array.isArray(data.acts)) return []
-    const performerLinks: any[] = Array.isArray(data.performerLinks) ? data.performerLinks : []
 
-    return data.acts.map((act: any, index: number) => {
-        // Already migrated (has relations)
-        if (Array.isArray(act.relations)) {
-            return {
-                ...act,
-                position: act.position || { x: 200, y: 200 + index * 120 },
-                width: act.width || 340,
-                height: act.height || 80,
-            }
-        }
-
-        // Migrate edgeIds → relations
-        const edgeIds: string[] = Array.isArray(act.edgeIds) ? act.edgeIds : []
-        const relations = performerLinks
-            .filter((e: any) => edgeIds.includes(e.id))
-            .map((e: any) => ({
-                id: e.id,
-                from: e.from,
-                to: e.to,
-                name: e.name || `rel_${e.id}`,
-                description: typeof e.description === 'string' ? e.description : '',
-                invocation: 'optional' as const,
-                await: true,
-                sessionPolicy: 'fresh' as const,
-                maxCalls: 10,
-                timeout: 300,
-            }))
-
-        const { edgeIds: _removed, ...rest } = act
-        return {
-            ...rest,
-            relations,
-            position: act.position || { x: 200, y: 200 + index * 120 },
-            width: act.width || 340,
-            height: act.height || 80,
-        }
-    })
+    return data.acts.map((act: any, index: number) => ({
+        ...act,
+        relations: Array.isArray(act.relations) ? act.relations : [],
+        position: act.position || { x: 200, y: 200 + index * 120 },
+        width: act.width || 340,
+        height: act.height || 80,
+    }))
 }
 
 // ────────────────────────────────────────
@@ -245,7 +213,7 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             stageId,
             performers: loadedPerformers,
             drafts: data.drafts || {},
-            acts: migrateActs(data),
+            acts: parseActs(data),
             selectedActId: null,
             editingActId: null,
             markdownEditors: loadedMarkdownEditors,
