@@ -113,6 +113,14 @@ function normalizePerformerPayload(author: string, slug: string, payload: Record
         throw new Error("Performer assets require at least one Tal or Dance reference.")
     }
 
+    // Accept model as string ("provider/modelId") or object ({provider, modelId})
+    let modelValue: unknown = undefined
+    if (typeof payload.model === 'string' && payload.model.trim()) {
+        modelValue = payload.model.trim()
+    } else if (isRecord(payload.model) && typeof (payload.model as any).provider === 'string') {
+        modelValue = payload.model
+    }
+
     return {
         type: `performer/@${author}/${slug}`,
         slug,
@@ -124,23 +132,23 @@ function normalizePerformerPayload(author: string, slug: string, payload: Record
             ? { dance: Array.isArray(dance) && dance.length === 1 ? dance[0] : dance }
             : {}),
         ...(act ? { act } : {}),
-        ...(typeof payload.model === 'string' && payload.model.trim() ? { model: payload.model.trim() } : {}),
+        ...(modelValue !== undefined ? { model: modelValue } : {}),
         ...(isRecord(payload.mcp_config) ? { mcp_config: payload.mcp_config } : {}),
     }
 }
 
 function normalizeActPayload(author: string, slug: string, payload: Record<string, unknown>) {
     const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : slug
+
     return {
         type: `act/@${author}/${slug}`,
+        schema: 'studio-v1' as const,
         slug,
         name,
         description: normalizeDescription(name, payload.description),
         tags: sanitizeTags(payload.tags),
-        entryNode: typeof payload.entryNode === 'string' ? payload.entryNode : '',
-        nodes: isRecord(payload.nodes) ? payload.nodes : {},
-        edges: Array.isArray(payload.edges) ? payload.edges : [],
-        ...(typeof payload.maxIterations === 'number' ? { maxIterations: payload.maxIterations } : {}),
+        performers: Array.isArray(payload.performers) ? payload.performers : [],
+        relations: Array.isArray(payload.relations) ? payload.relations : [],
     }
 }
 

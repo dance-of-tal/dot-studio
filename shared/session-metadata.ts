@@ -1,5 +1,5 @@
 const SESSION_TITLE_PREFIX = 'DOT Studio:'
-const SESSION_METADATA_PATTERN = /^DOT Studio:\s*(.*?)\s*\[studio:([^:\]]+):([^\]]+)\]\s*$/
+const SESSION_METADATA_PATTERN = /^DOT Studio:\s*(.*?)\s*\[studio:([^:\]]+):(.*)\]\s*$/
 
 export function buildStudioSessionTitle(performerId: string, performerName: string, configHash: string): string {
     return `${SESSION_TITLE_PREFIX} ${performerName} [studio:${performerId}:${configHash}]`

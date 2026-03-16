@@ -179,6 +179,16 @@ html {
     position: relative;
     background: var(--bg-canvas);
     overflow: hidden;
+    transition: background 0.3s ease;
+}
+
+/* Focus mode — clean background, no grid */
+.canvas-area--focus {
+    background: var(--bg-panel);
+}
+
+.canvas-area--focus .react-flow__background {
+    display: none !important;
 }
 
 .canvas-drop-overlay {
@@ -222,6 +232,19 @@ html {
     font-size: var(--font-lg);
     color: var(--text-primary);
     line-height: 1.5;
+}
+
+/* ── Act Edit Dimming Overlay ─── */
+.canvas-act-dimming {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.canvas-act-dimming:hover {
+    background: rgba(0, 0, 0, 0.18);
 }
 
 /* ── Canvas Top-Right Bar (Controls + Toolbar) ─── */

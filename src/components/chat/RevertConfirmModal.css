@@ -1,0 +1,101 @@
+/* ═══════════════════════════════════════════
+   REVERT CONFIRM MODAL
+   ═══════════════════════════════════════════ */
+
+.revert-confirm-modal {
+    max-width: 440px;
+}
+
+.revert-confirm-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.revert-confirm-modal__title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-primary);
+}
+
+.revert-confirm-modal__title-wrap h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.revert-confirm-modal__body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 20px;
+}
+
+.revert-confirm-modal__preview {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: var(--bg-hover);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+}
+
+.revert-confirm-modal__preview-label {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.revert-confirm-modal__preview-text {
+    font-size: var(--font-md);
+    color: var(--text-primary);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.revert-confirm-modal__warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: var(--radius-md);
+    color: #f87171;
+    font-size: var(--font-md);
+    line-height: 1.4;
+}
+
+.revert-confirm-modal__warning svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.revert-confirm-modal__warning--info {
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.revert-confirm-modal__note {
+    font-size: var(--font-md);
+    color: var(--text-muted);
+    padding: 0 2px;
+    line-height: 1.4;
+}
+
+/* Destructive action button */
+.publish-modal__action--destructive {
+    background: rgba(239, 68, 68, 0.12) !important;
+    border-color: rgba(239, 68, 68, 0.3) !important;
+    color: #f87171 !important;
+}
+
+.publish-modal__action--destructive:hover {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border-color: rgba(239, 68, 68, 0.4) !important;
+}

@@ -314,10 +314,15 @@ type AuthorableAsset = {
     actUrn?: string | null
     model?: unknown
     mcpConfig?: Record<string, unknown> | null
+    // Legacy Act fields
     entryNode?: string | null
     nodes?: Record<string, unknown>
     edges?: unknown[]
     maxIterations?: number
+    // studio-v1 Act fields
+    schema?: string
+    performers?: unknown[]
+    relations?: unknown[]
     slug?: string
 }
 
@@ -350,13 +355,12 @@ export function buildAuthoringPayloadFromAsset(asset: AuthorableAsset) {
 
     if (asset.kind === 'act') {
         return {
+            schema: 'studio-v1' as const,
             name: asset.name,
             description: asset.description || asset.name,
             tags: Array.isArray(asset.tags) ? asset.tags : [],
-            entryNode: asset.entryNode || '',
-            nodes: asset.nodes || {},
-            edges: Array.isArray(asset.edges) ? asset.edges : [],
-            ...(typeof asset.maxIterations === 'number' ? { maxIterations: asset.maxIterations } : {}),
+            performers: Array.isArray(asset.performers) ? asset.performers : [],
+            relations: Array.isArray(asset.relations) ? asset.relations : [],
         }
     }
 

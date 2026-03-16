@@ -9,14 +9,6 @@
 import type { PerformerNode, StageAct } from '../../types'
 import { useStudioStore } from '../../store'
 import { registryUrnFromRef } from '../../lib/performers'
-// resolvePublishablePerformerUrn removed (Phase 2 pending)
-function resolvePublishablePerformerUrn(
-    _performer: PerformerNode | null | undefined,
-    _author: string | null,
-    _opts?: { savedPerformerUrns?: Set<string> },
-): string | null {
-    return null // stub — Act publish flow will be reimplemented
-}
 
 // ── Types ───────────────────────────────────────────────
 
@@ -30,13 +22,6 @@ export type PerformerPreflightEntry = {
     label: string
     required: boolean
     status: 'ready' | 'draft' | 'missing'
-    detail: string
-}
-
-export type ActPreflightEntry = {
-    nodeId: string
-    performerName: string
-    status: 'ready' | 'missing'
     detail: string
 }
 
@@ -64,32 +49,79 @@ export function getPerformerIssue(p: PerformerNode): string | undefined {
     return undefined
 }
 
-export function isActPublishable(a: StageAct): boolean {
-    if (!a.meta?.derivedFrom) return true
-    if (a.meta.authoring?.slug || a.meta.authoring?.description || (a.meta.authoring?.tags && a.meta.authoring.tags.length > 0)) return true
-    return false
-}
-
-export function getActIssue(a: StageAct, allPerformers: PerformerNode[]): string | undefined {
-    if (a.nodes.length === 0) {
-        return 'No nodes'
-    }
-    if (a.nodes.length < 2) {
-        return 'Needs at least 2 nodes'
-    }
-    const unbound = a.nodes.filter((n: any) => !n.performerId)
-    if (unbound.length === a.nodes.length) {
-        return 'No performers assigned'
-    }
-    const allEmpty = a.nodes.every((n: any) => {
-        if (!n.performerId) return true
-        const p = allPerformers.find((perf) => perf.id === n.performerId)
-        return p ? !!getPerformerIssue(p) : true
-    })
-    if (allEmpty) {
-        return 'All performers are incomplete'
+export function getPerformerModelIssue(p: PerformerNode): string | undefined {
+    if (!p.model) {
+        return 'No model configured'
     }
     return undefined
+}
+
+// ── Act Validation ──────────────────────────────────────
+
+export function getActIssue(act: StageAct): string | undefined {
+    const performerIds = Object.keys(act.performers)
+    if (performerIds.length === 0) return 'No performers'
+    if (act.relations.length === 0) return 'No relations'
+
+    const connectedIds = new Set<string>()
+    for (const rel of act.relations) {
+        connectedIds.add(rel.from)
+        connectedIds.add(rel.to)
+    }
+    const disconnected = performerIds.filter((id) => !connectedIds.has(id))
+    if (disconnected.length > 0) {
+        const names = disconnected.map((id) => act.performers[id]?.name || id)
+        return `Disconnected: ${names.join(', ')}`
+    }
+
+    const noModel = performerIds.filter((id) => !act.performers[id]?.model)
+    if (noModel.length > 0) {
+        const names = noModel.map((id) => act.performers[id]?.name || id)
+        return `No model: ${names.join(', ')}`
+    }
+
+    return undefined
+}
+
+export function getActPublishBlockReasons(act: StageAct): string[] {
+    const reasons: string[] = []
+    const performerIds = Object.keys(act.performers)
+
+    if (performerIds.length === 0) {
+        reasons.push('Act has no performers.')
+    }
+    if (act.relations.length === 0) {
+        reasons.push('Act has no relations. Create relations between performers first.')
+    }
+
+    // Disconnected performers
+    if (performerIds.length > 0 && act.relations.length > 0) {
+        const connectedIds = new Set<string>()
+        for (const rel of act.relations) {
+            connectedIds.add(rel.from)
+            connectedIds.add(rel.to)
+        }
+        const disconnected = performerIds.filter((id) => !connectedIds.has(id))
+        if (disconnected.length > 0) {
+            const names = disconnected.map((id) => act.performers[id]?.name || id)
+            reasons.push(`Disconnected performer${disconnected.length > 1 ? 's' : ''}: ${names.join(', ')}. All performers must be connected by relations.`)
+        }
+
+        // Dangling relations
+        const dangling = act.relations.filter((r) => !act.performers[r.from] || !act.performers[r.to])
+        if (dangling.length > 0) {
+            reasons.push(`${dangling.length} relation(s) reference performers not in this Act.`)
+        }
+    }
+
+    // Missing models
+    const noModel = performerIds.filter((id) => !act.performers[id]?.model)
+    if (noModel.length > 0) {
+        const names = noModel.map((id) => act.performers[id]?.name || id)
+        reasons.push(`No model configured for: ${names.join(', ')}.`)
+    }
+
+    return reasons
 }
 
 export function buildPickerItems(args: {
@@ -98,7 +130,7 @@ export function buildPickerItems(args: {
     markdownEditors: ReturnType<typeof useStudioStore.getState>['markdownEditors']
     drafts: ReturnType<typeof useStudioStore.getState>['drafts']
     performers: PerformerNode[]
-    acts: StageAct[]
+    acts?: StageAct[]
 }): PickerItem[] {
     const items: PickerItem[] = []
 
@@ -135,16 +167,14 @@ export function buildPickerItems(args: {
     }
 
     for (const performer of args.performers) {
-        if (performer.ownerActId) continue
         if (isPerformerPublishable(performer)) {
             items.push({ kind: 'performer', source: 'canvas', performerId: performer.id, name: performer.name, issue: getPerformerIssue(performer) })
         }
     }
 
-    for (const act of args.acts) {
-        if (isActPublishable(act)) {
-            items.push({ kind: 'act', source: 'canvas', actId: act.id, name: act.name, issue: getActIssue(act, args.performers) })
-        }
+    for (const act of (args.acts || [])) {
+        const issue = getActIssue(act)
+        items.push({ kind: 'act', source: 'canvas', actId: act.id, name: act.name, issue })
     }
 
     return items
@@ -167,35 +197,6 @@ export function buildPerformerPreflight(performer: PerformerNode | null): Perfor
                 return { ...entry, status: 'draft' as const, detail: `draft:${entry.ref.draftId}` }
             }
             return { ...entry, status: 'missing' as const, detail: 'not set' }
-        })
-}
-
-export function buildActPreflight(
-    act: StageAct | null,
-    performers: PerformerNode[],
-    installedPerformers: any[],
-    author: string | null,
-): ActPreflightEntry[] {
-    if (!act) return []
-
-    const savedPerformerUrns = new Set(
-        installedPerformers
-            .filter((asset) => asset.source === 'stage')
-            .map((asset) => asset.urn),
-    )
-
-    return act.nodes
-        .map((node: any) => {
-            const boundPerformer = performers.find((item) => item.id === node.performerId)
-            const performerUrn = resolvePublishablePerformerUrn(boundPerformer, author, {
-                savedPerformerUrns,
-            })
-            return {
-                nodeId: node.id,
-                performerName: boundPerformer?.name || 'Unassigned',
-                status: performerUrn ? 'ready' as const : 'missing' as const,
-                detail: performerUrn || 'Save or publish this performer before publishing the act.',
-            }
         })
 }
 

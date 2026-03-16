@@ -8,6 +8,8 @@ import { createChatSlice } from './chatSlice'
 import { createIntegrationSlice } from './integrationSlice'
 import { createAdapterViewSlice } from './adapterViewSlice'
 import { createSafeModeSlice } from './safeModeSlice'
+import { createActSlice } from './actSlice'
+import { createAssistantSlice } from './assistantSlice'
 
 export const useStudioStore = create<StudioState>()((...a) => ({
     ...createPerformerRelationSlice(...a),
@@ -16,6 +18,8 @@ export const useStudioStore = create<StudioState>()((...a) => ({
     ...createIntegrationSlice(...a),
     ...createAdapterViewSlice(...a),
     ...createSafeModeSlice(...a),
+    ...createActSlice(...a),
+    ...createAssistantSlice(...a),
 }))
 
 export * from './types'

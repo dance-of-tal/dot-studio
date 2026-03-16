@@ -126,3 +126,28 @@ export function localSkillProjectionDir(
 export function toRelativePath(executionDir: string, absPath: string) {
     return path.relative(executionDir, absPath)
 }
+
+export type Posture = 'build' | 'plan'
+
+/**
+ * Single source of truth for agent identity.
+ * agentName is mechanically derived from filePath — never manually assembled.
+ */
+export function resolveAgentIdentity(input: {
+    executionDir: string
+    stageHash: string
+    performerId: string
+    posture: Posture
+    scope: 'stage' | 'act'
+    actId?: string
+}) {
+    const dir = agentProjectionDir(input.executionDir, input.stageHash, input.scope, input.actId)
+    const fileName = `${input.performerId}--${input.posture}.md`
+    const filePath = path.join(dir, fileName)
+    const agentName = path.relative(
+        path.join(input.executionDir, '.opencode', 'agents'),
+        filePath,
+    ).replace(/\.md$/, '')
+
+    return { agentName, filePath, fileName }
+}

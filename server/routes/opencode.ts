@@ -5,7 +5,7 @@ import { Hono } from 'hono'
 import { getOpencode } from '../lib/opencode.js'
 import { cached, invalidate, TTL } from '../lib/cache.js'
 
-type ModelSelection = { provider: string; modelId: string } | null
+import type { ModelSelection } from '../../shared/model-types.js'
 import { resolveRuntimeTools } from '../lib/runtime-tools.js'
 import { requestDirectoryQuery, resolveRequestWorkingDir } from '../lib/request-context.js'
 import { restartOpencodeSidecar, isManagedOpencode } from '../lib/opencode-sidecar.js'
@@ -228,7 +228,7 @@ opencode.post('/api/provider/:id/oauth/callback', async (c) => {
             method,
             ...(code ? { code } : {}),
         }))
-        unwrapOpencodeResult(await oc.instance.dispose(requestDirectoryQuery(c)))
+        await oc.global.dispose()
         return c.json(data)
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
@@ -243,7 +243,7 @@ opencode.put('/api/provider/:id/auth', async (c) => {
             providerID: c.req.param('id'),
             auth,
         }))
-        unwrapOpencodeResult(await oc.instance.dispose(requestDirectoryQuery(c)))
+        await oc.global.dispose()
         return c.json(data)
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
@@ -254,7 +254,7 @@ opencode.delete('/api/provider/:id/auth', async (c) => {
     try {
         const oc = await getOpencode()
         await clearStoredProviderAuth(c.req.param('id'))
-        unwrapOpencodeResult(await oc.instance.dispose(requestDirectoryQuery(c)))
+        await oc.global.dispose()
         return c.json({ ok: true })
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })

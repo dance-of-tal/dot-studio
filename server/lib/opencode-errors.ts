@@ -1,6 +1,5 @@
 import type { Context } from 'hono'
-
-type ModelSelection = { provider: string; modelId: string } | null
+import type { ModelSelection } from '../../shared/model-types.js'
 
 export type StudioOpencodeErrorCode =
     | 'validation'
@@ -108,7 +107,18 @@ function extractMessage(err: any): string {
         extractBodyMessage(err?.responseBody),
     ].find((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0)
 
-    return message || 'OpenCode request failed.'
+    if (message) {
+        return message
+    }
+
+    // Stringify raw error for debuggability — truncate if huge
+    try {
+        const raw = JSON.stringify(err, null, 2)
+        const truncated = raw.length > 500 ? raw.slice(0, 500) + '…' : raw
+        return `OpenCode request failed. Raw: ${truncated}`
+    } catch {
+        return 'OpenCode request failed.'
+    }
 }
 
 function extractProviderId(err: any, context: NormalizeErrorContext): string | undefined {

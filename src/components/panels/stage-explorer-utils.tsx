@@ -8,7 +8,7 @@
 
 import type { ReactNode } from 'react'
 import { Check, Pencil, Trash2, X } from 'lucide-react'
-import type { ActSessionRecord, PerformerNode, StageAct } from '../../types'
+import type { PerformerNode } from '../../types'
 import { parseStudioSessionTitle } from '../../../shared/session-metadata'
 
 // ── Types ───────────────────────────────────────────────
@@ -27,50 +27,27 @@ export type PerformerSessionRow = {
 
 export type ExplorerRenamingSession = null | {
     key: string
-    kind: 'performer' | 'act'
+    kind: 'performer'
     sessionId: string
     currentTitle?: string
     value: string
 }
 
-export type ThreadRow =
-    | {
-        id: string
-        kind: 'performer'
-        label: string
-        meta: string
-        hidden: boolean
-        active: boolean
-        children: PerformerSessionRow[]
-    }
-    | {
-        id: string
-        kind: 'act'
-        label: string
-        meta: string
-        hidden: boolean
-        active: boolean
-        children: ActSessionRecord[]
-    }
+export type ThreadRow = {
+    id: string
+    kind: 'performer'
+    label: string
+    meta: string
+    hidden: boolean
+    active: boolean
+    children: PerformerSessionRow[]
+}
 
 // ── Pure helpers ────────────────────────────────────────
 
 export function stageLabel(workingDir: string) {
     const normalized = workingDir.trim().replace(/\/+$/, '')
     return normalized.split(/[/\\]/).pop() || 'Working Directory'
-}
-
-export function actSessionTone(status: string): 'default' | 'success' | 'warn' | 'danger' {
-    switch (status) {
-        case 'completed':
-            return 'success'
-        case 'interrupted':
-            return 'warn'
-        case 'failed':
-            return 'danger'
-        default:
-            return 'default'
-    }
 }
 
 export function buildPerformerSessionRows(
@@ -117,48 +94,14 @@ export function groupPerformerSessionsById(performerSessionRows: PerformerSessio
     return map
 }
 
-export function groupActSessionsByActId(actSessions: ActSessionRecord[]) {
-    const map = new Map<string, ActSessionRecord[]>()
-        ;[...actSessions]
-            .sort((left, right) => right.updatedAt - left.updatedAt)
-            .forEach((session) => {
-                const current = map.get(session.actId) || []
-                current.push(session)
-                map.set(session.actId, current)
-            })
-    return map
-}
-
-export function buildLatestActSessionMap(
-    actSessionMap: Record<string, string>,
-    actSessionsByActId: Map<string, ActSessionRecord[]>,
-) {
-    const map = new Map<string, { status: string }>()
-    actSessionsByActId.forEach((sessionsForAct, actId) => {
-        const currentSessionId = actSessionMap[actId]
-        const currentSession = currentSessionId
-            ? sessionsForAct.find((session) => session.id === currentSessionId) || sessionsForAct[0]
-            : sessionsForAct[0]
-        if (currentSession) {
-            map.set(actId, { status: currentSession.status })
-        }
-    })
-    return map
-}
-
 export function buildThreadRows(args: {
     sharedPerformers: PerformerNode[]
-    acts: StageAct[]
-    editingTarget: { type: 'performer' | 'act'; id: string } | null
-    latestActSessionMap: Map<string, { status: string }>
+    editingTarget: { type: 'performer'; id: string } | null
     performerSessionsById: Map<string, PerformerSessionRow[]>
-    actSessionsByActId: Map<string, ActSessionRecord[]>
     selectedPerformerId: string | null
     selectedPerformerSessionId: string | null
-    selectedActId: string | null
-    selectedActSessionId: string | null
 }): ThreadRow[] {
-    const performerRows: ThreadRow[] = args.sharedPerformers.map((performer) => ({
+    return args.sharedPerformers.map((performer) => ({
         id: performer.id,
         kind: 'performer',
         label: performer.name,
@@ -168,22 +111,6 @@ export function buildThreadRows(args: {
             && !args.selectedPerformerSessionId,
         children: args.performerSessionsById.get(performer.id) || [],
     }))
-
-    const actRows: ThreadRow[] = args.acts.map((act) => {
-        const latestSession = args.latestActSessionMap.get(act.id)
-        return {
-            id: act.id,
-            kind: 'act',
-            label: act.name,
-            meta: latestSession ? `${latestSession.status} · ${act.nodes.length} nodes` : `${act.nodes.length} nodes`,
-            hidden: !!act.hidden,
-            active: ((args.selectedActId === act.id) || (args.editingTarget?.type === 'act' && args.editingTarget.id === act.id))
-                && !args.selectedActSessionId,
-            children: args.actSessionsByActId.get(act.id) || [],
-        }
-    })
-
-    return [...performerRows, ...actRows]
 }
 
 // ── Sub-components ──────────────────────────────────────

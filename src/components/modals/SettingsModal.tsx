@@ -1,44 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, CheckCircle, ExternalLink, RefreshCw, X } from 'lucide-react'
+import { AlertCircle, CheckCircle, RefreshCw, Settings, X, Sliders, Server, Cpu, FolderCog, LayoutGrid } from 'lucide-react'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import './SettingsModal.css'
 import { useProviderAuth } from './useProviderAuth'
 import type {
     ProviderCard,
-    SettingsTab,
-    ProviderListFilter,
     OpenCodeInfo,
     ProjectSettingsDraft,
     ProjectConfigMeta,
 } from './settings-utils'
 import {
-    isPopularProvider,
-    providerSupportsApiKey,
-    labelForAuthMethod,
     mergeProviders,
     buildProjectDraft,
     isProjectDraftEqual,
 } from './settings-utils'
 
-function filterProvidersByListFilter(providers: ProviderCard[], providerFilter: ProviderListFilter) {
-    if (providerFilter === 'all') {
-        return providers
-    }
-    if (providerFilter === 'connected') {
-        return providers.filter((provider) => provider.connected)
-    }
-    return providers.filter((provider) => provider.connected || isPopularProvider(provider.id))
+import SettingsGeneral from './SettingsGeneral'
+import SettingsProviders from './SettingsProviders'
+import SettingsModels from './SettingsModels'
+
+type SettingsTab = 'general' | 'providers' | 'models' | 'opencode' | 'project'
+
+interface SidebarSection {
+    label: string
+    items: { key: SettingsTab; label: string; icon: React.ReactNode }[]
 }
 
-function buildProviderFilterOptions(providers: ProviderCard[]) {
-    return [
-        { key: 'popular' as const, label: 'Popular', count: providers.filter((provider) => provider.connected || isPopularProvider(provider.id)).length },
-        { key: 'connected' as const, label: 'Connected', count: providers.filter((provider) => provider.connected).length },
-        { key: 'all' as const, label: 'All', count: providers.length },
-    ]
-}
+const SECTIONS: SidebarSection[] = [
+    {
+        label: 'Studio',
+        items: [
+            { key: 'general', label: 'General', icon: <Sliders size={14} /> },
+        ],
+    },
+    {
+        label: 'Server',
+        items: [
+            { key: 'providers', label: 'Providers', icon: <Server size={14} /> },
+            { key: 'models', label: 'Models', icon: <LayoutGrid size={14} /> },
+        ],
+    },
+    {
+        label: 'Runtime',
+        items: [
+            { key: 'opencode', label: 'OpenCode', icon: <Cpu size={14} /> },
+            { key: 'project', label: 'Project', icon: <FolderCog size={14} /> },
+        ],
+    },
+]
 
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     const queryClient = useQueryClient()
@@ -46,26 +57,27 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const performers = useStudioStore((state) => state.performers)
     const selectedPerformerId = useStudioStore((state) => state.selectedPerformerId)
     const setPerformerModel = useStudioStore((state) => state.setPerformerModel)
+
     const [providers, setProviders] = useState<ProviderCard[]>([])
     const [opencodeInfo, setOpencodeInfo] = useState<OpenCodeInfo | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [refreshTick, setRefreshTick] = useState(0)
-    const [activeTab, setActiveTab] = useState<SettingsTab>('runtime')
-    const [providerFilter, setProviderFilter] = useState<ProviderListFilter>('popular')
+    const [activeTab, setActiveTab] = useState<SettingsTab>('general')
     const [projectDraft, setProjectDraft] = useState<ProjectSettingsDraft | null>(null)
     const [projectSnapshot, setProjectSnapshot] = useState<ProjectSettingsDraft | null>(null)
     const [projectMeta, setProjectMeta] = useState<ProjectConfigMeta | null>(null)
     const [savingProject, setSavingProject] = useState(false)
     const [projectMessage, setProjectMessage] = useState<string | null>(null)
     const projectDirtyRef = useRef(false)
+
     const selectedPerformer = useMemo(
-        () => performers.find((performer) => performer.id === selectedPerformerId) || null,
+        () => performers.find((p) => p.id === selectedPerformerId) || null,
         [performers, selectedPerformerId],
     )
 
     function refreshSettings() {
-        setRefreshTick((value) => value + 1)
+        setRefreshTick((v) => v + 1)
     }
 
     async function refreshProviderState() {
@@ -82,36 +94,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         setProjectMessage,
         setActiveTab: (tab) => setActiveTab(tab as SettingsTab),
     })
-    const {
-        oauthFlows,
-        modelPicker,
-        setModelPicker,
-        visibleModelPickerModels,
-        openApiKeyFlow,
-        handleAuthMethod,
-        handleOauthCallback,
-        handleApiAuthSave,
-        dismissOauthFlow,
-        disconnectProvider,
-        openModelPicker,
-        applyPickedModel,
-        retryBrowserOauth,
-        syncFlowsWithProviders,
-        setOauthFlows,
-    } = auth
 
     const projectDirty = useMemo(
         () => !isProjectDraftEqual(projectDraft, projectSnapshot),
         [projectDraft, projectSnapshot],
-    )
-
-    const filteredProviders = useMemo(() => {
-        return filterProvidersByListFilter(providers, providerFilter)
-    }, [providerFilter, providers])
-
-    const providerFilterOptions = useMemo(
-        () => buildProviderFilterOptions(providers),
-        [providers],
     )
 
     useEffect(() => {
@@ -119,16 +105,12 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     }, [projectDirty])
 
     useEffect(() => {
-        if (!open) {
-            return
-        }
+        if (!open) return
 
         let cancelled = false
 
         const fetchAll = async () => {
-            if (providers.length === 0 && !opencodeInfo) {
-                setLoading(true)
-            }
+            if (providers.length === 0 && !opencodeInfo) setLoading(true)
             setError(null)
 
             try {
@@ -136,29 +118,19 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                     api.providers.list(),
                     api.provider.auth().catch(() => ({})),
                     api.opencodeHealth().catch((err) => ({
-                        connected: false,
-                        url: '',
-                        error: err instanceof Error ? err.message : String(err),
-                        restartAvailable: false,
+                        connected: false, url: '', error: err instanceof Error ? err.message : String(err), restartAvailable: false,
                     })),
                     api.config.getProject().catch(() => ({
-                        exists: false,
-                        path: `${workingDir}/config.json`,
-                        config: {},
+                        exists: false, path: `${workingDir}/config.json`, config: {},
                     })),
                 ])
 
-                if (cancelled) {
-                    return
-                }
+                if (cancelled) return
 
                 const mergedProviders = mergeProviders(providerRes, authRes || {})
                 setProviders(mergedProviders)
                 setOpencodeInfo(healthRes)
-                setProjectMeta({
-                    exists: projectRes.exists,
-                    path: projectRes.path,
-                })
+                setProjectMeta({ exists: projectRes.exists, path: projectRes.path })
 
                 if (!projectDirtyRef.current || !projectDraft || !projectSnapshot) {
                     const nextDraft = buildProjectDraft(mergedProviders, projectRes.config || {})
@@ -166,61 +138,46 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                     setProjectSnapshot(nextDraft)
                 }
 
-                syncFlowsWithProviders(mergedProviders)
+                auth.syncFlowsWithProviders(mergedProviders)
             } catch (err) {
-                if (!cancelled) {
-                    setError(err instanceof Error ? err.message : String(err))
-                }
+                if (!cancelled) setError(err instanceof Error ? err.message : String(err))
             } finally {
-                if (!cancelled) {
-                    setLoading(false)
-                }
+                if (!cancelled) setLoading(false)
             }
         }
 
         fetchAll()
-
-        return () => {
-            cancelled = true
-        }
+        return () => { cancelled = true }
     }, [open, refreshTick, workingDir])
 
     if (!open) return null
 
     function toggleProviderVisibility(providerId: string) {
-        setProjectDraft((current) => {
-            if (!current) return current
+        setProjectDraft((cur) => {
+            if (!cur) return cur
             return {
-                ...current,
-                visibleProviders: {
-                    ...current.visibleProviders,
-                    [providerId]: !current.visibleProviders[providerId],
-                },
+                ...cur,
+                visibleProviders: { ...cur.visibleProviders, [providerId]: !cur.visibleProviders[providerId] },
             }
         })
     }
 
     function resetProjectDraft() {
-        if (!projectSnapshot) {
-            return
-        }
+        if (!projectSnapshot) return
         setProjectDraft(projectSnapshot)
         setProjectMessage(null)
     }
 
     async function saveProjectSettings() {
-        if (!projectDraft) {
-            return
-        }
-
+        if (!projectDraft) return
         setSavingProject(true)
         setError(null)
         setProjectMessage(null)
 
         try {
             const disabledProviders = providers
-                .filter((provider) => !projectDraft.visibleProviders[provider.id])
-                .map((provider) => provider.id)
+                .filter((p) => !projectDraft.visibleProviders[p.id])
+                .map((p) => p.id)
 
             await api.config.update({
                 share: projectDraft.share,
@@ -232,7 +189,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
             setProjectSnapshot(projectDraft)
             setProjectMessage('Saved to OpenCode project config.')
             queryClient.invalidateQueries({ queryKey: ['models'] })
-            setRefreshTick((value) => value + 1)
+            setRefreshTick((v) => v + 1)
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err))
         } finally {
@@ -240,17 +197,216 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         }
     }
 
+    function renderContent() {
+        if (loading && activeTab !== 'general') {
+            return <div className="stg-empty">Loading…</div>
+        }
+
+        switch (activeTab) {
+            case 'general':
+                return <SettingsGeneral />
+
+            case 'providers':
+                return (
+                    <SettingsProviders
+                        providers={providers}
+                        oauthFlows={auth.oauthFlows}
+                        setOauthFlows={auth.setOauthFlows}
+                        modelPicker={auth.modelPicker}
+                        setModelPicker={auth.setModelPicker}
+                        visibleModelPickerModels={auth.visibleModelPickerModels}
+                        openApiKeyFlow={auth.openApiKeyFlow}
+                        handleAuthMethod={auth.handleAuthMethod}
+                        handleOauthCallback={auth.handleOauthCallback}
+                        handleApiAuthSave={auth.handleApiAuthSave}
+                        dismissOauthFlow={auth.dismissOauthFlow}
+                        disconnectProvider={auth.disconnectProvider}
+                        openModelPicker={auth.openModelPicker}
+                        applyPickedModel={auth.applyPickedModel}
+                        retryBrowserOauth={auth.retryBrowserOauth}
+                        selectedPerformer={selectedPerformer ? { id: selectedPerformer.id, name: selectedPerformer.name } : null}
+                        projectMessage={projectMessage}
+                    />
+                )
+
+            case 'models':
+                return <SettingsModels />
+
+            case 'opencode':
+                return (
+                    <div className="stg-panel">
+                        <div className="stg-panel__header">
+                            <h2 className="stg-panel__title">OpenCode</h2>
+                        </div>
+
+                        <section className="settings-section">
+                            <div className="settings-section-head">
+                                <h4>Connection</h4>
+                                {opencodeInfo?.mode === 'managed' && opencodeInfo.restartAvailable && (
+                                    <button
+                                        className="btn"
+                                        onClick={async () => {
+                                            setError(null)
+                                            try {
+                                                await api.opencodeRestart()
+                                                refreshSettings()
+                                            } catch (err) {
+                                                setError(err instanceof Error ? err.message : String(err))
+                                            }
+                                        }}
+                                    >
+                                        Restart OpenCode
+                                    </button>
+                                )}
+                            </div>
+                            <div className="settings-row">
+                                <span className="settings-label">Status</span>
+                                <span className="settings-value">
+                                    {opencodeInfo?.connected
+                                        ? <><CheckCircle size={12} color="#14AE5C" /> Connected</>
+                                        : <><AlertCircle size={12} color="#F24822" /> Disconnected</>}
+                                </span>
+                            </div>
+                            <div className="settings-row">
+                                <span className="settings-label">Mode</span>
+                                <span className="settings-value">
+                                    {opencodeInfo?.mode === 'external' ? 'External OpenCode' : 'Managed by Studio'}
+                                </span>
+                            </div>
+                            {opencodeInfo?.url && (
+                                <div className="settings-row settings-row--stacked">
+                                    <span className="settings-label">URL</span>
+                                    <span className="settings-value mono">{opencodeInfo.url}</span>
+                                </div>
+                            )}
+                            {opencodeInfo?.project?.worktree && (
+                                <div className="settings-row settings-row--stacked">
+                                    <span className="settings-label">Project</span>
+                                    <span className="settings-value mono">{opencodeInfo.project.worktree}</span>
+                                </div>
+                            )}
+                            {opencodeInfo?.error && (
+                                <div className="settings-note settings-note--error">{opencodeInfo.error}</div>
+                            )}
+                        </section>
+
+                        <section className="settings-section">
+                            <h4>About</h4>
+                            <div className="settings-row">
+                                <span className="settings-label">Studio API</span>
+                                <span className="settings-value mono">
+                                    {typeof window === 'undefined' ? '/api' : `${window.location.origin}/api`}
+                                </span>
+                            </div>
+                            <div className="settings-row">
+                                <span className="settings-label">Frontend</span>
+                                <span className="settings-value mono">
+                                    {typeof window === 'undefined' ? 'Unavailable' : window.location.origin}
+                                </span>
+                            </div>
+                        </section>
+                    </div>
+                )
+
+            case 'project':
+                return (
+                    <div className="stg-panel">
+                        <div className="stg-panel__header">
+                            <h2 className="stg-panel__title">Project</h2>
+                        </div>
+
+                        <section className="settings-section">
+                            <div className="settings-section-head">
+                                <h4>OpenCode Project Config</h4>
+                                <span className="settings-caption">
+                                    Saved through OpenCode into the current working directory.
+                                </span>
+                            </div>
+
+                            {projectMeta && (
+                                <div className="settings-row settings-row--stacked">
+                                    <span className="settings-label">Config File</span>
+                                    <span className="settings-value mono">{projectMeta.path}</span>
+                                </div>
+                            )}
+
+                            <div className="settings-form-grid">
+                                <label className="settings-field">
+                                    <span className="settings-field__label">Share mode</span>
+                                    <select
+                                        className="select"
+                                        value={projectDraft?.share || 'manual'}
+                                        onChange={(e) => setProjectDraft((cur) => cur ? {
+                                            ...cur, share: e.target.value as 'manual' | 'auto' | 'disabled',
+                                        } : cur)}
+                                    >
+                                        <option value="manual">Manual</option>
+                                        <option value="auto">Auto</option>
+                                        <option value="disabled">Disabled</option>
+                                    </select>
+                                </label>
+
+                                <label className="settings-field">
+                                    <span className="settings-field__label">Username</span>
+                                    <input
+                                        className="input"
+                                        value={projectDraft?.username || ''}
+                                        onChange={(e) => setProjectDraft((cur) => cur ? {
+                                            ...cur, username: e.target.value,
+                                        } : cur)}
+                                        placeholder="Display name for OpenCode sessions"
+                                    />
+                                </label>
+                            </div>
+
+                            <div className="settings-note">
+                                <div className="settings-note__title">Provider visibility</div>
+                                Hide providers you do not want surfaced in this project.
+                            </div>
+
+                            <div className="settings-checkbox-list">
+                                {providers.map((provider) => (
+                                    <label key={provider.id} className="settings-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={projectDraft?.visibleProviders[provider.id] ?? true}
+                                            onChange={() => toggleProviderVisibility(provider.id)}
+                                        />
+                                        <span className="settings-checkbox__body">
+                                            <span className="settings-checkbox__title">{provider.name}</span>
+                                            <span className="settings-checkbox__meta">
+                                                {provider.id} · {provider.modelCount} models · {provider.connected ? 'connected' : 'not connected'}
+                                            </span>
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            <div className="settings-save-row">
+                                <button className="btn" onClick={resetProjectDraft} disabled={!projectDirty || savingProject}>
+                                    Reset
+                                </button>
+                                <button className="btn btn--primary" onClick={saveProjectSettings} disabled={!projectDirty || savingProject}>
+                                    {savingProject ? 'Saving...' : projectMeta?.exists ? 'Update config' : 'Create config'}
+                                </button>
+                            </div>
+
+                            {projectMessage && (
+                                <div className="settings-note settings-note--success">{projectMessage}</div>
+                            )}
+                        </section>
+                    </div>
+                )
+        }
+    }
+
     return (
         <div className="settings-overlay" onClick={onClose}>
             <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="settings-header">
-                    <h3>Settings</h3>
+                    <h3><Settings size={16} style={{ display: 'inline', verticalAlign: '-2px', marginRight: 6 }} />Settings</h3>
                     <div className="settings-header-actions">
-                        <button
-                            className="icon-btn"
-                            onClick={refreshSettings}
-                            aria-label="Refresh settings"
-                        >
+                        <button className="icon-btn" onClick={refreshSettings} aria-label="Refresh settings">
                             <RefreshCw size={14} />
                         </button>
                         <button className="icon-btn" onClick={onClose} aria-label="Close settings">
@@ -259,448 +415,43 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                     </div>
                 </div>
 
-                {loading ? (
-                    <div className="empty-state" style={{ padding: 32 }}>Loading...</div>
-                ) : (
-                    <div className="settings-body">
-                        <div className="tab tab--lgs" role="tablist" aria-label="Settings sections">
-                            <button
-                                className={`tab tab--lg ${activeTab === 'runtime' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('runtime')}
-                                role="tab"
-                                aria-selected={activeTab === 'runtime'}
-                            >
-                                Runtime
-                            </button>
-                            <button
-                                className={`tab tab--lg ${activeTab === 'project' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('project')}
-                                role="tab"
-                                aria-selected={activeTab === 'project'}
-                            >
-                                Project
-                            </button>
-                            <button
-                                className={`tab tab--lg ${activeTab === 'providers' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('providers')}
-                                role="tab"
-                                aria-selected={activeTab === 'providers'}
-                            >
-                                Providers
-                            </button>
-                        </div>
-
-                        {error && (
-                            <section className="settings-section">
-                                <div className="settings-note settings-note--error">{error}</div>
-                            </section>
-                        )}
-
-                        {activeTab === 'runtime' && (
-                            <>
-                                <section className="settings-section">
-                                    <div className="settings-section-head">
-                                        <h4>OpenCode Connection</h4>
-                                        {opencodeInfo?.mode === 'managed' && opencodeInfo.restartAvailable && (
+                <div className="settings-body">
+                    {/* Left sidebar */}
+                    <div className="stg-sidebar">
+                        <nav className="stg-sidebar__nav">
+                            {SECTIONS.map((section) => (
+                                <div key={section.label}>
+                                    <div className="stg-sidebar__group-label">{section.label}</div>
+                                    <div className="stg-sidebar__items">
+                                        {section.items.map((item) => (
                                             <button
-                                                className="btn"
-                                                onClick={async () => {
-                                                    setError(null)
-                                                    try {
-                                                        await api.opencodeRestart()
-                                                        refreshSettings()
-                                                    } catch (err) {
-                                                        setError(err instanceof Error ? err.message : String(err))
-                                                    }
-                                                }}
+                                                key={item.key}
+                                                className={`stg-sidebar__item ${activeTab === item.key ? 'active' : ''}`}
+                                                onClick={() => setActiveTab(item.key)}
                                             >
-                                                Restart OpenCode
+                                                {item.icon}
+                                                {item.label}
                                             </button>
-                                        )}
+                                        ))}
                                     </div>
-                                    <div className="settings-row">
-                                        <span className="settings-label">Status</span>
-                                        <span className="settings-value">
-                                            {opencodeInfo?.connected
-                                                ? <><CheckCircle size={12} color="#14AE5C" /> Connected</>
-                                                : <><AlertCircle size={12} color="#F24822" /> Disconnected</>
-                                            }
-                                        </span>
-                                    </div>
-                                    <div className="settings-row">
-                                        <span className="settings-label">Mode</span>
-                                        <span className="settings-value">
-                                            {opencodeInfo?.mode === 'external' ? 'External OpenCode' : 'Managed by Studio'}
-                                        </span>
-                                    </div>
-                                    {opencodeInfo?.url && (
-                                        <div className="settings-row settings-row--stacked">
-                                            <span className="settings-label">URL</span>
-                                            <span className="settings-value mono">{opencodeInfo.url}</span>
-                                        </div>
-                                    )}
-                                    {opencodeInfo?.project?.worktree && (
-                                        <div className="settings-row settings-row--stacked">
-                                            <span className="settings-label">Project</span>
-                                            <span className="settings-value mono">{opencodeInfo.project.worktree}</span>
-                                        </div>
-                                    )}
-                                    {opencodeInfo?.error && (
-                                        <div className="settings-note settings-note--error">{opencodeInfo.error}</div>
-                                    )}
-                                    {opencodeInfo?.mode === 'managed' && !opencodeInfo.restartAvailable && (
-                                        <div className="settings-note">
-                                            Studio is attached to an existing OpenCode daemon that it did not spawn itself. Provider refresh still works, but restarting that daemon has to happen outside Studio.
-                                        </div>
-                                    )}
-                                </section>
-
-                                <section className="settings-section">
-                                    <h4>About</h4>
-                                    <div className="settings-row">
-                                        <span className="settings-label">Studio API</span>
-                                        <span className="settings-value mono">
-                                            {typeof window === 'undefined' ? '/api' : `${window.location.origin}/api`}
-                                        </span>
-                                    </div>
-                                    <div className="settings-row">
-                                        <span className="settings-label">Frontend</span>
-                                        <span className="settings-value mono">
-                                            {typeof window === 'undefined' ? 'Unavailable' : window.location.origin}
-                                        </span>
-                                    </div>
-                                </section>
-                            </>
-                        )}
-
-                        {activeTab === 'project' && (
-                            <section className="settings-section">
-                                <div className="settings-section-head">
-                                    <h4>OpenCode Project Controls</h4>
-                                    <span className="settings-caption">
-                                        Saved through OpenCode into the current working directory.
-                                    </span>
                                 </div>
-
-                                {projectMeta && (
-                                    <div className="settings-row settings-row--stacked">
-                                        <span className="settings-label">Config File</span>
-                                        <span className="settings-value mono">{projectMeta.path}</span>
-                                    </div>
-                                )}
-
-                                <div className="settings-form-grid">
-                                    <label className="settings-field">
-                                        <span className="settings-field__label">Share mode</span>
-                                        <select
-                                            className="select"
-                                            value={projectDraft?.share || 'manual'}
-                                            onChange={(e) => setProjectDraft((current) => current ? {
-                                                ...current,
-                                                share: e.target.value as 'manual' | 'auto' | 'disabled',
-                                            } : current)}
-                                        >
-                                            <option value="manual">Manual</option>
-                                            <option value="auto">Auto</option>
-                                            <option value="disabled">Disabled</option>
-                                        </select>
-                                    </label>
-
-                                    <label className="settings-field">
-                                        <span className="settings-field__label">Username</span>
-                                        <input
-                                            className="input"
-                                            value={projectDraft?.username || ''}
-                                            onChange={(e) => setProjectDraft((current) => current ? {
-                                                ...current,
-                                                username: e.target.value,
-                                            } : current)}
-                                            placeholder="Display name for OpenCode sessions"
-                                        />
-                                    </label>
-                                </div>
-
-                                <div className="settings-note">
-                                    <div className="settings-note__title">Provider visibility</div>
-                                    Hide providers you do not want surfaced in this project. This is the cleanest way to reduce the model list in Studio.
-                                </div>
-
-                                <div className="settings-note">
-                                    <div className="settings-note__title">Project MCP servers</div>
-                                    Manage MCP definitions, authentication, and connection state from the Asset Library MCP section.
-                                </div>
-
-                                <div className="settings-checkbox-list">
-                                    {providers.map((provider) => (
-                                        <label key={provider.id} className="settings-checkbox">
-                                            <input
-                                                type="checkbox"
-                                                checked={projectDraft?.visibleProviders[provider.id] ?? true}
-                                                onChange={() => toggleProviderVisibility(provider.id)}
-                                            />
-                                            <span className="settings-checkbox__body">
-                                                <span className="settings-checkbox__title">{provider.name}</span>
-                                                <span className="settings-checkbox__meta">
-                                                    {provider.id} · {provider.modelCount} models · {provider.connected ? 'connected' : 'not connected'}
-                                                </span>
-                                            </span>
-                                        </label>
-                                    ))}
-                                </div>
-
-                                <div className="settings-save-row">
-                                    <button
-                                        className="btn"
-                                        onClick={resetProjectDraft}
-                                        disabled={!projectDirty || savingProject}
-                                    >
-                                        Reset
-                                    </button>
-                                    <button
-                                        className="btn btn--primary"
-                                        onClick={saveProjectSettings}
-                                        disabled={!projectDirty || savingProject}
-                                    >
-                                        {savingProject ? 'Saving...' : projectMeta?.exists ? 'Update project config' : 'Create project config'}
-                                    </button>
-                                </div>
-
-                                {projectMessage && (
-                                    <div className="settings-note settings-note--success">{projectMessage}</div>
-                                )}
-                            </section>
-                        )}
-
-                        {activeTab === 'providers' && (
-                            <section className="settings-section">
-                                <div className="settings-section-head">
-                                    <h4>Provider Access</h4>
-                                    <span className="settings-caption">
-                                        Studio uses OpenCode provider auth directly. Browser OAuth waits for the callback automatically, and API key entry is written into OpenCode's auth store.
-                                    </span>
-                                </div>
-
-                                <div className="settings-filter-row" role="tablist" aria-label="Provider filters">
-                                    {providerFilterOptions.map((filter) => (
-                                        <button
-                                            key={filter.key}
-                                            className={`tab ${providerFilter === filter.key ? 'active' : ''}`}
-                                            onClick={() => setProviderFilter(filter.key)}
-                                            role="tab"
-                                            aria-selected={providerFilter === filter.key}
-                                        >
-                                            {filter.label}
-                                            <span className="tab__count">{filter.count}</span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {modelPicker && (
-                                    <div className="settings-note settings-note--success">
-                                        <div className="settings-note__title">Finish Setup</div>
-                                        {modelPicker.performerId
-                                            ? `${modelPicker.providerName} is connected. Pick a model for ${modelPicker.performerName || 'the selected performer'}.`
-                                            : `${modelPicker.providerName} is connected. Select a performer to assign a model.`}
-                                        {modelPicker.performerId && (
-                                            <div className="provider-model-picker">
-                                                <input
-                                                    className="input"
-                                                    value={modelPicker.query}
-                                                    onChange={(e) => setModelPicker((current) => current ? {
-                                                        ...current,
-                                                        query: e.target.value,
-                                                    } : current)}
-                                                    placeholder={`Search ${modelPicker.providerName} models`}
-                                                />
-                                                <div className="provider-model-picker__list">
-                                                    {visibleModelPickerModels
-                                                        .slice(0, 16)
-                                                        .map((model) => (
-                                                            <button
-                                                                key={`${model.provider}:${model.id}`}
-                                                                className="provider-model-option"
-                                                                onClick={() => applyPickedModel(model)}
-                                                            >
-                                                                <span className="provider-model-option__name">{model.name || model.id}</span>
-                                                                <span className="provider-model-option__meta">
-                                                                    {model.id}
-                                                                    {model.toolCall ? ' · tools' : ''}
-                                                                    {model.reasoning ? ' · reasoning' : ''}
-                                                                </span>
-                                                            </button>
-                                                        ))}
-                                                    {visibleModelPickerModels.length === 0 && (
-                                                        <div className="settings-note settings-note--muted">
-                                                            No connected models matched this search.
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {filteredProviders.length === 0 ? (
-                                    <div className="empty-state" style={{ padding: 12 }}>
-                                        No provider information available.
-                                    </div>
-                                ) : (
-                                    <div className="provider-list">
-                                        {filteredProviders.map((provider) => {
-                                            const flow = oauthFlows[provider.id]
-                                            const oauthMethods = provider.authMethods
-                                                .map((method, methodIndex) => ({ method, methodIndex }))
-                                                .filter(({ method }) => method.type === 'oauth')
-                                            const supportsApiAuth = providerSupportsApiKey(provider)
-
-                                            return (
-                                                <div key={provider.id} className="provider-card">
-                                                    <div className="provider-card__header">
-                                                        <div>
-                                                            <div className="provider-card__title">{provider.name}</div>
-                                                            <div className="provider-card__meta">
-                                                                <span>{provider.id}</span>
-                                                                <span>{provider.modelCount} models</span>
-                                                                {provider.defaultModel && <span>default: {provider.defaultModel}</span>}
-                                                                {supportsApiAuth && <span>API key</span>}
-                                                                {oauthMethods.length > 0 && <span>OAuth</span>}
-                                                            </div>
-                                                        </div>
-                                                        <span className={`provider-status ${provider.connected ? 'connected' : flow ? 'pending' : 'idle'}`}>
-                                                            {provider.connected ? 'Connected' : flow ? 'Pending' : 'Setup needed'}
-                                                        </span>
-                                                    </div>
-
-                                                    {(supportsApiAuth || oauthMethods.length > 0 || provider.connected) && (
-                                                        <div className="provider-actions">
-                                                            {supportsApiAuth && (
-                                                                <button
-                                                                    className="btn btn--primary"
-                                                                    onClick={() => openApiKeyFlow(provider)}
-                                                                >
-                                                                    Enter API Key
-                                                                </button>
-                                                            )}
-                                                            {provider.connected && selectedPerformer && (
-                                                                <button
-                                                                    className="btn"
-                                                                    onClick={() => openModelPicker(provider.id, provider.name)}
-                                                                >
-                                                                    Choose Model
-                                                                </button>
-                                                            )}
-                                                            {provider.connected && (
-                                                                <button
-                                                                    className="btn"
-                                                                    onClick={() => disconnectProvider(provider.id, provider.name)}
-                                                                >
-                                                                    Disconnect
-                                                                </button>
-                                                            )}
-                                                            {oauthMethods.map(({ method, methodIndex }) => (
-                                                                <button
-                                                                    key={`${provider.id}-${method.label}-${methodIndex}`}
-                                                                    className="btn"
-                                                                    onClick={() => handleAuthMethod(provider, methodIndex, method)}
-                                                                >
-                                                                    <ExternalLink size={12} />
-                                                                    {labelForAuthMethod(method)}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-
-                                                    {provider.env.length > 0 && (
-                                                        <div className="settings-note">
-                                                            <div className="settings-note__title">Credential target</div>
-                                                            OpenCode expects: {provider.env.join(', ')}
-                                                        </div>
-                                                    )}
-
-                                                    {flow && (
-                                                        <div className="oauth-flow">
-                                                            <div className="oauth-flow__header">
-                                                                <span className="oauth-flow__title">{flow.label}</span>
-                                                                <button className="icon-btn" onClick={() => dismissOauthFlow(provider.id)}>
-                                                                    <X size={12} />
-                                                                </button>
-                                                            </div>
-                                                            <div className="settings-note">
-                                                                {flow.instructions || 'Complete authorization in the opened browser window.'}
-                                                            </div>
-                                                            {flow.mode === 'code' || flow.mode === 'api' ? (
-                                                                <div className="oauth-code">
-                                                                    <input
-                                                                        className="input"
-                                                                        value={flow.code}
-                                                                        onChange={(e) => {
-                                                                            const code = e.target.value
-                                                                            setOauthFlows((current) => ({
-                                                                                ...current,
-                                                                                [provider.id]: {
-                                                                                    ...flow,
-                                                                                    code,
-                                                                                    error: undefined,
-                                                                                },
-                                                                            }))
-                                                                        }}
-                                                                        placeholder={flow.mode === 'api' ? 'Paste credential' : 'Paste authorization code'}
-                                                                        type={flow.mode === 'api' ? 'password' : 'text'}
-                                                                    />
-                                                                    <button
-                                                                        className="btn btn--primary"
-                                                                        onClick={() => flow.mode === 'api'
-                                                                            ? handleApiAuthSave(provider.id)
-                                                                            : handleOauthCallback(provider.id)}
-                                                                        disabled={flow.submitting || !flow.code.trim()}
-                                                                    >
-                                                                        {flow.submitting ? 'Submitting...' : flow.mode === 'api' ? 'Save credential' : 'Submit code'}
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <>
-                                                                    <div className="settings-note settings-note--muted">
-                                                                        {flow.submitting
-                                                                            ? 'Browser auth is waiting for OpenCode to receive the callback.'
-                                                                            : 'Browser auth is paused. Retry waiting for the callback or reopen the auth window.'}
-                                                                    </div>
-                                                                    <div className="provider-actions">
-                                                                        {flow.url && (
-                                                                            <button
-                                                                                className="btn"
-                                                                                onClick={() => window.open(flow.url, '_blank', 'noopener,noreferrer')}
-                                                                            >
-                                                                                <ExternalLink size={12} />
-                                                                                Open browser auth again
-                                                                            </button>
-                                                                        )}
-                                                                        <button
-                                                                            className="btn btn--primary"
-                                                                            onClick={() => retryBrowserOauth(provider.id)}
-                                                                            disabled={flow.submitting}
-                                                                        >
-                                                                            {flow.submitting
-                                                                                ? 'Waiting for callback...'
-                                                                                : 'Retry callback wait'}
-                                                                        </button>
-                                                                    </div>
-                                                                </>
-                                                            )}
-                                                            {flow.error && (
-                                                                <div className="settings-note settings-note--error">{flow.error}</div>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </section>
-                        )}
-
+                            ))}
+                        </nav>
+                        <div className="stg-sidebar__footer">
+                            DOT Studio<br />v0.1.0
+                        </div>
                     </div>
-                )}
+
+                    {/* Right content */}
+                    <div className="stg-content">
+                        {error && (
+                            <div className="stg-banner" style={{ color: '#f24822', background: 'rgba(242,72,34,0.1)', margin: '16px 24px 0' }}>
+                                {error}
+                            </div>
+                        )}
+                        {renderContent()}
+                    </div>
+                </div>
             </div>
         </div>
     )

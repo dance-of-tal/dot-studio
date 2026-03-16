@@ -10,31 +10,25 @@ import {
     Eye,
     EyeOff,
     Folder,
-    GitBranch,
     MessageSquare,
     Pencil,
     Plus,
+    Send,
     Trash2,
     X,
+    Zap,
 } from 'lucide-react';
 import './StageExplorer.css';
 import {
     stageLabel,
-    actSessionTone,
     buildPerformerSessionRows,
     groupPerformerSessionsById,
-    groupActSessionsByActId,
-    buildLatestActSessionMap,
     buildThreadRows,
     LayerRow,
     SessionNameEditor,
     SessionRowActions,
 } from './stage-explorer-utils';
 import type { ExplorerRenamingSession } from './stage-explorer-utils';
-
-
-
-
 
 
 export default function StageExplorer() {
@@ -69,44 +63,41 @@ export default function StageExplorer() {
         workingDir,
         stageList,
         performers,
-        acts,
         sessions,
-        actSessions,
-        actSessionMap,
         sessionMap,
         editingTarget,
         selectedPerformerId,
         selectedPerformerSessionId,
-        selectedActId,
-        selectedActSessionId,
         newStage,
         loadStage,
         listStages,
         listSessions,
         deleteStage,
         addPerformer,
-        addAct,
         selectPerformer,
         selectPerformerSession,
-        selectAct,
-        selectActSession,
-        setActThreadSession,
         setActiveChatPerformer,
         openPerformerEditor,
-        openActEditor,
         closeEditor,
         deleteSession,
-        deleteActSession,
         togglePerformerVisibility,
-        toggleActVisibility,
         removePerformer,
-        removeAct,
-        renameActSession,
     } = useStudioStore();
+
+    const acts = useStudioStore((s) => s.acts);
+    const selectedActId = useStudioStore((s) => s.selectedActId);
+    const selectAct = useStudioStore((s) => s.selectAct);
+    const removeAct = useStudioStore((s) => s.removeAct);
+    const setActExecutionMode = useStudioStore((s) => s.setActExecutionMode);
+    const sendActMessage = useStudioStore((s) => s.sendActMessage);
+    const loadingPerformerId = useStudioStore((s) => s.loadingPerformerId);
+    const actChats = useStudioStore((s) => s.actChats);
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
     const [renamingSession, setRenamingSession] = useState<ExplorerRenamingSession>(null);
+    const [actMessage, setActMessage] = useState('');
+    const [actCaller, setActCaller] = useState<string | null>(null);
 
     useEffect(() => {
         listStages();
@@ -114,7 +105,7 @@ export default function StageExplorer() {
     }, [listSessions, listStages, workingDir]);
 
     const sharedPerformers = useMemo(
-        () => performers.filter((performer) => performer.scope !== 'act-owned'),
+        () => performers.filter((performer) => performer.scope === 'shared'),
         [performers],
     );
 
@@ -126,28 +117,15 @@ export default function StageExplorer() {
         return groupPerformerSessionsById(performerSessionRows);
     }, [performerSessionRows]);
 
-    const actSessionsByActId = useMemo(() => {
-        return groupActSessionsByActId(actSessions);
-    }, [actSessions]);
-
-    const latestActSessionMap = useMemo(() => {
-        return buildLatestActSessionMap(actSessionMap, actSessionsByActId);
-    }, [actSessionMap, actSessionsByActId]);
-
     const threadRows = useMemo(() => {
         return buildThreadRows({
             sharedPerformers,
-            acts,
-            editingTarget,
-            latestActSessionMap,
+            editingTarget: editingTarget?.type === 'performer' ? editingTarget as { type: 'performer'; id: string } : null,
             performerSessionsById,
-            actSessionsByActId,
             selectedPerformerId,
             selectedPerformerSessionId,
-            selectedActId,
-            selectedActSessionId,
         });
-    }, [actSessionsByActId, acts, editingTarget, latestActSessionMap, performerSessionsById, selectedActId, selectedActSessionId, selectedPerformerId, selectedPerformerSessionId, sharedPerformers]);
+    }, [editingTarget, performerSessionsById, selectedPerformerId, selectedPerformerSessionId, sharedPerformers]);
 
     const stageRows = stageList.map((entry) => {
         const segments = entry.workingDir.trim().replace(/\/+$/, '').split('/');
@@ -195,16 +173,6 @@ export default function StageExplorer() {
         });
     }, [performerSessionLabel]);
 
-    const beginRenameActSession = useCallback((session: { id: string; title: string }) => {
-        setRenamingSession({
-            key: `act:${session.id}`,
-            kind: 'act',
-            sessionId: session.id,
-            currentTitle: session.title,
-            value: session.title,
-        });
-    }, []);
-
     const cancelRenameSession = useCallback(() => {
         setRenamingSession(null);
     }, []);
@@ -221,16 +189,12 @@ export default function StageExplorer() {
         }
 
         try {
-            if (renamingSession.kind === 'performer') {
-                const nextTitle = renameStudioSessionTitle(renamingSession.currentTitle, nextLabel);
-                if (!nextTitle) {
-                    throw new Error('Studio could not preserve thread metadata while renaming this session.');
-                }
-                await api.chat.updateSession(renamingSession.sessionId, nextTitle);
-                await listSessions();
-            } else {
-                renameActSession(renamingSession.sessionId, nextLabel);
+            const nextTitle = renameStudioSessionTitle(renamingSession.currentTitle, nextLabel);
+            if (!nextTitle) {
+                throw new Error('Studio could not preserve thread metadata while renaming this session.');
             }
+            await api.chat.updateSession(renamingSession.sessionId, nextTitle);
+            await listSessions();
             setRenamingSession(null);
         } catch (error) {
             console.error('Failed to rename session', error);
@@ -239,7 +203,10 @@ export default function StageExplorer() {
                 dedupeKey: `thread:rename:${renamingSession.sessionId}`,
             });
         }
-    }, [cancelRenameSession, listSessions, renameActSession, renamingSession]);
+    }, [cancelRenameSession, listSessions, renamingSession]);
+
+    const focusedPerformerId = useStudioStore((s) => s.focusedPerformerId);
+    const switchFocusTarget = useStudioStore((s) => s.switchFocusTarget);
 
     const openPerformer = (performerId: string) => {
         closeEditor();
@@ -249,18 +216,16 @@ export default function StageExplorer() {
             sessionMap: { ...state.sessionMap, [performerId]: '' },
             chats: { ...state.chats, [performerId]: [] },
         }));
+        if (focusedPerformerId && focusedPerformerId !== performerId) {
+            switchFocusTarget(performerId);
+        }
         selectPerformer(performerId);
         setActiveChatPerformer(performerId);
     };
 
     const openPerformerSession = async (performerId: string, session: { id: string; title?: string }) => {
-        const metadata = parseStudioSessionTitle(session.title);
         useStudioStore.setState((state) => ({
             sessionMap: { ...state.sessionMap, [performerId]: session.id },
-            sessionConfigMap: {
-                ...state.sessionConfigMap,
-                [performerId]: metadata?.configHash || '',
-            },
         }));
         try {
             const messages = await api.chat.messages(session.id);
@@ -282,21 +247,12 @@ export default function StageExplorer() {
             });
         }
         closeEditor();
+        if (focusedPerformerId && focusedPerformerId !== performerId) {
+            switchFocusTarget(performerId);
+        }
         selectPerformer(performerId);
         selectPerformerSession(session.id);
         setActiveChatPerformer(performerId);
-    };
-
-    const openAct = (actId: string) => {
-        closeEditor();
-        selectAct(actId);
-    };
-
-    const openActSession = (actId: string, sessionId: string) => {
-        closeEditor();
-        selectAct(actId);
-        setActThreadSession(actId, sessionId);
-        selectActSession(sessionId);
     };
 
     return (
@@ -330,19 +286,23 @@ export default function StageExplorer() {
                     <div className="explorer__actions">
                         <button
                             className="icon-btn"
-                            onClick={() => addPerformer(`Performer ${sharedPerformers.length + 1}`, 80 + (sharedPerformers.length * 24), 80 + (sharedPerformers.length * 18))}
+                            onClick={() => addPerformer(`Performer ${sharedPerformers.length + 1}`)}
                             title="Add performer"
                         >
                             <MessageSquare size={12} />
                         </button>
-                        <button className="icon-btn" onClick={() => addAct()} title="Add act">
-                            <GitBranch size={12} />
+                        <button
+                            className="icon-btn"
+                            onClick={() => useStudioStore.getState().addAct(`Act ${acts.length + 1}`)}
+                            title="Add Act"
+                        >
+                            <Zap size={12} />
                         </button>
                     </div>
                 </div>
                 <div className="explorer__tree scroll-area">
-                    {threadRows.length > 0 ? threadRows.map((row) => {
-                        const rowKey = `${row.kind}-${row.id}`;
+                    {(threadRows.length > 0 || acts.length > 0) ? <>{threadRows.map((row) => {
+                        const rowKey = `performer-${row.id}`;
                         const expanded = expandedRows[rowKey] ?? false;
 
                         return (
@@ -356,22 +316,15 @@ export default function StageExplorer() {
                                         row.active ? 'active' : '',
                                         row.hidden ? 'muted' : '',
                                     ].filter(Boolean).join(' ')}
-                                    onClick={() => {
-                                        if (row.kind === 'performer') {
-                                            openPerformer(row.id);
-                                            return;
-                                        }
-                                        openAct(row.id);
-                                    }}
+                                    onClick={() => openPerformer(row.id)}
                                     onKeyDown={(event) => {
                                         if ((event.key === 'Enter' || event.key === ' ')) {
                                             event.preventDefault();
-                                            if (row.kind === 'performer') openPerformer(row.id);
-                                            else openAct(row.id);
+                                            openPerformer(row.id);
                                         }
                                     }}
                                 >
-                                    {/* Toggle chevron – always visible */}
+                                    {/* Toggle chevron */}
                                     <span
                                         className={`thread-card__chevron ${expanded ? 'is-open' : ''}`}
                                         onClick={(event) => {
@@ -384,9 +337,7 @@ export default function StageExplorer() {
 
                                     {/* Type icon */}
                                     <span className="thread-card__icon">
-                                        {row.kind === 'performer'
-                                            ? <MessageSquare size={13} />
-                                            : <GitBranch size={13} />}
+                                        <MessageSquare size={13} />
                                     </span>
 
                                     {/* Name */}
@@ -394,7 +345,7 @@ export default function StageExplorer() {
                                         <span className="thread-card__name">{row.label}</span>
                                     </span>
 
-                                    {/* Always-visible actions */}
+                                    {/* Actions */}
                                     <span
                                         className="thread-card__actions"
                                         onClick={(event) => event.stopPropagation()}
@@ -407,11 +358,7 @@ export default function StageExplorer() {
                                                     className="icon-btn remove-btn"
                                                     onClick={() => {
                                                         setPendingDelete(null);
-                                                        if (row.kind === 'performer') {
-                                                            removePerformer(row.id);
-                                                        } else {
-                                                            removeAct(row.id);
-                                                        }
+                                                        removePerformer(row.id);
                                                     }}
                                                     title="Confirm delete"
                                                 >
@@ -430,35 +377,25 @@ export default function StageExplorer() {
                                             <>
                                                 <button
                                                     className={`icon-btn ${row.hidden ? 'visibility-off' : 'visibility-on'}`}
-                                                    onClick={() => {
-                                                        if (row.kind === 'performer') {
-                                                            togglePerformerVisibility(row.id);
-                                                            return;
-                                                        }
-                                                        toggleActVisibility(row.id);
-                                                    }}
-                                                    title={row.hidden ? `Show ${row.kind}` : `Hide ${row.kind}`}
+                                                    onClick={() => togglePerformerVisibility(row.id)}
+                                                    title={row.hidden ? 'Show performer' : 'Hide performer'}
                                                 >
                                                     {row.hidden ? <EyeOff size={11} /> : <Eye size={11} />}
                                                 </button>
                                                 <button
-                                                    className={`icon-btn ${(editingTarget?.type === row.kind && editingTarget.id === row.id) ? 'icon-btn--active' : ''}`}
+                                                    className={`icon-btn ${(editingTarget?.type === 'performer' && editingTarget.id === row.id) ? 'icon-btn--active' : ''}`}
                                                     onClick={() => {
-                                                        if (row.kind === 'performer') {
-                                                            openPerformerEditor(row.id, 'performer-runtime');
-                                                            setActiveChatPerformer(row.id);
-                                                            return;
-                                                        }
-                                                        openActEditor(row.id, 'act-structure');
+                                                        openPerformerEditor(row.id, 'performer-runtime');
+                                                        setActiveChatPerformer(row.id);
                                                     }}
-                                                    title={`Edit ${row.kind}`}
+                                                    title="Edit performer"
                                                 >
                                                     <Pencil size={11} />
                                                 </button>
                                                 <button
                                                     className="icon-btn remove-btn"
                                                     onClick={() => setPendingDelete(rowKey)}
-                                                    title={`Delete ${row.kind}`}
+                                                    title="Delete performer"
                                                 >
                                                     <Trash2 size={11} />
                                                 </button>
@@ -468,84 +405,152 @@ export default function StageExplorer() {
                                 </div>
                                 {expanded ? (
                                     <div className="thread-children">
-                                        {row.kind === 'performer' ? (
-                                            row.children.length > 0 ? row.children.map((entry) => (
-                                                <LayerRow
-                                                    key={entry.session.id}
-                                                    icon={<MessageSquare size={11} className={entry.active ? 'icon-active' : 'icon-muted'} />}
-                                                    label={(
-                                                        <SessionNameEditor
-                                                            renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
-                                                            display={performerSessionLabel(entry.session)}
-                                                            onChange={(value) => setRenamingSession((current) => current ? { ...current, value } : current)}
-                                                            onCommit={() => void commitRenameSession()}
-                                                            onCancel={cancelRenameSession}
-                                                        />
-                                                    )}
-                                                    meta={entry.active ? 'Current thread' : 'Saved thread'}
-                                                    metaTone={entry.active ? 'success' : 'default'}
-                                                    active={selectedPerformerSessionId === entry.session.id}
-                                                    onClick={renamingSession?.key === `performer:${entry.session.id}` ? undefined : () => openPerformerSession(row.id, entry.session)}
-                                                    actions={(
-                                                        <SessionRowActions
-                                                            renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
-                                                            onCommit={() => void commitRenameSession()}
-                                                            onCancel={cancelRenameSession}
-                                                            onRename={() => beginRenamePerformerSession(entry.session)}
-                                                            onDelete={() => deleteSession(entry.session.id)}
-                                                            renameTitle="Rename session"
-                                                            deleteTitle="Delete session"
-                                                        />
-                                                    )}
-                                                />
-                                            )) : (
-                                                <div className="empty-state empty-state--tight empty-state--nested">
-                                                    No threads yet
-                                                </div>
-                                            )
-                                        ) : (
-                                            row.children.length > 0 ? row.children.map((session) => (
-                                                <LayerRow
-                                                    key={session.id}
-                                                    icon={<MessageSquare size={11} className={selectedActSessionId === session.id ? 'icon-active' : 'icon-muted'} />}
-                                                    label={(
-                                                        <SessionNameEditor
-                                                            renaming={renamingSession?.key === `act:${session.id}` ? renamingSession : null}
-                                                            display={session.title}
-                                                            onChange={(value) => setRenamingSession((current) => current ? { ...current, value } : current)}
-                                                            onCommit={() => void commitRenameSession()}
-                                                            onCancel={cancelRenameSession}
-                                                        />
-                                                    )}
-                                                    meta={actSessionMap[row.id] === session.id ? `Current · ${session.status}` : session.status}
-                                                    metaTone={actSessionTone(session.status)}
-                                                    active={selectedActSessionId === session.id}
-                                                    onClick={renamingSession?.key === `act:${session.id}` ? undefined : () => openActSession(row.id, session.id)}
-                                                    actions={(
-                                                        <SessionRowActions
-                                                            renaming={renamingSession?.key === `act:${session.id}` ? renamingSession : null}
-                                                            onCommit={() => void commitRenameSession()}
-                                                            onCancel={cancelRenameSession}
-                                                            onRename={() => beginRenameActSession(session)}
-                                                            onDelete={() => deleteActSession(session.id)}
-                                                            renameTitle="Rename act session"
-                                                            deleteTitle="Delete act session"
-                                                        />
-                                                    )}
-                                                />
-                                            )) : (
-                                                <div className="empty-state empty-state--tight empty-state--nested">
-                                                    No threads yet
-                                                </div>
-                                            )
+                                        {row.children.length > 0 ? row.children.map((entry) => (
+                                            <LayerRow
+                                                key={entry.session.id}
+                                                icon={<MessageSquare size={11} className={entry.active ? 'icon-active' : 'icon-muted'} />}
+                                                label={(
+                                                    <SessionNameEditor
+                                                        renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
+                                                        display={performerSessionLabel(entry.session)}
+                                                        onChange={(value) => setRenamingSession((current) => current ? { ...current, value } : current)}
+                                                        onCommit={() => void commitRenameSession()}
+                                                        onCancel={cancelRenameSession}
+                                                    />
+                                                )}
+                                                meta={entry.active ? 'Current thread' : 'Saved thread'}
+                                                metaTone={entry.active ? 'success' : 'default'}
+                                                active={selectedPerformerSessionId === entry.session.id}
+                                                onClick={renamingSession?.key === `performer:${entry.session.id}` ? undefined : () => openPerformerSession(row.id, entry.session)}
+                                                actions={(
+                                                    <SessionRowActions
+                                                        renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
+                                                        onCommit={() => void commitRenameSession()}
+                                                        onCancel={cancelRenameSession}
+                                                        onRename={() => beginRenamePerformerSession(entry.session)}
+                                                        onDelete={() => deleteSession(entry.session.id)}
+                                                        renameTitle="Rename session"
+                                                        deleteTitle="Delete session"
+                                                    />
+                                                )}
+                                            />
+                                        )) : (
+                                            <div className="empty-state empty-state--tight empty-state--nested">
+                                                No threads yet
+                                            </div>
                                         )}
                                     </div>
                                 ) : null}
                             </div>
                         );
-                    }) : (
+                    })}{acts.map((act) => {
+                        const isActSelected = selectedActId === act.id;
+                        const performerCount = Object.keys(act.performers).length;
+                        return (
+                            <div key={`act-${act.id}`} className="thread-group">
+                                <div
+                                    role="button"
+                                    tabIndex={0}
+                                    className={[
+                                        'thread-card',
+                                        isActSelected ? 'active' : '',
+                                    ].filter(Boolean).join(' ')}
+                                    onClick={() => selectAct(isActSelected ? null : act.id)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            selectAct(isActSelected ? null : act.id);
+                                        }
+                                    }}
+                                >
+                                    <span className="thread-card__icon">
+                                        <Zap size={13} />
+                                    </span>
+                                    <span className="thread-card__body">
+                                        <span className="thread-card__name">{act.name}</span>
+                                        <span className="thread-card__meta">
+                                            {performerCount}p · {act.relations.length}r · {act.executionMode}
+                                        </span>
+                                    </span>
+                                    <span
+                                        className="thread-card__actions"
+                                        onClick={(event) => event.stopPropagation()}
+                                    >
+                                        <button
+                                            className={`icon-btn ${act.executionMode === 'safe' ? 'icon-btn--active' : ''}`}
+                                            onClick={() => setActExecutionMode(act.id, act.executionMode === 'direct' ? 'safe' : 'direct')}
+                                            title={`Switch to ${act.executionMode === 'direct' ? 'safe' : 'direct'} mode`}
+                                        >
+                                            {act.executionMode === 'safe' ? <Eye size={11} /> : <EyeOff size={11} />}
+                                        </button>
+                                        <button
+                                            className="icon-btn remove-btn"
+                                            onClick={() => removeAct(act.id)}
+                                            title="Delete act"
+                                        >
+                                            <Trash2 size={11} />
+                                        </button>
+                                    </span>
+                                </div>
+                                {isActSelected && performerCount > 0 && (
+                                    <div className="act-chat-input">
+                                        {(actChats[act.id] || []).length > 0 && (
+                                            <div className="act-chat-messages">
+                                                {(actChats[act.id] || []).slice(-5).map((msg) => (
+                                                    <div key={msg.id} className={`act-chat-msg act-chat-msg--${msg.role}`}>
+                                                        <span className="act-chat-msg__role">{msg.role === 'user' ? '▸' : msg.role === 'assistant' ? '◂' : '●'}</span>
+                                                        <span className="act-chat-msg__text">{typeof msg.content === 'string' ? msg.content.slice(0, 120) : '...'}{typeof msg.content === 'string' && msg.content.length > 120 ? '…' : ''}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <select
+                                            className="act-chat-input__caller"
+                                            value={actCaller && act.performers[actCaller] ? actCaller : Object.keys(act.performers)[0] || ''}
+                                            onChange={(e) => setActCaller(e.target.value)}
+                                        >
+                                            {Object.entries(act.performers).map(([id, p]) => (
+                                                <option key={id} value={id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                        <input
+                                            className="act-chat-input__message"
+                                            type="text"
+                                            placeholder="Send message as performer..."
+                                            value={actMessage}
+                                            onChange={(e) => setActMessage(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && actMessage.trim()) {
+                                                    const caller = actCaller && act.performers[actCaller] ? actCaller : Object.keys(act.performers)[0];
+                                                    if (caller) {
+                                                        sendActMessage(act.id, caller, actMessage.trim());
+                                                        setActMessage('');
+                                                    }
+                                                }
+                                            }}
+                                            disabled={!!loadingPerformerId}
+                                        />
+                                        <button
+                                            className="icon-btn"
+                                            title="Send"
+                                            disabled={!actMessage.trim() || !!loadingPerformerId}
+                                            onClick={() => {
+                                                const caller = actCaller && act.performers[actCaller] ? actCaller : Object.keys(act.performers)[0];
+                                                if (caller && actMessage.trim()) {
+                                                    sendActMessage(act.id, caller, actMessage.trim());
+                                                    setActMessage('');
+                                                }
+                                            }}
+                                        >
+                                            <Send size={11} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}</> : (
                         <div className="empty-state">
-                            Add a performer or act to start building this stage.
+                            Add a performer to start building this stage.
                         </div>
                     )}
                 </div>

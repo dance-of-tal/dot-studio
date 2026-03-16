@@ -1,0 +1,149 @@
+/* ── ActChatPanel — Chat mode styles ── */
+
+.act-chat {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* ── Messages ── */
+.act-chat__msg {
+    padding: 6px 10px;
+}
+.act-chat__msg--user {
+    background: var(--bg-elevated, var(--bg-hover));
+    border-radius: 6px;
+    margin: 2px 6px;
+}
+.act-chat__msg--assistant {
+    margin: 2px 6px;
+}
+.act-chat__msg--system {
+    margin: 2px 6px;
+}
+.act-chat__system {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+.act-chat__content {
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+/* ── Performer label on assistant messages ── */
+.act-chat__performer-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--act-accent, #f59e0b);
+    margin-bottom: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* ── Empty state ── */
+.act-chat__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+.act-chat__empty svg {
+    opacity: 0.3;
+}
+
+/* ── Loading ── */
+.act-chat__loading {
+    padding: 8px 16px;
+}
+.act-chat__dot-pulse {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--act-accent, #f59e0b);
+    animation: act-dot-pulse 1s ease-in-out infinite;
+}
+@keyframes act-dot-pulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── Composer ── */
+.act-chat__composer {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 8px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-panel);
+}
+
+.act-chat__caller-select {
+    font-size: 10px;
+    padding: 3px 6px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    background: var(--bg-panel);
+    color: var(--text-secondary);
+    cursor: pointer;
+    align-self: flex-start;
+}
+
+.act-chat__input-row {
+    display: flex;
+    gap: 4px;
+    align-items: flex-end;
+}
+
+.act-chat__input {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-family: inherit;
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    min-height: 32px;
+    max-height: 120px;
+    line-height: 1.4;
+}
+.act-chat__input:focus {
+    outline: none;
+    border-color: var(--act-accent, #f59e0b);
+}
+.act-chat__input:disabled {
+    opacity: 0.5;
+}
+
+.act-chat__send-btn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: var(--act-accent, #f59e0b);
+    color: white;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+}
+.act-chat__send-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+.act-chat__send-btn:hover:not(:disabled) {
+    opacity: 0.85;
+}

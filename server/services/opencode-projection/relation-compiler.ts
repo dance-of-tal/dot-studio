@@ -19,15 +19,15 @@ export function compileRequestRelations(targets: RequestRelationTarget[]): Compi
     }
 
     const lines = [
-        '# Performer Requests',
+        '# Available Agents',
         '',
-        'The following performers are available for request-style delegation in this context.',
+        'The following agents are available for request-style delegation in this context.',
         'Use the `task` tool only when it is actually useful, and only with the allowed agent names below.',
         '',
     ]
 
     for (const target of targets) {
-        lines.push(`- ${target.performerName}: use \`task\` with agent="${target.agentName}"${target.description ? ` — ${target.description}` : ''}`)
+        lines.push(`- **${target.performerName}**: use \`task\` with agent="${target.agentName}"${target.description ? ` — ${target.description}` : ''}`)
     }
 
     return {

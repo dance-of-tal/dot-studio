@@ -6,7 +6,7 @@
  * mutations without depending on React state.
  */
 
-import type { AssetCard, AssetRef, StageActNode } from '../types'
+import type { AssetCard, AssetRef } from '../types'
 import type { StudioState } from '../store'
 
 // ── Types ───────────────────────────────────────────────
@@ -32,12 +32,9 @@ export type DropTargetData = {
     type?: string;
     performerId?: string | null;
     editorId?: string;
-    actId?: string;
-    nodeId?: string;
 };
 
 export type PerformerAssetPayload = Parameters<StudioState['addPerformerFromAsset']>[0];
-export type ActOwnedPerformerSeed = Parameters<StudioState['createActOwnedPerformerForNode']>[2];
 
 // ── Helpers ─────────────────────────────────────────────
 
@@ -68,28 +65,6 @@ export function getAssetAuthor(asset: DragAsset) {
 
 export function getAssetSlug(asset: DragAsset) {
     return asset.slug || asset.name || '';
-}
-
-export function findActNode(store: StudioState, actId: string, nodeId: string) {
-    const act = store.acts.find((item) => item.id === actId);
-    const node = act?.nodes.find((item: StageActNode) => item.id === nodeId) || null;
-    return { act, node };
-}
-
-export function ensureActNodePerformer(
-    store: StudioState,
-    actId: string,
-    nodeId: string,
-    seededAsset?: ActOwnedPerformerSeed,
-) {
-    const { act, node } = findActNode(store, actId, nodeId);
-    if (!act || !node) {
-        return null;
-    }
-    if (node.performerId) {
-        return node.performerId;
-    }
-    return store.createActOwnedPerformerForNode(actId, nodeId, seededAsset || null);
 }
 
 // ── Asset → Performer applicators ───────────────────────

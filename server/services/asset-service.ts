@@ -31,28 +31,44 @@ function normalizeAsset(
             : typeof danceRaw === 'string'
                 ? [danceRaw]
                 : []
+        // Accept model as string or object {provider, modelId}
+        const modelValue = typeof content.model === 'string' ? content.model
+            : (content.model && typeof content.model === 'object' && typeof (content.model as any).provider === 'string')
+                ? content.model
+                : null
         return {
             ...base,
             talUrn: typeof content.tal === 'string' ? content.tal : null,
             danceUrns,
             actUrn: typeof content.act === 'string' ? content.act : null,
-            model: typeof content.model === 'string' ? content.model : null,
+            model: modelValue,
             mcpConfig: typeof content.mcp_config === 'object' && content.mcp_config !== null ? content.mcp_config : null,
             tags: Array.isArray(content.tags) ? content.tags : [],
         }
     }
 
     if (kind === 'act') {
+        const isStudioV1 = content.schema === 'studio-v1' || Array.isArray(content.performers)
         return {
             ...base,
-            entryNode: typeof content.entryNode === 'string' ? content.entryNode : null,
-            nodeCount: typeof content.nodes === 'object' && content.nodes ? Object.keys(content.nodes).length : 0,
             tags: Array.isArray(content.tags) ? content.tags : [],
-            ...(detail ? {
-                nodes: typeof content.nodes === 'object' && content.nodes ? content.nodes : {},
-                edges: Array.isArray(content.edges) ? content.edges : [],
-                maxIterations: typeof content.maxIterations === 'number' ? content.maxIterations : undefined,
-            } : {}),
+            ...(isStudioV1 ? {
+                schema: 'studio-v1',
+                performerCount: Array.isArray(content.performers) ? content.performers.length : 0,
+                relationCount: Array.isArray(content.relations) ? content.relations.length : 0,
+                ...(detail ? {
+                    performers: Array.isArray(content.performers) ? content.performers : [],
+                    relations: Array.isArray(content.relations) ? content.relations : [],
+                } : {}),
+            } : {
+                entryNode: typeof content.entryNode === 'string' ? content.entryNode : null,
+                nodeCount: typeof content.nodes === 'object' && content.nodes ? Object.keys(content.nodes).length : 0,
+                ...(detail ? {
+                    nodes: typeof content.nodes === 'object' && content.nodes ? content.nodes : {},
+                    edges: Array.isArray(content.edges) ? content.edges : [],
+                    maxIterations: typeof content.maxIterations === 'number' ? content.maxIterations : undefined,
+                } : {}),
+            }),
         }
     }
 

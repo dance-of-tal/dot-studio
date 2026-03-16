@@ -8,10 +8,12 @@ import {
     cleanGroupFiles,
     updateGitExclude,
     updateManifestGroup,
+    resolveAgentIdentity,
 } from './projection-manifest.js'
 import { compileDance, type CompiledSkill } from './dance-compiler.js'
 import { compilePerformer, type CompiledPerformer, type PerformerCompileInput, type Posture } from './performer-compiler.js'
 import { compileRequestRelations, type RequestRelationTarget } from './relation-compiler.js'
+import type { ModelSelection } from '../../../shared/model-types.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -25,11 +27,6 @@ type DraftAsset = {
     description?: string
     derivedFrom?: string | null
 }
-
-type ModelSelection = {
-    provider: string
-    modelId: string
-} | null
 
 type CapabilitySnapshot = {
     toolCall: boolean
@@ -57,6 +54,12 @@ export interface PerformerProjectionInput {
         performerId: string
         performerName: string
         description?: string
+    }>
+    scope?: 'stage' | 'act'
+    actId?: string
+    extraTools?: Array<{
+        name: string
+        content: string
     }>
 }
 
@@ -129,6 +132,12 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         toolResolution.resolvedTools,
     )
 
+    if (input.extraTools) {
+        for (const tool of input.extraTools) {
+            toolMap[tool.name] = true
+        }
+    }
+
     const skills: CompiledSkill[] = []
     for (const ref of input.danceRefs) {
         skills.push(await compileDance(
@@ -138,14 +147,15 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             stageHash,
             input.performerId,
             input.executionDir,
-            'stage',
+            input.scope || 'stage',
+            input.actId,
         ))
     }
 
     const requestTargets: RequestRelationTarget[] = (input.requestTargets || []).map((target) => ({
         performerId: target.performerId,
         performerName: target.performerName,
-        agentName: getProjectedAgentName(input.workingDir, target.performerId, 'build'),
+        agentName: getProjectedAgentName(input.workingDir, target.performerId, 'build', input.scope, input.actId),
         description: target.description || '',
     }))
     const requestProjection = compileRequestRelations(requestTargets)
@@ -161,7 +171,8 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             modelVariant: input.modelVariant || null,
             stageHash,
             executionDir: input.executionDir,
-            scope: 'stage',
+            scope: input.scope || 'stage',
+            actId: input.actId,
             skillNames: skills.map((skill) => skill.logicalName),
             toolMap,
             taskAllowlist: requestProjection.taskAllowlist,
@@ -170,9 +181,17 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         skills,
     )
 
+    let changed = false
+    if (input.extraTools) {
+        for (const tool of input.extraTools) {
+            const toolPath = path.join(input.executionDir, '.opencode', 'tools', `${tool.name}.ts`)
+            compiled.allFiles.push(toolPath)
+            changed = (await writeIfChanged(toolPath, tool.content)) || changed
+        }
+    }
+
     await cleanGroupFiles(input.executionDir, groupKey(input.performerId), compiled.allFiles)
 
-    let changed = false
     for (const skill of skills) {
         changed = (await writeIfChanged(skill.filePath, skill.content)) || changed
     }
@@ -203,7 +222,16 @@ export function getProjectedAgentName(
     workingDir: string,
     performerId: string,
     posture: Posture,
+    scope: 'stage' | 'act' = 'stage',
+    actId?: string,
 ) {
     const stageHash = computeStageHash(workingDir)
-    return `dot-studio/${stageHash}/${performerId}--${posture}`
+    return resolveAgentIdentity({
+        executionDir: workingDir,
+        stageHash,
+        performerId,
+        posture,
+        scope,
+        actId,
+    }).agentName
 }

@@ -1,5 +1,3 @@
-import { buildPerformerConfigHash } from '../lib/performers'
-
 export function normalizePath(dir: string): string {
     return dir.trim().replace(/\/+$/, '')
 }
@@ -51,7 +49,6 @@ export function applyPerformerPatch<T extends Record<string, any>>(performer: an
             publishBindingUrn: null,
         }
     }
-    next.configHash = buildPerformerConfigHash(next)
     return next
 }
 

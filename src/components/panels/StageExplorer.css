@@ -436,3 +436,87 @@
 .show-more-btn:hover {
     background: var(--bg-hover);
 }
+
+/* ── Act Chat Input ──────────────────────────────────── */
+.act-chat-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 6px 24px;
+}
+
+.act-chat-messages {
+    width: 100%;
+    max-height: 100px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 4px;
+    font-size: var(--font-xs);
+}
+
+.act-chat-msg {
+    display: flex;
+    gap: 4px;
+    align-items: baseline;
+    line-height: 1.3;
+}
+
+.act-chat-msg__role {
+    flex-shrink: 0;
+    opacity: 0.5;
+    font-size: 8px;
+}
+
+.act-chat-msg__text {
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+.act-chat-msg--user .act-chat-msg__text {
+    color: var(--text-primary);
+}
+
+.act-chat-msg--assistant .act-chat-msg__text {
+    color: var(--accent);
+}
+
+.act-chat-input__caller {
+    flex: 0 0 auto;
+    max-width: 90px;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: var(--font-xs);
+    padding: 3px 4px;
+    cursor: pointer;
+}
+
+.act-chat-input__caller:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.act-chat-input__message {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: var(--font-sm);
+    padding: 3px 6px;
+}
+
+.act-chat-input__message:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.act-chat-input__message:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

@@ -1,319 +1,206 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useDroppable } from '@dnd-kit/core';
-import { Handle, Position, useStore } from '@xyflow/react';
-import { useStudioStore } from '../../store';
-import { useSlashCommands } from '../../hooks/useSlashCommands';
-import { useFileMentions, type FileMention } from '../../hooks/useFileMentions';
-import { usePerformerMention, type PerformerMention } from '../../hooks/usePerformerMention';
-import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries';
-import { Send, Square, File as FileIcon, X, RotateCcw, Sparkles, Hammer, Lightbulb, EyeOff, Hexagon, Zap, Cpu, Server, ArrowLeft, Pencil, Shield } from 'lucide-react';
-import ThreadBody from '../chat/ThreadBody';
-import { assetRefKey, hasModelConfig, resolvePerformerAgentId } from '../../lib/performers';
-import { usePerformerPresentation } from '../../hooks/usePerformerPresentation';
-import { api } from '../../api';
-import { showToast } from '../../lib/toast';
-import { loadMaterialFileIconForPath } from '../../lib/material-file-icons';
-import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame';
-import ChatMessageContent from '../chat/ChatMessageContent';
+/**
+ * AgentFrame — Canvas node representing a performer.
+ *
+ * This is a thin orchestrator that:
+ * 1. Initializes shared hooks and store bindings
+ * 2. Renders the CanvasWindowFrame shell with header
+ * 3. Delegates to PerformerEditPanel or PerformerChatPanel
+ * 4. Manages SafeReviewModal
+ *
+ * Edit-mode composition → PerformerEditPanel
+ * Chat-mode conversation → PerformerChatPanel
+ */
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useDroppable } from '@dnd-kit/core'
+import { Handle, Position, useStore } from '@xyflow/react'
 
-import PerformerComposeCards from './PerformerComposeCards';
-import PerformerAdvancedSettings from './PerformerAdvancedSettings';
-import ModelVariantSelect from './ModelVariantSelect';
-import ModelQuickPicker from './ModelQuickPicker';
-import AgentSelect from './AgentSelect';
-import SafeReviewModal from '../../components/modals/SafeReviewModal';
-import './AgentFrame.css';
-import './AgentChat.css';
-import './AgentInput.css';
+import { useStudioStore } from '../../store'
+import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries'
+import { hasModelConfig, resolvePerformerAgentId } from '../../lib/performers'
+import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
+import { api } from '../../api'
+import { showToast } from '../../lib/toast'
+import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
+import SafeReviewModal from '../../components/modals/SafeReviewModal'
 
-/* ── Tool Call Card ───────────────────────────────── */
-import {
-    formatAgentLabel,
-    buildDanceSearchSections,
-    formatChatAttachments,
-    shouldShowChatLoading,
-} from './agent-frame-utils'
-import type { TurnDanceSelection, DanceSearchItem } from './agent-frame-utils'
+import PerformerEditPanel from './PerformerEditPanel'
+import PerformerChatPanel from './PerformerChatPanel'
+
+import { Pencil, EyeOff } from 'lucide-react'
+import './AgentFrame.css'
+import './AgentChat.css'
+import './AgentInput.css'
+
+/* ── Header Meta Badge ── */
 
 function PerformerHeaderMeta({
-    modelLabel,
-    modelTitle,
-    talLabel,
-    danceSummary,
-    executionMode,
-    pendingCount,
-    conflictCount,
+    modelLabel, modelTitle, talLabel, danceSummary, executionMode, pendingCount, conflictCount,
 }: {
-    modelLabel: string | null
-    modelTitle: string | null
-    talLabel: string | null
-    danceSummary: string | null
-    executionMode: 'direct' | 'safe'
-    pendingCount: number
-    conflictCount: number
+    modelLabel: string | null; modelTitle: string | null; talLabel: string | null;
+    danceSummary: string | null; executionMode: 'direct' | 'safe'; pendingCount: number; conflictCount: number;
 }) {
     return (
         <div className="canvas-frame__badges">
             <span className="canvas-frame__badge" title={executionMode === 'safe' ? 'Safe mode enabled' : 'Direct mode enabled'}>
                 {executionMode === 'safe' ? 'Safe' : 'Direct'}
             </span>
-            {conflictCount > 0 ? (
-                <span className="canvas-frame__badge" title={`${conflictCount} conflict${conflictCount === 1 ? '' : 's'} require review`}>
-                    Conflict
-                </span>
-            ) : null}
-            {pendingCount > 0 ? (
-                <span className="canvas-frame__badge" title={`${pendingCount} pending change${pendingCount === 1 ? '' : 's'}`}>
-                    {pendingCount} change{pendingCount === 1 ? '' : 's'}
-                </span>
-            ) : null}
-            {talLabel ? (
-                <span className="canvas-frame__badge" title={`Tal: ${talLabel}`}>
-                    {talLabel}
-                </span>
-            ) : null}
-            {danceSummary ? (
-                <span className="canvas-frame__badge" title={`Dance: ${danceSummary}`}>
-                    {danceSummary}
-                </span>
-            ) : null}
-            {modelLabel ? (
-                <span className="canvas-frame__badge" title={modelTitle || modelLabel}>
-                    {modelLabel}
-                </span>
-            ) : null}
+            {conflictCount > 0 ? <span className="canvas-frame__badge" title={`${conflictCount} conflict${conflictCount === 1 ? '' : 's'} require review`}>Conflict</span> : null}
+            {pendingCount > 0 ? <span className="canvas-frame__badge" title={`${pendingCount} pending change${pendingCount === 1 ? '' : 's'}`}>{pendingCount} change{pendingCount === 1 ? '' : 's'}</span> : null}
+            {talLabel ? <span className="canvas-frame__badge" title={`Tal: ${talLabel}`}>{talLabel}</span> : null}
+            {danceSummary ? <span className="canvas-frame__badge" title={`Dance: ${danceSummary}`}>{danceSummary}</span> : null}
+            {modelLabel ? <span className="canvas-frame__badge" title={modelTitle || modelLabel}>{modelLabel}</span> : null}
         </div>
-    );
-}
-
-function MentionFileIcon({ path }: { path: string }) {
-    const [iconUrl, setIconUrl] = useState('')
-
-    useEffect(() => {
-        let active = true
-
-        void loadMaterialFileIconForPath(path).then((url) => {
-            if (active) {
-                setIconUrl(url)
-            }
-        })
-
-        return () => {
-            active = false
-        }
-    }, [path])
-
-    return (
-        <span
-            className="mention-result__icon"
-            style={{
-                ['--mention-icon' as string]: iconUrl ? `url(${iconUrl})` : 'none',
-                background: iconUrl ? 'var(--text-secondary)' : 'transparent',
-            }}
-            aria-hidden="true"
-        />
     )
 }
 
+/* ── Main Component ── */
+
 export default function AgentFrame({ data, id }: any) {
+    // ─── Store ────────────────────────────────────────
     const {
         selectedPerformerId, focusedPerformerId, editingTarget,
-        chats, sendMessage, abortChat, loadingPerformerId, setPerformerAgentId, executeSlashCommand, summarizeSession,
-        togglePerformerVisibility,
-        closeEditor,
-        performers,
-        edges,
-        drafts,
+        chats, chatPrefixes, loadingPerformerId, setPerformerAgentId,
+        togglePerformerVisibility, closeEditor,
+        performers, drafts,
         createMarkdownEditor,
         updatePerformerName,
-        setPerformerTalRef,
-        setPerformerDanceDeliveryMode,
-        setPerformerModel,
-        setPerformerModelVariant,
-        removePerformerMcp,
-        setPerformerMcpBinding,
-        removePerformerDance,
-        setPerformerAutoCompact,
+        setPerformerTalRef, setPerformerDanceDeliveryMode,
+        setPerformerModel, setPerformerModelVariant,
+        removePerformerMcp, setPerformerMcpBinding, removePerformerDance,
         setPerformerExecutionMode,
-        sessionMap,
-        safeSummaries,
-        refreshSafeOwner,
-        applySafeOwner,
-        discardSafeOwnerFile,
-        discardAllSafeOwner,
-        undoLastSafeApply,
-        undoLastTurn,
+        sessionMap, safeSummaries,
+        refreshSafeOwner, applySafeOwner, discardSafeOwnerFile,
+        discardAllSafeOwner, undoLastSafeApply,
         detachPerformerSession,
-    } = useStudioStore();
+    } = useStudioStore()
 
-    const [input, setInput] = useState('');
-    const [attachments, setAttachments] = useState<FileMention[]>([]);
-    const [mentionedPerformers, setMentionedPerformers] = useState<PerformerMention[]>([]);
-    const [turnDanceSelections, setTurnDanceSelections] = useState<TurnDanceSelection[]>([]);
-    const [danceSearchIndex, setDanceSearchIndex] = useState(0);
-    const [editTab, setEditTab] = useState<'basic' | 'advanced'>('basic');
-    const [showModelPicker, setShowModelPicker] = useState(false);
-    const [showSafeReview, setShowSafeReview] = useState(false);
-    const [safeBusy, setSafeBusy] = useState(false);
-    const [pendingModeSwitch, setPendingModeSwitch] = useState<'direct' | null>(null);
+    // ─── Local State ──────────────────────────────────
+    const [showSafeReview, setShowSafeReview] = useState(false)
+    const [safeBusy, setSafeBusy] = useState(false)
+    const [pendingModeSwitch, setPendingModeSwitch] = useState<'direct' | null>(null)
+    const chatEndRef = useRef<HTMLDivElement>(null)
+    const bodyRef = useRef<HTMLDivElement>(null)
 
-    const chatEndRef = useRef<HTMLDivElement>(null);
-    const bodyRef = useRef<HTMLDivElement>(null);
-    const composerInputRef = useRef<HTMLTextAreaElement>(null);
-    const isSelected = selectedPerformerId === id;
-    const isFocused = focusedPerformerId === id;
-    const isLoading = loadingPerformerId === id;
-    const messages = useMemo(() => chats[id] || [], [chats, id]);
-    const modelConfigured = hasModelConfig(data.model);
-    const isEditMode = editingTarget?.type === 'performer' && editingTarget.id === id;
-    const performer = performers.find((item) => item.id === id) || null;
-    const safeSummary = safeSummaries[`performer:${id}`] || null;
-    const hasActiveSession = !!sessionMap[id];
-    const lastMessageId = messages[messages.length - 1]?.id || null;
-    const { data: agents = [] } = useAgents(isSelected || isEditMode);
-    const { data: danceAssets = [] } = useAssetKind('dance', isSelected || isFocused || isEditMode);
-    const { data: assetInventory = [] } = useAssets(isSelected || isEditMode);
-    const { data: mcpServers = [] } = useMcpServers(isSelected || isEditMode);
+    // ─── Derived ──────────────────────────────────────
+    const isSelected = selectedPerformerId === id
+    const isFocused = focusedPerformerId === id
+    const isLoading = loadingPerformerId === id
+    const messages = useMemo(() => chats[id] || [], [chats, id])
+    const prefixCount = useMemo(() => (chatPrefixes[id] || []).length, [chatPrefixes, id])
+    const modelConfigured = hasModelConfig(data.model)
+    const isEditMode = editingTarget?.type === 'performer' && editingTarget.id === id
+    const performer = performers.find((item) => item.id === id) || null
+    const safeSummary = safeSummaries[`performer:${id}`] || null
+    const sessionId = sessionMap[id] || null
+    const hasActiveSession = !!sessionId
 
+    // ─── Queries ──────────────────────────────────────
+    const { data: agents = [] } = useAgents(isSelected || isEditMode)
+    const { data: danceAssets = [] } = useAssetKind('dance', isSelected || isFocused || isEditMode)
+    const { data: assetInventory = [] } = useAssets(isSelected || isEditMode)
+    const { data: mcpServers = [] } = useMcpServers(isSelected || isEditMode)
 
-    const { isOver: isTalOver, setNodeRef: setTalRef } = useDroppable({
-        id: `performer-edit-tal-${id}`,
-        data: { performerId: id, type: 'tal' },
-    });
-    const { isOver: isDanceOver, setNodeRef: setDanceRef } = useDroppable({
-        id: `performer-edit-dance-${id}`,
-        data: { performerId: id, type: 'dance' },
-    });
-    const { isOver: isModelOver, setNodeRef: setModelRef } = useDroppable({
-        id: `performer-edit-model-${id}`,
-        data: { performerId: id, type: 'model' },
-    });
-    const { isOver: isMcpOver, setNodeRef: setMcpRef } = useDroppable({
-        id: `performer-edit-mcp-${id}`,
-        data: { performerId: id, type: 'mcp' },
-    });
+    // ─── DnD ──────────────────────────────────────────
+    const talDrop = useDroppable({ id: `performer-edit-tal-${id}`, data: { performerId: id, type: 'tal' } })
+    const danceDrop = useDroppable({ id: `performer-edit-dance-${id}`, data: { performerId: id, type: 'dance' } })
+    const modelDrop = useDroppable({ id: `performer-edit-model-${id}`, data: { performerId: id, type: 'model' } })
+    const mcpDrop = useDroppable({ id: `performer-edit-mcp-${id}`, data: { performerId: id, type: 'mcp' } })
 
-    const rfWidth = useStore((s) => s.width);
-    const rfHeight = useStore((s) => s.height);
+    // ─── Canvas size ──────────────────────────────────
+    const rfWidth = useStore((s) => s.width)
+    const rfHeight = useStore((s) => s.height)
+
+    // ─── Agent/model resolution ───────────────────────
     const selectedAgentId = performer
         ? resolvePerformerAgentId(performer)
-        : (data.agentId || (data.planMode ? 'plan' : 'build'));
-    const selectedAgent = useMemo(
-        () => agents.find((agent) => agent.name === selectedAgentId) || null,
-        [agents, selectedAgentId],
-    );
-    const buildAgent = useMemo(
-        () => agents.find((agent) => agent.name === 'build') || null,
-        [agents],
-    );
-    const planAgent = useMemo(
-        () => agents.find((agent) => agent.name === 'plan') || null,
-        [agents],
-    );
-    const isPlanAgent = selectedAgentId === 'plan';
+        : (data.agentId || (data.planMode ? 'plan' : 'build'))
+    const selectedAgent = useMemo(() => agents.find((a) => a.name === selectedAgentId) || null, [agents, selectedAgentId])
+    const buildAgent = useMemo(() => agents.find((a) => a.name === 'build') || null, [agents])
+    const planAgent = useMemo(() => agents.find((a) => a.name === 'plan') || null, [agents])
+
+    // ─── Presentation ─────────────────────────────────
     const { presentation: performerPresentation, runtimeTools } = usePerformerPresentation(
-        performer,
-        assetInventory,
-        mcpServers,
-        drafts,
+        performer, assetInventory, mcpServers, drafts,
         { enableTools: (isSelected || isEditMode) },
-    );
-    const requestRelations = useMemo(
-        () => edges
-            .filter((edge) => edge.from === id)
-            .map((edge) => ({
-                targetName: performers.find((item) => item.id === edge.to)?.name || edge.to,
-                description: edge.description,
-            })),
-        [edges, id, performers],
-    );
+    )
+    // Standalone performers no longer have edges — relations live inside Acts only
+    const requestRelations: Array<{ targetName: string; description: string }> = []
     const mcpBindingRows = useMemo(
-        () => (performerPresentation.declaredMcpServerNames || [])
-            .map((placeholderName) => ({
-                placeholderName,
-                serverName: performer?.mcpBindingMap?.[placeholderName] || null,
-            })),
-        [performer?.mcpBindingMap, performerPresentation.declaredMcpServerNames],
-    );
-    const mcpBindingOptions = useMemo(
-        () => mcpServers.map((server) => ({
-            name: server.name,
-            disabled: server.enabled === false,
+        () => (performerPresentation.declaredMcpServerNames || []).map((placeholderName) => ({
+            placeholderName,
+            serverName: performer?.mcpBindingMap?.[placeholderName] || null,
         })),
+        [performer?.mcpBindingMap, performerPresentation.declaredMcpServerNames],
+    )
+    const mcpBindingOptions = useMemo(
+        () => mcpServers.map((server) => ({ name: server.name, disabled: server.enabled === false })),
         [mcpServers],
-    );
+    )
 
+    // ─── MCP binding auto-cleanup ─────────────────────
     useEffect(() => {
-        if (!performer?.mcpBindingMap) {
-            return;
-        }
-        const validNames = new Set(
-            mcpServers
-                .filter((server) => server.enabled !== false)
-                .map((server) => server.name),
-        );
+        if (!performer?.mcpBindingMap) return
+        const validNames = new Set(mcpServers.filter((s) => s.enabled !== false).map((s) => s.name))
         for (const [placeholderName, serverName] of Object.entries(performer.mcpBindingMap)) {
-            if (!serverName || validNames.has(serverName)) {
-                continue;
-            }
-            setPerformerMcpBinding(id, placeholderName, null);
+            if (!serverName || validNames.has(serverName)) continue
+            setPerformerMcpBinding(id, placeholderName, null)
         }
-    }, [id, mcpServers, performer?.mcpBindingMap, setPerformerMcpBinding]);
+    }, [id, mcpServers, performer?.mcpBindingMap, setPerformerMcpBinding])
 
+    // ─── Safe mode refresh ────────────────────────────
     useEffect(() => {
-        if (performer?.executionMode !== 'safe') {
-            return;
-        }
-        if (!(isSelected || isFocused || isEditMode || showSafeReview)) {
-            return;
-        }
-        void refreshSafeOwner('performer', id);
-    }, [id, isEditMode, isFocused, isSelected, performer?.executionMode, refreshSafeOwner, showSafeReview]);
+        if (performer?.executionMode !== 'safe') return
+        if (!(isSelected || isFocused || isEditMode || showSafeReview)) return
+        void refreshSafeOwner('performer', id)
+    }, [id, isEditMode, isFocused, isSelected, performer?.executionMode, refreshSafeOwner, showSafeReview])
 
-    const canUndoLastTurn = useMemo(
-        () => hasActiveSession && messages.some((message) => message.role === 'user') && !isLoading,
-        [hasActiveSession, isLoading, messages],
-    );
+    // ─── Wheel isolation ──────────────────────────────
+    useEffect(() => {
+        const el = bodyRef.current
+        if (!el) return
+        const handler = (e: WheelEvent) => { e.stopPropagation() }
+        el.addEventListener('wheel', handler, { passive: true })
+        return () => el.removeEventListener('wheel', handler)
+    }, [])
 
+    // ─── Scroll on new messages ───────────────────────
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, [messages, isLoading])
+
+    // ─── Safe mode callbacks ──────────────────────────
     const handleToggleExecutionMode = useCallback(async () => {
-        if (!performer) {
-            return;
-        }
+        if (!performer) return
         if (performer.executionMode === 'safe') {
-            const summary = safeSummary || await refreshSafeOwner('performer', id);
+            const summary = safeSummary || await refreshSafeOwner('performer', id)
             if (summary && summary.pendingCount > 0) {
-                setPendingModeSwitch('direct');
-                setShowSafeReview(true);
-                return;
+                setPendingModeSwitch('direct')
+                setShowSafeReview(true)
+                return
             }
-            setPerformerExecutionMode(id, 'direct');
-            return;
+            setPerformerExecutionMode(id, 'direct')
+            return
         }
-
-        setPerformerExecutionMode(id, 'safe');
-        void refreshSafeOwner('performer', id);
-    }, [id, performer, refreshSafeOwner, safeSummary, setPerformerExecutionMode]);
+        setPerformerExecutionMode(id, 'safe')
+        void refreshSafeOwner('performer', id)
+    }, [id, performer, refreshSafeOwner, safeSummary, setPerformerExecutionMode])
 
     const runSafeAction = useCallback(async (
         task: () => Promise<void>,
         nextMode?: 'direct',
         notice = 'Updated the safe workspace and started a new thread lineage.',
     ) => {
-        setSafeBusy(true);
+        setSafeBusy(true)
         try {
-            await task();
-            if (nextMode) {
-                setPerformerExecutionMode(id, nextMode);
-            } else {
-                detachPerformerSession(id, notice);
-            }
-            void refreshSafeOwner('performer', id);
-            setShowSafeReview(false);
-            setPendingModeSwitch(null);
+            await task()
+            if (nextMode) { setPerformerExecutionMode(id, nextMode) } else { detachPerformerSession(id, notice) }
+            void refreshSafeOwner('performer', id)
+            setShowSafeReview(false)
+            setPendingModeSwitch(null)
         } finally {
-            setSafeBusy(false);
+            setSafeBusy(false)
         }
-    }, [detachPerformerSession, id, refreshSafeOwner, setPerformerExecutionMode]);
+    }, [detachPerformerSession, id, refreshSafeOwner, setPerformerExecutionMode])
 
     const openAssetEditor = useCallback(async (
         kind: 'tal' | 'dance',
@@ -323,989 +210,166 @@ export default function AgentFrame({ data, id }: any) {
         try {
             if (!targetRef) {
                 createMarkdownEditor(kind, {
-                    attachTarget: performer ? {
-                        performerId: performer.id,
-                        mode: attachMode,
-                        targetRef: attachMode === 'dance-replace' ? null : undefined,
-                    } : undefined,
-                });
-                return;
+                    attachTarget: performer ? { performerId: performer.id, mode: attachMode, targetRef: attachMode === 'dance-replace' ? null : undefined } : undefined,
+                })
+                return
             }
-
             if (targetRef.kind === 'draft') {
-                const draft = drafts[targetRef.draftId];
-                if (!draft) {
-                    throw new Error('Draft not found.');
-                }
+                const draft = drafts[targetRef.draftId]
+                if (!draft) throw new Error('Draft not found.')
                 createMarkdownEditor(kind, {
-                    source: {
-                        name: draft.name,
-                        slug: draft.slug,
-                        description: draft.description,
-                        tags: draft.tags,
-                        content: typeof draft.content === 'string' ? draft.content : '',
-                        derivedFrom: draft.derivedFrom || null,
-                    },
-                    attachTarget: performer ? {
-                        performerId: performer.id,
-                        mode: attachMode,
-                        targetRef,
-                    } : undefined,
-                });
-                return;
+                    source: { name: draft.name, slug: draft.slug, description: draft.description, tags: draft.tags, content: typeof draft.content === 'string' ? draft.content : '', derivedFrom: draft.derivedFrom || null },
+                    attachTarget: performer ? { performerId: performer.id, mode: attachMode, targetRef } : undefined,
+                })
+                return
             }
-
-            const [, author, name] = String(targetRef.urn || '').split('/');
-            if (!author || !name) {
-                throw new Error('Invalid asset reference.');
-            }
-
-            let detail: any;
-            try {
-                detail = await api.assets.get(kind, author.replace(/^@/, ''), name);
-            } catch {
-                detail = await api.assets.getRegistry(kind, author.replace(/^@/, ''), name);
-            }
-
+            const [, author, name] = String(targetRef.urn || '').split('/')
+            if (!author || !name) throw new Error('Invalid asset reference.')
+            let detail: any
+            try { detail = await api.assets.get(kind, author.replace(/^@/, ''), name) } catch { detail = await api.assets.getRegistry(kind, author.replace(/^@/, ''), name) }
             createMarkdownEditor(kind, {
-                source: {
-                    name: detail.name || name,
-                    slug: detail.slug || name,
-                    description: detail.description || detail.name || name,
-                    tags: Array.isArray(detail.tags) ? detail.tags : [],
-                    content: typeof detail.content === 'string' ? detail.content : '',
-                    derivedFrom: detail.urn || targetRef.urn || null,
-                },
-                attachTarget: performer ? {
-                    performerId: performer.id,
-                    mode: attachMode,
-                    targetRef,
-                } : undefined,
-            });
+                source: { name: detail.name || name, slug: detail.slug || name, description: detail.description || detail.name || name, tags: Array.isArray(detail.tags) ? detail.tags : [], content: typeof detail.content === 'string' ? detail.content : '', derivedFrom: detail.urn || targetRef.urn || null },
+                attachTarget: performer ? { performerId: performer.id, mode: attachMode, targetRef } : undefined,
+            })
         } catch (error) {
-            console.error('Failed to open markdown editor', error);
+            console.error('Failed to open markdown editor', error)
             showToast(`Studio could not open the ${kind} editor for this performer.`, 'error', {
                 title: `${kind === 'tal' ? 'Tal' : 'Dance'} editor failed`,
-                dedupeKey: `performer-editor-open:${id}:${kind}:${targetRef.kind}:${targetRef.kind === 'registry' ? targetRef.urn : targetRef.draftId}`,
+                dedupeKey: `performer-editor-open:${id}:${kind}:${targetRef?.kind}:${targetRef?.kind === 'registry' ? targetRef.urn : targetRef?.draftId}`,
                 actionLabel: 'Retry',
-                onAction: () => {
-                    void openAssetEditor(kind, targetRef, attachMode)
-                },
-            });
+                onAction: () => { void openAssetEditor(kind, targetRef, attachMode) },
+            })
         }
-    }, [createMarkdownEditor, drafts, id, performer]);
+    }, [createMarkdownEditor, drafts, id, performer])
 
-    const {
-        showSlashMenu,
-        setShowSlashMenu,
-        slashIndex,
-        filteredCommands,
-        handleInputChange: onSlashInputChange,
-        handleKeyDown: onSlashKeyDown
-    } = useSlashCommands(id, input, setInput);
-
-    const {
-        inputRef,
-        isMentioning: isFileMentioning,
-        mentionResults: fileMentionResults,
-        mentionIndex: fileMentionIndex,
-        setMentionIndex: setFileMentionIndex,
-        checkMention: checkFileMention,
-        extractMentionText: extractFileMentionText,
-        setIsMentioning: setIsFileMentioning,
-    } = useFileMentions(composerInputRef);
-
-    const {
-        isMentioning: isPerformerMentioning,
-        mentionResults: performerMentionResults,
-        mentionIndex: performerMentionIndex,
-        setMentionIndex: setPerformerMentionIndex,
-        checkMention: checkPerformerMention,
-        extractMentionText: extractPerformerMentionText,
-        setIsMentioning: setIsPerformerMentioning,
-    } = usePerformerMention(id, composerInputRef);
-
-    const danceSlashMatch = useMemo(() => {
-        const trimmed = input.trimStart();
-        if (!trimmed.startsWith('/')) {
-            return null;
-        }
-        return trimmed.slice(1).trim().toLowerCase();
-    }, [input]);
-
-    const danceSearchSections = useMemo(() => {
-        return buildDanceSearchSections(danceAssets, danceSlashMatch, drafts, performer);
-    }, [danceAssets, danceSlashMatch, drafts, performer]);
-
-    const danceSearchResults = useMemo<DanceSearchItem[]>(
-        () => danceSearchSections.flatMap((section) => section.items),
-        [danceSearchSections],
-    );
-
-    const addTurnDanceSelection = useCallback((item: DanceSearchItem) => {
-        setTurnDanceSelections((current) => (
-            current.some((selection) => assetRefKey(selection.ref) === assetRefKey(item.ref))
-                ? current
-                : [...current, { ref: item.ref, label: item.label, scope: item.scope }]
-        ));
-        setInput('');
-        setShowSlashMenu(false);
-        setDanceSearchIndex(0);
-        inputRef.current?.focus();
-    }, [inputRef, setShowSlashMenu]);
-
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isLoading]);
-
-    useEffect(() => {
-        if (editTab !== 'basic') {
-            setShowModelPicker(false);
-        }
-    }, [editTab]);
-
-    useEffect(() => {
-        setDanceSearchIndex(0);
-    }, [danceSlashMatch]);
-
-    // Prevent wheel events from reaching ReactFlow's d3-zoom so that
-    // scrolling over the performer panel scrolls chat content instead of zooming the canvas.
-    useEffect(() => {
-        const el = bodyRef.current;
-        if (!el) return;
-        const handler = (e: WheelEvent) => {
-            e.stopPropagation();
-        };
-        el.addEventListener('wheel', handler, { passive: true });
-        return () => el.removeEventListener('wheel', handler);
-    }, []);
-
-    const handleSend = useCallback(() => {
-        if (!input.trim() || isLoading) return;
-        if (!modelConfigured) {
-            return;
-        }
-        if (danceSlashMatch !== null) {
-            return;
-        }
-        const text = input.trim();
-        setInput('');
-        setShowSlashMenu(false);
-        setIsFileMentioning(false);
-        setIsPerformerMentioning(false);
-
-        if (text === '/undo' || text === '/redo') {
-            showToast('Use the Undo Last Turn button for performer undo.', 'info', {
-                title: 'Undo moved',
-                dedupeKey: `performer-undo-moved:${id}`,
-            });
-            return;
-        }
-
-        const cmdPattern = /^\/(share|compact)$/;
-        if (cmdPattern.test(text)) {
-            executeSlashCommand(id, text);
-            return;
-        }
-
-        const formattedAttachments = formatChatAttachments(attachments)
-
-        if (runtimeTools && runtimeTools.selectedMcpServers.length > 0 && runtimeTools.resolvedTools.length === 0 && runtimeTools.unavailableDetails.length > 0) {
-            showToast(
-                `Selected MCP servers are unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.`,
-                'error',
-                {
-                    title: 'MCP tools unavailable',
-                    dedupeKey: `performer-mcp-block:${id}`,
-                },
-            );
-            return;
-        }
-
-        if (runtimeTools && runtimeTools.resolvedTools.length > 0 && runtimeTools.unavailableDetails.length > 0) {
-            showToast(
-                `Some MCP tools are unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.`,
-                'warning',
-                {
-                    title: 'Partial MCP availability',
-                    dedupeKey: `performer-mcp-warn:${id}`,
-                },
-            );
-        }
-
-        sendMessage(
-            id,
-            text,
-            formattedAttachments,
-            turnDanceSelections.map((selection) => selection.ref),
-            mentionedPerformers,
-        );
-        setAttachments([]);
-        setMentionedPerformers([]);
-        setTurnDanceSelections([]);
-    }, [input, isLoading, modelConfigured, danceSlashMatch, id, executeSlashCommand, setShowSlashMenu, attachments, sendMessage, setIsFileMentioning, setIsPerformerMentioning, turnDanceSelections, runtimeTools, mentionedPerformers]);
-
-    const handleInputChange = (val: string) => {
-        onSlashInputChange(val);
-        checkPerformerMention(val, inputRef.current?.selectionStart ?? val.length);
-        checkFileMention(val, inputRef.current?.selectionStart ?? val.length);
-    };
-
-    const handleKeyDownWrapper = (e: React.KeyboardEvent) => {
-        if (e.nativeEvent.isComposing) return;
-
-        if (danceSlashMatch !== null) {
-            if (danceSearchResults.length > 0) {
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setDanceSearchIndex((index) => Math.min(index + 1, danceSearchResults.length - 1));
-                    return;
-                }
-                if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setDanceSearchIndex((index) => Math.max(index - 1, 0));
-                    return;
-                }
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addTurnDanceSelection(danceSearchResults[danceSearchIndex]);
-                    return;
-                }
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                setInput('');
-                setShowSlashMenu(false);
-                setDanceSearchIndex(0);
-                return;
-            }
-        }
-
-        if (isPerformerMentioning && performerMentionResults.length > 0) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setPerformerMentionIndex((i) => (i < performerMentionResults.length - 1 ? i + 1 : i));
-                return;
-            }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setPerformerMentionIndex((i) => (i > 0 ? i - 1 : i));
-                return;
-            }
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const selectedPerformer = performerMentionResults[performerMentionIndex];
-                const newText = extractPerformerMentionText();
-                if (newText !== null) {
-                    setInput(newText);
-                    setMentionedPerformers((current) => (
-                        current.some((item) => item.performerId === selectedPerformer.performerId)
-                            ? current
-                            : [...current, selectedPerformer]
-                    ));
-                }
-                return;
-            }
-            if (e.key === 'Escape') {
-                setIsPerformerMentioning(false);
-                return;
-            }
-        }
-
-        if (isFileMentioning && fileMentionResults.length > 0) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setFileMentionIndex((i) => (i < fileMentionResults.length - 1 ? i + 1 : i));
-                return;
-            }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setFileMentionIndex((i) => (i > 0 ? i - 1 : i));
-                return;
-            }
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const selectedFile = fileMentionResults[fileMentionIndex];
-                const newText = extractFileMentionText();
-                if (newText !== null) {
-                    setInput(newText);
-                    setAttachments(prev => [...prev, selectedFile]);
-                }
-                return;
-            }
-            if (e.key === 'Escape') {
-                setIsFileMentioning(false);
-                return;
-            }
-        }
-
-        const handled = onSlashKeyDown(e, (text) => {
-            if (!modelConfigured) {
-                return;
-            }
-            sendMessage(id, text, [], turnDanceSelections.map((selection) => selection.ref), mentionedPerformers);
-            setMentionedPerformers([]);
-            setTurnDanceSelections([]);
-        });
-        if (!handled && e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-        }
-    };
-
-    const handleDrop = async (e: React.DragEvent) => {
-        e.preventDefault();
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            Array.from(e.dataTransfer.files).forEach(file => {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    if (event.target?.result) {
-                        setAttachments(prev => [...prev, {
-                            name: file.name,
-                            path: file.name,
-                            absolute: event.target!.result as string, // base64 data URI
-                            type: file.type
-                        }]);
-                    }
-                };
-                reader.readAsDataURL(file);
-            });
-        }
-        e.dataTransfer.clearData();
-    };
-
+    // ─── Render ───────────────────────────────────────
     return (
         <div className="performer-node-shell">
-        <Handle type="target" position={Position.Left} className="performer-node-shell__handle" />
-        <Handle type="source" position={Position.Right} className="performer-node-shell__handle" />
-        <CanvasWindowFrame
-            className={`nowheel ${isFocused ? 'canvas-frame--focused' : ''}`}
-            width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}
-            height={isFocused ? Math.max(rfHeight - 140, 400) : (data.height || 400)}
-            transformActive={!!data.transformActive}
-            onActivateTransform={data.onActivateTransform as (() => void) | undefined}
-            onDeactivateTransform={data.onDeactivateTransform as (() => void) | undefined}
-            selected={isSelected}
-            minWidth={280}
-            minHeight={320}
-            headerStart={<span className="canvas-frame__name">{data.name}</span>}
-            headerEnd={(
-                <div className="canvas-frame__header-actions">
-                    <PerformerHeaderMeta
-                        modelLabel={data.modelLabel || null}
-                        modelTitle={data.modelTitle || null}
-                        talLabel={data.talLabel || null}
-                        danceSummary={data.danceSummary || null}
-                        executionMode={performer?.executionMode === 'safe' ? 'safe' : 'direct'}
-                        pendingCount={safeSummary?.pendingCount || 0}
-                        conflictCount={safeSummary?.conflictCount || 0}
-                    />
-                    {!isEditMode && (
+            <Handle type="target" position={Position.Left} className="performer-node-shell__handle" />
+            <Handle type="source" position={Position.Right} className="performer-node-shell__handle" />
+            <CanvasWindowFrame
+                className={`nowheel ${isFocused ? 'canvas-frame--focused' : ''}`}
+                width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}
+                height={isFocused ? Math.max(rfHeight - 140, 400) : (data.height || 400)}
+                transformActive={!!data.transformActive}
+                onActivateTransform={data.onActivateTransform as (() => void) | undefined}
+                onDeactivateTransform={data.onDeactivateTransform as (() => void) | undefined}
+                selected={isSelected}
+                minWidth={280}
+                minHeight={320}
+                headerStart={<span className="canvas-frame__name">{data.name}</span>}
+                headerEnd={(
+                    <div className="canvas-frame__header-actions">
+                        <PerformerHeaderMeta
+                            modelLabel={data.modelLabel || null}
+                            modelTitle={data.modelTitle || null}
+                            talLabel={data.talLabel || null}
+                            danceSummary={data.danceSummary || null}
+                            executionMode={performer?.executionMode === 'safe' ? 'safe' : 'direct'}
+                            pendingCount={safeSummary?.pendingCount || 0}
+                            conflictCount={safeSummary?.conflictCount || 0}
+                        />
+                        {!isEditMode && (
+                            <button
+                                className="icon-btn"
+                                onClick={(e) => { e.stopPropagation(); useStudioStore.getState().openPerformerEditor(id) }}
+                                title="Edit performer"
+                                style={{ padding: '0 4px', opacity: 0.7 }}
+                            >
+                                <Pencil size={11} />
+                            </button>
+                        )}
                         <button
                             className="icon-btn"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                useStudioStore.getState().openPerformerEditor(id);
-                            }}
-                            title="Edit performer"
+                            onClick={(e) => { e.stopPropagation(); togglePerformerVisibility(id) }}
+                            title="Hide from Canvas"
                             style={{ padding: '0 4px', opacity: 0.7 }}
                         >
-                            <Pencil size={11} />
+                            <EyeOff size={11} />
                         </button>
-                    )}
-                    <button
-                        className="icon-btn"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            togglePerformerVisibility(id);
-                        }}
-                        title="Hide from Canvas"
-                        style={{ padding: '0 4px', opacity: 0.7 }}
-                    >
-                        <EyeOff size={11} />
-                    </button>
-                </div>
-            )}
-            bodyClassName="nowheel nodrag"
-            bodyRef={bodyRef}
-        >
-            {isEditMode ? (
-                <>
-                    <div className="edit-workbench__header">
-                        <button
-                            className="edit-workbench__back"
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                closeEditor();
-                            }}
-                            title="Back to chat"
-                        >
-                            <ArrowLeft size={12} />
-                        </button>
-                        <span className="section-title">Edit</span>
-                        <div className="edit-workbench__actions">
-                            <button
-                                className={`tab ${editTab === 'basic' ? 'active' : ''}`}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    setEditTab('basic');
-                                }}
-                                title="Basic composition"
-                            >
-                                Basic
-                            </button>
-                            <button
-                                className={`tab ${editTab === 'advanced' ? 'active' : ''}`}
-                                onClick={(event) => {
-                                    event.stopPropagation();
-                                    setEditTab('advanced');
-                                }}
-                                title="Advanced settings"
-                            >
-                                Advanced
-                            </button>
-                        </div>
                     </div>
-                    <PerformerComposeCards
-                        hidden={editTab !== 'basic'}
-                        cards={[
-                            {
-                                key: 'tal',
-                                title: 'Tal',
-                                description: performerPresentation.talAsset ? '' : 'No Tal connected yet.',
-                                hint: 'Drag & drop from Asset Library',
-                                icon: <Hexagon size={12} />,
-                                items: performerPresentation.talAsset ? [{
-                                    key: performerPresentation.talAsset.urn,
-                                    label: performerPresentation.talAsset.name,
-                                    description: performerPresentation.talAsset.description || null,
-                                    onRemove: () => setPerformerTalRef(id, null),
-                                }] : undefined,
-                                isOver: isTalOver,
-                                setNodeRef: setTalRef,
-                                onClick: () => {
-                                    if (performer?.talRef) {
-                                        void openAssetEditor('tal', performer.talRef, 'tal');
-                                    } else {
-                                        void openAssetEditor('tal', null, 'tal');
-                                    }
-                                },
-                            },
-                            {
-                                key: 'dances',
-                                title: 'Dances',
-                                description: performerPresentation.danceAssets.length > 0 ? '' : 'No Dances connected yet.',
-                                hint: 'Drag & drop from Asset Library',
-                                icon: <Zap size={12} />,
-                                items: performerPresentation.danceAssets.map((asset, index) => ({
-                                    key: `${asset.urn}:${index}`,
-                                    label: asset.name,
-                                    description: asset.description || null,
-                                    onRemove: () => removePerformerDance(id, performer?.danceRefs[index] ? assetRefKey(performer.danceRefs[index]) || asset.urn : asset.urn),
-                                })),
-                                isOver: isDanceOver,
-                                setNodeRef: setDanceRef,
-                                onClick: () => setEditTab('advanced'),
-                            },
-                            {
-                                key: 'model',
-                                title: 'Model',
-                                description: performer?.model || performer?.modelPlaceholder ? '' : 'No model selected yet.',
-                                hint: 'Drag & drop from Asset Library',
-                                icon: <Cpu size={12} />,
-                                items: performer?.model ? [{
-                                    key: `${performer.model.provider}:${performer.model.modelId}`,
-                                    label: performer.model.modelId,
-                                    description: performer.model.provider,
-                                    onRemove: () => setPerformerModel(id, null),
-                                }] : performer?.modelPlaceholder ? [{
-                                    key: `${performer.modelPlaceholder.provider}:${performer.modelPlaceholder.modelId}:placeholder`,
-                                    label: performer.modelPlaceholder.modelId,
-                                    description: `Missing in current Studio runtime · ${performer.modelPlaceholder.provider}`,
-                                    onRemove: () => setPerformerModel(id, null),
-                                }] : undefined,
-                                isOver: isModelOver,
-                                setNodeRef: setModelRef,
-                                onClick: () => setShowModelPicker((current) => !current),
-                            },
-                            {
-                                key: 'mcp',
-                                title: 'MCP',
-                                description: performerPresentation.mcpServers.length > 0 || performerPresentation.mcpPlaceholders.length > 0 ? '' : 'No MCP servers connected yet.',
-                                hint: 'Drag & drop from Asset Library',
-                                icon: <Server size={12} />,
-                                items: [
-                                    ...performerPresentation.mcpServers.map((server) => ({
-                                        key: server.name,
-                                        label: server.name,
-                                        description: `${server.status}${server.tools.length ? ` · ${server.tools.length} tools` : ''}`,
-                                        onRemove: () => removePerformerMcp(id, server.name),
-                                    })),
-                                    ...performerPresentation.mcpPlaceholders.map((name) => ({
-                                        key: `placeholder:${name}`,
-                                        label: name,
-                                        description: 'Imported from asset · not mapped in Asset Library MCP catalog',
-                                    })),
-                                ],
-                                isOver: isMcpOver,
-                                setNodeRef: setMcpRef,
-                                onClick: () => setEditTab('advanced'),
-                            },
-                        ]}
-                    />
-                    <ModelQuickPicker
-                        open={editTab === 'basic' && showModelPicker}
-                        currentModel={performer?.model || null}
-                        onSelect={(model) => {
-                            setPerformerModel(id, model)
-                            setShowModelPicker(false)
+                )}
+                bodyClassName="nowheel nodrag"
+                bodyRef={bodyRef}
+            >
+                {isEditMode ? (
+                    <PerformerEditPanel
+                        performerId={id}
+                        performer={performer}
+                        presentation={performerPresentation}
+                        runtimeTools={runtimeTools || null}
+                        selectedAgent={selectedAgent}
+                        requestRelations={requestRelations}
+                        mcpBindingRows={mcpBindingRows}
+                        mcpBindingOptions={mcpBindingOptions}
+                        dropRefs={{
+                            tal: { isOver: talDrop.isOver, setNodeRef: talDrop.setNodeRef },
+                            dance: { isOver: danceDrop.isOver, setNodeRef: danceDrop.setNodeRef },
+                            model: { isOver: modelDrop.isOver, setNodeRef: modelDrop.setNodeRef },
+                            mcp: { isOver: mcpDrop.isOver, setNodeRef: mcpDrop.setNodeRef },
                         }}
-                        onClose={() => setShowModelPicker(false)}
-                        title="Choose a performer model"
+                        onClose={closeEditor}
+                        onNameChange={(value) => updatePerformerName(id, value)}
+                        onTalRefChange={(ref) => setPerformerTalRef(id, ref)}
+                        onDanceDeliveryModeChange={(value) => setPerformerDanceDeliveryMode(id, value)}
+                        onModelChange={(model) => setPerformerModel(id, model)}
+                        onModelVariantChange={(variant) => setPerformerModelVariant(id, variant)}
+                        onAgentIdChange={(agentId) => setPerformerAgentId(id, agentId)}
+                        onRemoveDance={removePerformerDance}
+                        onRemoveMcp={removePerformerMcp}
+                        onSetMcpBinding={setPerformerMcpBinding}
+
+                        onOpenAssetEditor={openAssetEditor}
                     />
-                    {editTab === 'advanced' ? (
-                        <PerformerAdvancedSettings
-                            performer={performer}
-                            talLabel={data.talLabel || null}
-                            modelLabel={performer?.model?.modelId || null}
-                            agentLabel={formatAgentLabel(selectedAgent?.name) || 'Build'}
-                            mcpSummary={data.mcpSummary || null}
-                            onNameChange={(value) => updatePerformerName(id, value)}
-                            onDanceDeliveryModeChange={(value) => setPerformerDanceDeliveryMode(id, value)}
-                            onOpenTalEditor={() => void openAssetEditor('tal', performer?.talRef || null, 'tal')}
-                            onCreateDanceDraft={() => void openAssetEditor('dance', null, 'dance-new')}
-                            onEditDance={(ref) => void openAssetEditor('dance', ref, 'dance-replace')}
-                            onRemoveDance={(ref) => removePerformerDance(id, ref.kind === 'draft' ? ref.draftId : ref.urn)}
-                            onClearModel={() => setPerformerModel(id, null)}
-                            onRemoveMcp={(serverName) => removePerformerMcp(id, serverName)}
-                            onSetMcpBinding={(placeholderName, serverName) => setPerformerMcpBinding(id, placeholderName, serverName)}
-                            onAutoCompactChange={(enabled) => setPerformerAutoCompact(id, enabled)}
-                            mcpBindings={mcpBindingRows}
-                            mcpOptions={mcpBindingOptions}
-                            runtimeControls={(
-                                <>
-                                    <AgentSelect
-                                        value={performer?.agentId || null}
-                                        onChange={(value) => setPerformerAgentId(id, value)}
-                                        titlePrefix="Performer agent"
-                                    />
-                                    <ModelVariantSelect
-                                        model={performer?.model || null}
-                                        value={performer?.modelVariant || null}
-                                        onChange={(value) => setPerformerModelVariant(id, value)}
-                                        titlePrefix="Performer variant"
-                                    />
-                                </>
-                            )}
-                            runtimeStatus={runtimeTools ? (
-                                <div className="adv-section__summary">
-                                    {runtimeTools.resolvedTools.length > 0
-                                        ? `Resolved tools: ${runtimeTools.resolvedTools.join(', ')}`
-                                        : runtimeTools.selectedMcpServers.length > 0
-                                            ? 'No MCP tools resolved for the current model yet.'
-                                            : 'No MCP servers selected.'}
-                                    {runtimeTools.unavailableDetails.length > 0 ? ` Unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.` : ''}
-                                </div>
-                            ) : null}
-                            executionModeSummary={(
-                                <div className="adv-section__summary">
-                                    Default Run Mode: {performer?.executionMode === 'safe' ? 'Safe' : 'Direct'}.
-                                    {' '}
-                                    Mention requests always run in the caller workspace.
-                                </div>
-                            )}
-                            requestRelations={requestRelations}
-                        />
-                    ) : null}
-                </>
-            ) : (
-                <ThreadBody
-                    messages={messages}
-                    loading={shouldShowChatLoading(messages, isLoading)}
-                    renderEmpty={() => (
-                        <div className="chat-empty-state">
-                            <Sparkles size={28} className="empty-icon" />
-                            <p className="empty-title">Start a conversation</p>
-                            <p className="empty-subtitle">Send a message to begin</p>
-                        </div>
-                    )}
-                    renderMessage={(msg) => {
-                        const showUndoAction = canUndoLastTurn && msg.id === lastMessageId;
-                        return (
-                        <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`}>
-                            {msg.role === 'user' ? (
-                                <div className="user-input-box">
-                                    <span className="user-input-text">{msg.content}</span>
-                                    <div className="user-input-actions">
-                                        <button
-                                            className="user-input-revert"
-                                            onClick={() => setInput(msg.content)}
-                                            title="Re-use this message"
-                                        >
-                                            <RotateCcw size={12} />
-                                        </button>
-                                        {showUndoAction ? (
-                                            <button
-                                                className="user-input-revert is-visible"
-                                                onClick={() => {
-                                                    void undoLastTurn(id);
-                                                }}
-                                                title="Undo the last turn"
-                                            >
-                                                <ArrowLeft size={12} />
-                                            </button>
-                                        ) : null}
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="thread-msg__body-with-actions">
-                                    <ChatMessageContent message={msg} />
-                                    {showUndoAction ? (
-                                        <button
-                                            className="thread-msg__icon-btn"
-                                            onClick={() => {
-                                                void undoLastTurn(id);
-                                            }}
-                                            title="Undo the last turn"
-                                        >
-                                            <ArrowLeft size={12} />
-                                        </button>
-                                    ) : null}
-                                </div>
-                            )}
-                        </div>
-                    )}}
-                    renderLoading={() => (
-                        <div className="thread-msg thread-msg--assistant">
-                            <div className="assistant-body">
-                                <div className="loading-dots">
-                                    <span /><span /><span />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    endRef={chatEndRef}
-                    composer={(
-                        <div
-                            className="chat-input"
-                            style={{ position: 'relative' }}
-                            onDrop={handleDrop}
-                            onDragOver={e => e.preventDefault()}
-                        >
-                            {mentionedPerformers.length > 0 ? (
-                                <div className="chat-input__warning">
-                                    <strong>Performer request</strong>
-                                    <span>Mentioned performers use their own identity, but run in your current workspace.</span>
-                                </div>
-                            ) : null}
-                            {(attachments.length > 0 || turnDanceSelections.length > 0) && (
-                                <div style={{ display: 'flex', gap: '4px', padding: '4px 8px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-main)' }}>
-                                    {mentionedPerformers.map((mention, idx) => (
-                                        <div key={`${mention.performerId}:${idx}`} className="turn-option-pill">
-                                            <Sparkles size={10} style={{ marginRight: '4px' }} />
-                                            <span>{mention.name}</span>
-                                            <span className="turn-option-pill__scope turn-option-pill__scope--local">
-                                                performer
-                                            </span>
-                                            <X
-                                                size={10}
-                                                style={{ marginLeft: '4px', cursor: 'pointer' }}
-                                                onClick={() => setMentionedPerformers((current) => current.filter((item) => item.performerId !== mention.performerId))}
-                                            />
-                                        </div>
-                                    ))}
-                                    {turnDanceSelections.map((selection, idx) => (
-                                        <div key={`${selection.scope}:${assetRefKey(selection.ref) || idx}`} className="turn-option-pill">
-                                            <Zap size={10} style={{ marginRight: '4px' }} />
-                                            <span>{selection.label}</span>
-                                            <span className={`turn-option-pill__scope turn-option-pill__scope--${selection.scope}`}>
-                                                {selection.scope}
-                                            </span>
-                                            <X
-                                                size={10}
-                                                style={{ marginLeft: '4px', cursor: 'pointer' }}
-                                                onClick={() => setTurnDanceSelections((current) => current.filter((_, currentIndex) => currentIndex !== idx))}
-                                            />
-                                        </div>
-                                    ))}
-                                    {attachments.map((att, idx) => (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px' }}>
-                                            <FileIcon size={10} style={{ marginRight: '4px' }} />
-                                            {att.name}
-                                            <X size={10} style={{ marginLeft: '4px', cursor: 'pointer' }} onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} />
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                ) : (
+                    <PerformerChatPanel
+                        performerId={id}
+                        performer={performer}
+                        messages={messages}
+                        prefixCount={prefixCount}
+                        isLoading={isLoading}
+                        sessionId={sessionId}
+                        hasActiveSession={hasActiveSession}
+                        modelConfigured={modelConfigured}
+                        selectedAgentId={selectedAgentId}
+                        buildAgent={buildAgent}
+                        planAgent={planAgent}
+                        runtimeTools={runtimeTools || null}
+                        danceAssets={danceAssets}
+                        drafts={drafts}
+                        chatEndRef={chatEndRef}
+                        onSetAgentId={setPerformerAgentId}
+                        onSetModelVariant={setPerformerModelVariant}
+                        onSetExecutionMode={handleToggleExecutionMode}
 
-                            {isPerformerMentioning && performerMentionResults.length > 0 ? (
-                                <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                    {performerMentionResults.map((performerMention, i) => (
-                                        <div
-                                            key={performerMention.performerId}
-                                            className={`slash-menu-item mention-menu-item ${i === performerMentionIndex ? 'active' : ''}`}
-                                            onClick={() => {
-                                                const newText = extractPerformerMentionText();
-                                                if (newText !== null) {
-                                                    setInput(newText);
-                                                    setMentionedPerformers((current) => (
-                                                        current.some((item) => item.performerId === performerMention.performerId)
-                                                            ? current
-                                                            : [...current, performerMention]
-                                                    ));
-                                                }
-                                                inputRef.current?.focus();
-                                            }}
-                                        >
-                                            <span className="mention-result__content">
-                                                <span className="mention-result__name">{performerMention.name}</span>
-                                                <span className="mention-result__path">Runs in this workspace</span>
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
-
-                            {isFileMentioning && fileMentionResults.length > 0 ? (
-                                <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                    {fileMentionResults.map((file, i) => (
-                                        <div
-                                            key={file.absolute}
-                                            className={`slash-menu-item mention-menu-item ${i === fileMentionIndex ? 'active' : ''}`}
-                                            onClick={() => {
-                                                const newText = extractFileMentionText();
-                                                if (newText !== null) {
-                                                    setInput(newText);
-                                                    setAttachments(prev => [...prev, file]);
-                                                }
-                                                inputRef.current?.focus();
-                                            }}
-                                        >
-                                            <MentionFileIcon path={file.path} />
-                                            <span className="mention-result__content">
-                                                <span className="mention-result__name">{file.name}</span>
-                                                <span className="mention-result__path">{file.path}</span>
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
-
-                            {danceSlashMatch !== null ? (
-                                <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                    {danceSearchSections.length > 0 ? danceSearchSections.map((section) => (
-                                        <div key={section.key} className="slash-menu__section">
-                                            <div className="slash-menu__section-title">{section.title}</div>
-                                            {section.items.map((item) => {
-                                                const resultIndex = danceSearchResults.findIndex((candidate) => candidate.key === item.key);
-                                                return (
-                                                    <div
-                                                        key={item.key}
-                                                        className={`slash-menu-item dance-menu-item ${resultIndex === danceSearchIndex ? 'active' : ''}`}
-                                                        onClick={() => addTurnDanceSelection(item)}
-                                                    >
-                                                        <span className={`dance-result__scope dance-result__scope--${item.scope}`}>{item.scope}</span>
-                                                        <span className="mention-result__content">
-                                                            <span className="mention-result__name">{item.label}</span>
-                                                            <span className="mention-result__path">{item.subtitle}</span>
-                                                        </span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )) : (
-                                        <div className="slash-menu__section">
-                                            <div className="slash-menu__section-title">Dance</div>
-                                            <div className="slash-menu-item">
-                                                <span className="slash-desc">No matching dances found.</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : null}
-
-                            {danceSlashMatch === null && showSlashMenu && filteredCommands.length > 0 ? (
-                                <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                    {filteredCommands.map((c, i) => (
-                                        <div
-                                            key={c.cmd}
-                                            className={`slash-menu-item ${i === slashIndex ? 'active' : ''}`}
-                                            onClick={() => {
-                                                if (c.mode === 'compose') {
-                                                    setInput(`${c.cmd} `);
-                                                } else {
-                                                    executeSlashCommand(id, c.cmd);
-                                                    setInput('');
-                                                }
-                                                setShowSlashMenu(false);
-                                            }}
-                                        >
-                                            <span className="slash-cmd">{c.cmd}</span>
-                                            <span className="slash-desc">{c.desc}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
-                            <div className="chat-input__main">
-                                <textarea
-                                    ref={inputRef}
-                                    value={input}
-                                    onChange={(e) => {
-                                        handleInputChange(e.target.value);
-                                        e.target.style.height = '0';
-                                        e.target.style.height = `${e.target.scrollHeight}px`;
-                                        e.target.style.overflowY = e.target.scrollHeight > 102 ? 'auto' : 'hidden';
-                                    }}
-                                    onKeyUp={() => {
-                                        checkPerformerMention();
-                                        checkFileMention();
-                                    }}
-                                    onMouseUp={() => {
-                                        checkPerformerMention();
-                                        checkFileMention();
-                                    }}
-                                    onKeyDown={handleKeyDownWrapper}
-                                    placeholder={!modelConfigured
-                                        ? 'Select a model before chatting'
-                                        : isPlanAgent
-                                            ? 'Plan mode — ask for a plan...'
-                                            : 'Message... (@ performers, # files, / to use dance for this turn)'}
-                                    disabled={isLoading}
-                                    rows={1}
-                                    className="text-input"
-                                />
-                                {isLoading ? (
-                                    <button
-                                        className="send-btn abort"
-                                        onClick={() => abortChat(id)}
-                                        title="Abort generation"
-                                    >
-                                        <Square size={12} fill="currentColor" />
-                                    </button>
-                                ) : (
-                                    <button
-                                        className="send-btn"
-                                        onClick={handleSend}
-                                        disabled={!input.trim() || !modelConfigured || danceSlashMatch !== null}
-                                    >
-                                        <Send size={12} />
-                                    </button>
-                                )}
-                            </div>
-                            <div className="chat-input__runtime-row">
-                                <div className="chat-input__mode-group">
-                                    <button
-                                        className={`mode-toggle ${!isPlanAgent ? 'is-active' : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (selectedAgentId !== 'build') setPerformerAgentId(id, 'build');
-                                        }}
-                                        title={buildAgent?.description || 'Build mode'}
-                                        type="button"
-                                    >
-                                        <Hammer size={12} />
-                                        <span>Build</span>
-                                    </button>
-                                    <button
-                                        className={`mode-toggle mode-plan ${isPlanAgent ? 'is-active' : ''}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (selectedAgentId !== 'plan') setPerformerAgentId(id, 'plan');
-                                        }}
-                                        title={planAgent?.description || 'Plan mode'}
-                                        type="button"
-                                    >
-                                        <Lightbulb size={12} />
-                                        <span>Plan</span>
-                                    </button>
-                                </div>
-                                <ModelVariantSelect
-                                    model={performer?.model || null}
-                                    value={performer?.modelVariant || null}
-                                    onChange={(value) => setPerformerModelVariant(id, value)}
-                                    className="chat-input__variant"
-                                    compact
-                                    titlePrefix="Performer variant"
-                                />
-                                <button
-                                    className="mode-toggle mode-compact"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        void summarizeSession(id);
-                                    }}
-                                    title="Compact this thread"
-                                    type="button"
-                                    disabled={!modelConfigured || isLoading}
-                                >
-                                    <Sparkles size={12} />
-                                </button>
-                                <div className="chat-input__safe-group">
-                                <button
-                                    className={`mode-toggle mode-safe ${performer?.executionMode === 'safe' ? 'is-active' : ''}`}
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        void handleToggleExecutionMode();
-                                    }}
-                                    title={performer?.executionMode === 'safe'
-                                        ? 'Switch default standalone run mode to Direct'
-                                        : 'Switch default standalone run mode to Safe'}
-                                    type="button"
-                                >
-                                    <Shield size={12} />
-                                    <span>Safe</span>
-                                </button>
-                                {performer?.executionMode === 'safe' ? (
-                                    <button
-                                        className={`mode-toggle ${safeSummary?.pendingCount || safeSummary?.conflictCount ? 'is-active' : ''}`}
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            setPendingModeSwitch(null);
-                                            setShowSafeReview(true);
-                                        }}
-                                        title="Review safe mode changes"
-                                        type="button"
-                                    >
-                                        <span>Review</span>
-                                    </button>
-                                ) : null}
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                        safeSummary={safeSummary}
+                    />
+                )}
+            </CanvasWindowFrame>
+            {showSafeReview ? (
+                <SafeReviewModal
+                    title={pendingModeSwitch === 'direct' ? `${data.name} · Review before switching to Direct` : `${data.name} · Safe Mode Review`}
+                    summary={safeSummary}
+                    busy={safeBusy}
+                    onClose={() => { setShowSafeReview(false); setPendingModeSwitch(null) }}
+                    onApply={() => { void runSafeAction(() => applySafeOwner('performer', id), pendingModeSwitch || undefined) }}
+                    onDiscardAll={() => { void runSafeAction(() => discardAllSafeOwner('performer', id), pendingModeSwitch || undefined) }}
+                    onDiscardFile={(filePath) => {
+                        void runSafeAction(
+                            () => discardSafeOwnerFile('performer', id, filePath),
+                            undefined,
+                            `Discarded ${filePath} from the safe workspace and started a new thread lineage.`,
+                        )
+                    }}
+                    onUndoLastApply={() => {
+                        void runSafeAction(
+                            () => undoLastSafeApply('performer', id),
+                            undefined,
+                            'Undid the last apply and started a new thread lineage.',
+                        )
+                    }}
                 />
-            )}
-        </CanvasWindowFrame>
-        {showSafeReview ? (
-            <SafeReviewModal
-                title={pendingModeSwitch === 'direct' ? `${data.name} · Review before switching to Direct` : `${data.name} · Safe Mode Review`}
-                summary={safeSummary}
-                busy={safeBusy}
-                onClose={() => {
-                    setShowSafeReview(false);
-                    setPendingModeSwitch(null);
-                }}
-                onApply={() => {
-                    void runSafeAction(() => applySafeOwner('performer', id), pendingModeSwitch || undefined);
-                }}
-                onDiscardAll={() => {
-                    void runSafeAction(() => discardAllSafeOwner('performer', id), pendingModeSwitch || undefined);
-                }}
-                onDiscardFile={(filePath) => {
-                    void runSafeAction(
-                        () => discardSafeOwnerFile('performer', id, filePath),
-                        undefined,
-                        `Discarded ${filePath} from the safe workspace and started a new thread lineage.`,
-                    );
-                }}
-                onUndoLastApply={() => {
-                    void runSafeAction(
-                        () => undoLastSafeApply('performer', id),
-                        undefined,
-                        'Undid the last apply and started a new thread lineage.',
-                    );
-                }}
-            />
-        ) : null}
+            ) : null}
         </div>
-    );
+    )
 }

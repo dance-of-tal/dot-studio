@@ -222,12 +222,3 @@ export function togglePerformerVisibility(set: SetFn, id: string) {
         stageDirty: true,
     }))
 }
-
-export function setPerformerAutoCompact(set: SetFn, id: string, enabled: boolean) {
-    set((s) => ({
-        performers: s.performers.map(a =>
-            a.id === id ? { ...a, autoCompact: enabled } : a
-        ),
-        stageDirty: true,
-    }))
-}

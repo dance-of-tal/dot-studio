@@ -1,0 +1,31 @@
+.tool-row__section--terminal {
+    background: #1e1e1e;
+    color: #cccccc;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 11px;
+    border-radius: 4px;
+    padding: 8px;
+    overflow-x: auto;
+    margin-top: 4px;
+}
+
+.terminal-command {
+    margin-bottom: 6px;
+    color: #e5e5e5;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.terminal-output {
+    color: #a3a3a3;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.tool-row__section--edit {
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 4px;
+    background: var(--bg-panel);
+}

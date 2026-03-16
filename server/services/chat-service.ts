@@ -12,10 +12,12 @@ export async function createStudioChatSession(
     request: ChatSessionCreateRequest,
 ) {
     const oc = await getOpencode()
+    const ownerKind = request.actId ? 'act' as const : 'performer' as const
+    const ownerId = request.actId ?? request.performerId
     const executionDir = await getSafeOwnerExecutionDir(
         cwd,
-        'performer',
-        request.performerId,
+        ownerKind,
+        ownerId,
         request.executionMode || 'direct',
     )
     const session = unwrapOpencodeResult<{ id: string; title: string }>(await oc.session.create({
@@ -24,8 +26,8 @@ export async function createStudioChatSession(
     }))
     await registerSessionExecutionContext({
         sessionId: session.id,
-        ownerKind: 'performer',
-        ownerId: request.performerId,
+        ownerKind,
+        ownerId,
         mode: request.executionMode || 'direct',
         workingDir: cwd,
         executionDir,
@@ -68,12 +70,20 @@ export async function sendStudioChatMessage(
         executionDir,
         workingDir,
         requestTargets,
+        ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
     })
 
     for (const related of request.relatedPerformers || []) {
         if (!related.model) {
             continue
         }
+        // Pass B's own outgoing edges as requestTargets so B's agent .md
+        // gets task-allowlist entries (enabling A→B→C chaining).
+        const nestedTargets = (related.relatedPerformerIds || []).map((target) => ({
+            performerId: target.performerId,
+            performerName: target.performerName,
+            description: target.description || '',
+        }))
         await ensurePerformerProjection({
             performerId: related.performerId,
             performerName: related.performerName,
@@ -85,6 +95,8 @@ export async function sendStudioChatMessage(
             mcpServerNames: related.mcpServerNames || [],
             executionDir,
             workingDir,
+            requestTargets: nestedTargets.length > 0 ? nestedTargets : undefined,
+            ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
         })
     }
 

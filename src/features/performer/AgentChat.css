@@ -84,30 +84,8 @@
     word-wrap: break-word;
 }
 
-.user-input-revert {
-    flex-shrink: 0;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 2px;
-    border-radius: var(--radius-sm);
-    opacity: 0;
-    transition: opacity 0.2s, color 0.2s;
-}
 
-.user-input-revert.is-visible {
-    opacity: 1;
-}
 
-.user-input-box:hover .user-input-revert {
-    opacity: 1;
-}
-
-.user-input-revert:hover {
-    color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.06);
-}
 
 .thread-msg__body-with-actions {
     display: flex;

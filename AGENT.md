@@ -88,7 +88,8 @@ type AssetRef =
 ```
 
 - Performer and Act both support `executionMode: 'direct' | 'safe'`.
-- Act copies performer config at edge creation (complete copy, not reference).
+- Act copies performer config at add time (complete copy, not reference).
+  - Performers can be added by dragging standalone performers into Act edit mode, or creating new ones inside Act.
   - Agent config (Tal, Dance, model, MCP) is owned by Act after copy. Standalone changes don't affect Act.
   - `derivedFrom` metadata records original performer id/urn (provenance only, no runtime link).
   - Sessions are Act-scoped (separate from the performer's standalone chat).
@@ -109,11 +110,12 @@ type AssetRef =
   - Dance -> generated skill
   - Performer -> generated agent
 - Performer chat and act runtime are separate session models.
-- Changing Tal, Dance, model, or MCP selection invalidates the projection hash, which rolls the OpenCode session.
+- **Correction over v1**: OpenCode natively tracks `{agent, model, variant}` on a **per-message** basis. Changing Tal, Dance, MCP (which generates a new agent name) or changing the model/variant mid-session **does not** require rolling the OpenCode session. The new config applies naturally to the next turn.
 - OpenCode remains the execution authority in both direct and safe modes.
 - Safe mode changes the execution directory, not the execution engine.
 - Studio compiles Performer config into OpenCode native agent/skill projections. See PRD-001 §6.
-- At chat send time, Studio passes only the compiled agent name. Large system prompt assembly is removed.
+- At chat send time, Studio passes only the compiled `agent` name. The projected agent `.md` file already contains the model, variant, tools, and system prompt — no inline override is passed to `promptAsync()`.
+- Model `variant` (e.g., `full-thinking`, `normal`) is set in the agent `.md` frontmatter `variant:` field. OpenCode reads it at prompt time.
 
 ## Safe Mode Rules
 
@@ -153,7 +155,7 @@ type AssetRef =
 ## Undo Rules
 
 - Studio does not expose generic chat-only undo.
-- Performer undo is exactly OpenCode `session.revert`.
+- Performer undo/redo is exactly OpenCode `session.revert` and `session.unrevert`.
 - `Undo Last Turn` should revert both chat history and file state to the previous turn boundary.
 - In performer UI, undo belongs to the last visible turn affordance, not global header chrome.
 - Act does not expose undo in v1 safe mode.
@@ -255,18 +257,41 @@ This repository should remain compatible with a future `Performer Adapter View` 
 - Unresolved imported MCP placeholders block performer publish.
 - Act publish must also fail if any bound performer still has unresolved MCP placeholders.
 
+### Act Publish Validation (Blocking)
+
+Act publish/save is blocked when any of these conditions are met:
+
+| Rule | Condition |
+|------|-----------|
+| No performers | `Object.keys(act.performers).length === 0` |
+| No relations | `act.relations.length === 0` |
+| Disconnected performer | Performer exists in Act but has no relations (in or out) |
+| Dangling relation | Relation references a performer not in Act |
+| Missing model | Any Act performer has `model === null` |
+
+Validation is implemented in `src/components/modals/publish-modal-utils.tsx` (`getActPublishBlockReasons`).
+
+### Performer Publish Validation
+
+- Performer model not set → warning in picker
+- Blocking dependencies (unpublished Tal/Dance) → blocks publish
+- Unresolved MCP placeholders → blocks publish
+
 ## Act Architecture
 
-An Act defines a performer relation graph. Performers are connected by edges that represent interaction contracts. Runtime execution is delegated to OpenCode's native `task` tool and custom tool system. See PRD-001 for full details.
+An Act defines a performer relation graph. Performers are connected by relations that represent interaction contracts. Runtime execution is delegated to OpenCode's native `task` tool and custom tool system. See PRD-001 for full details.
 
 ### Act Entity
 
-Act remains a first-class entity:
+Act is a first-class canvas node:
 
 - DOT asset / publish target
 - Safe-mode owner (`ownerKind='act'`)
 - Thread owner
-- Canvas entity with visual edges
+- Canvas node with ⚡ icon, three states: collapsed (badges), chat mode, edit mode
+- Edit mode shows mini performer cards + SVG relation arrows in an expandable rectangle
+- Relations (formerly edges) live exclusively inside Act — no standalone performer-to-performer edges exist
+- Schema v5: `performerLinks` removed from Stage, Act stores `relations` inline + `position/width/height`
 
 ### Performer Reference
 
@@ -305,13 +330,23 @@ Act relations are projected to OpenCode surfaces:
 
 Custom tools must not become a hidden Studio runtime bridge. They may improve discoverability or shorten repeated request calls, but execution authority remains with OpenCode task/subagent flow.
 
+### Multi-Depth Chaining
+
+Subagent chaining (A→B→C) is supported:
+
+- When A sends a message, A's related performers (B) are projected with `requestTargets`.
+- Each related performer (B) also carries its own outgoing relations.
+- B's projection includes B→C in `permission.task` allowlist, enabling B to call C via `task`.
+- OpenCode's `task.ts` checks `hasTaskPermission` on the subagent's `permission` to decide whether to allow or deny the nested `task` tool.
+- Depth is bounded by graph structure (only explicitly related targets are allowed) and OpenCode's per-agent `steps` limit.
+
 ### Safety
 
 | Guard | Implementation |
 |-------|----------------|
 | Infinite loop | Per-performer `steps` limit (OpenCode agent setting) |
 | Total budget | Act-wide tool call count monitoring |
-| Error propagation | `escalate` tool + max retry count |
+| Error propagation | 런타임 자체 컨텍스트 반환 에러 활용 |
 
 ## Act Runtime Rules
 
@@ -338,6 +373,19 @@ Act sessions are simplified from the previous 2D model (policy × lifetime):
 - Standalone performer chat uses one standalone performer session model
 - Act keeps the act thread as owner and creates act-scoped performer sub-sessions
 - Standalone performer chat sessions are not shared with Act
+- **Correction over v1**: Session config invalidation is technically unnecessary. OpenCode supports changing agents and models mid-session per-turn. Studio may choose to keep hash-based session invalidation for simplicity in Act, but it is not a requirement of the OpenCode engine.
+- Act execution mode (`direct`/`safe`) is set per-Act, not per-performer within Act.
+
+### Payload Schema
+
+Act publish supports two payload schemas:
+
+| Schema | Fields | Used By |
+|--------|--------|---------|
+| Legacy | `entryNode`, `nodes`, `edges` | Older assets |
+| `studio-v1` | `schema: 'studio-v1'`, `performers`, `relations` | Current Studio canvas |
+
+Both `dot-authoring.ts` normalizer and `asset-service.ts` reader handle both formats.
 
 ## Read First
 
@@ -345,16 +393,27 @@ Act sessions are simplified from the previous 2D model (policy × lifetime):
 - [src/types/index.ts](./src/types/index.ts)
 - [src/store/workspaceSlice.ts](./src/store/workspaceSlice.ts)
 - [src/store/chatSlice.ts](./src/store/chatSlice.ts)
+- [src/store/actSlice.ts](./src/store/actSlice.ts)
+- [src/store/performerRelationSlice.ts](./src/store/performerRelationSlice.ts)
 - [src/store/safeModeSlice.ts](./src/store/safeModeSlice.ts)
 - [src/lib/performers.ts](./src/lib/performers.ts)
-- [src/lib/acts.ts](./src/lib/acts.ts)
 - [src/components/panels/AssetLibrary.tsx](./src/components/panels/AssetLibrary.tsx)
+- [src/components/modals/publish-modal-utils.tsx](./src/components/modals/publish-modal-utils.tsx)
 - [src/features/performer/AgentFrame.tsx](./src/features/performer/AgentFrame.tsx)
-- [src/features/act/ActAreaFrame.tsx](./src/features/act/ActAreaFrame.tsx)
+- [src/features/act/ActFrame.tsx](./src/features/act/ActFrame.tsx)
+- [src/features/act/ActEditPanel.tsx](./src/features/act/ActEditPanel.tsx)
+- [src/features/act/ActChatPanel.tsx](./src/features/act/ActChatPanel.tsx)
 - [src/components/modals/SafeReviewModal.tsx](./src/components/modals/SafeReviewModal.tsx)
 - [server/routes/chat.ts](./server/routes/chat.ts)
-- [server/routes/compile.ts](./server/routes/compile.ts)
 - [server/routes/safe.ts](./server/routes/safe.ts)
+- [server/services/chat-service.ts](./server/services/chat-service.ts)
+- [server/services/opencode-projection/stage-projection-service.ts](./server/services/opencode-projection/stage-projection-service.ts)
+- [server/services/opencode-projection/performer-compiler.ts](./server/services/opencode-projection/performer-compiler.ts)
+- [server/services/opencode-projection/dance-compiler.ts](./server/services/opencode-projection/dance-compiler.ts)
+- [server/services/opencode-projection/relation-compiler.ts](./server/services/opencode-projection/relation-compiler.ts)
+- [server/services/opencode-projection/act-compiler.ts](./server/services/opencode-projection/act-compiler.ts)
+- [server/services/opencode-projection/projection-manifest.ts](./server/services/opencode-projection/projection-manifest.ts)
 - [server/lib/safe-mode.ts](./server/lib/safe-mode.ts)
+- [server/lib/dot-authoring.ts](./server/lib/dot-authoring.ts)
 - [server/lib/session-execution.ts](./server/lib/session-execution.ts)
 - [server/lib/runtime-tools.ts](./server/lib/runtime-tools.ts)

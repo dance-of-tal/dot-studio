@@ -7,7 +7,6 @@ import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import { normalizeIncompleteToolParts, uniqueAssetRefs, waitForSessionToSettle } from '../lib/chat-session.js'
 import { createStudioChatSession, sendStudioChatMessage } from '../services/chat-service.js'
 import {
-    cloneSessionExecutionContext,
     listSessionExecutionContextsForWorkingDir,
     resolveSessionExecutionContext,
     unregisterSessionExecutionContext,
@@ -126,6 +125,51 @@ chat.post('/api/chat/sessions/:id/abort', async (c) => {
     }
 })
 
+// ── Permissions ─────────────────────────────────────────
+chat.post('/api/chat/sessions/:id/permission/:pid/respond', async (c) => {
+    const { response } = await c.req.json<{ response: 'once' | 'always' | 'reject' }>()
+    try {
+        const oc = await getOpencode()
+        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
+        unwrapOpencodeResult(await oc.permission.respond({
+            ...directoryQuery,
+            sessionID: c.req.param('id'),
+            permissionID: c.req.param('pid'),
+            response,
+        }))
+        return c.json({ ok: true })
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+// ── Questions ───────────────────────────────────────────
+chat.post('/api/chat/questions/:qid/respond', async (c) => {
+    const { answers } = await c.req.json<{ answers: any[] }>()
+    try {
+        const oc = await getOpencode()
+        unwrapOpencodeResult(await oc.question.reply({
+            requestID: c.req.param('qid'),
+            answers,
+        }))
+        return c.json({ ok: true })
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+chat.post('/api/chat/questions/:qid/reject', async (c) => {
+    try {
+        const oc = await getOpencode()
+        unwrapOpencodeResult(await oc.question.reject({
+            requestID: c.req.param('qid'),
+        }))
+        return c.json({ ok: true })
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
 // ── SSE event stream ────────────────────────────────────
 chat.get('/api/chat/events', async (c) => {
     try {
@@ -165,6 +209,25 @@ chat.get('/api/chat/events', async (c) => {
                                 if (!active) {
                                     return
                                 }
+                                // Auto-accept 'permission.asked' for Act sessions
+                                if (event.type === 'permission.asked') {
+                                    const context = await resolveSessionExecutionContext(event.properties.sessionID)
+                                    if (context?.ownerKind === 'act') {
+                                        // Automatically allow always for Act automated sessions
+                                        try {
+                                            await oc.permission.respond({
+                                                sessionID: event.properties.sessionID,
+                                                permissionID: event.properties.id,
+                                                response: 'always',
+                                            })
+                                        } catch (err) {
+                                            console.error('Failed to auto-accept permission for Act session:', err)
+                                        }
+                                        // Do not send this event to the client
+                                        continue
+                                    }
+                                }
+
                                 controller.enqueue(sseEncode(JSON.stringify(event)))
                             }
                         } catch {
@@ -234,27 +297,6 @@ chat.get('/api/chat/sessions/:id/todo', async (c) => {
             ...directoryQuery,
         }))
         return c.json(data || [])
-    } catch (err) {
-        return jsonOpencodeError(c, err)
-    }
-})
-
-// ── Fork ────────────────────────────────────────────────
-chat.post('/api/chat/sessions/:id/fork', async (c) => {
-    const { messageId } = await c.req.json<{ messageId: string }>()
-    try {
-        const oc = await getOpencode()
-        const directoryQuery = await directoryQueryForSession(c, c.req.param('id'))
-        const data = unwrapOpencodeResult<any>(await oc.session.fork({
-            sessionID: c.req.param('id'),
-            ...directoryQuery,
-            messageID: messageId,
-        }))
-        const nextSessionId = data?.id || data?.sessionId
-        if (typeof nextSessionId === 'string' && nextSessionId) {
-            await cloneSessionExecutionContext(c.req.param('id'), nextSessionId)
-        }
-        return c.json(data)
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

@@ -1,21 +1,33 @@
+/**
+ * Chat slice — thin composition root.
+ *
+ * Domain logic is split into:
+ *   - chat/chat-internals.ts   — shared helpers (sync, fallback poller, system messages)
+ *   - chat/act-chat.ts         — Act-scoped chat (sendActMessage)
+ *   - chat/chat-approvals.ts   — permission / question / todo handlers
+ *
+ * This file owns performer standalone chat, session management, and slash commands.
+ */
 import type { StateCreator } from 'zustand'
 import type { StudioState, ChatSlice } from './types'
 import { api } from '../api'
 import { showToast } from '../lib/toast'
 import {
-    buildPerformerConfigHash,
     hasModelConfig,
     resolvePerformerRuntimeConfig,
 } from '../lib/performers'
-import { mapSessionMessagesToChatMessages } from '../lib/chat-messages'
 import { formatStudioApiErrorMessage } from '../lib/api-errors'
+
 import {
-    sendActMessage as sendActMessageHelper,
-    abortAct as abortActHelper,
-    startNewActSession as startNewActSessionHelper,
-    deleteActSession as deleteActSessionHelper,
-    renameActSession as renameActSessionHelper,
-} from './chat-act-helpers'
+    getPerformerById,
+    getPerformerSessionId,
+    addChatMessage as addChatMessageHelper,
+    appendPerformerSystemMessage,
+    syncPerformerMessages,
+    scheduleSessionFallbackSync,
+} from './chat/chat-internals'
+import { createActChat } from './chat/act-chat'
+import { createChatApprovals } from './chat/chat-approvals'
 
 export const createChatSlice: StateCreator<
     StudioState,
@@ -23,62 +35,14 @@ export const createChatSlice: StateCreator<
     [],
     ChatSlice
 > = (set, get) => {
-    const getPerformerById = (performerId: string) => (
-        get().performers.find((item: any) => item.id === performerId) as any
-    )
-
-    const buildPerformerSessionHash = (performerId: string) => {
-        const performer = getPerformerById(performerId)
-        if (!performer) {
-            return ''
-        }
-        const base = buildPerformerConfigHash(performer)
-        const relationSignature = JSON.stringify(
-            (get().edges || [])
-                .filter((edge) => edge.from === performerId)
-                .map((edge) => ({
-                    to: edge.to,
-                    interaction: edge.interaction || 'request',
-                    description: edge.description || '',
-                }))
-                .sort((left, right) => (
-                    left.to.localeCompare(right.to)
-                    || left.interaction.localeCompare(right.interaction)
-                    || left.description.localeCompare(right.description)
-                ))
-        )
-        return `${base}::rel:${relationSignature}`
-    }
-
-    const getPerformerSessionId = (performerId: string) => get().sessionMap[performerId]
-
-    const syncPerformerMessages = async (performerId: string, sessionId: string) => {
-        const messages = await api.chat.messages(sessionId)
-        const mapped = mapSessionMessagesToChatMessages(messages)
-        set((state) => ({
-            chats: {
-                ...state.chats,
-                [performerId]: [
-                    ...(state.chatPrefixes[performerId] || []),
-                    ...mapped,
-                ],
-            },
-        }))
-        if (getPerformerById(performerId)?.executionMode === 'safe') {
-            void get().refreshSafeOwner('performer', performerId)
-        }
-        return messages
-    }
-
     const createFreshSession = async (
         performerId: string,
         options?: {
             resetMessages?: Array<{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }>
         }
     ) => {
-        const performer = getPerformerById(performerId)
+        const performer = getPerformerById(get, performerId)
         const name = performer?.name || 'Untitled Performer'
-        const configHash = buildPerformerSessionHash(performerId)
         const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
             talRef: null,
             danceRefs: [],
@@ -93,7 +57,6 @@ export const createChatSlice: StateCreator<
         if (!hasModelConfig(runtimeConfig.model)) {
             return {
                 sessionId: null,
-                configHash,
                 runtimeConfig,
             }
         }
@@ -101,68 +64,38 @@ export const createChatSlice: StateCreator<
         const res = await api.chat.createSession(
             performerId,
             name,
-            configHash,
+            '',
             performer?.executionMode === 'safe' ? 'safe' : 'direct',
         )
         const sessionId = res.sessionId
-
-        set((state: any) => {
-            const nextState: Record<string, unknown> = {
-                sessionMap: {
-                    ...state.sessionMap,
-                    [performerId]: sessionId,
-                },
-                sessionConfigMap: {
-                    ...state.sessionConfigMap,
-                    [performerId]: configHash,
-                },
+        const nextState: Record<string, any> = {
+            sessionMap: { ...get().sessionMap, [performerId]: sessionId },
+        }
+        if (options?.resetMessages) {
+            nextState.chats = {
+                ...get().chats,
+                [performerId]: options.resetMessages,
             }
-
-            if (options?.resetMessages) {
-                nextState.chats = {
-                    ...state.chats,
-                    [performerId]: options.resetMessages,
-                }
-                nextState.chatPrefixes = {
-                    ...state.chatPrefixes,
-                    [performerId]: options.resetMessages,
-                }
+            nextState.chatPrefixes = {
+                ...get().chatPrefixes,
+                [performerId]: options.resetMessages,
             }
-
+        }
+        set(() => {
             return nextState
         })
 
         await get().listSessions()
         return {
             sessionId,
-            configHash,
             runtimeConfig,
         }
-    }
-
-    const appendPerformerSystemMessage = (performerId: string, content: string) => {
-        set((state) => ({
-            chats: {
-                ...state.chats,
-                [performerId]: [
-                    ...(state.chats[performerId] || []),
-                    {
-                        id: `msg-${Date.now()}`,
-                        role: 'system' as const,
-                        content,
-                        timestamp: Date.now(),
-                    },
-                ],
-            },
-        }))
     }
 
     const detachPerformerSessionInternal = (performerId: string, notice?: string) => {
         set((state) => {
             const nextSessionMap = { ...state.sessionMap }
             delete nextSessionMap[performerId]
-            const nextConfigMap = { ...state.sessionConfigMap }
-            delete nextConfigMap[performerId]
             const nextChatContent = notice
                 ? [
                     ...(state.chats[performerId] || []),
@@ -185,120 +118,36 @@ export const createChatSlice: StateCreator<
                     [performerId]: nextChatContent,
                 },
                 sessionMap: nextSessionMap,
-                sessionConfigMap: nextConfigMap,
                 selectedPerformerSessionId: state.selectedPerformerId === performerId ? null : state.selectedPerformerSessionId,
             }
         })
     }
 
-    const detachActSessionInternal = (actId: string, notice?: string) => {
-        const currentSessionId = get().actSessionMap[actId]
-        set((state) => {
-            const nextActSessionMap = { ...state.actSessionMap }
-            delete nextActSessionMap[actId]
-            return {
-                actSessionMap: nextActSessionMap,
-                actChats: currentSessionId && notice
-                    ? {
-                        ...state.actChats,
-                        [currentSessionId]: [
-                            ...(state.actChats[currentSessionId] || []),
-                            {
-                                id: `act-system-${Date.now()}`,
-                                role: 'system' as const,
-                                content: notice,
-                                timestamp: Date.now(),
-                            },
-                        ],
-                    }
-                    : state.actChats,
-                selectedActSessionId: state.actSessionMap[actId] === state.selectedActSessionId ? null : state.selectedActSessionId,
-                loadingActId: state.loadingActId === actId ? null : state.loadingActId,
-                stageDirty: true,
-            }
-        })
-    }
-
-    const scheduleSessionFallbackSync = (
-        performerId: string,
-        sessionId: string,
-        startedAt: number,
-        attempt = 0,
-    ) => {
-        const maxAttempts = 8
-        const delay = attempt === 0 ? 2500 : 3000
-
-        globalThis.setTimeout(async () => {
-            if (get().loadingPerformerId !== performerId) {
-                return
-            }
-
-            try {
-                const messages = await syncPerformerMessages(performerId, sessionId)
-                const mapped = mapSessionMessagesToChatMessages(messages)
-                const latestAssistant = [...messages]
-                    .reverse()
-                    .find((message: any) => (message?.info?.role || message?.role) === 'assistant') as any
-
-                const settled = !!(
-                    latestAssistant
-                    && (latestAssistant.info?.time?.created || 0) >= (startedAt - 1000)
-                    && (
-                        latestAssistant.info?.time?.completed
-                        || latestAssistant.info?.error
-                    )
-                )
-
-                set((state) => ({
-                    chats: {
-                        ...state.chats,
-                        [performerId]: mapped,
-                    },
-                    ...(settled
-                        ? { loadingPerformerId: state.loadingPerformerId === performerId ? null : state.loadingPerformerId }
-                        : {}),
-                }))
-
-                if (!settled && attempt < maxAttempts) {
-                    scheduleSessionFallbackSync(performerId, sessionId, startedAt, attempt + 1)
-                }
-            } catch {
-                if (attempt < maxAttempts) {
-                    scheduleSessionFallbackSync(performerId, sessionId, startedAt, attempt + 1)
-                }
-            }
-        }, delay)
-    }
+    // ── Delegated sub-modules ────────────────────────
+    const actChat = createActChat(set as any, get)
+    const approvals = createChatApprovals(set as any, get)
 
     return {
         chats: {},
-        chatPrefixes: {},
         actChats: {},
-        actPerformerChats: {},
-        actPerformerBindings: {},
+        chatPrefixes: {},
         activeChatPerformerId: null,
         sessionMap: {},
-        sessionConfigMap: {},
         actSessionMap: {},
         loadingPerformerId: null,
-        loadingActId: null,
         sessions: [],
-        actSessions: [],
+        pendingPermissions: {},
+        pendingQuestions: {},
+        todos: {},
 
         setActiveChatPerformer: (performerId) => set({ activeChatPerformerId: performerId }),
 
-        addChatMessage: (performerId, msg) => set((s) => ({
-            chats: {
-                ...s.chats,
-                [performerId]: [...(s.chats[performerId] || []), msg]
-            }
-        })),
+        addChatMessage: (performerId, msg) => addChatMessageHelper(set as any, get, performerId, msg),
 
+        // ── Performer standalone chat ────────────────
         sendMessage: async (performerId, text, attachments, extraDanceRefs = [], mentionedPerformers = []) => {
-            const { sessionMap, sessionConfigMap, addChatMessage } = get()
-            let sessionId: string | undefined = sessionMap[performerId]
-            const performer = getPerformerById(performerId)
-            const currentConfigHash = buildPerformerSessionHash(performerId)
+            let sessionId: string | undefined = get().sessionMap[performerId]
+            const performer = getPerformerById(get, performerId)
             const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
                 talRef: null,
                 danceRefs: [],
@@ -312,52 +161,16 @@ export const createChatSlice: StateCreator<
             if (!hasModelConfig(runtimeConfig.model)) {
                 return
             }
-            const configChanged = !!sessionId && sessionConfigMap[performerId] !== currentConfigHash
 
-            // Ensure session exists
+            // Ensure session exists (OpenCode tracks agent/model/variant per-message,
+            // so config changes don't require a new session)
             if (!sessionId) {
                 try {
                     const freshSession = await createFreshSession(performerId)
                     sessionId = freshSession.sessionId || undefined
                 } catch (err) {
                     console.error("Failed to create session", err)
-                    appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
-                    return
-                }
-            } else if (configChanged) {
-                set({ loadingPerformerId: performerId })
-                try {
-                    // Find the last assistant or user message to fork from
-                    const msgs = get().chats[performerId] || []
-                    const lastValidMessage = [...msgs].reverse().find(
-                        msg => msg.role === 'assistant' || msg.role === 'user'
-                    )
-
-                    const res = await api.chat.fork(
-                        sessionId,
-                        lastValidMessage ? ((lastValidMessage as any).info?.id || lastValidMessage.id) : ''
-                    )
-                    
-                    sessionId = res.id || res.sessionId
-                    if (sessionId) {
-                        set((state: any) => {
-                            const newMap = { ...state.sessionMap }
-                            newMap[performerId] = sessionId
-                            const newConfigMap = { ...state.sessionConfigMap }
-                            newConfigMap[performerId] = currentConfigHash
-                            return { sessionMap: newMap, sessionConfigMap: newConfigMap }
-                        })
-                        appendPerformerSystemMessage(
-                            performerId,
-                            'Performer configuration changed. Started a new OpenCode session branch with the updated Tal, Dances, model, and tools.'
-                        )
-                        // Refresh list in background
-                        get().listSessions().catch(() => {})
-                    }
-                } catch (err) {
-                    console.error("Failed to fork session on config change", err)
-                    appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
-                    set({ loadingPerformerId: null })
+                    appendPerformerSystemMessage(set as any, get, performerId, formatStudioApiErrorMessage(err))
                     return
                 }
             }
@@ -367,8 +180,19 @@ export const createChatSlice: StateCreator<
                 return
             }
 
-            // Add user message to UI
-            addChatMessage(performerId, { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() })
+            // Add user message to UI with metadata about the active config
+            addChatMessageHelper(set as any, get, performerId, {
+                id: Date.now().toString(),
+                role: 'user',
+                content: text,
+                timestamp: Date.now(),
+                metadata: {
+                    agentName: runtimeConfig.agentId || 'build',
+                    modelId: runtimeConfig.model?.modelId,
+                    provider: runtimeConfig.model?.provider,
+                    variant: runtimeConfig.modelVariant || undefined,
+                },
+            })
 
             set({ loadingPerformerId: performerId })
 
@@ -376,11 +200,8 @@ export const createChatSlice: StateCreator<
                 get().initRealtimeEvents()
 
                 // Pass the prompt over proxy
-                const relationTargetIds = new Set(
-                    get().edges
-                        .filter((edge) => edge.from === performerId)
-                        .map((edge) => edge.to)
-                )
+                // Standalone performers no longer have edges — delegation only inside Act
+                const relationTargetIds = new Set<string>()
                 for (const mention of mentionedPerformers) {
                     relationTargetIds.add(mention.performerId)
                 }
@@ -400,13 +221,12 @@ export const createChatSlice: StateCreator<
                         mcpServerNames: runtimeConfig.mcpServerNames,
                         danceDeliveryMode: runtimeConfig.danceDeliveryMode,
                         planMode: runtimeConfig.planMode,
-                        configHash: currentConfigHash,
                     },
                     attachments,
                     mentions: mentionedPerformers.map((mention) => ({ performerId: mention.performerId })),
                     relatedPerformers: [...relationTargetIds]
                         .map((targetPerformerId) => {
-                            const related = getPerformerById(targetPerformerId)
+                            const related = getPerformerById(get, targetPerformerId)
                             if (!related || !hasModelConfig(related.model)) {
                                 return null
                             }
@@ -414,7 +234,7 @@ export const createChatSlice: StateCreator<
                             return {
                                 performerId: related.id,
                                 performerName: related.name,
-                                description: get().edges.find((edge) => edge.from === performerId && edge.to === related.id)?.description || '',
+                                description: '',
                                 talRef: relatedConfig.talRef,
                                 danceRefs: relatedConfig.danceRefs,
                                 drafts: get().drafts,
@@ -425,9 +245,9 @@ export const createChatSlice: StateCreator<
                         })
                         .filter((value): value is NonNullable<typeof value> => value !== null),
                 })
-                scheduleSessionFallbackSync(performerId, sessionId, Date.now())
+                scheduleSessionFallbackSync(set as any, get, performerId, sessionId, Date.now())
             } catch (err: any) {
-                addChatMessage(performerId, {
+                addChatMessageHelper(set as any, get, performerId, {
                     id: `msg-${Date.now()}`,
                     role: 'system',
                     content: formatStudioApiErrorMessage(err),
@@ -437,17 +257,13 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        sendActMessage: async (actId, text) => {
-            await sendActMessageHelper(get, set, actId, text)
-        },
+        // ── Act chat (delegated) ────────────────────
+        sendActMessage: actChat.sendActMessage,
 
-        abortAct: async (actId) => {
-            await abortActHelper(get, set, actId)
-        },
-
+        // ── Slash commands ──────────────────────────
         executeSlashCommand: async (performerId, cmd) => {
             const state = get()
-            const sessionId = getPerformerSessionId(performerId)
+            const sessionId = getPerformerSessionId(get, performerId)
             if (!sessionId) return
 
             set({ loadingPerformerId: performerId })
@@ -460,8 +276,6 @@ export const createChatSlice: StateCreator<
                         content: `Session shared at: ${shareRes.url}`,
                         timestamp: Date.now()
                     })
-                } else if (cmd === '/compact') {
-                    await get().summarizeSession(performerId)
                 }
             } catch (e: any) {
                 state.addChatMessage(performerId, {
@@ -475,6 +289,7 @@ export const createChatSlice: StateCreator<
             }
         },
 
+        // ── Session management ──────────────────────
         clearSession: (performerId) => set((s) => {
             const newChats = { ...s.chats }
             delete newChats[performerId]
@@ -482,19 +297,16 @@ export const createChatSlice: StateCreator<
             delete newChatPrefixes[performerId]
             const newSessionMap = { ...s.sessionMap }
             delete newSessionMap[performerId]
-            const newConfigMap = { ...s.sessionConfigMap }
-            delete newConfigMap[performerId]
             return {
                 chats: newChats,
                 chatPrefixes: newChatPrefixes,
                 sessionMap: newSessionMap,
-                sessionConfigMap: newConfigMap,
                 selectedPerformerSessionId: s.selectedPerformerId === performerId ? null : s.selectedPerformerSessionId,
             }
         }),
 
         startNewSession: async (performerId) => {
-            const performer = getPerformerById(performerId)
+            const performer = getPerformerById(get, performerId)
             if (!performer || !hasModelConfig(performer.model)) {
                 get().clearSession(performerId)
                 return
@@ -504,67 +316,28 @@ export const createChatSlice: StateCreator<
                 set({ selectedPerformerSessionId: null })
             } catch (err) {
                 console.error('Failed to start new session', err)
-                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
+                appendPerformerSystemMessage(set as any, get, performerId, formatStudioApiErrorMessage(err))
             }
         },
 
-        startNewActSession: (actId) => {
-            startNewActSessionHelper(get, set, actId)
-        },
-
-        detachPerformerSession: (performerId, notice) => {
-            detachPerformerSessionInternal(performerId, notice)
-        },
-
-        detachActSession: (actId, notice) => {
-            detachActSessionInternal(actId, notice)
-        },
-
         abortChat: async (performerId) => {
-            const sessionId = getPerformerSessionId(performerId)
+            const sessionId = getPerformerSessionId(get, performerId)
             if (sessionId) {
                 try {
                     await api.chat.abort(sessionId)
-                    await syncPerformerMessages(performerId, sessionId)
-                    appendPerformerSystemMessage(performerId, 'Stopped the current turn.')
+                    await syncPerformerMessages(set as any, get, performerId, sessionId)
+                    appendPerformerSystemMessage(set as any, get, performerId, 'Stopped the current turn.')
                 } catch (err) {
                     console.error('Failed to abort chat', err)
-                    appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
+                    appendPerformerSystemMessage(set as any, get, performerId, formatStudioApiErrorMessage(err))
                 }
             }
             set({ loadingPerformerId: null })
         },
 
-        summarizeSession: async (performerId) => {
-            const sessionId = getPerformerSessionId(performerId)
-            const performer = getPerformerById(performerId)
-            const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : null
-
-            if (!sessionId || !runtimeConfig?.model || !hasModelConfig(runtimeConfig.model)) {
-                appendPerformerSystemMessage(
-                    performerId,
-                    'Select a model and start a thread before compacting.',
-                )
-                return
-            }
-
-            set({ loadingPerformerId: performerId })
-            try {
-                await api.chat.summarize(sessionId, {
-                    providerID: runtimeConfig.model.provider,
-                    modelID: runtimeConfig.model.modelId,
-                })
-                await syncPerformerMessages(performerId, sessionId)
-                appendPerformerSystemMessage(performerId, 'Thread compacted.')
-            } catch (e: any) {
-                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(e))
-            } finally {
-                set({ loadingPerformerId: null })
-            }
-        },
 
         undoLastTurn: async (performerId) => {
-            const sessionId = getPerformerSessionId(performerId)
+            const sessionId = getPerformerSessionId(get, performerId)
             if (!sessionId) {
                 return
             }
@@ -572,17 +345,17 @@ export const createChatSlice: StateCreator<
                 .reverse()
                 .find((message) => message.role === 'user') as any
             if (!lastUser) {
-                appendPerformerSystemMessage(performerId, 'No prior turn is available to undo.')
+                appendPerformerSystemMessage(set as any, get, performerId, 'No prior turn is available to undo.')
                 return
             }
 
             set({ loadingPerformerId: performerId })
             try {
                 await api.chat.revert(sessionId, lastUser.info?.id || lastUser.id)
-                await syncPerformerMessages(performerId, sessionId)
-                appendPerformerSystemMessage(performerId, 'Undid the last turn.')
+                await syncPerformerMessages(set as any, get, performerId, sessionId)
+                appendPerformerSystemMessage(set as any, get, performerId, 'Undid the last turn.')
             } catch (err) {
-                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
+                appendPerformerSystemMessage(set as any, get, performerId, formatStudioApiErrorMessage(err))
             } finally {
                 set({ loadingPerformerId: null })
             }
@@ -595,38 +368,10 @@ export const createChatSlice: StateCreator<
 
             for (const [performerId, sessionId] of sessionEntries) {
                 try {
-                    await syncPerformerMessages(performerId, sessionId)
+                    await syncPerformerMessages(set as any, get, performerId, sessionId)
                 } catch (err) {
                     console.error(`Failed to rehydrate session for performer ${performerId}:`, err)
                 }
-            }
-        },
-
-        forkSession: async (performerId, messageId) => {
-            const state = get()
-            const sessionId = state.sessionMap[performerId]
-            if (!sessionId) return
-
-            try {
-                const res = await api.chat.fork(sessionId, messageId)
-                const newSessionId = res.id || res.sessionId
-                if (newSessionId) {
-                    set((state: any) => {
-                        const newMap = { ...state.sessionMap }
-                        newMap[performerId] = newSessionId
-                        const newConfigMap = { ...state.sessionConfigMap }
-                        const performer = getPerformerById(performerId)
-                        newConfigMap[performerId] = performer ? buildPerformerSessionHash(performerId) : ''
-                        return { sessionMap: newMap, sessionConfigMap: newConfigMap }
-                    })
-                    // Re-sync messages for the new branch
-                    await get().rehydrateSessions()
-                    // Refresh list
-                    get().listSessions()
-                }
-            } catch (err) {
-                console.error("Failed to fork session", err)
-                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
             }
         },
 
@@ -635,12 +380,16 @@ export const createChatSlice: StateCreator<
             const sessionId = state.sessionMap[performerId]
             if (!sessionId) return
 
+            set({ loadingPerformerId: performerId })
             try {
                 await api.chat.revert(sessionId, messageId)
-                await get().rehydrateSessions()
+                await syncPerformerMessages(set as any, get, performerId, sessionId)
+                appendPerformerSystemMessage(set as any, get, performerId, 'Reverted to the selected message.')
             } catch (err) {
                 console.error("Failed to revert session", err)
-                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
+                appendPerformerSystemMessage(set as any, get, performerId, formatStudioApiErrorMessage(err))
+            } finally {
+                set({ loadingPerformerId: null })
             }
         },
 
@@ -653,7 +402,7 @@ export const createChatSlice: StateCreator<
                 return await api.chat.diff(sessionId)
             } catch (err) {
                 console.error("Failed to get diff", err)
-                appendPerformerSystemMessage(performerId, formatStudioApiErrorMessage(err))
+                appendPerformerSystemMessage(set as any, get, performerId, formatStudioApiErrorMessage(err))
                 return []
             }
         },
@@ -671,20 +420,17 @@ export const createChatSlice: StateCreator<
             try {
                 await api.chat.deleteSession(sessionId)
                 // Remove from sessionMap if present
-                const { sessionMap, sessionConfigMap, chats } = get()
+                const { sessionMap, chats } = get()
                 const newMap = { ...sessionMap }
-                const newConfigMap = { ...sessionConfigMap }
                 const newChats = { ...chats }
                 for (const [performerId, sid] of Object.entries(newMap)) {
                     if (sid === sessionId) {
                         delete newMap[performerId]
-                        delete newConfigMap[performerId]
                         delete newChats[performerId]
                     }
                 }
                 set({
                     sessionMap: newMap,
-                    sessionConfigMap: newConfigMap,
                     chats: newChats,
                     selectedPerformerSessionId: get().selectedPerformerSessionId === sessionId ? null : get().selectedPerformerSessionId,
                 })
@@ -699,12 +445,9 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        deleteActSession: (sessionId) => {
-            deleteActSessionHelper(get, set, sessionId)
-        },
+        detachPerformerSession: detachPerformerSessionInternal,
 
-        renameActSession: (sessionId, title) => {
-            renameActSessionHelper(set, sessionId, title)
-        },
+        // ── Approvals (delegated) ───────────────────
+        ...approvals,
     }
 }

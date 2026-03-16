@@ -1,213 +1,102 @@
-import fs from 'fs/promises'
-import path from 'path'
-import { createHash } from 'crypto'
-import { getOpencode } from '../../lib/opencode.js'
-import { resolveRuntimeModel } from '../../lib/model-catalog.js'
-import { resolveRuntimeTools, type RuntimeToolResolution } from '../../lib/runtime-tools.js'
-import {
-    cleanGroupFiles,
-    updateGitExclude,
-    updateManifestGroup,
-} from './projection-manifest.js'
-import { compileDance, type CompiledSkill } from './dance-compiler.js'
-import { compilePerformer, type CompiledPerformer, type PerformerCompileInput, type Posture } from './performer-compiler.js'
-import { compileRequestRelations, type RequestRelationTarget } from './relation-compiler.js'
+/**
+ * act-compiler.ts — Compiles Act projection
+ *
+ * Uses Act's copied performer configs (not standalone) to project
+ * into the act-scoped namespace: .opencode/agents/dot-studio/act/<stageHash>/<actId>/
+ */
 
-type AssetRef =
-    | { kind: 'registry'; urn: string }
-    | { kind: 'draft'; draftId: string }
+import type { PerformerProjectionInput, EnsuredPerformerProjection } from './stage-projection-service.js'
+import { ensurePerformerProjection, getProjectedAgentName } from './stage-projection-service.js'
 
-type DraftAsset = {
-    id: string
-    kind: string
+interface ActPerformerConfig {
+    sourcePerformerId: string
     name: string
-    content: unknown
-    description?: string
-    derivedFrom?: string | null
+    talRef: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null
+    danceRefs: Array<{ kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string }>
+    model: { provider: string; modelId: string } | null
+    modelVariant: string | null
+    mcpServerNames: string[]
+    agentId: string | null
+    planMode: boolean
 }
 
-type ModelSelection = {
-    provider: string
-    modelId: string
-} | null
+interface ActRelation {
+    id: string
+    from: string
+    to: string
+    interaction: 'request'
+    description: string
+}
 
-type CapabilitySnapshot = {
-    toolCall: boolean
-    reasoning: boolean
-    attachment: boolean
-    temperature: boolean
-    modalities: {
-        input: string[]
-        output: string[]
-    }
-} | null
-
-export interface ActPerformerProjectionInput {
+export interface ActCompileInput {
     actId: string
-    performerId: string
-    performerName: string
-    talRef: AssetRef | null
-    danceRefs: AssetRef[]
-    drafts: Record<string, DraftAsset>
-    model: ModelSelection
-    modelVariant?: string | null
-    mcpServerNames: string[]
+    actPerformers: Record<string, ActPerformerConfig>
+    relations: ActRelation[]
     executionDir: string
     workingDir: string
-    requestTargets?: Array<{
-        performerId: string
-        performerName: string
-        description?: string
-    }>
+    drafts: Record<string, any>
 }
 
-export interface EnsuredActPerformerProjection {
-    compiled: CompiledPerformer
-    toolResolution: RuntimeToolResolution
-    capabilitySnapshot: CapabilitySnapshot
+export interface CompiledActProjection {
+    performerProjections: Record<string, EnsuredPerformerProjection>
 }
 
-function computeStageHash(workingDir: string) {
-    return createHash('sha1').update(workingDir).digest('hex').slice(0, 12)
-}
+/**
+ * Compiles all performers in an Act using their copied configs.
+ * Each performer is projected into the act-scoped namespace.
+ */
+export async function compileActProjection(input: ActCompileInput): Promise<CompiledActProjection> {
+    const performerProjections: Record<string, EnsuredPerformerProjection> = {}
 
-function actGroupKey(actId: string, performerId: string) {
-    return `act:${actId}:performer:${performerId}`
-}
+    for (const [sourceId, actPerformer] of Object.entries(input.actPerformers)) {
+        if (!actPerformer.model) {
+            continue
+        }
 
-async function writeIfChanged(filePath: string, content: string) {
-    const current = await fs.readFile(filePath, 'utf-8').catch(() => null)
-    if (current === content) {
-        return false
+        // Build request targets for this performer based on relations
+        const requestTargets = input.relations
+            .filter((rel) => rel.from === sourceId)
+            .map((rel) => {
+                const target = input.actPerformers[rel.to]
+                return target ? {
+                    performerId: rel.to,
+                    performerName: target.name,
+                    description: rel.description || '',
+                } : null
+            })
+            .filter(Boolean) as PerformerProjectionInput['requestTargets']
+
+        const ensured = await ensurePerformerProjection({
+            performerId: sourceId,
+            performerName: actPerformer.name,
+            talRef: actPerformer.talRef,
+            danceRefs: actPerformer.danceRefs,
+            drafts: input.drafts,
+            model: actPerformer.model,
+            modelVariant: actPerformer.modelVariant,
+            mcpServerNames: actPerformer.mcpServerNames,
+            executionDir: input.executionDir,
+            workingDir: input.workingDir,
+            requestTargets,
+            scope: 'act',
+            actId: input.actId,
+        })
+
+        performerProjections[sourceId] = ensured
     }
-    await fs.mkdir(path.dirname(filePath), { recursive: true })
-    await fs.writeFile(filePath, content, 'utf-8')
-    return true
+
+    return { performerProjections }
 }
 
-async function allMcpToolIds(cwd: string) {
-    const oc = await getOpencode()
-    const res = await oc.mcp.status({ directory: cwd })
-    const statusMap = ((res as any).data || {}) as Record<string, { tools?: Array<{ name?: string }> }>
-    return Array.from(
-        new Set(
-            Object.values(statusMap).flatMap((entry) =>
-                (entry?.tools || [])
-                    .map((tool) => tool.name || '')
-                    .filter(Boolean)
-            )
-        )
-    )
-}
-
-function buildProjectedToolMap(allToolIds: string[], resolvedToolIds: string[]) {
-    const resolved = new Set(resolvedToolIds)
-    return Object.fromEntries(allToolIds.map((toolId) => [toolId, resolved.has(toolId)]))
-}
-
-async function resolveCapabilitySnapshot(cwd: string, model: ModelSelection): Promise<CapabilitySnapshot> {
-    if (!model) {
-        return null
-    }
-    const runtimeModel = await resolveRuntimeModel(cwd, model)
-    if (!runtimeModel) {
-        return null
-    }
-    return {
-        toolCall: runtimeModel.toolCall,
-        reasoning: runtimeModel.reasoning,
-        attachment: runtimeModel.attachment,
-        temperature: runtimeModel.temperature,
-        modalities: runtimeModel.modalities,
-    }
-}
-
-export function getProjectedActAgentName(
+/**
+ * Get the projected agent name for an act-scoped performer.
+ */
+export function getActProjectedAgentName(
     workingDir: string,
     actId: string,
     performerId: string,
-    posture: Posture,
+    posture: 'build' | 'plan',
 ) {
-    const stageHash = computeStageHash(workingDir)
-    return `dot-studio/act/${stageHash}/${actId}/${performerId}--${posture}`
-}
-
-export async function ensureActPerformerProjection(input: ActPerformerProjectionInput): Promise<EnsuredActPerformerProjection> {
-    const stageHash = computeStageHash(input.workingDir)
-    const toolResolution = await resolveRuntimeTools(input.executionDir, input.model, input.mcpServerNames)
-    const toolMap = buildProjectedToolMap(
-        await allMcpToolIds(input.executionDir),
-        toolResolution.resolvedTools,
-    )
-
-    const skills: CompiledSkill[] = []
-    for (const ref of input.danceRefs) {
-        skills.push(await compileDance(
-            input.executionDir,
-            ref,
-            input.drafts,
-            stageHash,
-            input.performerId,
-            input.executionDir,
-            'act',
-            input.actId,
-        ))
-    }
-
-    const requestTargets: RequestRelationTarget[] = (input.requestTargets || []).map((target) => ({
-        performerId: target.performerId,
-        performerName: target.performerName,
-        agentName: getProjectedActAgentName(input.workingDir, input.actId, target.performerId, 'build'),
-        description: target.description || '',
-    }))
-    const requestProjection = compileRequestRelations(requestTargets)
-
-    const compiled = await compilePerformer(
-        input.executionDir,
-        {
-            performerId: input.performerId,
-            performerName: input.performerName,
-            talRef: input.talRef,
-            drafts: input.drafts,
-            model: input.model,
-            modelVariant: input.modelVariant || null,
-            stageHash,
-            executionDir: input.executionDir,
-            scope: 'act',
-            actId: input.actId,
-            skillNames: skills.map((skill) => skill.logicalName),
-            toolMap,
-            taskAllowlist: requestProjection.taskAllowlist,
-            relationPromptSection: requestProjection.promptSection,
-        } satisfies PerformerCompileInput,
-        skills,
-    )
-
-    await cleanGroupFiles(input.executionDir, actGroupKey(input.actId, input.performerId), compiled.allFiles)
-
-    let changed = false
-    for (const skill of skills) {
-        changed = (await writeIfChanged(skill.filePath, skill.content)) || changed
-    }
-    changed = (await writeIfChanged(compiled.agentPaths.build, compiled.agentContents.build)) || changed
-    changed = (await writeIfChanged(compiled.agentPaths.plan, compiled.agentContents.plan)) || changed
-
-    await updateManifestGroup(
-        input.executionDir,
-        stageHash,
-        actGroupKey(input.actId, input.performerId),
-        compiled.allFiles,
-    )
-    await updateGitExclude(input.executionDir)
-
-    if (changed) {
-        const oc = await getOpencode()
-        await oc.instance.dispose({ directory: input.executionDir }).catch(() => {})
-    }
-
-    return {
-        compiled,
-        toolResolution,
-        capabilitySnapshot: await resolveCapabilitySnapshot(input.executionDir, input.model),
-    }
+    // Uses the act-scoped naming: dot-studio/act/<stageHash>/<actId>/<performerId>--<posture>
+    return getProjectedAgentName(workingDir, performerId, posture, 'act', actId)
 }

@@ -3,7 +3,7 @@ import { api } from '../../api';
 import { showToast } from '../../lib/toast';
 import { SettingsModal } from '../../features/providers';
 import PublishModal from '../modals/PublishModal';
-import { GitBranch, CheckCircle, AlertCircle, Settings, Moon, Sun, Hexagon, Terminal as TerminalIcon, Github, FileText, ChevronDown, Upload, LogIn, UserRound } from 'lucide-react';
+import { GitBranch, CheckCircle, AlertCircle, Settings, Moon, Sun, Hexagon, Terminal as TerminalIcon, Github, FileText, ChevronDown, Upload, LogIn, UserRound, Sparkles } from 'lucide-react';
 import { useStudioStore } from '../../store';
 import { useServerHealth, useDotStatus, usePerformers } from '../../hooks/queries';
 import { useDotLogin } from '../../hooks/useDotLogin';
@@ -22,6 +22,8 @@ export default function StageToolbar() {
     const theme = useStudioStore(s => s.theme);
     const toggleTheme = useStudioStore(s => s.toggleTheme);
     const workingDir = useStudioStore(s => s.workingDir);
+    const isAssistantOpen = useStudioStore(s => s.isAssistantOpen);
+    const toggleAssistant = useStudioStore(s => s.toggleAssistant);
     const isTerminalOpen = useStudioStore(s => s.isTerminalOpen);
     const setTerminalOpen = useStudioStore(s => s.setTerminalOpen);
     const isTrackingOpen = useStudioStore(s => s.isTrackingOpen);
@@ -230,6 +232,10 @@ export default function StageToolbar() {
 
                 <button className="icon-btn" onClick={toggleTheme} title="Toggle Theme">
                     {theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />}
+                </button>
+
+                <button className={`icon-btn ${isAssistantOpen ? 'is-active' : ''}`} onClick={toggleAssistant} title="Toggle Studio Assistant">
+                    <Sparkles size={12} className={isAssistantOpen ? 'icon-active' : ''} color={isAssistantOpen ? "var(--primary)" : undefined} />
                 </button>
 
                 <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="Settings">

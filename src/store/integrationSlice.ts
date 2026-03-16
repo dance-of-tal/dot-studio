@@ -27,6 +27,11 @@ import {
     handleSessionIdle,
     handleSessionCompacted,
     handleSessionError,
+    handlePermissionAsked,
+    handlePermissionReplied,
+    handleQuestionAsked,
+    handleQuestionReplied,
+    handleTodoUpdated,
 } from './integration-event-handlers'
 import {
     reconnectManagedEventSource,
@@ -36,9 +41,6 @@ import type { EventSourceSlot } from './integration-eventsource'
 import {
     eventSourceInstance, setEventSourceInstance,
     eventSourceWorkingDir, setEventSourceWorkingDir,
-    actEventSourceInstance, setActEventSourceInstance,
-    actEventSourceWorkingDir, setActEventSourceWorkingDir,
-    actEventSourceSessionId, setActEventSourceSessionId,
     adapterEventSourceInstance, setAdapterEventSourceInstance,
     adapterEventSourceWorkingDir, setAdapterEventSourceWorkingDir,
 } from './integration-streaming'
@@ -71,9 +73,7 @@ export const createIntegrationSlice: StateCreator<
             set((state) => updateTargetMessages(
                 state,
                 target,
-                () => target.kind === 'act-performer'
-                    ? mapped.filter((message) => message.role !== 'user')
-                    : mapped,
+                () => mapped,
             ))
         } catch {
             // Ignore background sync failures and keep the streamed content.
@@ -92,14 +92,6 @@ export const createIntegrationSlice: StateCreator<
         setWorkingDir: setEventSourceWorkingDir,
     }
 
-    const actSlot: EventSourceSlot = {
-        getInstance: () => actEventSourceInstance,
-        setInstance: setActEventSourceInstance,
-        getWorkingDir: () => actEventSourceWorkingDir,
-        setWorkingDir: setActEventSourceWorkingDir,
-        getExtraKey: () => actEventSourceSessionId,
-        setExtraKey: setActEventSourceSessionId,
-    }
 
     const adapterSlot: EventSourceSlot = {
         getInstance: () => adapterEventSourceInstance,
@@ -128,6 +120,11 @@ export const createIntegrationSlice: StateCreator<
                 if (data.type === 'session.idle') return handleSessionIdle(data, get, set, syncSessionMessages)
                 if (data.type === 'session.compacted') return handleSessionCompacted(data, get, set, syncSessionMessages)
                 if (data.type === 'session.error') return handleSessionError(data, get, set)
+                if (data.type === 'permission.asked') return handlePermissionAsked(data, get, set)
+                if (data.type === 'permission.replied') return handlePermissionReplied(data, get, set)
+                if (data.type === 'question.asked') return handleQuestionAsked(data, get, set)
+                if (data.type === 'question.replied') return handleQuestionReplied(data, get, set)
+                if (data.type === 'todo.updated') return handleTodoUpdated(data, get, set)
             },
         })
     }
@@ -184,11 +181,8 @@ export const createIntegrationSlice: StateCreator<
 
         cleanupRealtimeEvents: () => {
             closeManagedEventSource(chatSlot)
-            closeManagedEventSource(actSlot)
             closeManagedEventSource(adapterSlot)
             chatSlot.setWorkingDir(null)
-            actSlot.setWorkingDir(null)
-            actSlot.setExtraKey?.(null)
             adapterSlot.setWorkingDir(null)
             clearIntegrationStreamingState()
         },
@@ -201,20 +195,8 @@ export const createIntegrationSlice: StateCreator<
                 return '// Prompt preview unavailable.'
             }
             try {
-                const relatedPerformers = (get().edges || [])
-                    .filter((edge) => edge.from === performerId)
-                    .map((edge) => {
-                        const related = get().performers.find((item) => item.id === edge.to) || null
-                        if (!related) {
-                            return null
-                        }
-                        return {
-                            performerId: related.id,
-                            performerName: related.name,
-                            description: edge.description || '',
-                        }
-                    })
-                    .filter((value): value is NonNullable<typeof value> => value !== null)
+                // Standalone performers no longer have edges — delegation only inside Act
+                const relatedPerformers: Array<{ performerId: string; performerName: string; description: string }> = []
                 const res = await api.compile(
                     performer.id,
                     performer.name,

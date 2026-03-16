@@ -14,7 +14,6 @@ function validatePerformer(performer: Performer): void {
     const dances = performer.dance
         ? (Array.isArray(performer.dance) ? performer.dance : [performer.dance])
         : []
-    const act = performer.act ?? null
 
     if (!tal && dances.length === 0) {
         throw new Error("Invalid performer: at least one of 'tal' or 'dance' must be present.")
@@ -29,7 +28,6 @@ function validatePerformer(performer: Performer): void {
 
     if (tal) validateUrn(tal, 'tal')
     for (const d of dances) validateUrn(d, 'dance')
-    if (act) validateUrn(act, 'act')
 }
 import { invalidate } from '../lib/cache.js'
 import { resolveRequestWorkingDir } from '../lib/request-context.js'

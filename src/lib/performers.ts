@@ -357,7 +357,6 @@ export function buildPerformerAssetPayload(
         throw new Error('Map imported MCP placeholders to project MCP servers before publishing.')
     }
 
-    const model = modelConfigToAssetValue(performer.model)
     const mcpConfig = selectProjectMcpConfig(performer, options.projectMcpConfig)
     if (resolveMappedMcpServerNames(performer).length > 0 && !mcpConfig) {
         throw new Error('Map imported MCP placeholders to project MCP servers before publishing.')
@@ -366,13 +365,57 @@ export function buildPerformerAssetPayload(
     const tags = (options.tags || []).filter((tag) => tag.trim().length > 0)
 
     return {
+        schema: 'studio-v1' as const,
         name: options.name.trim() || 'Untitled Performer',
         description,
         tags,
         ...(talUrn ? { tal: talUrn } : {}),
         ...(danceUrns.length === 1 ? { dance: danceUrns[0] } : danceUrns.length > 1 ? { dance: danceUrns } : {}),
-        ...(model ? { model } : {}),
+        ...(performer.model ? { model: { provider: performer.model.provider, modelId: performer.model.modelId } } : {}),
         ...(mcpConfig && Object.keys(mcpConfig).length > 0 ? { mcp_config: mcpConfig } : {}),
+    }
+}
+
+/**
+ * Build Act asset payload for registry publish (schema: studio-v1).
+ * Serializes Act's copied performers and edges into flat relation graph.
+ */
+export function buildActAssetPayload(
+    act: import('../types').StageAct,
+    options: { description?: string; tags?: string[] } = {},
+) {
+    const performers = Object.values(act.performers).map((p) => ({
+        name: p.name,
+        sourceUrn: p.sourcePerformerId ? `performer:${p.sourcePerformerId}` : undefined,
+        ...(p.talRef?.kind === 'registry' ? { tal: p.talRef.urn } : {}),
+        ...(p.danceRefs.length > 0
+            ? {
+                  dance: p.danceRefs
+                      .filter((r) => r.kind === 'registry')
+                      .map((r) => r.urn),
+              }
+            : {}),
+        ...(p.model ? { model: { provider: p.model.provider, modelId: p.model.modelId } } : {}),
+    }))
+
+    const relations = act.relations.map((rel) => {
+        const fromP = act.performers[rel.from]
+        const toP = act.performers[rel.to]
+        return {
+            from: fromP?.name || rel.from,
+            to: toP?.name || rel.to,
+            interaction: 'request' as const,
+            description: rel.description || '',
+        }
+    })
+
+    return {
+        schema: 'studio-v1' as const,
+        name: act.name,
+        description: options.description?.trim() || act.name,
+        tags: (options.tags || []).filter((t) => t.trim().length > 0),
+        performers,
+        relations,
     }
 }
 
@@ -557,7 +600,6 @@ export function createPerformerNode(input: {
     x: number
     y: number
     scope?: PerformerScope
-    ownerActId?: string | null
     talRef?: AssetRef | null
     danceRefs?: AssetRef[]
     model?: ModelConfig | null
@@ -589,7 +631,6 @@ export function createPerformerNode(input: {
         width: 320,
         height: 400,
         scope: input.scope || 'shared',
-        ownerActId: input.ownerActId || null,
         model: input.model || null,
         ...(input.modelPlaceholder ? { modelPlaceholder: input.modelPlaceholder } : {}),
         ...(input.modelVariant ? { modelVariant: input.modelVariant } : {}),
@@ -599,7 +640,6 @@ export function createPerformerNode(input: {
         mcpServerNames: unique(input.mcpServerNames || []),
         mcpBindingMap: sanitizeMcpBindingMap(input.mcpBindingMap),
         declaredMcpConfig: input.declaredMcpConfig || null,
-        configHash: '',
         danceDeliveryMode: input.danceDeliveryMode || 'auto',
         executionMode: input.executionMode || 'direct',
         ...(input.activeSessionId ? { activeSessionId: input.activeSessionId } : {}),
@@ -607,7 +647,6 @@ export function createPerformerNode(input: {
         ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
         ...(input.meta ? { meta: input.meta } : {}),
     }
-    node.configHash = buildPerformerConfigHash(node)
     return node
 }
 
@@ -627,7 +666,6 @@ export function createPerformerNodeFromAsset(input: {
     x: number
     y: number
     scope?: PerformerScope
-    ownerActId?: string | null
     hidden?: boolean
 }): PerformerNode {
     const normalized = normalizePerformerAssetInput(input.asset)
@@ -637,7 +675,6 @@ export function createPerformerNodeFromAsset(input: {
         x: input.x,
         y: input.y,
         scope: input.scope,
-        ownerActId: input.ownerActId,
         talRef: normalized.talRef,
         danceRefs: normalized.danceRefs,
         model: normalized.model,
@@ -658,7 +695,6 @@ export function clonePerformerNode(input: {
     x: number
     y: number
     scope?: PerformerScope
-    ownerActId?: string | null
     hidden?: boolean
     name?: string
     carryPublishBinding?: boolean
@@ -673,7 +709,6 @@ export function clonePerformerNode(input: {
         x: input.x,
         y: input.y,
         scope: input.scope || input.source.scope,
-        ownerActId: input.ownerActId ?? input.source.ownerActId ?? null,
         talRef: input.source.talRef,
         danceRefs: input.source.danceRefs,
         model: input.source.model,

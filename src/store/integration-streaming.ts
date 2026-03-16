@@ -1,13 +1,10 @@
-import type { ActPerformerSessionBinding, ChatMessage, ChatMessagePart } from '../types'
+import type { ChatMessage, ChatMessagePart } from '../types'
 import type { StudioState } from './types'
 import { queryClient } from '../lib/query-client'
 import { upsertAssistantStreamingMessage } from '../lib/chat-messages'
 
 export let eventSourceInstance: EventSource | null = null
 export let eventSourceWorkingDir: string | null = null
-export let actEventSourceInstance: EventSource | null = null
-export let actEventSourceWorkingDir: string | null = null
-export let actEventSourceSessionId: string | null = null
 export let adapterEventSourceInstance: EventSource | null = null
 export let adapterEventSourceWorkingDir: string | null = null
 export const streamingTextParts = new Map<string, Map<string, string>>()
@@ -15,8 +12,6 @@ export const streamingReasoningParts = new Map<string, Map<string, string>>()
 export const streamingMessageRoles = new Map<string, 'user' | 'assistant' | 'system'>()
 export const streamingPartKinds = new Map<string, 'text' | 'reasoning'>()
 export const syncingSessions = new Set<string>()
-export const pendingActPerformerUpdates = new Map<string, Array<(messages: ChatMessage[]) => ChatMessage[]>>()
-export let pendingActPerformerFlushTimer: number | null = null
 
 export function setEventSourceInstance(next: EventSource | null) {
     eventSourceInstance = next
@@ -26,28 +21,12 @@ export function setEventSourceWorkingDir(next: string | null) {
     eventSourceWorkingDir = next
 }
 
-export function setActEventSourceInstance(next: EventSource | null) {
-    actEventSourceInstance = next
-}
-
-export function setActEventSourceWorkingDir(next: string | null) {
-    actEventSourceWorkingDir = next
-}
-
-export function setActEventSourceSessionId(next: string | null) {
-    actEventSourceSessionId = next
-}
-
 export function setAdapterEventSourceInstance(next: EventSource | null) {
     adapterEventSourceInstance = next
 }
 
 export function setAdapterEventSourceWorkingDir(next: string | null) {
     adapterEventSourceWorkingDir = next
-}
-
-export function setPendingActPerformerFlushTimer(next: number | null) {
-    pendingActPerformerFlushTimer = next
 }
 
 export function diagnosticMatchesWorkingDir(uri: string, workingDir: string) {
@@ -114,36 +93,30 @@ function performerIdForSession(sessionMap: Record<string, string>, sessionId: st
     return null
 }
 
-function actBindingForSession(
-    actPerformerBindings: Record<string, ActPerformerSessionBinding[]>,
-    sessionId: string,
-): { actSessionId: string; binding: ActPerformerSessionBinding } | null {
-    for (const [actSessionId, bindings] of Object.entries(actPerformerBindings)) {
-        const binding = bindings.find((entry) => entry.sessionId === sessionId)
-        if (binding) {
-            return { actSessionId, binding }
-        }
-    }
-    return null
-}
-
 export type SessionStreamTarget =
     | { kind: 'performer'; performerId: string }
-    | { kind: 'act-performer'; actSessionId: string; performerSessionId: string }
+    | { kind: 'act'; actId: string }
+    | { kind: 'assistant'; sessionId: string }
 
 export function resolveSessionTarget(state: StudioState, sessionId: string): SessionStreamTarget | null {
+    if (state.assistantSessionId === sessionId) {
+        return { kind: 'assistant', sessionId }
+    }
+    // Check performer sessions first
     const performerId = performerIdForSession(state.sessionMap, sessionId)
     if (performerId) {
         return { kind: 'performer', performerId }
     }
-    const actBinding = actBindingForSession(state.actPerformerBindings, sessionId)
-    if (actBinding) {
-        return {
-            kind: 'act-performer',
-            actSessionId: actBinding.actSessionId,
-            performerSessionId: sessionId,
+
+    // Check Act sessions — route to act-owned chat
+    if (state.actSessionMap) {
+        for (const [actId, actSessionId] of Object.entries(state.actSessionMap)) {
+            if (actSessionId === sessionId) {
+                return { kind: 'act', actId }
+            }
         }
     }
+
     return null
 }
 
@@ -161,16 +134,22 @@ export function updateTargetMessages(
         }
     }
 
-    const currentSessionChats = state.actPerformerChats[target.actSessionId] || {}
-    return {
-        actPerformerChats: {
-            ...state.actPerformerChats,
-            [target.actSessionId]: {
-                ...currentSessionChats,
-                [target.performerSessionId]: updater(currentSessionChats[target.performerSessionId] || []),
+    if (target.kind === 'act') {
+        return {
+            actChats: {
+                ...state.actChats,
+                [target.actId]: updater(state.actChats[target.actId] || []),
             },
-        },
+        }
     }
+
+    if (target.kind === 'assistant') {
+        return {
+            assistantMessages: updater(state.assistantMessages || [])
+        }
+    }
+
+    return {}
 }
 
 export function invalidateRuntimeQueries(workingDir: string) {
@@ -231,73 +210,11 @@ export function removeStreamingPartStoreEntry(
     return key
 }
 
-export function flushPendingActPerformerUpdates(set: (partial: any) => void) {
-    if (pendingActPerformerUpdates.size === 0) {
-        pendingActPerformerFlushTimer = null
-        return
-    }
-
-    set((state: StudioState) => {
-        let nextActPerformerChats = state.actPerformerChats
-
-        for (const [key, updaters] of pendingActPerformerUpdates.entries()) {
-            const separatorIndex = key.indexOf('::')
-            if (separatorIndex === -1) {
-                continue
-            }
-            const actSessionId = key.slice(0, separatorIndex)
-            const performerSessionId = key.slice(separatorIndex + 2)
-            const currentSessionChats = nextActPerformerChats[actSessionId] || {}
-            let nextMessages = currentSessionChats[performerSessionId] || []
-            for (const updater of updaters) {
-                nextMessages = updater(nextMessages)
-            }
-            nextActPerformerChats = {
-                ...nextActPerformerChats,
-                [actSessionId]: {
-                    ...currentSessionChats,
-                    [performerSessionId]: nextMessages,
-                },
-            }
-        }
-
-        pendingActPerformerUpdates.clear()
-        pendingActPerformerFlushTimer = null
-        return {
-            actPerformerChats: nextActPerformerChats,
-        }
-    })
-}
-
-export function scheduleActPerformerMessageUpdate(
-    set: (partial: any) => void,
-    target: Extract<SessionStreamTarget, { kind: 'act-performer' }>,
-    updater: (messages: ChatMessage[]) => ChatMessage[],
-) {
-    const key = `${target.actSessionId}::${target.performerSessionId}`
-    const pending = pendingActPerformerUpdates.get(key) || []
-    pending.push(updater)
-    pendingActPerformerUpdates.set(key, pending)
-
-    if (pendingActPerformerFlushTimer !== null) {
-        return
-    }
-
-    pendingActPerformerFlushTimer = window.setTimeout(() => {
-        flushPendingActPerformerUpdates(set)
-    }, 48)
-}
-
 export function applyTargetMessageUpdate(
     set: (partial: any) => void,
     target: SessionStreamTarget,
     updater: (messages: ChatMessage[]) => ChatMessage[],
 ) {
-    if (target.kind === 'act-performer') {
-        scheduleActPerformerMessageUpdate(set, target, updater)
-        return
-    }
-
     set((state: StudioState) => updateTargetMessages(state, target, updater))
 }
 
@@ -361,16 +278,6 @@ export function removeMessagePart(
     return next
 }
 
-export function resolveCurrentActSessionId(state: StudioState): string | null {
-    if (state.selectedActSessionId) {
-        return state.selectedActSessionId
-    }
-    if (state.selectedActId) {
-        return state.actSessionMap[state.selectedActId] || null
-    }
-    return null
-}
-
 export function extractEventErrorMessage(error: any): string {
     if (typeof error?.data?.message === 'string' && error.data.message.trim()) {
         return error.data.message.trim()
@@ -378,7 +285,11 @@ export function extractEventErrorMessage(error: any): string {
     if (typeof error?.message === 'string' && error.message.trim()) {
         return error.message.trim()
     }
-    return 'OpenCode session failed.'
+    try {
+        return `OpenCode session failed: ${JSON.stringify(error)}`
+    } catch {
+        return 'OpenCode session failed.'
+    }
 }
 
 export function clearIntegrationStreamingState() {
@@ -387,6 +298,4 @@ export function clearIntegrationStreamingState() {
     streamingMessageRoles.clear()
     streamingPartKinds.clear()
     syncingSessions.clear()
-    pendingActPerformerUpdates.clear()
-    pendingActPerformerFlushTimer = null
 }

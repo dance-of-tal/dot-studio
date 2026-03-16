@@ -1,0 +1,71 @@
+/* ═══════════════════════════════════════════
+   MESSAGE ACTION BAR
+   Hover-reveal toolbar per chat message
+   ═══════════════════════════════════════════ */
+
+.msg-action-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 20px;
+    padding: 2px 0;
+}
+
+/* ── Metadata Badge ── */
+.msg-action__metadata {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+    flex-shrink: 1;
+}
+
+/* ── Action Buttons ── */
+.msg-action-bar__actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    margin-left: auto;
+}
+
+.thread-msg:hover .msg-action-bar__actions {
+    opacity: 1;
+}
+
+.msg-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.msg-action-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+    border-color: var(--border-light);
+}
+
+.msg-action-btn--undo {
+    color: var(--text-secondary);
+    border-color: var(--border-light);
+}
+
+.msg-action-btn--undo:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+    border-color: var(--border-main);
+}

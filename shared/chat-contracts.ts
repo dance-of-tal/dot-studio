@@ -40,6 +40,7 @@ export type ChatSessionCreateRequest = {
     performerName: string
     configHash: string
     executionMode?: ExecutionMode
+    actId?: string
 }
 
 export type ChatSessionCreateResponse = {
@@ -69,6 +70,7 @@ export type ChatSendRequest = {
     }
     attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
     mentions?: Array<{ performerId: string }>
+    actId?: string
     relatedPerformers?: Array<{
         performerId: string
         performerName: string
@@ -82,5 +84,11 @@ export type ChatSendRequest = {
         } | null
         modelVariant?: string | null
         mcpServerNames?: string[]
+        /** Outgoing edge targets of this related performer (for multi-depth task chaining). */
+        relatedPerformerIds?: Array<{
+            performerId: string
+            performerName: string
+            description?: string
+        }>
     }>
 }

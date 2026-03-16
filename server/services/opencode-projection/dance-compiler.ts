@@ -83,7 +83,7 @@ function buildFrontmatter(name: string, description: string) {
     return [
         '---',
         `name: ${JSON.stringify(name)}`,
-        `description: ${JSON.stringify(description || 'DOT Studio generated skill')}`,
+        `description: ${JSON.stringify(description || 'Generated skill')}`,
         '---',
     ].join('\n')
 }
@@ -145,7 +145,7 @@ export async function compileDance(
         'draft',
         sanitizeSegment(ref.draftId),
     ].join('-')
-    const description = extractDraftDescription(draft) || draft.name || 'Draft dance'
+    const description = extractDraftDescription(draft) || draft.name || 'Draft skill'
     const filePath = path.join(
         localSkillProjectionDir(executionDir, stageHash, performerId, scope, actId),
         logicalName,

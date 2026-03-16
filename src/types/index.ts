@@ -7,23 +7,7 @@ import type {
     SafeOwnerFile,
     SafeOwnerSummary,
 } from '../../shared/safe-mode'
-import type {
-    ActNodeType,
-    StageActWorkerNode,
-    StageActNode,
-    StageActEdge,
-    ActHistoryEntry,
-    ActThreadResumeSummary,
-} from '../../shared/act-contracts'
 
-export type {
-    ActNodeType,
-    StageActWorkerNode,
-    StageActNode,
-    StageActEdge,
-    ActHistoryEntry,
-    ActThreadResumeSummary,
-}
 export type {
     ExecutionMode,
     SafeOwnerKind,
@@ -153,7 +137,7 @@ export interface McpServer {
     clientRegistrationRequired?: boolean
 }
 
-export type PerformerScope = 'shared' | 'act-owned'
+export type PerformerScope = 'shared'
 
 export interface PerformerNode {
     id: string
@@ -162,7 +146,6 @@ export interface PerformerNode {
     width?: number
     height?: number
     scope: PerformerScope
-    ownerActId?: string | null
     model: ModelConfig | null
     modelPlaceholder?: ModelConfig | null
     modelVariant?: string | null
@@ -172,13 +155,11 @@ export interface PerformerNode {
     mcpServerNames: string[]
     mcpBindingMap?: Record<string, string>
     declaredMcpConfig?: Record<string, any> | null
-    configHash: string
     activeSessionId?: string
     danceDeliveryMode: DanceDeliveryMode
     executionMode?: ExecutionMode
     planMode?: boolean
     hidden?: boolean
-    autoCompact?: boolean
     meta?: {
         derivedFrom?: string | null
         publishBindingUrn?: string | null
@@ -190,32 +171,52 @@ export interface PerformerNode {
     }
 }
 
+/** @deprecated kept for schema migration only */
 export interface PerformerLink {
     id: string
     from: string
-    to: string        // node ID or '$exit'
+    to: string
     interaction: 'request'
     description: string
 }
 
+/** Act-internal relation between two Act performers */
+export interface ActRelation {
+    id: string
+    from: string
+    to: string
+    interaction: 'request'
+    description: string
+}
 
+/** Act performer — standalone에서 복사된 독립 config (PRD §7.2) */
+export interface ActPerformer {
+    sourcePerformerId: string
+    name: string
+    talRef: AssetRef | null
+    danceRefs: AssetRef[]
+    model: ModelConfig | null
+    modelVariant: string | null
+    mcpServerNames: string[]
+    mcpBindingMap: Record<string, string | null>
+    agentId: string | null
+    planMode: boolean
+    danceDeliveryMode: DanceDeliveryMode
+}
 
 export interface StageAct {
     id: string
     name: string
-    description: string
-    hidden?: boolean
-    executionMode?: ExecutionMode
-    bounds: {
-        x: number
-        y: number
-        width: number
-        height: number
-    }
-    entryNodeId: string | null
-    nodes: StageActNode[]
-    edges: StageActEdge[]
-    maxIterations: number
+    executionMode: ExecutionMode
+    /** Canvas position */
+    position: { x: number; y: number }
+    width: number
+    height: number
+    /** 복사된 performer configs (key = internal performer id) */
+    performers: Record<string, ActPerformer>
+    /** Act-internal edges between performers */
+    relations: ActRelation[]
+    createdAt: number
     meta?: {
         derivedFrom?: string | null
         authoring?: {
@@ -245,20 +246,14 @@ export interface CanvasTrackingWindow {
 }
 
 export interface Stage {
-    schemaVersion: 4
+    schemaVersion: 5
     workingDir: string
     performers: PerformerNode[]
-    performerLinks: PerformerLink[]
-    acts: StageAct[]
+    acts?: StageAct[]
     drafts: Record<string, DraftAsset>
     markdownEditors: MarkdownEditorNode[]
     canvasTerminals?: CanvasTerminalNode[]
     trackingWindow?: CanvasTrackingWindow | null
-    actChats?: Record<string, ChatMessage[]>
-    actPerformerChats?: Record<string, Record<string, ChatMessage[]>>
-    actPerformerBindings?: Record<string, ActPerformerSessionBinding[]>
-    actSessionMap?: Record<string, string>
-    actSessions?: ActSessionRecord[]
 }
 
 export interface SavedStageSummary {
@@ -331,14 +326,12 @@ export interface ChatMessage {
     content: string
     timestamp: number
     parts?: ChatMessagePart[]
-}
-
-export interface ActPerformerSessionBinding {
-    sessionId: string
-    nodeId: string
-    nodeLabel: string
-    performerId?: string | null
-    performerName?: string | null
+    metadata?: {
+        agentName?: string
+        modelId?: string
+        provider?: string
+        variant?: string
+    }
 }
 
 export interface FileStatus {
@@ -346,47 +339,4 @@ export interface FileStatus {
     added: number;
     removed: number;
     status: 'added' | 'deleted' | 'modified';
-}
-
-export interface SharedState {
-    [key: string]: any;
-}
-
-export interface ActRunState {
-    status: 'idle' | 'running' | 'completed' | 'failed' | 'interrupted';
-    currentNodeId: string | null;
-    runId: string | null;
-    sharedState: SharedState;
-    sessions: Array<{
-        scopeKey: string;
-        sessionId: string;
-        nodeId?: string | null;
-        performerId?: string | null;
-    }>;
-    sessionHandles?: Array<{
-        handle: string;
-        nodeId: string;
-        nodeType: 'worker';
-        performerId?: string | null;
-        status: 'warm';
-        turnCount: number;
-        lastUsedAt: number;
-        summary?: string;
-    }>;
-    history: ActHistoryEntry[];
-    finalOutput?: string;
-    error?: string;
-    iterations?: number;
-}
-
-export interface ActSessionRecord {
-    id: string;
-    actId: string;
-    actName: string;
-    title: string;
-    createdAt: number;
-    updatedAt: number;
-    status: ActRunState['status'];
-    lastRunId?: string | null;
-    resumeSummary?: ActThreadResumeSummary | null;
 }

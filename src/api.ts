@@ -6,12 +6,10 @@ import type {
     DraftAsset,
     ModelConfig,
     PromptPreview,
-    ActRunState,
     SavedStageSummary,
 } from './types'
 import type { RuntimeModelCatalogEntry } from '../shared/model-variants'
 import type { AdapterViewActionRequest, AdapterViewProjection } from '../shared/adapter-view'
-import type { RunActRequest } from '../shared/act-contracts'
 import type { AssetListItem } from '../shared/asset-contracts'
 import type { ChatSendRequest, ChatSessionCreateResponse, CompilePromptRequest } from '../shared/chat-contracts'
 import type { ExecutionMode, SafeOwnerKind, SafeOwnerSummary } from '../shared/safe-mode'
@@ -202,8 +200,8 @@ export const api = {
 
     // ── Chat ────────────────────────────────────────────
     chat: {
-        createSession: (performerId: string, performerName: string, configHash: string, executionMode: ExecutionMode) =>
-            postJSON<ChatSessionCreateResponse>('/api/chat/sessions', { performerId, performerName, configHash, executionMode }),
+        createSession: (performerId: string, performerName: string, configHash: string, executionMode: ExecutionMode, actId?: string) =>
+            postJSON<ChatSessionCreateResponse>('/api/chat/sessions', { performerId, performerName, configHash, executionMode, actId }),
 
         deleteSession: (id: string) =>
             deleteJSON<{ ok: boolean }>(`/api/chat/sessions/${id}`),
@@ -228,10 +226,10 @@ export const api = {
                     mcpServerNames?: string[]
                     danceDeliveryMode?: DanceDeliveryMode
                     planMode?: boolean
-                    configHash?: string
                 }
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
                 mentions?: Array<{ performerId: string }>
+                actId?: string
                 relatedPerformers?: Array<{
                     performerId: string
                     performerName: string
@@ -259,9 +257,6 @@ export const api = {
         todo: (id: string) =>
             fetchJSON<Array<{ id: string; content: string; status: string; priority: string }>>(`/api/chat/sessions/${id}/todo`),
 
-        fork: (id: string, messageId: string) =>
-            postJSON<any>(`/api/chat/sessions/${id}/fork`, { messageId }),
-
         share: (id: string) =>
             postJSON<{ url: string }>(`/api/chat/sessions/${id}/share`),
 
@@ -282,6 +277,14 @@ export const api = {
             fetchJSON<any[]>('/api/chat/sessions'),
 
         events: () => createApiEventSource('/api/chat/events'),
+        respondPermission: (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') =>
+            postJSON<{ ok: boolean }>(`/api/chat/sessions/${sessionId}/permission/${permissionId}/respond`, { response }),
+        
+        respondQuestion: (questionId: string, answers: Record<string, string[]>) =>
+            postJSON<{ ok: boolean }>(`/api/chat/questions/${questionId}/respond`, { answers }),
+            
+        rejectQuestion: (questionId: string) =>
+            postJSON<{ ok: boolean }>(`/api/chat/questions/${questionId}/reject`),
     },
 
     safe: {
@@ -301,16 +304,6 @@ export const api = {
             postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/undo-last-apply`),
     },
 
-    act: {
-        run: (payload: RunActRequest) =>
-            postJSON<ActRunState>('/api/act/run', payload),
-
-        abort: (actSessionId: string) =>
-            postJSON<{ ok: boolean }>(`/api/act/sessions/${actSessionId}/abort`),
-
-        events: (actSessionId: string) =>
-            createApiEventSource(`/api/act/events?actSessionId=${encodeURIComponent(actSessionId)}`),
-    },
 
     // ── LSP (from OpenCode SDK) ───────────────────────────
     lsp: {

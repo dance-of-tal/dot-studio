@@ -9,7 +9,7 @@ type ThreadMessage = {
 type ThreadBodyProps<TMessage extends ThreadMessage> = {
     messages: TMessage[]
     loading: boolean
-    renderMessage: (message: TMessage) => ReactNode
+    renderMessage: (message: TMessage, index: number) => ReactNode
     renderEmpty?: () => ReactNode
     renderLoading?: () => ReactNode
     composer: ReactNode
@@ -37,7 +37,7 @@ export default function ThreadBody<TMessage extends ThreadMessage>({
                 {messages.length === 0 ? (
                     renderEmpty ? renderEmpty() : null
                 ) : (
-                    messages.map((message) => renderMessage(message))
+                    messages.map((message, index) => renderMessage(message, index))
                 )}
                 {loading && renderLoading ? renderLoading() : null}
                 {endRef ? <div ref={endRef} /> : null}

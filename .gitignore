@@ -10,7 +10,7 @@ client/
 .dance-of-tal/
 test-results/
 tmp-client-sourcemap/
-.opencode/
+
 
 # Environment and machine-local config
 .env

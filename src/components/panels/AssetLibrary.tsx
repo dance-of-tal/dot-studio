@@ -11,7 +11,6 @@ import {
     Users,
     HardDrive,
     FolderOpen,
-    GitBranch,
     Plus,
 } from 'lucide-react';
 import { api } from '../../api';
@@ -71,7 +70,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const performers = useStudioStore((state) => state.performers)
     const drafts = useStudioStore((state) => state.drafts)
     const addPerformer = useStudioStore((state) => state.addPerformer)
-    const addAct = useStudioStore((state) => state.addAct)
     const createMarkdownEditor = useStudioStore((state) => state.createMarkdownEditor)
     const selectPerformer = useStudioStore((state) => state.selectPerformer)
     const setActiveChatPerformer = useStudioStore((state) => state.setActiveChatPerformer)
@@ -180,7 +178,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
 
     const createNewPerformer = () => {
         const beforeIds = new Set(performers.map((performer) => performer.id))
-        addPerformer(`Performer ${performers.filter((performer) => performer.scope !== 'act-owned').length + 1}`, 80, 80)
+        addPerformer(`Performer ${performers.filter((performer) => performer.scope === 'shared').length + 1}`, 80, 80)
         const created = useStudioStore.getState().performers.find((performer) => !beforeIds.has(performer.id))
         if (created) {
             selectPerformer(created.id)
@@ -189,10 +187,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         }
     }
 
-    const createNewAct = () => {
-        addAct(`Act ${useStudioStore.getState().acts.length + 1}`)
-        setAuthoringHint('Created a new act area. Configure and publish it from the inspector.')
-    }
 
     const invalidateInstalledAssetQueries = async (kind: InstalledKind) => {
         await Promise.all([
@@ -238,22 +232,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         }
     }
 
-    const handlePinnedActImport = async (asset: any) => {
-        if (!asset || asset.kind !== 'act') {
-            return
-        }
-
-        try {
-            setDetailActionLoading('import')
-            setDetailActionStatus(null)
-            await useStudioStore.getState().importActFromAsset(asset)
-            setDetailActionStatus(`Imported ${asset.name} into the current stage.`)
-        } catch (err: any) {
-            setDetailActionStatus(err?.message || 'Act import failed.')
-        } finally {
-            setDetailActionLoading(null)
-        }
-    }
 
     const queryText = filter.trim().toLowerCase()
 
@@ -298,7 +276,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         { key: 'performer', label: 'Performer', icon: <Users size={10} /> },
         { key: 'tal', label: 'Tal', icon: <Hexagon size={10} /> },
         { key: 'dance', label: 'Dance', icon: <Zap size={10} /> },
-        { key: 'act', label: 'Act', icon: <GitBranch size={10} /> },
+        { key: 'act', label: 'Act', icon: <Zap size={10} /> },
     ]
 
     const runtimeTabs: Array<{ key: RuntimeKind; label: string; icon: React.ReactNode }> = [
@@ -432,9 +410,9 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                 </button>
                             )}
                             {installedKind === 'act' && (
-                                <button className="btn" onClick={createNewAct}>
-                                    <Plus size={10} /> New Act
-                                </button>
+                                <div className="asset-authoring-row__note" style={{ fontStyle: 'italic', opacity: 0.7 }}>
+                                    Acts are created from the Threads sidebar or by dragging from the registry.
+                                </div>
                             )}
                             <div className="asset-authoring-row__note">
                                 {authoringNoteForInstalledKind(installedKind)}
@@ -811,7 +789,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                             actionLoading={detailActionLoading}
                             onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
                             onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
-                            onImportToStage={handlePinnedActImport}
+                            onImportToStage={undefined}
                         />
                     </div>
                 </>
@@ -905,7 +883,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                             actionLoading={detailActionLoading}
                             onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
                             onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
-                            onImportToStage={handlePinnedActImport}
+                            onImportToStage={undefined}
                         />
                     </div>
                 </>

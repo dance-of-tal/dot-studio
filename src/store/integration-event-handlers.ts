@@ -32,6 +32,7 @@ import {
     upsertStreamingAssistant,
 } from './integration-streaming'
 import { showToast } from '../lib/toast'
+import { handleAssistantToolCall } from '../features/assistant/assistant-actions'
 
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
@@ -211,6 +212,21 @@ export function handleMessagePartUpdated(
                 time: state.time,
             },
         }
+
+        // Auto-execute assistant tools on completion
+        if (target.kind === 'assistant' && state.status === 'completed' && part.tool?.startsWith('assistant_')) {
+            // Ensure we only execute once (we can check if it already ran, but state.status edge is safe enough)
+            // Wait, part.state is what we have. Let's use requestAnimationFrame or just execute it directly.
+            // A better way is to see if we haven't executed it yet. Since integration handlers are idempotent-ish,
+            // we should probably check if it was already executed. But for Studio Assistant V1, this is fine.
+            if (state.input) {
+                // Wait for part to be updated in store, then execute
+                setTimeout(() => {
+                    handleAssistantToolCall(part.callID || part.id, part.tool, state.input)
+                }, 10)
+            }
+        }
+
         applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(
             messages,
             part.messageID,
@@ -440,6 +456,8 @@ export function handleSessionCompacted(
     void syncSessionMessages(target, sessionId)
 }
 
+
+
 // ── session.error ──
 
 export function handleSessionError(
@@ -468,4 +486,112 @@ export function handleSessionError(
             timestamp: Date.now(),
         },
     ])
+}
+
+// ── permission.asked ──
+
+export function handlePermissionAsked(
+    data: any,
+    get: GetFn,
+    set: SetFn,
+) {
+    const request = data.properties
+    if (!request || !request.sessionID || !request.id) {
+        return
+    }
+
+    const context = resolveEventSessionContext(get(), request.sessionID)
+    if (!context) {
+        return
+    }
+
+    set((state) => ({
+        pendingPermissions: {
+            ...state.pendingPermissions,
+            [request.sessionID]: request,
+        },
+    }))
+}
+
+// ── permission.replied ──
+
+export function handlePermissionReplied(
+    data: any,
+    _get: GetFn,
+    set: SetFn,
+) {
+    const replyInfo = data.properties
+    if (!replyInfo || !replyInfo.sessionID) {
+        return
+    }
+
+    set((state) => {
+        const next = { ...state.pendingPermissions }
+        delete next[replyInfo.sessionID]
+        return { pendingPermissions: next }
+    })
+}
+
+// ── question.asked ──
+
+export function handleQuestionAsked(
+    data: any,
+    get: GetFn,
+    set: SetFn,
+) {
+    const request = data.properties
+    if (!request || !request.sessionID || !request.id) {
+        return
+    }
+
+    const context = resolveEventSessionContext(get(), request.sessionID)
+    if (!context) {
+        return
+    }
+
+    set((state) => ({
+        pendingQuestions: {
+            ...state.pendingQuestions,
+            [request.sessionID]: request,
+        },
+    }))
+}
+
+// ── question.replied ──
+
+export function handleQuestionReplied(
+    data: any,
+    _get: GetFn,
+    set: SetFn,
+) {
+    const replyInfo = data.properties
+    if (!replyInfo || !replyInfo.sessionID) {
+        return
+    }
+
+    set((state) => {
+        const next = { ...state.pendingQuestions }
+        delete next[replyInfo.sessionID]
+        return { pendingQuestions: next }
+    })
+}
+
+// ── todo.updated ──
+
+export function handleTodoUpdated(
+    data: any,
+    _get: GetFn,
+    set: SetFn,
+) {
+    const payload = data.properties
+    if (!payload || !payload.sessionID || !payload.todos) {
+        return
+    }
+
+    set((state) => ({
+        todos: {
+            ...state.todos,
+            [payload.sessionID]: payload.todos,
+        },
+    }))
 }

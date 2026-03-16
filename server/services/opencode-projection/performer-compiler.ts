@@ -1,10 +1,13 @@
-import path from 'path'
+
 import { createHash } from 'crypto'
 import { getAssetPayload } from 'dance-of-tal/lib/registry'
 import { resolveRuntimeModel } from '../../lib/model-catalog.js'
 import { findRuntimeModelVariant } from '../../../shared/model-variants.js'
-import { agentProjectionDir, toRelativePath } from './projection-manifest.js'
+import { toRelativePath, resolveAgentIdentity } from './projection-manifest.js'
+import type { Posture } from './projection-manifest.js'
+export type { Posture } from './projection-manifest.js'
 import type { CompiledSkill } from './dance-compiler.js'
+import type { ModelSelection } from '../../../shared/model-types.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -18,13 +21,6 @@ type DraftAsset = {
     description?: string
     derivedFrom?: string | null
 }
-
-type ModelSelection = {
-    provider: string
-    modelId: string
-} | null
-
-export type Posture = 'build' | 'plan'
 
 export interface PerformerCompileInput {
     performerId: string
@@ -122,44 +118,19 @@ function buildTalSection(talContent: string | null) {
     ].join('\n')
 }
 
-function buildRuntimePreferencesSection(variantId: string | null, variantSummary: string | null): string | null {
-    if (!variantId) {
-        return null
-    }
 
-    const lines = [
-        '# Runtime Preferences',
-        `Preferred model variant: ${variantId}`,
-    ]
-
-    if (variantSummary) {
-        lines.push(`Variant settings: ${variantSummary}`)
-    }
-
-    lines.push('Apply this preferred runtime profile when supported by the current host and model.')
-    return lines.join('\n')
-}
 
 function buildBody(input: {
     talContent: string | null
-    variantId: string | null
-    variantSummary: string | null
     relationPromptSection?: string | null
 }) {
     return [
         buildSystemPreamble(),
         buildTalSection(input.talContent),
-        buildRuntimePreferencesSection(input.variantId, input.variantSummary),
         input.relationPromptSection || null,
     ].filter(Boolean).join('\n\n')
 }
 
-function agentName(stageHash: string, performerId: string, posture: Posture, scope: 'stage' | 'act', actId?: string) {
-    if (scope === 'act' && actId) {
-        return `dot-studio/act/${stageHash}/${actId}/${performerId}--${posture}`
-    }
-    return `dot-studio/${stageHash}/${performerId}--${posture}`
-}
 
 function buildSkillPermissionLines(skillNames: string[]) {
     const lines = ['permission:', '  skill:', '    "*": "deny"']
@@ -200,15 +171,19 @@ function buildFrontmatter(input: {
     performerName: string
     model: ModelSelection
     posture: Posture
+    variantId?: string | null
     skillNames: string[]
     toolMap: Record<string, boolean>
     taskAllowlist?: string[]
 }) {
     const lines = ['---']
-    lines.push(`description: ${JSON.stringify(`DOT Studio performer: ${input.performerName}`)}`)
+    lines.push(`description: ${JSON.stringify(`Agent: ${input.performerName}`)}`)
     lines.push('mode: primary')
     if (input.model) {
         lines.push(`model: ${JSON.stringify(`${input.model.provider}/${input.model.modelId}`)}`)
+    }
+    if (input.variantId) {
+        lines.push(`variant: ${JSON.stringify(input.variantId)}`)
     }
     lines.push(...buildSkillPermissionLines(input.skillNames))
     lines.push(...buildTaskPermissionLines(input.taskAllowlist || []))
@@ -226,26 +201,34 @@ function buildAgentFile(input: {
     actId?: string
     model: ModelSelection
     posture: Posture
+    variantId?: string | null
     skillNames: string[]
     toolMap: Record<string, boolean>
     taskAllowlist?: string[]
     body: string
 }): AgentFile {
-    const fileName = `${input.performerId}--${input.posture}.md`
-    const filePath = path.join(agentProjectionDir(input.executionDir, input.stageHash, input.scope, input.actId), fileName)
+    const identity = resolveAgentIdentity({
+        executionDir: input.executionDir,
+        stageHash: input.stageHash,
+        performerId: input.performerId,
+        posture: input.posture,
+        scope: input.scope,
+        actId: input.actId,
+    })
     const frontmatter = buildFrontmatter({
         performerName: input.performerName,
         model: input.model,
         posture: input.posture,
+        variantId: input.variantId,
         skillNames: input.skillNames,
         toolMap: input.toolMap,
         taskAllowlist: input.taskAllowlist,
     })
     const content = `${frontmatter}\n\n${input.body}`
     return {
-        agentName: agentName(input.stageHash, input.performerId, input.posture, input.scope, input.actId),
-        filePath,
-        relativePath: toRelativePath(input.executionDir, filePath),
+        agentName: identity.agentName,
+        filePath: identity.filePath,
+        relativePath: toRelativePath(input.executionDir, identity.filePath),
         content,
     }
 }
@@ -258,7 +241,6 @@ export async function compilePerformer(
     const talContent = await resolveTalContent(cwd, input.talRef, input.drafts)
 
     let resolvedVariantId: string | null = null
-    let variantSummary: string | null = null
     if (input.model) {
         const runtimeModel = await resolveRuntimeModel(cwd, input.model)
         if (runtimeModel) {
@@ -269,7 +251,6 @@ export async function compilePerformer(
                 input.modelVariant || null,
             )
             resolvedVariantId = selectedVariant?.id || null
-            variantSummary = selectedVariant?.summary || null
         } else {
             resolvedVariantId = input.modelVariant || null
         }
@@ -277,8 +258,6 @@ export async function compilePerformer(
 
     const body = buildBody({
         talContent,
-        variantId: resolvedVariantId,
-        variantSummary,
         relationPromptSection: input.relationPromptSection || null,
     })
 
@@ -291,6 +270,7 @@ export async function compilePerformer(
         actId: input.actId,
         model: input.model,
         posture: 'build',
+        variantId: resolvedVariantId,
         skillNames: input.skillNames,
         toolMap: input.toolMap,
         taskAllowlist: input.taskAllowlist,
@@ -306,6 +286,7 @@ export async function compilePerformer(
         actId: input.actId,
         model: input.model,
         posture: 'plan',
+        variantId: resolvedVariantId,
         skillNames: input.skillNames,
         toolMap: input.toolMap,
         taskAllowlist: input.taskAllowlist,

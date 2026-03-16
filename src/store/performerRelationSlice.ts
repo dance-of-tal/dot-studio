@@ -1,29 +1,15 @@
+// DOT Studio — Performer Relation Slice
+// Stand-alone edges have been removed. Edges now live inside Act.relations.
+// This slice is kept as an empty shell to satisfy StudioState composition.
+
 import type { StateCreator } from 'zustand'
 import type { StudioState, PerformerRelationSlice } from './types'
-import { makeId } from '../lib/acts'
-
-const genEdgeId = () => makeId('edge')
 
 export const createPerformerRelationSlice: StateCreator<
     StudioState,
     [],
     [],
     PerformerRelationSlice
-> = (set) => ({
-    edges: [],
-
-    addEdge: (from, to) => set((state) => ({
-        edges: [...state.edges, { id: genEdgeId(), from, to, interaction: 'request', description: '' }],
-        stageDirty: true,
-    })),
-
-    removeEdge: (id) => set((state) => ({
-        edges: state.edges.filter((edge) => edge.id !== id),
-        stageDirty: true,
-    })),
-
-    updateEdgeDescription: (id, description) => set((state) => ({
-        edges: state.edges.map((edge) => edge.id === id ? { ...edge, description } : edge),
-        stageDirty: true,
-    })),
+> = (_set, _get) => ({
+    // No-op: edges are managed by actSlice via Act.relations
 })

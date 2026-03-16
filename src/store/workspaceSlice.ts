@@ -6,8 +6,6 @@ import {
     createPerformerNodeFromAsset,
     normalizePerformerAssetInput,
 } from '../lib/performers'
-import { createActActions } from './actSlice'
-import { makeId } from '../lib/acts'
 import {
     applyPerformerPatch,
     defaultMarkdownContent,
@@ -36,13 +34,16 @@ import {
     setPerformerMcpBinding as setPerformerMcpBindingImpl,
     updatePerformerAuthoringMeta as updatePerformerAuthoringMetaImpl,
     togglePerformerVisibility as togglePerformerVisibilityImpl,
-    setPerformerAutoCompact as setPerformerAutoCompactImpl,
 } from './workspace-performer-config'
 
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
 export const canvasTerminalIdCounter = { value: 0 }
 const TRACKING_WINDOW_ID = 'stage-tracking-window'
+
+function makeId(prefix: string) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
 
 export const createWorkspaceSlice: StateCreator<
     StudioState,
@@ -52,7 +53,6 @@ export const createWorkspaceSlice: StateCreator<
 > = (set, get) => ({
     stageId: null,
     performers: [],
-    acts: [],
     drafts: {},
     markdownEditors: [],
     editingTarget: null,
@@ -60,9 +60,7 @@ export const createWorkspaceSlice: StateCreator<
     selectedPerformerSessionId: null,
     selectedMarkdownEditorId: null,
     focusedPerformerId: null,
-    focusedActId: null,
-    selectedActId: null,
-    selectedActSessionId: null,
+    focusSnapshot: null,
     inspectorFocus: null,
     stageList: [],
     stageDirty: false,
@@ -73,6 +71,7 @@ export const createWorkspaceSlice: StateCreator<
     isAssetLibraryOpen: false,
     canvasTerminals: [],
     trackingWindow: null,
+    canvasCenter: null,
 
     setTerminalOpen: (open) => set({ isTerminalOpen: open }),
     setTrackingOpen: (open) => set((state) => {
@@ -100,36 +99,40 @@ export const createWorkspaceSlice: StateCreator<
         return { theme: newTheme }
     }),
 
+    setCanvasCenter: (x, y) => set({ canvasCenter: { x, y } }),
+
     addPerformer: (name, x, y) => {
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
+        
+        const finalX = x ?? get().canvasCenter?.x ?? (60 + (get().performers.length * 28))
+        const finalY = y ?? get().canvasCenter?.y ?? (60 + (get().performers.length * 20))
+
         set((s) => ({
-            performers: [...s.performers, createPerformerNode({ id, name, x, y })],
+            performers: [...s.performers, createPerformerNode({ id, name, x: finalX, y: finalY })],
             editingTarget: null,
             selectedPerformerId: id,
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
-            selectedActId: null,
-            selectedActSessionId: null,
-            focusedActId: null,
             activeChatPerformerId: id,
             inspectorFocus: null,
             stageDirty: true,
         }))
     },
 
-    addPerformerFromAsset: (asset, x = 60 + (get().performers.length * 28), y = 60 + (get().performers.length * 20)) => {
+    addPerformerFromAsset: (asset, x, y) => {
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
+
+        const finalX = x ?? get().canvasCenter?.x ?? (60 + (get().performers.length * 28))
+        const finalY = y ?? get().canvasCenter?.y ?? (60 + (get().performers.length * 20))
+
         set((s) => ({
-            performers: [...s.performers, createPerformerNodeFromAsset({ id, asset, x, y })],
+            performers: [...s.performers, createPerformerNodeFromAsset({ id, asset, x: finalX, y: finalY })],
             editingTarget: null,
             selectedPerformerId: id,
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
-            selectedActId: null,
-            selectedActSessionId: null,
-            focusedActId: null,
             activeChatPerformerId: id,
             inspectorFocus: null,
             stageDirty: true,
@@ -159,26 +162,16 @@ export const createWorkspaceSlice: StateCreator<
         }
     }),
 
-    removePerformer: (id) => set((s) => {
-        const acts = s.acts.map((act) => ({
-            ...act,
-            nodes: act.nodes.map((node) => (
-                node.performerId === id
-                    ? { ...node, performerId: null }
-                    : node
-            )),
-        }))
-        return {
+    removePerformer: (id) => {
+        set((s) => ({
             performers: s.performers.filter(a => a.id !== id),
-            edges: s.edges.filter(e => e.from !== id && e.to !== id),
-            acts,
             selectedPerformerId: s.selectedPerformerId === id ? null : s.selectedPerformerId,
             selectedPerformerSessionId: s.selectedPerformerId === id ? null : s.selectedPerformerSessionId,
             selectedMarkdownEditorId: s.selectedMarkdownEditorId,
             editingTarget: s.editingTarget?.type === 'performer' && s.editingTarget.id === id ? null : s.editingTarget,
             stageDirty: true,
-        }
-    }),
+        }))
+    },
 
     updatePerformerPosition: (id, x, y) => set((s) => ({
         performers: s.performers.map(a => a.id === id ? { ...a, position: { x, y } } : a),
@@ -195,16 +188,14 @@ export const createWorkspaceSlice: StateCreator<
         stageDirty: true,
     })),
 
-    selectPerformer: (id) => set({
+    selectPerformer: (id) => set((s) => ({
         selectedPerformerId: id,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
-        selectedActId: null,
-        selectedActSessionId: null,
-        focusedPerformerId: null,
-        focusedActId: null,
+        // Preserve focus mode when switching performers in focus mode
+        focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
         inspectorFocus: null,
-    }),
+    })),
 
     selectPerformerSession: (sessionId) => set({ selectedPerformerSessionId: sessionId, selectedMarkdownEditorId: null }),
 
@@ -212,53 +203,138 @@ export const createWorkspaceSlice: StateCreator<
         selectedMarkdownEditorId: id,
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
-        selectedActId: null,
-        selectedActSessionId: null,
         focusedPerformerId: null,
-        focusedActId: null,
         inspectorFocus: null,
     }),
 
     setFocusedPerformer: (id) => set({ focusedPerformerId: id }),
-    setFocusedAct: (id) => set({ focusedActId: id }),
 
-    selectAct: (id) => {
-        set((state) => ({
-            selectedActId: id,
-            selectedPerformerId: null,
-            selectedPerformerSessionId: null,
-            selectedMarkdownEditorId: null,
-            selectedActSessionId: state.selectedActId === id ? state.selectedActSessionId : null,
-            focusedPerformerId: null,
-            focusedActId: state.editingTarget?.type === 'act' && state.editingTarget.id === id ? id : null,
-            inspectorFocus: state.selectedActId === id ? state.inspectorFocus : null,
-        }))
-        get().initRealtimeEvents()
-    },
+    enterFocusMode: (performerId, viewportSize) => {
+        const state = get()
+        const performer = state.performers.find(p => p.id === performerId)
+        if (!performer) return
 
-    selectActSession: (id) => {
+        // Snapshot current state for later restoration
+        const FOCUS_PADDING = 48
+        const focusSnapshot = {
+            hiddenPerformerIds: state.performers.filter(p => p.hidden).map(p => p.id),
+            hiddenActIds: state.acts.filter(a => (a as any).hidden).map(a => a.id),
+            hiddenEditorIds: state.markdownEditors.filter(e => e.hidden).map(e => e.id),
+            hiddenTerminalIds: [] as string[],
+            nodeSize: { width: performer.width ?? 400, height: performer.height ?? 500 },
+            assetLibraryOpen: state.isAssetLibraryOpen,
+            assistantOpen: state.isAssistantOpen,
+            terminalOpen: state.isTerminalOpen,
+        }
+
+        const focusWidth = viewportSize.width - FOCUS_PADDING
+        const focusHeight = viewportSize.height - FOCUS_PADDING
+
         set({
-            selectedPerformerSessionId: null,
-            selectedMarkdownEditorId: null,
-            selectedActSessionId: id,
-            focusedActId: null,
+            focusedPerformerId: performerId,
+            focusSnapshot,
+            selectedPerformerId: performerId,
+            selectedPerformerSessionId: state.selectedPerformerSessionId,
+            activeChatPerformerId: performerId,
+            // Hide all other performers
+            performers: state.performers.map(p => {
+                if (p.id === performerId) {
+                    return { ...p, hidden: false, width: focusWidth, height: focusHeight }
+                }
+                return { ...p, hidden: true }
+            }),
+            // Hide all markdown editors
+            markdownEditors: state.markdownEditors.map(e => ({ ...e, hidden: true })),
+            // Close panels
+            isAssetLibraryOpen: false,
+            isAssistantOpen: false,
+            isTerminalOpen: false,
+            // Close editor if open
+            editingTarget: null,
             inspectorFocus: null,
         })
-        get().initRealtimeEvents()
     },
 
-    setActThreadSession: (actId, sessionId) => set((state) => {
-        const nextActSessionMap = { ...state.actSessionMap }
-        if (sessionId) {
-            nextActSessionMap[actId] = sessionId
-        } else {
-            delete nextActSessionMap[actId]
-        }
-        return {
-            actSessionMap: nextActSessionMap,
-            stageDirty: true,
-        }
-    }),
+    exitFocusMode: () => {
+        const state = get()
+        const snapshot = state.focusSnapshot
+        if (!snapshot || !state.focusedPerformerId) return
+
+        const focusedId = state.focusedPerformerId
+
+        set({
+            focusedPerformerId: null,
+            focusSnapshot: null,
+            // Restore performer sizes and hidden states
+            performers: state.performers.map(p => {
+                if (p.id === focusedId) {
+                    return {
+                        ...p,
+                        width: snapshot.nodeSize.width,
+                        height: snapshot.nodeSize.height,
+                        hidden: snapshot.hiddenPerformerIds.includes(p.id),
+                    }
+                }
+                // Restore hidden state: only re-hide if it was hidden before focus
+                return {
+                    ...p,
+                    hidden: snapshot.hiddenPerformerIds.includes(p.id),
+                }
+            }),
+            // Restore markdown editors
+            markdownEditors: state.markdownEditors.map(e => ({
+                ...e,
+                hidden: snapshot.hiddenEditorIds.includes(e.id),
+            })),
+            // Restore panels
+            isAssetLibraryOpen: snapshot.assetLibraryOpen,
+            isAssistantOpen: snapshot.assistantOpen,
+            isTerminalOpen: snapshot.terminalOpen,
+        })
+    },
+
+    switchFocusTarget: (performerId) => {
+        const state = get()
+        const snapshot = state.focusSnapshot
+        if (!snapshot || !state.focusedPerformerId) return
+
+        const prevId = state.focusedPerformerId
+        const nextPerformer = state.performers.find(p => p.id === performerId)
+        if (!nextPerformer || performerId === prevId) return
+
+        // Find the current focus node to get its expanded size
+        const currentFocused = state.performers.find(p => p.id === prevId)
+        const focusWidth = currentFocused?.width || 800
+        const focusHeight = currentFocused?.height || 600
+
+        set({
+            focusedPerformerId: performerId,
+            selectedPerformerId: performerId,
+            activeChatPerformerId: performerId,
+            // Update snapshot to store the previous node's original size
+            focusSnapshot: {
+                ...snapshot,
+                // Keep the original snapshot's hidden IDs — they don't change
+                // But save the new node's original size
+                nodeSize: { width: nextPerformer.width ?? 400, height: nextPerformer.height ?? 500 },
+            },
+            // Restore prev node size, hide it; show new focus node expanded
+            performers: state.performers.map(p => {
+                if (p.id === prevId) {
+                    return {
+                        ...p,
+                        width: snapshot.nodeSize.width,
+                        height: snapshot.nodeSize.height,
+                        hidden: true,
+                    }
+                }
+                if (p.id === performerId) {
+                    return { ...p, hidden: false, width: focusWidth, height: focusHeight }
+                }
+                return { ...p, hidden: true }
+            }),
+        })
+    },
 
     setInspectorFocus: (focus) => set({ inspectorFocus: focus }),
 
@@ -267,29 +343,12 @@ export const createWorkspaceSlice: StateCreator<
         selectedPerformerId: id,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
-        selectedActId: null,
-        selectedActSessionId: null,
         focusedPerformerId: null,
-        focusedActId: null,
-        inspectorFocus: focus,
-    }),
-
-    openActEditor: (id, focus = null) => set({
-        editingTarget: { type: 'act', id },
-        isAssetLibraryOpen: true,
-        selectedActId: id,
-        selectedPerformerId: null,
-        selectedPerformerSessionId: null,
-        selectedMarkdownEditorId: null,
-        selectedActSessionId: null,
-        focusedPerformerId: null,
-        focusedActId: id,
         inspectorFocus: focus,
     }),
 
     closeEditor: () => set({
         editingTarget: null,
-        focusedActId: null,
         inspectorFocus: null,
     }),
 
@@ -311,21 +370,14 @@ export const createWorkspaceSlice: StateCreator<
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
             focusedPerformerId: null,
-            focusedActId: null,
-            selectedActId: null,
+            focusSnapshot: null,
             chats: {},
-            chatPrefixes: {},
             actChats: {},
-            actPerformerChats: {},
-            actPerformerBindings: {},
+            chatPrefixes: {},
             activeChatPerformerId: null,
             sessionMap: {},
-            sessionConfigMap: {},
             actSessionMap: {},
             sessions: [],
-            actSessions: [],
-            selectedActSessionId: null,
-            loadingActId: null,
             inspectorFocus: null,
             lspServers: [],
             lspDiagnostics: {},
@@ -333,6 +385,9 @@ export const createWorkspaceSlice: StateCreator<
             trackingWindow: null,
             isTrackingOpen: false,
             stageDirty: true,
+            acts: [],
+            selectedActId: null,
+            editingActId: null,
         }))
         get().initRealtimeEvents()
         api.studio.activate(normalized).catch(err => console.warn('[studio] activate failed', err))
@@ -359,18 +414,17 @@ export const createWorkspaceSlice: StateCreator<
         if (get().stageId === stageId) {
             set({
                 stageId: null,
-                actSessions: [],
-                actChats: {},
-                actPerformerChats: {},
-                actPerformerBindings: {},
-                actSessionMap: {},
-                selectedActSessionId: null,
                 selectedPerformerSessionId: null,
                 selectedMarkdownEditorId: null,
                 inspectorFocus: null,
                 editingTarget: null,
                 trackingWindow: null,
                 isTrackingOpen: false,
+                acts: [],
+                selectedActId: null,
+                editingActId: null,
+                actSessionMap: {},
+                actChats: {},
             })
             api.studio.updateConfig({ lastStage: undefined }).catch(err => console.warn('[studio] clear lastStage failed', err))
         }
@@ -407,7 +461,6 @@ export const createWorkspaceSlice: StateCreator<
 
     togglePerformerVisibility: (id) => togglePerformerVisibilityImpl(set, id),
 
-    setPerformerAutoCompact: (id, enabled) => setPerformerAutoCompactImpl(set, id, enabled),
 
     setPerformerExecutionMode: (performerId, mode) => {
         set((state) => ({
@@ -427,32 +480,6 @@ export const createWorkspaceSlice: StateCreator<
         )
     },
 
-    toggleActVisibility: (id) => set((s) => ({
-        acts: s.acts.map((act) => (
-            act.id === id
-                ? { ...act, hidden: !act.hidden }
-                : act
-        )),
-        stageDirty: true,
-    })),
-
-    setActExecutionMode: (actId, mode) => {
-        set((state) => ({
-            acts: state.acts.map((act) => (
-                act.id === actId
-                    ? { ...act, executionMode: mode }
-                    : act
-            )),
-            stageDirty: true,
-        }))
-        get().clearSafeOwner('act', actId)
-        get().detachActSession(
-            actId,
-            mode === 'safe'
-                ? 'Switched this act to Safe mode. The next run will start in a safe workspace.'
-                : 'Switched this act to Direct mode. The next run will start in the project workspace.',
-        )
-    },
 
     addCanvasTerminal: () => {
         canvasTerminalIdCounter.value++
@@ -546,13 +573,6 @@ export const createWorkspaceSlice: StateCreator<
             x: 160 + (get().markdownEditors.length * 28),
             y: 140 + (get().markdownEditors.length * 24),
         }
-        const attachPerformerId = options?.attachTarget?.performerId || null
-        const attachedAct = attachPerformerId
-            ? get().acts.find((act) => act.nodes.some((node) => node.performerId === attachPerformerId)) || null
-            : null
-        const attachedNodeId = attachPerformerId && attachedAct
-            ? attachedAct.nodes.find((node) => node.performerId === attachPerformerId)?.id || null
-            : null
 
         set((s) => ({
             drafts: {
@@ -590,14 +610,10 @@ export const createWorkspaceSlice: StateCreator<
                 },
             ],
             selectedMarkdownEditorId: editorId,
-            selectedPerformerId: attachPerformerId && attachedAct ? s.selectedPerformerId : null,
-            selectedPerformerSessionId: attachPerformerId && attachedAct ? s.selectedPerformerSessionId : null,
-            selectedActId: attachedAct ? attachedAct.id : null,
-            selectedActSessionId: attachedAct ? s.selectedActSessionId : null,
-            focusedPerformerId: attachPerformerId && attachedAct ? s.focusedPerformerId : null,
-            focusedActId: attachedAct ? attachedAct.id : null,
-            inspectorFocus: attachedNodeId ? `act-node:${attachedNodeId}` : null,
-            editingTarget: attachedAct ? { type: 'act', id: attachedAct.id } : s.editingTarget,
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            focusedPerformerId: null,
+            inspectorFocus: null,
             stageDirty: true,
         }))
 
@@ -625,6 +641,4 @@ export const createWorkspaceSlice: StateCreator<
         stageDirty: true,
     })),
 
-    // Act-related actions delegated to actSlice.ts
-    ...createActActions(set, get, performerIdCounter),
 })

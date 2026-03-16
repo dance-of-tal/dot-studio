@@ -5,6 +5,7 @@ import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { AlertCircle, Hexagon, Zap, Cpu, Server, Package, X } from 'lucide-react';
 import { useStudioStore } from './store';
 import { LeftSidebar, CanvasArea, ToastViewport, TerminalPanel } from './features/workspace';
+import { AssistantChat } from './features/assistant/AssistantChat';
 import { api, setApiWorkingDirContext } from './api';
 import { showToast } from './lib/toast';
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers';
@@ -16,11 +17,6 @@ import {
   isInstalledAsset,
   getAssetAuthor,
   getAssetSlug,
-  ensureActNodePerformer,
-  applyTalToPerformer,
-  applyDanceToPerformer,
-  applyModelToPerformer,
-  applyMcpToPerformer,
   applyAssetToPerformerTarget,
 } from './lib/dnd-handlers';
 import type { DragAsset, DropTargetData, PerformerAssetPayload } from './lib/dnd-handlers';
@@ -29,18 +25,16 @@ export default function App() {
   const theme = useStudioStore(s => s.theme);
   const workingDir = useStudioStore(s => s.workingDir);
   const performers = useStudioStore(s => s.performers);
-  const edges = useStudioStore(s => s.edges);
   const acts = useStudioStore(s => s.acts);
   const drafts = useStudioStore(s => s.drafts);
   const markdownEditors = useStudioStore(s => s.markdownEditors);
   const sessionMap = useStudioStore(s => s.sessionMap);
-  const actChats = useStudioStore(s => s.actChats);
-  const actSessionMap = useStudioStore(s => s.actSessionMap);
-  const actSessions = useStudioStore(s => s.actSessions);
   const canvasTerminals = useStudioStore(s => s.canvasTerminals);
+
   const stageDirty = useStudioStore(s => s.stageDirty);
   const isTerminalOpen = useStudioStore(s => s.isTerminalOpen);
   const setTerminalOpen = useStudioStore(s => s.setTerminalOpen);
+  const focusedPerformerId = useStudioStore(s => s.focusedPerformerId);
 
   const isInitialMount = useRef(true);
 
@@ -60,7 +54,7 @@ export default function App() {
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [stageDirty, performers, edges, acts, drafts, markdownEditors, workingDir, sessionMap, actChats, actSessionMap, actSessions, canvasTerminals]);
+  }, [stageDirty, performers, acts, drafts, markdownEditors, workingDir, sessionMap, canvasTerminals]);
 
   // Apply theme to HTML root
   useEffect(() => {
@@ -162,15 +156,6 @@ export default function App() {
     showToast(`Loaded ${asset.kind} template into the editor.`, 'success');
   };
 
-  const importActAsset = async (
-    asset: DragAsset,
-    store: StudioState,
-  ) => {
-    const detail = isInstalledAsset(asset)
-      ? await api.assets.get('act', getAssetAuthor(asset), getAssetSlug(asset))
-      : await api.assets.getRegistry('act', getAssetAuthor(asset), getAssetSlug(asset));
-    await store.importActFromAsset(detail);
-  };
 
   const resolvePerformerAssetForStudio = async (asset: DragAsset): Promise<PerformerAssetPayload> => {
     const projectConfig = await api.config.getProject().catch(() => ({ config: {} }));
@@ -215,26 +200,12 @@ export default function App() {
         return true;
       }
 
-      if (asset.kind !== 'act') {
-        return false;
+      if (asset.kind === 'act') {
+        store.importActFromAsset(asset);
+        return true;
       }
 
-      try {
-        await importActAsset(asset, store);
-      } catch (error) {
-        console.error('Failed to import act asset', error);
-        showToast('Failed to import act asset.', 'error', {
-          title: 'Act import failed',
-          dedupeKey: `act-import:${asset.urn || `${asset.author || ''}/${asset.slug || asset.name}`}`,
-          actionLabel: 'Retry',
-          onAction: () => {
-            void importActAsset(asset, useStudioStore.getState()).catch((retryError) => {
-              console.error('Failed to retry act import', retryError);
-            });
-          },
-        });
-      }
-      return true;
+      return false;
     };
 
     const handleMarkdownEditorDrop = async () => {
@@ -260,81 +231,12 @@ export default function App() {
       return true;
     };
 
-    const handleActAreaDrop = async () => {
-      if (dropData.type !== 'act-area' || asset.kind !== 'performer' || !dropData.actId) {
-        return false;
-      }
-
-      store.addPerformerAssetToAct(dropData.actId, await resolvePerformerAssetForStudio(asset));
-      return true;
-    };
-
-    const handleActNodePerformerDrop = async () => {
-      if (dropData.type !== 'act-node-performer' || asset.kind !== 'performer' || !dropData.actId || !dropData.nodeId) {
-        return false;
-      }
-
-      store.createActOwnedPerformerForNode(dropData.actId, dropData.nodeId, await resolvePerformerAssetForStudio(asset));
-      return true;
-    };
-
-    const handleActNodeAssetDrop = () => {
-      if (!dropData.actId || !dropData.nodeId) {
-        return false;
-      }
-
-      if (dropData.type === 'act-node-tal' && asset.kind === 'tal') {
-        const performerId = ensureActNodePerformer(store, dropData.actId, dropData.nodeId);
-        if (performerId) {
-          applyTalToPerformer(store, performerId, asset);
-        }
-        return true;
-      }
-
-      if (dropData.type === 'act-node-dance' && asset.kind === 'dance') {
-        const performerId = ensureActNodePerformer(store, dropData.actId, dropData.nodeId);
-        if (performerId) {
-          applyDanceToPerformer(store, performerId, asset);
-        }
-        return true;
-      }
-
-      if (dropData.type === 'act-node-model' && asset.kind === 'model') {
-        const performerId = ensureActNodePerformer(store, dropData.actId, dropData.nodeId);
-        if (performerId) {
-          applyModelToPerformer(store, performerId, asset, showDropWarning);
-        }
-        return true;
-      }
-
-      if (dropData.type === 'act-node-mcp' && asset.kind === 'mcp') {
-        const performerId = ensureActNodePerformer(store, dropData.actId, dropData.nodeId);
-        if (performerId) {
-          applyMcpToPerformer(store, performerId, asset);
-        }
-        return true;
-      }
-
-      return false;
-    };
 
     if (await handleCanvasRootDrop()) {
       return;
     }
 
     if (await handleMarkdownEditorDrop()) {
-      return;
-    }
-
-    if (await handleActAreaDrop()) {
-      return;
-    }
-
-    if (await handleActNodePerformerDrop()) {
-      return;
-    }
-
-    if (handleActNodeAssetDrop()) {
       return;
     }
 
@@ -381,13 +283,16 @@ export default function App() {
           <ReactFlowProvider>
             <CanvasArea />
           </ReactFlowProvider>
+          {!focusedPerformerId && <AssistantChat />}
         </div>
-        <TerminalPanel
-          isOpen={isTerminalOpen}
-          onToggle={() => setTerminalOpen(!isTerminalOpen)}
-          height={termHeight}
-          onHeightChange={setTermHeight}
-        />
+        {!focusedPerformerId && (
+          <TerminalPanel
+            isOpen={isTerminalOpen}
+            onToggle={() => setTerminalOpen(!isTerminalOpen)}
+            height={termHeight}
+            onHeightChange={setTermHeight}
+          />
+        )}
       </div>
       <DragOverlay dropAnimation={null}>
         {activeDrag ? (

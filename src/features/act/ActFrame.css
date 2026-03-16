@@ -1,0 +1,143 @@
+/* ── ActFrame — Canvas node styles ── */
+
+.act-frame {
+    --act-accent: #f59e0b;
+}
+
+/* ── Title ── */
+.act-frame__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+.act-frame__icon {
+    color: var(--act-accent);
+    flex-shrink: 0;
+}
+.act-frame__name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+/* ── Header actions ── */
+.act-frame__header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+.act-frame__edit-btn,
+.act-frame__close-btn {
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+.act-frame__edit-btn:hover,
+.act-frame__close-btn:hover {
+    opacity: 1;
+}
+.act-frame--editing .act-frame__edit-btn {
+    opacity: 1;
+    color: var(--act-accent);
+}
+
+/* ── Meta badges (collapsed) ── */
+.act-frame__meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+}
+.act-frame__badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.act-frame__badge--mode {
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--act-accent);
+}
+
+/* ── Edit body (expanded) ── */
+.act-frame__edit-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    overflow: auto;
+    min-height: 200px;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 19px,
+            var(--border-subtle, rgba(128, 128, 128, 0.06)) 19px,
+            var(--border-subtle, rgba(128, 128, 128, 0.06)) 20px
+        ),
+        repeating-linear-gradient(
+            90deg,
+            transparent,
+            transparent 19px,
+            var(--border-subtle, rgba(128, 128, 128, 0.06)) 19px,
+            var(--border-subtle, rgba(128, 128, 128, 0.06)) 20px
+        );
+    border-radius: 0 0 6px 6px;
+}
+
+/* ── Empty state ── */
+.act-frame__empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+    user-select: none;
+}
+.act-frame__empty-state svg {
+    opacity: 0.3;
+}
+
+/* ── Editing state chrome ── */
+.act-frame--editing {
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+}
+
+/* ── Chat state chrome ── */
+.act-frame--chat {
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.15);
+}
+
+.act-frame__chat-btn {
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+.act-frame__chat-btn:hover {
+    opacity: 1;
+}
+.act-frame__chat-btn.icon-btn--active {
+    opacity: 1;
+    color: var(--act-accent);
+}
+
+/* ── Handle style ── */
+.act-frame__handle {
+    width: 8px !important;
+    height: 8px !important;
+    background: var(--bg-panel) !important;
+    border: 1.5px solid var(--act-accent) !important;
+    border-radius: 50% !important;
+}
+.act-frame__handle:hover {
+    background: var(--act-accent) !important;
+}

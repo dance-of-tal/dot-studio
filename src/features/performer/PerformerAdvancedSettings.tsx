@@ -18,13 +18,13 @@ type PerformerAdvancedSettingsProps = {
     onClearModel?: () => void
     onRemoveMcp?: (serverName: string) => void
     onSetMcpBinding?: (placeholderName: string, serverName: string | null) => void
-    onAutoCompactChange?: (enabled: boolean) => void
+
     mcpBindings?: Array<{ placeholderName: string; serverName: string | null }>
     mcpOptions?: Array<{ name: string; disabled?: boolean }>
     runtimeControls?: ReactNode
     runtimeStatus?: ReactNode
     executionModeSummary?: ReactNode
-    requestRelations?: Array<{ targetName: string; description: string }>
+    requestRelations?: Array<{ targetName: string; description?: string }>
 }
 
 function assetRefLabel(ref: AssetRef) {
@@ -48,7 +48,7 @@ export default function PerformerAdvancedSettings({
     onClearModel,
     onRemoveMcp,
     onSetMcpBinding,
-    onAutoCompactChange,
+
     mcpBindings,
     mcpOptions,
     runtimeControls,
@@ -159,17 +159,7 @@ export default function PerformerAdvancedSettings({
                         </div>
                     ) : null}
                     {runtimeStatus ? runtimeStatus : null}
-                    <label className="adv-toggle">
-                        <input
-                            type="checkbox"
-                            className="adv-toggle__input"
-                            checked={performer?.autoCompact !== false}
-                            onChange={(event) => onAutoCompactChange?.(event.target.checked)}
-                        />
-                        <span className="adv-toggle__switch" />
-                        <span className="adv-toggle__label">Auto-Compact</span>
-                        <span className="adv-toggle__hint">Compact when context fills</span>
-                    </label>
+
                 </div>
             </div>
 

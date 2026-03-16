@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { X, Upload, Save, ChevronLeft, FileText, Wand2, Workflow } from 'lucide-react';
+import { X, Upload, Save, ChevronLeft, FileText, Wand2, Zap } from 'lucide-react';
 import { useStudioStore } from '../../store';
 import { api } from '../../api';
 import { formatStudioApiErrorMessage } from '../../lib/api-errors';
-import { buildPerformerAssetPayload, slugifyAssetName, unresolvedDeclaredMcpServerNames } from '../../lib/performers';
-// buildActAssetPayload removed (Phase 2 pending)
-function buildActAssetPayload(_act: any, _performers: any[], _author: string | null, _opts: any): any {
-    console.warn('[studio] buildActAssetPayload: Act publish flow removed (Phase 2 pending)')
-    return {}
-}
-import { queryKeys, useAssetKind } from '../../hooks/queries';
+import { buildPerformerAssetPayload, buildActAssetPayload, slugifyAssetName, unresolvedDeclaredMcpServerNames } from '../../lib/performers';
+import { queryKeys } from '../../hooks/queries';
 import { useDotLogin } from '../../hooks/useDotLogin';
 import { DOT_TOS_URL } from '../../lib/dot-terms';
 import './PublishModal.css';
@@ -18,8 +13,8 @@ import {
     parseTags,
     buildPickerItems,
     buildPerformerPreflight,
-    buildActPreflight,
     buildMarkdownAssetPayload,
+    getActPublishBlockReasons,
     PickerSection,
 } from './publish-modal-utils';
 import type { PickerItem } from './publish-modal-utils';
@@ -31,11 +26,11 @@ import type { PickerItem } from './publish-modal-utils';
 export default function PublishModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     const workingDir = useStudioStore((state) => state.workingDir);
     const performers = useStudioStore((state) => state.performers);
-    const acts = useStudioStore((state) => state.acts);
     const drafts = useStudioStore((state) => state.drafts);
     const markdownEditors = useStudioStore((state) => state.markdownEditors);
+    const acts = useStudioStore((state) => state.acts);
+
     const updatePerformerAuthoringMeta = useStudioStore((state) => state.updatePerformerAuthoringMeta);
-    const updateActAuthoringMeta = useStudioStore((state) => state.updateActAuthoringMeta);
     const updateMarkdownEditorBaseline = useStudioStore((state) => state.updateMarkdownEditorBaseline);
     const upsertDraft = useStudioStore((state) => state.upsertDraft);
     const setPerformerTalRef = useStudioStore((state) => state.setPerformerTalRef);
@@ -43,9 +38,6 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
     const replacePerformerDanceRef = useStudioStore((state) => state.replacePerformerDanceRef);
     const queryClient = useQueryClient();
     const { authUser, startLogin, isAuthenticating } = useDotLogin();
-    const { data: installedPerformers = [] } = useAssetKind('performer', open);
-    const { data: installedTals = [] } = useAssetKind('tal', open);
-    const { data: installedDances = [] } = useAssetKind('dance', open);
 
     // ── Step state ──────────────────────────────────────
     const [step, setStep] = useState<'picker' | 'form'>('picker');
@@ -55,9 +47,6 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
     const performer = pickerSelection?.kind === 'performer'
         ? performers.find((p) => p.id === pickerSelection.performerId) || null
         : null;
-    const act = pickerSelection?.kind === 'act'
-        ? acts.find((a) => a.id === pickerSelection.actId) || null
-        : null;
     const markdownEditor = pickerSelection?.source === 'draft'
         ? markdownEditors.find((e) => e.id === pickerSelection.editorId) || null
         : null;
@@ -66,10 +55,14 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
     // For local-saved tal/dance, we create a virtual draft-like target
     const isLocalAsset = pickerSelection?.source === 'local';
 
+    const selectedAct = pickerSelection?.kind === 'act'
+        ? acts.find((a) => a.id === (pickerSelection as any).actId) || null
+        : null;
+
     const target = performer
         ? { kind: 'performer' as const, id: performer.id, name: performer.name }
-        : act
-            ? { kind: 'act' as const, id: act.id, name: act.name }
+        : selectedAct
+            ? { kind: 'act' as const, id: selectedAct.id, name: selectedAct.name }
             : markdownEditor && draft
                 ? { kind: markdownEditor.kind, id: markdownEditor.id, name: draft.name || `${markdownEditor.kind} draft` }
                 : isLocalAsset && pickerSelection
@@ -87,14 +80,14 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
     // ── Build publishable item list ─────────────────────
     const pickerItems = useMemo(() => {
         return buildPickerItems({
-            installedTals,
-            installedDances,
+            installedTals: [],
+            installedDances: [],
             markdownEditors,
             drafts,
             performers,
             acts,
         });
-    }, [installedTals, installedDances, markdownEditors, drafts, performers, acts]);
+    }, [markdownEditors, drafts, performers, acts]);
 
     // ── Reset on open/close ─────────────────────────────
     useEffect(() => {
@@ -116,12 +109,6 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
             setTagsText((performer.meta?.authoring?.tags || []).join(', '));
             return;
         }
-        if (act) {
-            setSlug(act.meta?.authoring?.slug || slugifyAssetName(act.name));
-            setDescription(act.meta?.authoring?.description || act.description || act.name);
-            setTagsText((act.meta?.authoring?.tags || []).join(', '));
-            return;
-        }
         if (draft) {
             setSlug(draft.slug || slugifyAssetName(draft.name));
             setDescription(draft.description || draft.name);
@@ -133,7 +120,7 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
             setDescription(pickerSelection.name);
             setTagsText('');
         }
-    }, [step, pickerSelection, performer, act, draft, isLocalAsset]);
+    }, [step, pickerSelection, performer, draft, isLocalAsset]);
 
     // ── Fetch project MCP config ────────────────────────
     useEffect(() => {
@@ -152,9 +139,6 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
         return buildPerformerPreflight(performer);
     }, [performer]);
 
-    const actPreflight = useMemo(() => {
-        return buildActPreflight(act, performers, installedPerformers, authUser?.username || null);
-    }, [act, authUser?.username, performers, installedPerformers]);
 
     const markdownDirty = useMemo(() => {
         if (!markdownEditor || !draft) return false;
@@ -175,10 +159,6 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
         () => performer ? unresolvedDeclaredMcpServerNames(performer).length > 0 : false,
         [performer],
     );
-    const actHasBlockingBindings = useMemo(
-        () => actPreflight.some((entry: any) => entry.status !== 'ready'),
-        [actPreflight],
-    );
 
     const publishBlockedReason = useMemo(() => {
         if (performer && performerHasBlockingDependencies) {
@@ -187,11 +167,14 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
         if (performer && performerHasUnresolvedMcpPlaceholders) {
             return 'Map imported MCP placeholders to project MCP servers before publishing.';
         }
-        if (act && actHasBlockingBindings) {
-            return 'Resolve every act performer binding to a saved or published performer asset before exporting this act.';
+        if (selectedAct) {
+            const actBlockReasons = getActPublishBlockReasons(selectedAct);
+            if (actBlockReasons.length > 0) {
+                return actBlockReasons.join(' ');
+            }
         }
         return null;
-    }, [act, actHasBlockingBindings, performer, performerHasBlockingDependencies, performerHasUnresolvedMcpPlaceholders]);
+    }, [performer, performerHasBlockingDependencies, performerHasUnresolvedMcpPlaceholders, selectedAct]);
 
     const canSaveOrPublish = !!target
         && !!slug.trim()
@@ -265,19 +248,8 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
                 return;
             }
 
-            if (target.kind === 'act' && act) {
-                updateActAuthoringMeta(act.id, { slug, description, tags });
-                const savedPerformerUrns = new Set(
-                    installedPerformers
-                        .filter((asset) => asset.source === 'stage')
-                        .map((asset) => asset.urn),
-                );
-                const payload = buildActAssetPayload(act, performers, authUser?.username || null, {
-                    name: act.name,
-                    description,
-                    tags,
-                    savedPerformerUrns,
-                });
+            if (target.kind === 'act' && selectedAct) {
+                const payload = buildActAssetPayload(selectedAct, { description, tags });
                 const result = await api.dot.saveLocalAsset('act', slug, payload, authUser?.username || undefined);
                 await invalidateKind('act');
                 setStatus({
@@ -334,19 +306,8 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
                 return;
             }
 
-            if (target.kind === 'act' && act) {
-                updateActAuthoringMeta(act.id, { slug, description, tags });
-                const savedPerformerUrns = new Set(
-                    installedPerformers
-                        .filter((asset) => asset.source === 'stage')
-                        .map((asset) => asset.urn),
-                );
-                const payload = buildActAssetPayload(act, performers, authUser?.username || null, {
-                    name: act.name,
-                    description,
-                    tags,
-                    savedPerformerUrns,
-                });
+            if (target.kind === 'act' && selectedAct) {
+                const payload = buildActAssetPayload(selectedAct, { description, tags });
                 const result = await api.dot.publishAsset('act', slug, payload, tags, true);
                 await invalidateKind('act');
                 setStatus({
@@ -448,7 +409,7 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
                                     <PickerSection title="Performers" items={performerItems} onPick={handlePickItem} icon={<Wand2 size={12} />} />
                                 )}
                                 {actItems.length > 0 && (
-                                    <PickerSection title="Acts" items={actItems} onPick={handlePickItem} icon={<Workflow size={12} />} />
+                                    <PickerSection title="Acts" items={actItems} onPick={handlePickItem} icon={<Zap size={12} />} />
                                 )}
                             </>
                         )}
@@ -501,18 +462,6 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
                                 {performerPreflight.map((entry: any) => (
                                     <div key={`${entry.label}-${entry.detail}`} className={`publish-modal__preflight-row is-${entry.status}`}>
                                         <span>{entry.label}</span>
-                                        <span>{entry.detail}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
-
-                        {actPreflight.length > 0 ? (
-                            <div className="publish-modal__preflight">
-                                <strong>Act performer bindings</strong>
-                                {actPreflight.map((entry: any) => (
-                                    <div key={entry.nodeId} className={`publish-modal__preflight-row is-${entry.status}`}>
-                                        <span>{entry.performerName}</span>
                                         <span>{entry.detail}</span>
                                     </div>
                                 ))}
