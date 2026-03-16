@@ -11,6 +11,8 @@ import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
 import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
 import ActFrame from '../../features/act/ActFrame';
 import ActPerformerFrame from '../../features/act/ActPerformerFrame';
+import ActPerformerInspector from '../../features/act/ActPerformerInspector';
+import ActInlineEditor from '../../features/act/ActInlineEditor';
 // PerformerRelationEdge removed — edges now live inside Act edit mode only
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
@@ -628,6 +630,12 @@ export default function CanvasArea() {
                     </div>
                 );
             })()}
+            {isActEditFocus && selectedActPerformerKey && (
+                <ActPerformerInspector />
+            )}
+            {isActEditFocus && selectedActPerformerKey && (
+                <ActInlineEditor />
+            )}
             {canvasDropLabel && (
                 <div className={`canvas-drop-overlay ${isCanvasDropOver ? 'is-active' : ''}`}>
                     <div className="canvas-drop-overlay__card">

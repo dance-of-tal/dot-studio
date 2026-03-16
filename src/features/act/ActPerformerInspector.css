@@ -1,0 +1,192 @@
+/* ActPerformerInspector — left-side panel in Act edit focus */
+
+.act-inspector {
+    position: absolute;
+    top: 48px;
+    left: 8px;
+    z-index: 50;
+    width: 280px;
+    max-height: calc(100% - 64px);
+    overflow-y: auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    padding: 0;
+}
+
+.act-inspector__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.act-inspector__header-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.act-inspector__name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.act-inspector__name:hover {
+    color: var(--accent);
+}
+
+.act-inspector__name-input {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 4px;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    background: var(--bg-inset);
+    color: var(--text);
+    outline: none;
+}
+
+.act-inspector__remove {
+    flex-shrink: 0;
+    opacity: 0.5;
+}
+.act-inspector__remove:hover {
+    opacity: 1;
+    color: var(--error, #ef4444);
+}
+
+/* Sections */
+.act-inspector__section {
+    padding: 8px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.act-inspector__section:last-child {
+    border-bottom: none;
+}
+
+.act-inspector__section-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 6px;
+}
+
+.act-inspector__config-btn {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-inset);
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s;
+}
+
+.act-inspector__config-btn:hover {
+    border-color: var(--accent);
+}
+
+.act-inspector__config-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.act-inspector__config-value {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.act-inspector__empty {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Lists */
+.act-inspector__list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.act-inspector__list-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    background: var(--bg-inset);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text);
+}
+
+.act-inspector__list-item span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Relations */
+.act-inspector__relation-item {
+    padding: 6px;
+    background: var(--bg-inset);
+    border-radius: 6px;
+    margin-bottom: 4px;
+}
+
+.act-inspector__relation-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+
+.act-inspector__relation-direction {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.act-inspector__relation-desc {
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-surface);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.act-inspector__relation-desc:focus {
+    border-color: var(--accent);
+}
+
+.act-inspector__relation-desc::placeholder {
+    color: var(--text-muted);
+}
