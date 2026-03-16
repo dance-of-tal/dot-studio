@@ -201,11 +201,9 @@ export default function CanvasArea() {
         editingActId,
         selectAct,
         updateActPosition,
-        enterActEditFocus,
         exitActEditFocus,
         addRelationInAct,
         updateActPerformerPosition,
-        selectedActPerformerKey,
         selectActPerformer,
         focusSnapshot,
     } = useStudioStore();
@@ -420,7 +418,7 @@ export default function CanvasArea() {
             id: `act-p-${key}`,
             type: 'act-performer' as const,
             position: perf.position,
-            dragHandle: '.act-performer-card',
+            dragHandle: '.canvas-frame__header',
             data: { performerKey: key, actId: editingActId },
         }))
     }, [isActEditFocus, editingActId, acts])
@@ -455,6 +453,14 @@ export default function CanvasArea() {
             style: { stroke: 'var(--accent)', strokeWidth: 2 },
         }))
     }, [isActEditFocus, editingActId, acts])
+
+    const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+        if (!isActEditFocus || !editingActId) return
+        // Confirm deletion
+        if (window.confirm('Remove this relation?')) {
+            useStudioStore.getState().removeRelationFromAct(editingActId, edge.id)
+        }
+    }, [isActEditFocus, editingActId])
 
 
     const onNodeDragStop = useCallback(
@@ -662,6 +668,7 @@ export default function CanvasArea() {
                 onNodeDragStop={onNodeDragStop}
                 onNodeClick={onNodeClick}
                 onConnect={onConnect}
+                onEdgeClick={onEdgeClick}
                 onPaneClick={onPaneClick}
                 onMoveEnd={() => {
                     if (reactFlowInstance && canvasAreaRef.current) {
