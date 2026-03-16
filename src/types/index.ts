@@ -180,13 +180,18 @@ export interface PerformerLink {
     description: string
 }
 
-/** Act-internal relation between two Act performers */
+/** Act-internal relation between two Act performers (Edge Attribute Model) */
 export interface ActRelation {
     id: string
     from: string
     to: string
-    interaction: 'request'
+    name: string
     description: string
+    invocation: 'optional' | 'required'
+    await: boolean
+    sessionPolicy: 'fresh' | 'reuse'
+    maxCalls: number
+    timeout: number
 }
 
 /** Act performer — standalone에서 복사된 독립 config (PRD §7.2) */

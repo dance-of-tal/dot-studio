@@ -11,6 +11,7 @@ import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
 import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
 import ActFrame from '../../features/act/ActFrame';
 import ActPerformerFrame from '../../features/act/ActPerformerFrame';
+import EdgeEditPopover from '../../features/act/EdgeEditPopover';
 // PerformerRelationEdge removed — edges now live inside Act edit mode only
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
@@ -443,23 +444,36 @@ export default function CanvasArea() {
         if (!isActEditFocus || !editingActId) return []
         const act = acts.find((a) => a.id === editingActId)
         if (!act) return []
-        return act.relations.map((rel) => ({
-            id: rel.id,
-            source: `act-p-${rel.from}`,
-            target: `act-p-${rel.to}`,
-            type: 'default',
-            animated: true,
-            label: rel.description || undefined,
-            style: { stroke: 'var(--accent)', strokeWidth: 2 },
-        }))
+        return act.relations.map((rel) => {
+            const isRequired = rel.invocation === 'required'
+            const isFireAndForget = !rel.await
+            return {
+                id: rel.id,
+                source: `act-p-${rel.from}`,
+                target: `act-p-${rel.to}`,
+                type: 'default',
+                animated: isFireAndForget,
+                label: rel.name || rel.description || undefined,
+                style: {
+                    stroke: isFireAndForget ? 'var(--info, #58f)' : 'var(--accent)',
+                    strokeWidth: isRequired ? 3 : 1.5,
+                    strokeDasharray: isRequired ? undefined : '5 3',
+                },
+            }
+        })
     }, [isActEditFocus, editingActId, acts])
 
-    const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
+    const [edgePopover, setEdgePopover] = useState<{
+        relationId: string;
+        position: { x: number; y: number };
+    } | null>(null)
+
+    const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
         if (!isActEditFocus || !editingActId) return
-        // Confirm deletion
-        if (window.confirm('Remove this relation?')) {
-            useStudioStore.getState().removeRelationFromAct(editingActId, edge.id)
-        }
+        setEdgePopover({
+            relationId: edge.id,
+            position: { x: event.clientX, y: event.clientY },
+        })
     }, [isActEditFocus, editingActId])
 
 
@@ -695,6 +709,14 @@ export default function CanvasArea() {
             >
                 <Background color={focusedPerformerId ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>
+            {edgePopover && editingActId && (
+                <EdgeEditPopover
+                    actId={editingActId}
+                    relationId={edgePopover.relationId}
+                    position={edgePopover.position}
+                    onClose={() => setEdgePopover(null)}
+                />
+            )}
         </div>
     );
 }

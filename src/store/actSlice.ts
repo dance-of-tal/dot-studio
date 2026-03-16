@@ -303,12 +303,24 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     // ── Relation management (Act-internal edges) ────────
 
     addRelationInAct: (actId, from, to) => {
+        const act = get().acts.find((a) => a.id === actId)
+        if (!act) return
+        const fromPerf = act.performers[from]
+        const toPerf = act.performers[to]
+        const autoName = fromPerf && toPerf
+            ? `${fromPerf.name.toLowerCase().replace(/\s+/g, '_')}_to_${toPerf.name.toLowerCase().replace(/\s+/g, '_')}`
+            : `rel_${Date.now()}`
         const relation: ActRelation = {
             id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             from,
             to,
-            interaction: 'request',
+            name: autoName,
             description: '',
+            invocation: 'optional',
+            await: true,
+            sessionPolicy: 'fresh',
+            maxCalls: 10,
+            timeout: 300,
         }
         set((s) => ({
             acts: s.acts.map((a) => {
@@ -331,14 +343,14 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    updateRelationDescription: (actId, relationId, description) => {
+    updateRelation: (actId, relationId, update) => {
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
                 return {
                     ...a,
                     relations: a.relations.map((r) =>
-                        r.id === relationId ? { ...r, description } : r,
+                        r.id === relationId ? { ...r, ...update } : r,
                     ),
                 }
             }),
@@ -409,8 +421,13 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             id: nanoid(8),
             from: idMapping[r.from] || r.from,
             to: idMapping[r.to] || r.to,
-            interaction: r.interaction || 'request',
+            name: r.name || `rel_${nanoid(6)}`,
             description: r.description || '',
+            invocation: r.invocation || 'optional' as const,
+            await: r.await ?? true,
+            sessionPolicy: r.sessionPolicy || 'fresh' as const,
+            maxCalls: r.maxCalls ?? 10,
+            timeout: r.timeout ?? 300,
         }))
 
         const newAct: StageAct = {

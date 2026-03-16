@@ -161,8 +161,13 @@ function migrateActs(data: any): any[] {
                 id: e.id,
                 from: e.from,
                 to: e.to,
-                interaction: 'request' as const,
+                name: e.name || `rel_${e.id}`,
                 description: typeof e.description === 'string' ? e.description : '',
+                invocation: 'optional' as const,
+                await: true,
+                sessionPolicy: 'fresh' as const,
+                maxCalls: 10,
+                timeout: 300,
             }))
 
         const { edgeIds: _removed, ...rest } = act

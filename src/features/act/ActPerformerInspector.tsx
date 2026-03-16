@@ -20,7 +20,7 @@ export default function ActPerformerInspector() {
         updateActPerformer,
         removePerformerFromAct,
         removeRelationFromAct,
-        updateRelationDescription,
+        updateRelation,
         drafts,
     } = useStudioStore()
 
@@ -204,7 +204,7 @@ export default function ActPerformerInspector() {
                                         className="act-inspector__relation-desc"
                                         placeholder="Description (optional)"
                                         value={rel.description}
-                                        onChange={(e) => updateRelationDescription(editingActId, rel.id, e.target.value)}
+                                        onChange={(e) => updateRelation(editingActId, rel.id, { description: e.target.value })}
                                     />
                                 </div>
                             )

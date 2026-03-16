@@ -253,7 +253,7 @@ export interface ActSlice {
     // Relation management (Act-internal edges)
     addRelationInAct: (actId: string, from: string, to: string) => void
     removeRelationFromAct: (actId: string, relationId: string) => void
-    updateRelationDescription: (actId: string, relationId: string, description: string) => void
+    updateRelation: (actId: string, relationId: string, update: Partial<import('../types').ActRelation>) => void
     // Authoring / import
     updateActAuthoringMeta: (id: string, meta: StageAct['meta']) => void
     importActFromAsset: (asset: any) => void

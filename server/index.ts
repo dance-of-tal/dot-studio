@@ -20,6 +20,7 @@ import dotRoutes from './routes/dot.js'
 import adapterRoutes from './routes/adapter.js'
 import safeRoutes from './routes/safe.js'
 import assistantRoutes from './routes/assistant.js'
+import delegateRoutes from './routes/delegate.js'
 
 // Config
 import { PORT, OPENCODE_URL, STUDIO_DIR, IS_PRODUCTION, getActiveProjectDir } from './lib/config.js'
@@ -52,6 +53,7 @@ if (IS_PRODUCTION) {
     app.route('/', adapterRoutes)
     app.route('/', safeRoutes)
     app.route('/', assistantRoutes)
+    app.route('/', delegateRoutes)
 
     // Serve static assets
     app.use('/assets/*', serveStatic({ root: clientDir }))
@@ -86,6 +88,7 @@ if (IS_PRODUCTION) {
     app.route('/', adapterRoutes)
     app.route('/', safeRoutes)
     app.route('/', assistantRoutes)
+    app.route('/', delegateRoutes)
 }
 
 // ── Start Server ────────────────────────────────────────

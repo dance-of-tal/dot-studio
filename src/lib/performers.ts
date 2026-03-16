@@ -404,8 +404,13 @@ export function buildActAssetPayload(
         return {
             from: fromP?.name || rel.from,
             to: toP?.name || rel.to,
-            interaction: 'request' as const,
+            name: rel.name,
             description: rel.description || '',
+            invocation: rel.invocation,
+            await: rel.await,
+            sessionPolicy: rel.sessionPolicy,
+            maxCalls: rel.maxCalls,
+            timeout: rel.timeout,
         }
     })
 
