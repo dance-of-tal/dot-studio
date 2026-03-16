@@ -1,0 +1,391 @@
+/* ActInspectorPanel — Right-side panel for Act edit focus mode */
+
+.act-panel {
+    position: absolute;
+    top: 48px;
+    right: 8px;
+    z-index: 50;
+    width: 280px;
+    max-height: calc(100% - 64px);
+    overflow-y: auto;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    font-size: 12px;
+}
+
+/* Scrollbar */
+.act-panel::-webkit-scrollbar { width: 4px; }
+.act-panel::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+/* Header */
+.act-panel__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+/* Content */
+.act-panel__content {
+    padding: 4px 0;
+}
+
+/* Sections */
+.act-panel__section {
+    padding: 8px 14px;
+}
+
+.act-panel__section--half {
+    flex: 1;
+    min-width: 0;
+}
+
+.act-panel__row {
+    display: flex;
+    gap: 0;
+}
+
+.act-panel__row .act-panel__section {
+    padding: 8px 14px 8px 14px;
+}
+.act-panel__row .act-panel__section:first-child {
+    padding-right: 6px;
+}
+.act-panel__row .act-panel__section:last-child {
+    padding-left: 6px;
+}
+
+.act-panel__label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 5px;
+}
+
+.act-panel__label--checkbox {
+    cursor: pointer;
+    font-size: 12px;
+    text-transform: none;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.act-panel__label--checkbox input[type='checkbox'] {
+    margin-right: 6px;
+    accent-color: var(--accent);
+}
+
+.act-panel__hint {
+    display: block;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-style: italic;
+}
+
+/* Inputs */
+.act-panel__input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font-size: 12px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+    font-family: inherit;
+}
+
+.act-panel__input:focus {
+    border-color: var(--accent);
+}
+
+.act-panel__input--number {
+    font-variant-numeric: tabular-nums;
+}
+
+.act-panel__textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font-size: 12px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    outline: none;
+    resize: vertical;
+    font-family: inherit;
+    transition: border-color 0.15s;
+    min-height: 52px;
+}
+
+.act-panel__textarea:focus {
+    border-color: var(--accent);
+}
+
+.act-panel__textarea::placeholder,
+.act-panel__input::placeholder {
+    color: var(--text-muted);
+}
+
+/* Item Header (Performer / Edge detail) */
+.act-panel__item-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.act-panel__item-icon {
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.act-panel__item-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.act-panel__item-name:hover {
+    color: var(--accent);
+}
+
+.act-panel__item-name--edge {
+    cursor: default;
+    font-size: 12px;
+}
+
+.act-panel__item-name--edge:hover {
+    color: var(--text);
+}
+
+.act-panel__inline-edit {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 4px;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    background: var(--bg-inset);
+    color: var(--text);
+    outline: none;
+    min-width: 0;
+}
+
+.act-panel__danger-btn {
+    flex-shrink: 0;
+    opacity: 0.4;
+    transition: all 0.15s;
+}
+.act-panel__danger-btn:hover {
+    opacity: 1;
+    color: var(--error, #ef4444) !important;
+}
+
+/* Config button (like model selector) */
+.act-panel__config-btn {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-inset);
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s;
+}
+
+.act-panel__config-btn:hover {
+    border-color: var(--accent);
+}
+
+.act-panel__config-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.act-panel__config-value {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.act-panel__empty {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Lists */
+.act-panel__list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.act-panel__list-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    background: var(--bg-inset);
+    border-radius: 5px;
+    font-size: 11px;
+    color: var(--text);
+}
+.act-panel__list-item span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Edge links in performer detail */
+.act-panel__edge-link {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 6px;
+    background: var(--bg-inset);
+    border-radius: 5px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.act-panel__edge-link:hover {
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
+}
+
+.act-panel__edge-dir {
+    color: var(--text-muted);
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.act-panel__edge-target {
+    flex: 1;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.act-panel__edge-badge {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.act-panel__edge-badge--optional {
+    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+    color: var(--text-muted);
+}
+
+.act-panel__edge-badge--required {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--accent);
+}
+
+/* Toggle group (invocation, session) */
+.act-panel__toggle-group {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-inset);
+    border-radius: 6px;
+    padding: 2px;
+}
+
+.act-panel__toggle {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 6px;
+    font-size: 11px;
+    border-radius: 5px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.act-panel__toggle:hover {
+    color: var(--text);
+}
+
+.act-panel__toggle.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Stat grid */
+.act-panel__stat-grid {
+    display: flex;
+    gap: 8px;
+}
+
+.act-panel__stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    background: var(--bg-inset);
+    border-radius: 5px;
+}
+
+/* Tags */
+.act-panel__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.act-panel__tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border-radius: 3px;
+}

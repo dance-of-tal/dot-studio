@@ -31,6 +31,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     selectedActId: null,
     editingActId: null,
     selectedActPerformerKey: null,
+    selectedRelationId: null,
 
     addAct: (name) => {
         const id = nanoid(12)
@@ -281,7 +282,11 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     },
 
     selectActPerformer: (key) => {
-        set({ selectedActPerformerKey: key })
+        set({ selectedActPerformerKey: key, selectedRelationId: null })
+    },
+
+    selectRelation: (id) => {
+        set({ selectedRelationId: id, selectedActPerformerKey: null })
     },
 
     updateActPerformerPosition: (actId, performerKey, x, y) => {

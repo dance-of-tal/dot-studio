@@ -231,6 +231,7 @@ export interface ActSlice {
     selectedActId: string | null
     editingActId: string | null
     selectedActPerformerKey: string | null
+    selectedRelationId: string | null
     addAct: (name: string) => string
     removeAct: (id: string) => void
     renameAct: (id: string, name: string) => void
@@ -243,6 +244,7 @@ export interface ActSlice {
     enterActEditFocus: (actId: string) => void
     exitActEditFocus: () => void
     selectActPerformer: (key: string | null) => void
+    selectRelation: (id: string | null) => void
     updateActPerformerPosition: (actId: string, performerKey: string, x: number, y: number) => void
     // Performer management (copy-based)
     addPerformerToAct: (actId: string, performerId: string) => void

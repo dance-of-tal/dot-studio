@@ -11,7 +11,7 @@ import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
 import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
 import ActFrame from '../../features/act/ActFrame';
 import ActPerformerFrame from '../../features/act/ActPerformerFrame';
-import EdgeEditPopover from '../../features/act/EdgeEditPopover';
+import ActInspectorPanel from '../../features/act/ActInspectorPanel';
 // PerformerRelationEdge removed — edges now live inside Act edit mode only
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
@@ -206,6 +206,7 @@ export default function CanvasArea() {
         addRelationInAct,
         updateActPerformerPosition,
         selectActPerformer,
+        selectRelation,
         focusSnapshot,
     } = useStudioStore();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -463,18 +464,10 @@ export default function CanvasArea() {
         })
     }, [isActEditFocus, editingActId, acts])
 
-    const [edgePopover, setEdgePopover] = useState<{
-        relationId: string;
-        position: { x: number; y: number };
-    } | null>(null)
-
-    const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
         if (!isActEditFocus || !editingActId) return
-        setEdgePopover({
-            relationId: edge.id,
-            position: { x: event.clientX, y: event.clientY },
-        })
-    }, [isActEditFocus, editingActId])
+        selectRelation(edge.id)
+    }, [isActEditFocus, editingActId, selectRelation])
 
 
     const onNodeDragStop = useCallback(
@@ -561,16 +554,17 @@ export default function CanvasArea() {
         closeEditor();
         selectPerformer(null);
         selectMarkdownEditor(null);
-        // In Act edit focus, deselect act performer
+        // In Act edit focus, deselect act performer and relation
         if (isActEditFocus) {
             selectActPerformer(null);
+            selectRelation(null);
             return;
         }
         // Close Act edit mode when clicking on empty canvas
         if (editingActId) {
             useStudioStore.getState().toggleActEdit(editingActId);
         }
-    }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, editingActId, isActEditFocus, selectActPerformer]);
+    }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, editingActId, isActEditFocus, selectActPerformer, selectRelation]);
 
     const onConnect = useCallback((connection: Connection) => {
         if (isActEditFocus && editingActId && connection.source && connection.target) {
@@ -709,14 +703,7 @@ export default function CanvasArea() {
             >
                 <Background color={focusedPerformerId ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>
-            {edgePopover && editingActId && (
-                <EdgeEditPopover
-                    actId={editingActId}
-                    relationId={edgePopover.relationId}
-                    position={edgePopover.position}
-                    onClose={() => setEdgePopover(null)}
-                />
-            )}
+            {isActEditFocus && <ActInspectorPanel />}
         </div>
     );
 }
