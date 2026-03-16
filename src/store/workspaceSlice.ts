@@ -217,6 +217,7 @@ export const createWorkspaceSlice: StateCreator<
         // Snapshot current state for later restoration
         const FOCUS_PADDING = 48
         const focusSnapshot = {
+            type: 'performer' as const,
             hiddenPerformerIds: state.performers.filter(p => p.hidden).map(p => p.id),
             hiddenActIds: state.acts.filter(a => (a as any).hidden).map(a => a.id),
             hiddenEditorIds: state.markdownEditors.filter(e => e.hidden).map(e => e.id),

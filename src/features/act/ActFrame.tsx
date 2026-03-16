@@ -20,7 +20,7 @@ export default function ActFrame({ data, id }: any) {
         selectedActId,
         editingActId,
         selectAct,
-        toggleActEdit,
+        enterActEditFocus,
         removeAct,
         updateActSize,
     } = useStudioStore()
@@ -90,7 +90,7 @@ export default function ActFrame({ data, id }: any) {
                     <button
                         className={`icon-btn act-frame__edit-btn ${showEdit ? 'icon-btn--active' : ''}`}
                         title={showEdit ? 'Close edit mode' : 'Edit Act'}
-                        onClick={() => toggleActEdit(id)}
+                        onClick={() => enterActEditFocus(id)}
                     >
                         <Pencil size={11} />
                     </button>

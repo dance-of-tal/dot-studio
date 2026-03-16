@@ -25,6 +25,8 @@ export interface PerformerRelationSlice {
 }
 
 export interface FocusSnapshot {
+    type: 'performer' | 'act'
+    actId?: string
     hiddenPerformerIds: string[]
     hiddenActIds: string[]
     hiddenEditorIds: string[]
@@ -228,6 +230,7 @@ export interface ActSlice {
     acts: StageAct[]
     selectedActId: string | null
     editingActId: string | null
+    selectedActPerformerKey: string | null
     addAct: (name: string) => string
     removeAct: (id: string) => void
     renameAct: (id: string, name: string) => void
@@ -236,6 +239,11 @@ export interface ActSlice {
     toggleActEdit: (id: string) => void
     updateActPosition: (id: string, x: number, y: number) => void
     updateActSize: (id: string, width: number, height: number) => void
+    // Focus mode for Act editing
+    enterActEditFocus: (actId: string) => void
+    exitActEditFocus: () => void
+    selectActPerformer: (key: string | null) => void
+    updateActPerformerPosition: (actId: string, performerKey: string, x: number, y: number) => void
     // Performer management (copy-based)
     addPerformerToAct: (actId: string, performerId: string) => void
     addNewPerformerInAct: (actId: string, name: string) => string

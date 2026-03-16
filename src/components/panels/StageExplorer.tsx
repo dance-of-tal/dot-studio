@@ -288,6 +288,7 @@ export default function StageExplorer() {
                             className="icon-btn"
                             onClick={() => addPerformer(`Performer ${sharedPerformers.length + 1}`)}
                             title="Add performer"
+                            disabled={!stageId}
                         >
                             <MessageSquare size={12} />
                         </button>
@@ -295,6 +296,7 @@ export default function StageExplorer() {
                             className="icon-btn"
                             onClick={() => useStudioStore.getState().addAct(`Act ${acts.length + 1}`)}
                             title="Add Act"
+                            disabled={!stageId}
                         >
                             <Zap size={12} />
                         </button>

@@ -193,6 +193,7 @@ export interface ActRelation {
 export interface ActPerformer {
     sourcePerformerId: string
     name: string
+    position: { x: number; y: number }
     talRef: AssetRef | null
     danceRefs: AssetRef[]
     model: ModelConfig | null

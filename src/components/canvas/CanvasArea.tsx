@@ -10,6 +10,7 @@ import MarkdownEditorFrame from '../../features/assets/MarkdownEditorFrame';
 import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
 import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
 import ActFrame from '../../features/act/ActFrame';
+import ActPerformerFrame from '../../features/act/ActPerformerFrame';
 // PerformerRelationEdge removed — edges now live inside Act edit mode only
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
@@ -54,11 +55,12 @@ const nodeTypes = {
     canvasTerminal: CanvasTerminalFrame,
     stageTracking: CanvasTrackingFrame,
     act: ActFrame,
+    'act-performer': ActPerformerFrame,
 };
 
 const edgeTypes = {};
 
-type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act';
+type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act' | 'act-performer';
 
 function getCanvasWindowZIndex({
     selected = false,
@@ -83,7 +85,7 @@ function CustomControls() {
     const [isFitted, setIsFitted] = useState(false);
     const prevViewport = useRef<Viewport | null>(null);
 
-    const { selectedPerformerId, focusedPerformerId, enterFocusMode, exitFocusMode } = useStudioStore();
+    const { selectedPerformerId, focusedPerformerId, enterFocusMode, exitFocusMode, focusSnapshot, exitActEditFocus } = useStudioStore();
 
     const toggleFitView = useCallback(() => {
         if (isFitted && prevViewport.current) {
@@ -117,16 +119,26 @@ function CustomControls() {
     // Escape key to exit focus mode
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && focusedPerformerId) {
-                exitFocusMode();
-                setTimeout(() => {
-                    fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
-                }, 50);
+            if (e.key === 'Escape') {
+                // Act edit focus takes priority
+                if (focusSnapshot?.type === 'act') {
+                    exitActEditFocus();
+                    setTimeout(() => {
+                        fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
+                    }, 50);
+                    return;
+                }
+                if (focusedPerformerId) {
+                    exitFocusMode();
+                    setTimeout(() => {
+                        fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
+                    }, 50);
+                }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedPerformerId, exitFocusMode, fitView]);
+    }, [focusedPerformerId, exitFocusMode, focusSnapshot, exitActEditFocus, fitView]);
 
     return (
         <div className="canvas-controls">
@@ -189,6 +201,13 @@ export default function CanvasArea() {
         editingActId,
         selectAct,
         updateActPosition,
+        enterActEditFocus,
+        exitActEditFocus,
+        addRelationInAct,
+        updateActPerformerPosition,
+        selectedActPerformerKey,
+        selectActPerformer,
+        focusSnapshot,
     } = useStudioStore();
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [transformTarget, setTransformTarget] = useState<{ id: string; type: CanvasNodeKind } | null>(null);
@@ -390,18 +409,52 @@ export default function CanvasArea() {
         } as Record<string, unknown>,
     })), [acts, selectedActId, editingActId, transformTarget, activateTransformTarget, deactivateTransformTarget])
 
+    const isActEditFocus = !!(focusSnapshot?.type === 'act' && editingActId)
+
+    // Build act-internal performer nodes for Act edit focus mode
+    const buildActPerformerNodes = useCallback(() => {
+        if (!isActEditFocus || !editingActId) return []
+        const act = acts.find((a) => a.id === editingActId)
+        if (!act) return []
+        return Object.entries(act.performers).map(([key, perf]) => ({
+            id: `act-p-${key}`,
+            type: 'act-performer' as const,
+            position: perf.position,
+            dragHandle: '.act-performer-card',
+            data: { performerKey: key, actId: editingActId },
+        }))
+    }, [isActEditFocus, editingActId, acts])
+
     // Sync from store to local state when performers change
     useEffect(() => {
-        setNodes([
-            ...buildPerformerNodes(),
-            ...buildMarkdownEditorNodes(),
-            ...buildCanvasTerminalNodes(),
-            ...buildTrackingNodes(),
-            ...buildActNodes(),
-        ]);
-    }, [buildPerformerNodes, buildMarkdownEditorNodes, buildCanvasTerminalNodes, buildTrackingNodes, buildActNodes, setNodes]);
+        if (isActEditFocus) {
+            // In act edit focus, only show act-internal performer nodes
+            setNodes(buildActPerformerNodes());
+        } else {
+            setNodes([
+                ...buildPerformerNodes(),
+                ...buildMarkdownEditorNodes(),
+                ...buildCanvasTerminalNodes(),
+                ...buildTrackingNodes(),
+                ...buildActNodes(),
+            ]);
+        }
+    }, [isActEditFocus, buildActPerformerNodes, buildPerformerNodes, buildMarkdownEditorNodes, buildCanvasTerminalNodes, buildTrackingNodes, buildActNodes, setNodes]);
 
-    const relationEdges = useCallback((): Edge[] => [], [])
+    const relationEdges = useCallback((): Edge[] => {
+        if (!isActEditFocus || !editingActId) return []
+        const act = acts.find((a) => a.id === editingActId)
+        if (!act) return []
+        return act.relations.map((rel) => ({
+            id: rel.id,
+            source: `act-p-${rel.from}`,
+            target: `act-p-${rel.to}`,
+            type: 'default',
+            animated: true,
+            label: rel.description || undefined,
+            style: { stroke: 'var(--accent)', strokeWidth: 2 },
+        }))
+    }, [isActEditFocus, editingActId, acts])
 
 
     const onNodeDragStop = useCallback(
@@ -425,9 +478,15 @@ export default function CanvasArea() {
                 return;
             }
 
+            if (node.type === 'act-performer' && editingActId) {
+                const performerKey = node.id.replace(/^act-p-/, '')
+                updateActPerformerPosition(editingActId, performerKey, Math.round(node.position.x), Math.round(node.position.y));
+                return;
+            }
+
             updatePerformerPosition(node.id, Math.round(node.position.x), Math.round(node.position.y));
         },
-        [updateMarkdownEditorPosition, updatePerformerPosition, updateCanvasTerminalPosition, updateTrackingWindowPosition, updateActPosition]
+        [updateMarkdownEditorPosition, updatePerformerPosition, updateCanvasTerminalPosition, updateTrackingWindowPosition, updateActPosition, editingActId, updateActPerformerPosition]
     );
 
     const onNodeClick = useCallback(
@@ -463,13 +522,18 @@ export default function CanvasArea() {
                 selectAct(node.id);
                 return;
             }
+            if (node.type === 'act-performer') {
+                const performerKey = node.id.replace(/^act-p-/, '')
+                selectActPerformer(performerKey)
+                return;
+            }
             if (editingTarget && !(editingTarget.type === 'performer' && editingTarget.id === node.id)) {
                 closeEditor();
             }
             selectPerformer(node.id);
             setActiveChatPerformer(node.id);
         },
-        [clearTransformTarget, closeEditor, editingTarget, selectMarkdownEditor, selectPerformer, setActiveChatPerformer, selectAct]
+        [clearTransformTarget, closeEditor, editingTarget, selectMarkdownEditor, selectPerformer, setActiveChatPerformer, selectAct, selectActPerformer]
     );
 
     const onPaneClick = useCallback(() => {
@@ -477,15 +541,24 @@ export default function CanvasArea() {
         closeEditor();
         selectPerformer(null);
         selectMarkdownEditor(null);
+        // In Act edit focus, deselect act performer
+        if (isActEditFocus) {
+            selectActPerformer(null);
+            return;
+        }
         // Close Act edit mode when clicking on empty canvas
         if (editingActId) {
             useStudioStore.getState().toggleActEdit(editingActId);
         }
-    }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, editingActId]);
+    }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, editingActId, isActEditFocus, selectActPerformer]);
 
-    const onConnect = useCallback((_connection: Connection) => {
-        // Stand-alone edges removed — edges are created inside Act edit mode
-    }, []);
+    const onConnect = useCallback((connection: Connection) => {
+        if (isActEditFocus && editingActId && connection.source && connection.target) {
+            const fromKey = connection.source.replace(/^act-p-/, '')
+            const toKey = connection.target.replace(/^act-p-/, '')
+            addRelationInAct(editingActId, fromKey, toKey)
+        }
+    }, [isActEditFocus, editingActId, addRelationInAct]);
 
     const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
         // Filter out 'select' changes — selection is driven externally by Zustand selectedPerformerId
@@ -520,11 +593,41 @@ export default function CanvasArea() {
         : null;
 
     return (
-        <div className={`canvas-area ${focusedPerformerId ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
+        <div className={`canvas-area ${(focusedPerformerId || isActEditFocus) ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
             <div className="canvas-top-right-bar">
                 <CustomControls />
                 <StageToolbar />
             </div>
+            {isActEditFocus && editingActId && (() => {
+                const currentAct = acts.find(a => a.id === editingActId);
+                const performerCount = currentAct ? Object.keys(currentAct.performers).length : 0;
+                return (
+                    <div className="act-edit-toolbar">
+                        <div className="act-edit-toolbar__left">
+                            <span className="act-edit-toolbar__icon">⚡</span>
+                            <span className="act-edit-toolbar__name">{currentAct?.name || 'Act'}</span>
+                            <span className="act-edit-toolbar__badge">{performerCount} performer{performerCount !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div className="act-edit-toolbar__right">
+                            <button
+                                className="act-edit-toolbar__btn"
+                                onClick={() => {
+                                    const name = `Performer ${performerCount + 1}`;
+                                    useStudioStore.getState().addNewPerformerInAct(editingActId, name);
+                                }}
+                            >
+                                + Add Performer
+                            </button>
+                            <button
+                                className="act-edit-toolbar__btn act-edit-toolbar__btn--exit"
+                                onClick={() => exitActEditFocus()}
+                            >
+                                Exit Edit
+                            </button>
+                        </div>
+                    </div>
+                );
+            })()}
             {canvasDropLabel && (
                 <div className={`canvas-drop-overlay ${isCanvasDropOver ? 'is-active' : ''}`}>
                     <div className="canvas-drop-overlay__card">
@@ -563,7 +666,7 @@ export default function CanvasArea() {
                 zoomOnScroll={!focusedPerformerId}
                 zoomOnPinch={!focusedPerformerId}
                 zoomOnDoubleClick={!focusedPerformerId}
-                nodesDraggable={!focusedPerformerId}
+                nodesDraggable={!focusedPerformerId || isActEditFocus}
             >
                 <Background color={focusedPerformerId ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>

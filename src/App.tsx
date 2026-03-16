@@ -35,6 +35,8 @@ export default function App() {
   const isTerminalOpen = useStudioStore(s => s.isTerminalOpen);
   const setTerminalOpen = useStudioStore(s => s.setTerminalOpen);
   const focusedPerformerId = useStudioStore(s => s.focusedPerformerId);
+  const focusSnapshot = useStudioStore(s => s.focusSnapshot);
+  const isAnyFocusActive = !!(focusedPerformerId || (focusSnapshot?.type === 'act'));
 
   const isInitialMount = useRef(true);
 
@@ -283,9 +285,9 @@ export default function App() {
           <ReactFlowProvider>
             <CanvasArea />
           </ReactFlowProvider>
-          {!focusedPerformerId && <AssistantChat />}
+          {!isAnyFocusActive && <AssistantChat />}
         </div>
-        {!focusedPerformerId && (
+        {!isAnyFocusActive && (
           <TerminalPanel
             isOpen={isTerminalOpen}
             onToggle={() => setTerminalOpen(!isTerminalOpen)}

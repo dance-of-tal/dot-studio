@@ -1,0 +1,104 @@
+/* ActPerformerFrame — Canvas card for Act-internal performers */
+
+.act-performer-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    position: relative;
+    user-select: none;
+}
+
+.act-performer-card:hover {
+    border-color: var(--border-strong);
+}
+
+.act-performer-card--selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Header */
+.act-performer-card__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.act-performer-card__icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.act-performer-card__name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.act-performer-card__actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.act-performer-card:hover .act-performer-card__actions {
+    opacity: 1;
+}
+
+/* Badges */
+.act-performer-card__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.act-performer-card__badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-inset);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.act-performer-card__badge--model {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+}
+
+.act-performer-card__badge--tal {
+    background: color-mix(in srgb, #22c55e 15%, transparent);
+    color: #22c55e;
+}
+
+.act-performer-card__badge--dance {
+    background: color-mix(in srgb, #eab308 15%, transparent);
+    color: #eab308;
+}
+
+.act-performer-card__badge--empty {
+    font-style: italic;
+    opacity: 0.5;
+}
+
+/* ReactFlow Handles */
+.act-performer-card__handle {
+    width: 8px !important;
+    height: 8px !important;
+    background: var(--border-strong) !important;
+    border: 2px solid var(--bg-surface) !important;
+    transition: background 0.15s;
+}
+
+.act-performer-card__handle:hover {
+    background: var(--accent) !important;
+}
