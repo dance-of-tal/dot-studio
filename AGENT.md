@@ -279,7 +279,7 @@ Validation is implemented in `src/components/modals/publish-modal-utils.tsx` (`g
 
 ## Act Architecture
 
-An Act defines a performer relation graph. Performers are connected by relations that represent interaction contracts. Runtime execution is delegated to OpenCode's native `task` tool and custom tool system. See PRD-001 for full details.
+An Act defines a performer relation graph. Relations (edges) are projected as Custom Tool → Hono BFF → OpenCode SDK for subagent execution. See PRD-001 §7 for full details.
 
 ### Act Entity
 
@@ -289,13 +289,13 @@ Act is a first-class canvas node:
 - Safe-mode owner (`ownerKind='act'`)
 - Thread owner
 - Canvas node with ⚡ icon, three states: collapsed (badges), chat mode, edit mode
-- Edit mode shows mini performer cards + SVG relation arrows in an expandable rectangle
-- Relations (formerly edges) live exclusively inside Act — no standalone performer-to-performer edges exist
+- Edit mode shows performer edit cards + relation arrows on React Flow canvas
+- Relations live exclusively inside Act — no standalone performer-to-performer edges exist
 - Schema v5: `performerLinks` removed from Stage, Act stores `relations` inline + `position/width/height`
 
 ### Performer Reference
 
-Act copies performer config at edge creation (not reference):
+Act copies performer config at addition (not reference):
 
 | Item | Owner | Notes |
 |------|-------|-------|
@@ -304,65 +304,80 @@ Act copies performer config at edge creation (not reference):
 | Workspace | Act | Act-scoped safe/direct; performer's own mode is ignored |
 | Provenance | metadata | `derivedFrom` records original performer id/urn (no runtime link) |
 
-### Interaction Primitives
+### Tal / Edge Role Separation
 
-v1 supported primitive:
+- **Tal** = performer가 무엇을 하는지 (정체성, 역할, 규칙) — standalone과 Act에서 재사용 가능
+- **Edge** = performer가 누구에게 무엇을 시킬 수 있는지 (delegation semantics) — Act-specific
+- Tal에 다른 performer에 대한 delegation 지시를 넣지 않는다
+- Edge의 `name`이 custom tool 이름, `description`이 tool description이 된다
 
-| Primitive | Behavior | OpenCode Mapping |
-|-----------|----------|------------------|
-| **request** | Ask for work, get result back, continue | `task` tool → child session → result return |
+### Edge Attribute Model
 
-Deferred primitives:
+Relations use an attribute-based model instead of fixed interaction types:
 
-- `handoff`
-- `notify`
-- `fan_out`
+```ts
+interface ActRelation {
+    id: string
+    from: string
+    to: string
+    name: string                          // custom tool name
+    description: string                   // tool description for LLM
+    invocation: 'optional' | 'required'   // prompt injection strength
+    await: boolean                        // wait for result
+    sessionPolicy: 'fresh' | 'reuse'     // subagent session management
+    maxCalls: number                      // max invocations (default 10)
+    timeout: number                       // seconds (default 300)
+}
+```
 
-These may remain schema/UI concepts, but v1 runtime/compiler should not implement them until OpenCode-native semantics are validated without reintroducing a Studio coordinator.
+### Relation Projection — Custom Tool + BFF
 
-### Relation Projection
+Act relations are projected as:
 
-Act relations are projected to OpenCode surfaces:
+1. Custom tool file — `.opencode/tools/dot_studio__<hash>__<name>.ts`
+2. Agent prompt section — relation semantics injected into agent `.md` body
+3. `permission.task` allowlist — callable targets constrained (defense in depth)
 
-1. Performer prompt body — relation semantics injected
-2. `permission.task` allowlist — callable targets constrained
-3. Optional generated custom tool — UX sugar only, must complete without Studio intercept
+Execution flow: LLM calls custom tool → tool fetches `POST /api/act/delegate` on Hono BFF → BFF uses OpenCode SDK (`session.create()` + `session.prompt()`) → subagent runs → result returned.
 
-Custom tools must not become a hidden Studio runtime bridge. They may improve discoverability or shorten repeated request calls, but execution authority remains with OpenCode task/subagent flow.
+BFF manages: session creation/reuse (`sessionPolicy`), call counting (`maxCalls`), timeout (`AbortController`), async fire-and-forget (`await: false`).
 
 ### Multi-Depth Chaining
 
 Subagent chaining (A→B→C) is supported:
 
-- When A sends a message, A's related performers (B) are projected with `requestTargets`.
-- Each related performer (B) also carries its own outgoing relations.
-- B's projection includes B→C in `permission.task` allowlist, enabling B to call C via `task`.
-- OpenCode's `task.ts` checks `hasTaskPermission` on the subagent's `permission` to decide whether to allow or deny the nested `task` tool.
-- Depth is bounded by graph structure (only explicitly related targets are allowed) and OpenCode's per-agent `steps` limit.
+- A's projection includes B as custom tool + `permission.task`
+- B's projection includes C as custom tool + `permission.task` (B's outgoing edge)
+- Each custom tool BFF call independently manages sessions
+- Depth bounded by graph structure + `maxCalls` + `agent.steps`
 
 ### Safety
 
 | Guard | Implementation |
 |-------|----------------|
-| Infinite loop | Per-performer `steps` limit (OpenCode agent setting) |
-| Total budget | Act-wide tool call count monitoring |
-| Error propagation | 런타임 자체 컨텍스트 반환 에러 활용 |
+| Loop prevention | Edge `maxCalls` (BFF enforced) |
+| Time limit | Edge `timeout` (BFF `AbortController`) |
+| Total budget | Performer `agent.steps` (OpenCode agent setting) |
+| Error propagation | BFF returns error string → LLM decides next action |
 
 ## Act Runtime Rules
 
 ### Execution
 
 - Act runtime is no longer an XState state machine.
-- Execution is driven by OpenCode's native agent→subagent (`task` tool) mechanism.
-- Studio compiles Act relations into projection (tools, permissions, prompt additions) before execution.
-- Studio does not intercept tool output or re-sequence execution at runtime.
+- Execution is driven by **Custom Tool → BFF → OpenCode SDK** mechanism.
+- Studio compiles Act relations into custom tool files + agent prompt sections + `permission.task` allowlists.
+- Custom tools call `POST /api/act/delegate` on the Hono BFF.
+- BFF uses OpenCode SDK (`session.create()` + `session.prompt()`) to execute subagents.
+- BFF manages session lifecycle: creation/reuse (`sessionPolicy`), call counting (`maxCalls`), timeout.
 
 ### Orchestrator Replacement
 
 The orchestrator node pattern (LLM selects next target via JSON) is replaced by:
 
-- `task` tool + `permission.task` for target selection
-- Write tools disabled, read tools enabled for routing decisions
+- Per-relation custom tools for named delegation (e.g., `request_code_review`)
+- `permission.task` for defense-in-depth target restriction
+- `invocation: required` for mandatory workflow steps (prompt injection)
 - Standard tool call interface instead of JSON response parsing
 
 ### Session Management
@@ -371,9 +386,10 @@ Act sessions are simplified from the previous 2D model (policy × lifetime):
 
 - No more fine-grained `fresh` / `node` / `performer` / `act` policy matrix
 - Standalone performer chat uses one standalone performer session model
-- Act keeps the act thread as owner and creates act-scoped performer sub-sessions
+- Act subagent sessions are managed by BFF `delegate-service.ts`:
+  - `sessionPolicy: 'fresh'` → new session per call
+  - `sessionPolicy: 'reuse'` → same session across multiple calls (context preserved)
 - Standalone performer chat sessions are not shared with Act
-- **Correction over v1**: Session config invalidation is technically unnecessary. OpenCode supports changing agents and models mid-session per-turn. Studio may choose to keep hash-based session invalidation for simplicity in Act, but it is not a requirement of the OpenCode engine.
 - Act execution mode (`direct`/`safe`) is set per-Act, not per-performer within Act.
 
 ### Payload Schema
