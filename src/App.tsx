@@ -18,6 +18,8 @@ import {
   getAssetAuthor,
   getAssetSlug,
   applyAssetToPerformerTarget,
+  parseActPerformerDropId,
+  applyAssetToActPerformer,
 } from './lib/dnd-handlers';
 import type { DragAsset, DropTargetData, PerformerAssetPayload } from './lib/dnd-handlers';
 
@@ -242,6 +244,23 @@ export default function App() {
       return;
     }
 
+    // Act performer drops — must check before standalone performer drops
+    if (dropData.performerId && over?.id) {
+      const actPerf = parseActPerformerDropId(String(over.id));
+      if (actPerf && store.editingActId) {
+        applyAssetToActPerformer(
+          store,
+          store.editingActId,
+          actPerf.performerKey,
+          dropData.type,
+          asset,
+          showDropWarning,
+        );
+        return;
+      }
+    }
+
+    // Standalone performer drops
     if (dropData.performerId) {
       await applyAssetToPerformerTarget(
         store,

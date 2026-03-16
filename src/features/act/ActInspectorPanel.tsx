@@ -7,12 +7,11 @@
  */
 import { useState, useMemo, useEffect } from 'react'
 import {
-    Settings, User, ArrowRightLeft, Cpu, Hexagon, Zap, X, Trash2,
+    Settings, User, ArrowRightLeft, Cpu, Hexagon, Zap, Trash2,
     Clock, Hash, Phone, PhoneForwarded, RefreshCw, RotateCcw,
 } from 'lucide-react'
 import { useStudioStore } from '../../store'
-import ModelQuickPicker from '../performer/ModelQuickPicker'
-import type { ModelConfig, ActRelation } from '../../types'
+import type { ActRelation } from '../../types'
 import './ActInspectorPanel.css'
 
 // ── Act Meta View ───────────────────────────────────────
@@ -96,17 +95,12 @@ function ActMetaView() {
     )
 }
 
-// ── Performer View ──────────────────────────────────────
+// ── Performer View (summary + edge nav) ─────────────────
 function PerformerView() {
     const {
         acts, editingActId, selectedActPerformerKey,
-        updateActPerformer, removePerformerFromAct,
         selectRelation, drafts,
     } = useStudioStore()
-
-    const [showModelPicker, setShowModelPicker] = useState(false)
-    const [editingName, setEditingName] = useState(false)
-    const [nameValue, setNameValue] = useState('')
 
     const act = useMemo(() => acts.find((a) => a.id === editingActId), [acts, editingActId])
     const performer = act && selectedActPerformerKey ? act.performers[selectedActPerformerKey] : null
@@ -122,122 +116,48 @@ function PerformerView() {
 
     const modelLabel = performer.model
         ? `${performer.model.provider}/${performer.model.modelId}`
-        : null
+        : 'No model'
     const talLabel = performer.talRef
         ? performer.talRef.kind === 'draft'
             ? drafts[performer.talRef.draftId]?.name || 'Draft Tal'
             : performer.talRef.urn.split('/').pop() || performer.talRef.urn
         : null
 
-    const handleNameSubmit = () => {
-        if (nameValue.trim() && nameValue !== performer.name) {
-            updateActPerformer(editingActId, selectedActPerformerKey, { name: nameValue.trim() })
-        }
-        setEditingName(false)
-    }
-
     const getPerformerName = (key: string) => act.performers[key]?.name || key
 
     return (
         <div className="act-panel__content">
-            {/* Header */}
+            {/* Performer summary */}
             <div className="act-panel__item-header">
                 <User size={14} className="act-panel__item-icon" />
-                {editingName ? (
-                    <input
-                        className="act-panel__inline-edit"
-                        value={nameValue}
-                        onChange={(e) => setNameValue(e.target.value)}
-                        onBlur={handleNameSubmit}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleNameSubmit()
-                            if (e.key === 'Escape') setEditingName(false)
-                        }}
-                        autoFocus
-                    />
-                ) : (
-                    <span
-                        className="act-panel__item-name"
-                        onClick={() => { setNameValue(performer.name); setEditingName(true) }}
-                        title="Click to rename"
-                    >
-                        {performer.name}
-                    </span>
-                )}
-                <button
-                    className="icon-btn act-panel__danger-btn"
-                    title="Remove from Act"
-                    onClick={() => removePerformerFromAct(editingActId, selectedActPerformerKey)}
-                >
-                    <Trash2 size={12} />
-                </button>
+                <span className="act-panel__item-name act-panel__item-name--edge">
+                    {performer.name}
+                </span>
             </div>
 
-            {/* Model */}
+            {/* Quick config badges */}
             <div className="act-panel__section">
-                <label className="act-panel__label"><Cpu size={11} /> Model</label>
-                <button
-                    className="act-panel__config-btn"
-                    onClick={() => setShowModelPicker(!showModelPicker)}
-                >
-                    {modelLabel || 'No model'}
-                </button>
-                <ModelQuickPicker
-                    open={showModelPicker}
-                    currentModel={performer.model}
-                    onSelect={(model: ModelConfig) => {
-                        updateActPerformer(editingActId, selectedActPerformerKey, { model })
-                        setShowModelPicker(false)
-                    }}
-                    onClose={() => setShowModelPicker(false)}
-                    title="Choose a performer model"
-                />
-            </div>
-
-            {/* Tal */}
-            <div className="act-panel__section">
-                <label className="act-panel__label"><Hexagon size={11} /> Tal</label>
-                <div className="act-panel__config-row">
-                    <span className="act-panel__config-value">{talLabel || 'No Tal'}</span>
-                    {performer.talRef && (
-                        <button className="icon-btn" title="Remove" onClick={() =>
-                            updateActPerformer(editingActId, selectedActPerformerKey, { talRef: null })}
-                        >
-                            <X size={10} />
-                        </button>
+                <div className="act-panel__stat-grid">
+                    <div className="act-panel__stat">
+                        <Cpu size={11} />
+                        <span>{modelLabel}</span>
+                    </div>
+                    {talLabel && (
+                        <div className="act-panel__stat">
+                            <Hexagon size={11} />
+                            <span>{talLabel}</span>
+                        </div>
+                    )}
+                    {performer.danceRefs.length > 0 && (
+                        <div className="act-panel__stat">
+                            <Zap size={11} />
+                            <span>{performer.danceRefs.length} dance{performer.danceRefs.length !== 1 ? 's' : ''}</span>
+                        </div>
                     )}
                 </div>
             </div>
 
-            {/* Dances */}
-            <div className="act-panel__section">
-                <label className="act-panel__label"><Zap size={11} /> Dances ({performer.danceRefs.length})</label>
-                {performer.danceRefs.length > 0 ? (
-                    <div className="act-panel__list">
-                        {performer.danceRefs.map((ref, i) => {
-                            const label = ref.kind === 'draft'
-                                ? drafts[ref.draftId]?.name || 'Draft'
-                                : ref.urn.split('/').pop() || ref.urn
-                            return (
-                                <div key={i} className="act-panel__list-item">
-                                    <span>{label}</span>
-                                    <button className="icon-btn" onClick={() => {
-                                        const newRefs = [...performer.danceRefs]
-                                        newRefs.splice(i, 1)
-                                        updateActPerformer(editingActId, selectedActPerformerKey, { danceRefs: newRefs })
-                                    }}>
-                                        <X size={10} />
-                                    </button>
-                                </div>
-                            )
-                        })}
-                    </div>
-                ) : (
-                    <span className="act-panel__empty">No dances attached</span>
-                )}
-            </div>
-
-            {/* Connected Edges */}
+            {/* Connected Edges — clickable to navigate */}
             <div className="act-panel__section">
                 <label className="act-panel__label"><ArrowRightLeft size={11} /> Edges ({relatedRelations.length})</label>
                 {relatedRelations.length > 0 ? (

@@ -141,3 +141,72 @@ export async function applyAssetToPerformerTarget(
 
     return false;
 }
+
+// ── Act Performer applicators ───────────────────────────
+
+/**
+ * Detect whether a drop target belongs to an Act performer.
+ * Act performer droppable IDs use the format `act-perf-{type}-act-p-{key}`.
+ */
+export function parseActPerformerDropId(dropId: string): { performerKey: string } | null {
+    const match = dropId.match(/^act-perf-\w+-act-p-(.+)$/)
+    return match ? { performerKey: match[1] } : null
+}
+
+/**
+ * Apply a asset drop to an Act performer (routes to updateActPerformer).
+ */
+export function applyAssetToActPerformer(
+    store: StudioState,
+    actId: string,
+    performerKey: string,
+    dropType: string | undefined,
+    asset: DragAsset,
+    showDropWarning: (message: string) => void,
+): boolean {
+    if (dropType === 'tal' && asset.kind === 'tal') {
+        const ref = assetRefFromDragAsset(asset)
+        if (ref) {
+            store.updateActPerformer(actId, performerKey, { talRef: ref })
+        }
+        return true
+    }
+
+    if (dropType === 'dance' && asset.kind === 'dance') {
+        const ref = assetRefFromDragAsset(asset)
+        if (ref) {
+            // Append to existing danceRefs
+            const act = store.acts.find((a) => a.id === actId)
+            const performer = act?.performers[performerKey]
+            if (performer) {
+                store.updateActPerformer(actId, performerKey, {
+                    danceRefs: [...performer.danceRefs, ref],
+                })
+            }
+        }
+        return true
+    }
+
+    if (dropType === 'model' && asset.kind === 'model') {
+        store.updateActPerformer(actId, performerKey, {
+            model: { provider: asset.provider as string, modelId: asset.modelId as string },
+        })
+        if (asset.connected === false) {
+            showDropWarning(`${asset.providerName || asset.provider} is not connected yet.`)
+        }
+        return true
+    }
+
+    if (dropType === 'mcp' && asset.kind === 'mcp') {
+        const act = store.acts.find((a) => a.id === actId)
+        const performer = act?.performers[performerKey]
+        if (performer && asset.name) {
+            store.updateActPerformer(actId, performerKey, {
+                mcpServerNames: [...new Set([...performer.mcpServerNames, asset.name])],
+            })
+        }
+        return true
+    }
+
+    return false
+}
