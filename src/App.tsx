@@ -199,23 +199,22 @@ export default function App() {
         return false;
       }
 
-      const isActEditFocus = !!(store.focusSnapshot?.type === 'act' && store.editingActId);
+      const targetActId = store.layoutActId;
 
-      // Act edit mode: dropping performer onto canvas adds new Act performer
-      if (isActEditFocus && store.editingActId) {
+      // Layout mode: dropping performer onto canvas adds new act participant
+      if (targetActId && asset.kind === 'performer') {
         if (asset.kind === 'performer') {
-          // In choreography model, bind performer ref to act
           const ref = asset.source === 'draft' && asset.draftId
             ? { kind: 'draft' as const, draftId: asset.draftId as string }
             : asset.urn
               ? { kind: 'registry' as const, urn: asset.urn }
               : null;
           if (ref) {
-            store.bindPerformerToAct(store.editingActId, ref);
+            store.attachPerformerRefToAct(targetActId, ref);
           }
           return true;
         }
-        // Don't handle other drops on canvas root in act-edit mode
+        // Don't handle other drops on canvas root while targeting an act layout
         return false;
       }
 
@@ -267,6 +266,26 @@ export default function App() {
       return true;
     };
 
+    const handleActRootDrop = async () => {
+      if (dropData.type !== 'act-root' || !dropData.actId) {
+        return false;
+      }
+      if (asset.kind !== 'performer') {
+        return false;
+      }
+
+      const ref = asset.source === 'draft' && asset.draftId
+        ? { kind: 'draft' as const, draftId: asset.draftId as string }
+        : asset.urn
+          ? { kind: 'registry' as const, urn: asset.urn }
+          : null;
+
+      if (ref) {
+        store.attachPerformerRefToAct(dropData.actId, ref);
+      }
+      return true;
+    };
+
 
     if (await handleCanvasRootDrop()) {
       return;
@@ -276,13 +295,18 @@ export default function App() {
       return;
     }
 
-    // Act performer drops — must check before standalone performer drops
+    if (await handleActRootDrop()) {
+      return;
+    }
+
+    // Act participant drops — prefer the current act target when available
     if (dropData.performerId && over?.id) {
       const actPerf = parseActPerformerDropId(String(over.id));
-      if (actPerf && store.editingActId) {
+      const targetActId = store.layoutActId || store.selectedActId;
+      if (actPerf && targetActId) {
         applyAssetToActPerformer(
           store,
-          store.editingActId,
+          targetActId,
           actPerf.performerKey,
           dropData.type,
           asset,

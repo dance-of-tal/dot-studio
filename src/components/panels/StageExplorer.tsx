@@ -18,6 +18,7 @@ import {
     User,
     X,
     Workflow,
+    Activity,
 } from 'lucide-react';
 import './StageExplorer.css';
 import {
@@ -30,6 +31,7 @@ import {
     SessionRowActions,
 } from './stage-explorer-utils';
 import type { ExplorerRenamingSession } from './stage-explorer-utils';
+import { resolveActParticipantLabel } from '../../features/act/participant-labels';
 
 
 export default function StageExplorer() {
@@ -91,11 +93,14 @@ export default function StageExplorer() {
     const selectedActId = useStudioStore((s) => s.selectedActId);
     const selectAct = useStudioStore((s) => s.selectAct);
     const removeAct = useStudioStore((s) => s.removeAct);
-    const enterActEditFocus = useStudioStore((s) => s.enterActEditFocus);
+    const enterActLayoutMode = useStudioStore((s) => s.enterActLayoutMode);
     const toggleActVisibility = useStudioStore((s) => s.toggleActVisibility);
     const actThreads = useStudioStore((s) => s.actThreads);
     const activeThreadId = useStudioStore((s) => s.activeThreadId);
+    const activeThreadPerformerKey = useStudioStore((s) => s.activeThreadPerformerKey);
     const createThread = useStudioStore((s) => s.createThread);
+    const selectThread = useStudioStore((s) => s.selectThread);
+    const selectThreadPerformer = useStudioStore((s) => s.selectThreadPerformer);
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -526,8 +531,8 @@ export default function StageExplorer() {
                                         </button>
                                         <button
                                             className="icon-btn"
-                                            onClick={() => enterActEditFocus(act.id)}
-                                            title="Edit Act"
+                                            onClick={() => enterActLayoutMode(act.id)}
+                                            title="Advanced Layout"
                                         >
                                             <Pencil size={11} />
                                         </button>
@@ -576,7 +581,7 @@ export default function StageExplorer() {
                                                         tabIndex={0}
                                                         className={`layer-row ${isThreadActive ? 'active' : ''}`}
                                                         onClick={() => {
-                                                            useStudioStore.setState({ activeThreadId: thread.id });
+                                                            selectThread(thread.id);
                                                             selectAct(act.id);
                                                         }}
                                                     >
@@ -608,19 +613,27 @@ export default function StageExplorer() {
                                                             </span>
                                                         </span>
                                                     </div>
-                                                    {threadExpanded && boundPerformerKeys.length > 0 && (
+                                                    {threadExpanded && (
                                                         <div className="thread-children">
-                                                            {boundPerformerKeys.map((pKey) => (
+                                                            <LayerRow
+                                                                icon={<Activity size={10} />}
+                                                                label="Callboard / Activity"
+                                                                active={isThreadActive && !activeThreadPerformerKey}
+                                                                onClick={() => {
+                                                                    selectThread(thread.id);
+                                                                    selectThreadPerformer(null);
+                                                                    selectAct(act.id);
+                                                                }}
+                                                            />
+                                                            {boundPerformerKeys.length > 0 && boundPerformerKeys.map((pKey) => (
                                                                 <LayerRow
                                                                     key={pKey}
                                                                     icon={<User size={10} />}
-                                                                    label={pKey}
-                                                                    active={isThreadActive && (useStudioStore.getState() as any).activeThreadPerformerKey === pKey}
+                                                                    label={resolveActParticipantLabel(act, pKey, performers)}
+                                                                    active={isThreadActive && activeThreadPerformerKey === pKey}
                                                                     onClick={() => {
-                                                                        useStudioStore.setState({
-                                                                            activeThreadId: thread.id,
-                                                                            activeThreadPerformerKey: pKey,
-                                                                        } as any);
+                                                                        selectThread(thread.id);
+                                                                        selectThreadPerformer(pKey);
                                                                         selectAct(act.id);
                                                                     }}
                                                                 />

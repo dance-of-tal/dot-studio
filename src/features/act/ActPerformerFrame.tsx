@@ -1,8 +1,8 @@
 /**
- * ActPerformerFrame — Canvas node for a performer binding in Act edit focus mode.
+ * ActPerformerFrame — Canvas node for a participant binding in Act layout mode.
  *
- * Choreography model: shows performer key, ref source, subscriptions summary,
- * and active dance count. Clicking selects the performer for inspector editing.
+ * Choreography model: shows participant key, ref source, subscriptions summary,
+ * and active dance count. Clicking selects the participant for inspector editing.
  */
 import { useMemo, useCallback } from 'react'
 import { Handle, Position } from '@xyflow/react'
@@ -10,6 +10,7 @@ import { Trash2, Hexagon, Mail, BookOpen } from 'lucide-react'
 
 import { useStudioStore } from '../../store'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
+import { resolveActParticipantLabel } from './participant-labels'
 
 import './ActPerformerFrame.css'
 
@@ -19,28 +20,30 @@ export const ACT_PERFORMER_HEIGHT = 200
 export default function ActPerformerFrame({ id }: any) {
     const {
         acts,
-        editingActId,
-        selectedActPerformerKey,
+        layoutActId,
+        selectedActParticipantKey,
         unbindPerformerFromAct,
-        selectActPerformer,
+        selectActParticipant,
     } = useStudioStore()
 
     const performerKey = id.replace(/^act-p-/, '')
-    const act = useMemo(() => acts.find((a) => a.id === editingActId), [acts, editingActId])
+    const act = useMemo(() => acts.find((a) => a.id === layoutActId), [acts, layoutActId])
     const binding = act ? act.performers[performerKey] : null
 
-    const isSelected = selectedActPerformerKey === performerKey
+    const isSelected = selectedActParticipantKey === performerKey
 
     const handleRemove = useCallback(() => {
-        if (!editingActId) return
-        unbindPerformerFromAct(editingActId, performerKey)
-    }, [editingActId, performerKey, unbindPerformerFromAct])
+        if (!layoutActId) return
+        unbindPerformerFromAct(layoutActId, performerKey)
+    }, [layoutActId, performerKey, unbindPerformerFromAct])
 
     const handleSelect = useCallback(() => {
-        selectActPerformer(performerKey)
-    }, [performerKey, selectActPerformer])
+        selectActParticipant(performerKey)
+    }, [performerKey, selectActParticipant])
 
-    if (!act || !binding || !editingActId) return null
+    if (!act || !binding || !layoutActId) return null
+
+    const participantLabel = resolveActParticipantLabel(act, performerKey, useStudioStore.getState().performers)
 
     // Display performer ref info
     const refLabel = binding.performerRef.kind === 'registry'
@@ -49,7 +52,8 @@ export default function ActPerformerFrame({ id }: any) {
 
     // Subscriptions summary
     const subs = binding.subscriptions || {}
-    const subCount = (subs.messagesFrom?.length || 0) + (subs.messageTags?.length || 0) + (subs.boardKeys?.length || 0)
+    const callboardKeys = subs.callboardKeys || subs.boardKeys || []
+    const subCount = (subs.messagesFrom?.length || 0) + (subs.messageTags?.length || 0) + callboardKeys.length
 
     return (
         <div className="act-performer-node" onClick={handleSelect}>
@@ -62,7 +66,7 @@ export default function ActPerformerFrame({ id }: any) {
                 selected={isSelected}
                 minWidth={300}
                 minHeight={120}
-                headerStart={<span className="canvas-frame__name">{performerKey}</span>}
+                headerStart={<span className="canvas-frame__name">{participantLabel}</span>}
                 headerEnd={(
                     <div className="canvas-frame__header-actions">
                         <button
@@ -101,15 +105,15 @@ export default function ActPerformerFrame({ id }: any) {
                                 {(subs.messageTags || []).map((v) => (
                                     <span key={`tag-${v}`} className="act-performer-body__tag act-performer-body__tag--tag">#{v}</span>
                                 ))}
-                                {(subs.boardKeys || []).map((v) => (
-                                    <span key={`board-${v}`} className="act-performer-body__tag act-performer-body__tag--board">{v}</span>
+                                {callboardKeys.map((v) => (
+                                    <span key={`board-${v}`} className="act-performer-body__tag act-performer-body__tag--board">callboard: {v}</span>
                                 ))}
                             </div>
                         </div>
                     ) : (
                         <div className="act-performer-body__hint">
                             <Mail size={11} />
-                            <span>No subscriptions — click to configure</span>
+                            <span>No subscriptions — click to configure this participant</span>
                         </div>
                     )}
                 </div>

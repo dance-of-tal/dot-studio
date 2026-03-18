@@ -518,7 +518,12 @@ export const createWorkspaceSlice: StateCreator<
             stageDirty: true,
             acts: [],
             selectedActId: null,
-            editingActId: null,
+            layoutActId: null,
+            selectedActParticipantKey: null,
+            selectedRelationId: null,
+            actThreads: {},
+            activeThreadId: null,
+            activeThreadPerformerKey: null,
         }))
         get().initRealtimeEvents()
         api.studio.activate(normalized).catch(err => console.warn('[studio] activate failed', err))
@@ -553,7 +558,12 @@ export const createWorkspaceSlice: StateCreator<
                 isTrackingOpen: false,
                 acts: [],
                 selectedActId: null,
-                editingActId: null,
+                layoutActId: null,
+                selectedActParticipantKey: null,
+                selectedRelationId: null,
+                actThreads: {},
+                activeThreadId: null,
+                activeThreadPerformerKey: null,
             })
             api.studio.updateConfig({ lastStage: undefined }).catch(err => console.warn('[studio] clear lastStage failed', err))
         }

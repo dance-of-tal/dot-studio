@@ -1,191 +1,185 @@
 # Phase 4 — UI Components (Frontend)
 
-> Act 관련 UI 컴포넌트를 choreography 모델에 맞게 전면 재작성한다.
+> Revised plan.
+> dedicated `Act Edit` canvas mode를 걷어내고,
+> main canvas authoring + callboard projection + left-sidebar runtime navigation으로 UI를 재구성한다.
 > PRD §7, §17 범위.
+
+이 phase는 incremental cleanup이 아니라 **full rewrite** 기준으로 진행한다.
 
 ---
 
 ## 목표
 
-- Act Canvas: communication relation 시각화 (`↔` / `→`), performer 클릭 시 직접 대화
-- Act Chat: Thread 기반 performer별 대화 패널
-- Act Inspector: relation (communication contract), subscriptions 편집
-- Sidebar: Act → Thread → Performer 3단 계층 네비게이션
-- Activity View: mailbox event 실시간 표시
+- 메인 캔버스에서 performer 연결만으로 Act를 authoring
+- Act/participant/relation selection 기반 inspector
+- Thread 기반 participant chat과 callboard/activity view를 명확히 분리
+- 좌측 메뉴에서 definition과 runtime 경계를 직관적으로 표현
 
 ---
 
-## 삭제 대상
+## 현재 코드 기준 문제
 
-### `src/features/act/` — 전체 재작성
+### 1. ActFrame 이 여전히 edit-mode 진입을 중심으로 설계됨
 
-| 파일 | 삭제 사유 |
-|------|----------|
-| `ActFrame.tsx` / `.css` | orchestration 기반 (entry performer, execution mode 표시) |
-| `ActChatPanel.tsx` / `.css` | entry performer 기반 단일 채팅 → Thread 내 performer별 채팅으로 교체 |
-| `ActInspectorPanel.tsx` / `.css` | from/to 단방향 relation 편집 → between 양방향 contract 편집으로 교체 |
-| `ActPerformerFrame.tsx` / `.css` | copy 기반 performer 표시 → ref binding 기반으로 교체 |
+- `src/features/act/ActFrame.tsx`
+- `src/components/canvas/CanvasArea.tsx`
+
+현재는 Edit 버튼이 별도 focus canvas로 들어가는 전제다.
+새 UX에서는 selection과 main canvas 조작이 중심이 되어야 한다.
+
+### 2. Empty state 와 버튼 문구가 edit mode 를 전제함
+
+- `src/features/act/ActChatPanel.tsx`
+- `src/components/panels/StageExplorer.tsx`
+
+현재 문구는 "Edit Act"로 performer binding을 유도한다.
+새 방향에서는 캔버스 연결과 sidebar navigation을 유도해야 한다.
+
+### 3. Sidebar 에서 participant 와 definition 의 의미가 아직 약함
+
+- `src/components/panels/StageExplorer.tsx`
+
+트리는 있으나, `Act row`, `Thread row`, `Participant row`, `Inbox row`의 의미 구분이 더 필요하다.
 
 ---
 
-## 새로 작성할 컴포넌트
+## 제거 또는 재설계 대상
 
-### `src/features/act/ActFrame.tsx` [REWRITE]
+### `src/features/act/ActFrame.tsx`
 
-Act canvas node:
+재설계 포인트:
 
-- Act 이름, 설명 표시
-- 내부 performer nodes (ref binding 기반, 이름 + 아이콘)
-- Relation edges: `↔` (both) 또는 `→` (one-way) 시각적 구분
-- Act click → edit focus mode 진입
-- Performer node click → Thread 내 해당 performer 대화로 이동
+- Edit 버튼 제거
+- Act 선택과 Thread runtime 진입을 분리
+- selection 상태에 따라 chat/activity를 전환
 
-### `src/features/act/ActChatPanel.tsx` [REWRITE]
+### `src/components/canvas/CanvasArea.tsx`
 
-Thread 기반 performer별 채팅:
+재설계 포인트:
 
-```
-┌────────────────────────────────┐
-│ Thread 1                       │
-│ ┌────┬────────┬────────┐      │
-│ │Code│Reviewer│Tester  │ ← tab│
-│ └────┴────────┴────────┘      │
-│                                │
-│ [채팅 메시지 영역]              │
-│                                │
-│ ─── wake-up prompt ─────────── │  ← 시각적 구분: 다른 performer의
-│                                │    wake-up vs user input
-│ [입력창]                        │
-└────────────────────────────────┘
+- `isActEditFocus` 의존 로직 제거
+- main canvas connect 로직이 Act 생성/확장 로직을 직접 호출
+- act-specific toolbar 제거
+
+### `src/features/act/ActInspectorPanel.tsx`
+
+재설계 포인트:
+
+- `editingActId` 기반이 아니라 `selectedActId` + selection target 기반
+- Act / Participant / Relation selection만으로 열림
+
+---
+
+## 새 UI 방향
+
+### `src/components/canvas/CanvasArea.tsx` [REWORK]
+
+main canvas authoring:
+
+- shared performer 두 개를 처음 연결하면 새 Act 생성
+- 이미 같은 Act에 속한 performer를 연결하면 relation 추가
+- Act를 선택하면 cluster 또는 frame이 활성화됨
+- relation 클릭 시 inspector에서 contract 편집
+- cross-act connection은 자동 merge하지 않고 explicit action으로 남김
+
+### `src/features/act/ActFrame.tsx` [REWORK]
+
+Act frame / cluster view:
+
+- Act 이름, summary, 현재 thread indicator 표시
+- Activity 탭과 Chat 탭 제공 가능
+- edit-mode 진입 버튼 제거
+- participant 또는 activity 선택은 sidebar와 동기화
+
+### `src/features/act/ActChatPanel.tsx` [REWORK]
+
+Thread participant chat:
+
+```text
+Act: Product Launch
+Thread: #2
+
+[Callboard] [Activity] [Strategist] [Operator]
+
+- Callboard: shared entries + pinned context
+- Activity: runtime projection
+- Participant tab: 해당 thread participant session
 ```
 
 핵심 UX:
 
-- Thread 내 performer 탭으로 전환
-- User input은 일반 OpenCode session prompt (mailbox 바깥)
-- Wake-up prompt는 시각적으로 구분 (다른 색상/아이콘)
-- `+ New Thread` 버튼
+- participant tab은 항상 thread-scoped session을 연다
+- wake-up prompt는 user input과 시각적으로 구분한다
+- thread가 없으면 "New Thread" CTA를 보여준다
 
-### `src/features/act/ActInspectorPanel.tsx` [REWRITE]
+### `src/features/act/ActInspectorPanel.tsx` [REWORK]
 
-Act 정의 편집 패널:
+selection 기반 inspector:
 
-**Act 레벨:**
-- 이름, 설명
-- Act Rules (문자열 목록)
+- Act selection: 이름, 설명, rules
+- Participant selection: active dances, subscriptions
+- Relation selection: direction, permissions, timeout, session policy
 
-**Performer Binding 편집:**
-- performer ref 선택 (기존 standalone performer 또는 registry)
-- Active dances 선택
-- Subscriptions 편집:
-  - messagesFrom (performer 목록)
-  - messageTags (태그 목록)
-  - boardKeys (키 패턴 목록)
-  - eventTypes (이벤트 타입 목록)
+### `src/features/act/ActActivityView.tsx` [KEEP/EXPAND]
 
-**Relation 편집:**
-- `between`: performer pair 선택
-- `direction`: both / one-way 토글
-- `name`, `description`
-- Permissions:
-  - boardKeys (반응 가능 board key 범위)
-  - messageTags (허용 message tag 범위)
-- `maxCalls`, `timeout`
-- `sessionPolicy`: fresh / reuse
+표시 대상:
 
-### `src/features/act/ActPerformerFrame.tsx` [REWRITE]
+- callboard event timeline
+- board artifacts
+- current active performer
+- unread / recent activity summary
 
-Act 내부 performer node (canvas):
-
-- Performer 이름 (ref에서 resolve)
-- 아이콘 (연결 상태)
-- Active dances 표시
-- Subscription 인디케이터 (어떤 관심사가 있는지 요약)
-- Click → 해당 performer와 대화 (Thread context)
-
-### `src/features/act/ActActivityView.tsx` [NEW]
-
-PRD §17.2 Activity / Artifact View:
-
-- performer 간 협업 흐름 타임라인
-- 주요 board 산출물 목록
-- 현재 active performer 표시
-- 최근 이벤트 요약
-- Event log SSE로 실시간 업데이트
-
-```
-┌─────────────────────────────────────┐
-│ Activity                             │
-│                                      │
-│ ● Coder → post_to_board("api-spec") │
-│ ○ Reviewer ← wake-up (board.posted) │
-│ ● Reviewer → send_message(tag=review)│
-│ ○ Coder ← wake-up (message.sent)    │
-│                                      │
-│ ── Board ────────────────────────── │
-│ api-spec: REST API 초안 (v2)         │
-│ review-report: 리뷰 결과 (v1)        │
-└─────────────────────────────────────┘
-```
-
-### `src/features/act/ActThreadSelector.tsx` [NEW]
-
-Thread 목록 및 선택:
-
-- 현재 Act의 Thread 목록 (status 표시)
-- Active Thread 선택
-- `+ New Thread` 생성 버튼
+Activity 는 thread 아래에 속해야 하며, act definition만 있을 때는 표시되지 않는다.
 
 ---
 
 ## Sidebar 변경
 
-### 기존 Sidebar Act 영역 수정
+목표 구조:
 
-```
-현재:
-  Acts
-  └── 웹앱 개발 → (click: focus mode)
+```text
+Performers
+- Reviewer
+- Coder
 
-변경:
-  Acts
-  ├── 웹앱 개발
-  │   ├── Thread 1 (active)
-  │   │   ├── Coder ← (click: 대화)
-  │   │   ├── Reviewer
-  │   │   └── Tester
-  │   ├── Thread 2 (idle)
-  │   └── + New Thread
-  └── 데이터 파이프라인
-      └── Thread 1
+Acts
+- Web App Build
+  - Thread 1
+    - Inbox / Activity
+    - Reviewer @ T1
+    - Coder @ T1
+  - Thread 2
+    - Inbox / Activity
+    - Reviewer @ T2
 ```
+
+클릭 의미:
+
+- `Performers > Reviewer` → standalone definition / standalone sessions
+- `Acts > Web App Build` → act definition selection
+- `Thread 1` → activity 기본 보기
+- `Reviewer @ T1` → thread participant session
 
 ---
 
-## Canvas Edge 변경
+## Canvas Relation 시각화
 
-### Relation 시각화
-
-| 기존 | 변경 |
+| 의미 | 표현 |
 |------|------|
-| `from → to` 단방향 화살표 | `↔` 양방향 선 (direction: both) |
-| 실행 호출 의미 | communication contract 의미 |
-| invocation/await 속성 표시 | permissions (boardKeys, messageTags) 표시 |
+| `direction: both` | `↔`, 실선 |
+| `direction: one-way` | `→`, 점선 또는 단일 arrow |
 
-Edge 스타일:
-
-- `both`: 양쪽 끝에 원형/화살표, 실선
-- `one-way`: 한쪽 끝 화살표, 점선
+relation 은 실행 순서가 아니라 communication contract 임을 UI가 드러내야 한다.
 
 ---
 
 ## 검증 기준
 
-- [ ] Act Canvas에서 `↔` / `→` relation 올바르게 표시
-- [ ] Thread 생성 → performer 탭 전환 → 각 performer와 독립 대화 가능
-- [ ] Wake-up prompt가 user input과 시각적으로 구분
-- [ ] Inspector에서 relation (between, direction, permissions) 편집 가능
-- [ ] Inspector에서 subscription (messagesFrom, boardKeys 등) 편집 가능
-- [ ] Activity View에서 event log 실시간 표시
-- [ ] Sidebar 3단 계층 (Act → Thread → Performer) 네비게이션 동작
+- [ ] 메인 캔버스 연결만으로 새 Act authoring 이 가능하다
+- [ ] dedicated edit mode 없이 Act/Participant/Relation 편집이 가능하다
+- [ ] Thread 생성 후 participant chat이 thread-scoped session을 연다
+- [ ] Activity view가 thread 아래에서만 보인다
+- [ ] Sidebar 가 definition/runtime 경계를 명확히 보여준다
+- [ ] Wake-up prompt와 user input이 구분되어 보인다
 - [ ] `npm run build` 성공

@@ -33,6 +33,7 @@ export type DragAsset = Omit<Partial<AssetCard>, 'kind'> & {
 export type DropTargetData = {
     type?: string;
     performerId?: string | null;
+    actId?: string | null;
     editorId?: string;
 };
 
@@ -172,7 +173,7 @@ export function applyAssetToActPerformer(
         // In choreography model, bind performer ref to act
         const ref = assetRefFromDragAsset(asset)
         if (ref) {
-            store.bindPerformerToAct(actId, ref)
+            store.attachPerformerRefToAct(actId, ref)
         }
         return true
     }

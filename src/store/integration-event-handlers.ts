@@ -396,6 +396,8 @@ export function handleSessionStatus(
     const statusType = data.properties?.status?.type
     if (statusType === 'busy' && target.kind === 'performer') {
         set({ loadingPerformerId: target.performerId })
+    } else if (statusType === 'busy' && target.kind === 'act-participant') {
+        set({ loadingPerformerId: target.chatKey })
     } else if (statusType === 'retry') {
         applyTargetMessageUpdate(set, target, (messages) => {
             const retryMsgId = `retry-${sessionId}`
@@ -434,7 +436,10 @@ export function handleSessionIdle(
         return
     }
     const { sessionId, target } = context
-    if (target.kind === 'performer' && get().loadingPerformerId === target.performerId) {
+    if (
+        (target.kind === 'performer' && get().loadingPerformerId === target.performerId)
+        || (target.kind === 'act-participant' && get().loadingPerformerId === target.chatKey)
+    ) {
         set({ loadingPerformerId: null })
     }
     void syncSessionMessages(target, sessionId)
@@ -473,7 +478,10 @@ export function handleSessionError(
 
     clearStreamingSession(sessionId)
 
-    if (target.kind === 'performer' && get().loadingPerformerId === target.performerId) {
+    if (
+        (target.kind === 'performer' && get().loadingPerformerId === target.performerId)
+        || (target.kind === 'act-participant' && get().loadingPerformerId === target.chatKey)
+    ) {
         set({ loadingPerformerId: null })
     }
 
@@ -514,7 +522,8 @@ export function handlePermissionAsked(
             ...state.pendingPermissions,
             [request.sessionID]: request,
         },
-        ...(target.kind === 'performer' && state.loadingPerformerId === target.performerId
+        ...((target.kind === 'performer' && state.loadingPerformerId === target.performerId)
+            || (target.kind === 'act-participant' && state.loadingPerformerId === target.chatKey)
             ? { loadingPerformerId: null }
             : {}),
     }))
@@ -564,7 +573,8 @@ export function handleQuestionAsked(
             ...state.pendingQuestions,
             [request.sessionID]: request,
         },
-        ...(target.kind === 'performer' && state.loadingPerformerId === target.performerId
+        ...((target.kind === 'performer' && state.loadingPerformerId === target.performerId)
+            || (target.kind === 'act-participant' && state.loadingPerformerId === target.chatKey)
             ? { loadingPerformerId: null }
             : {}),
     }))

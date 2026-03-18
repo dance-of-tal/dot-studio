@@ -74,6 +74,11 @@ export async function newStage(get: GetFn, set: SetFn) {
                 trackingWindow: null,
                 isTrackingOpen: false,
                 stageDirty: true,
+                selectedActParticipantKey: null,
+                selectedRelationId: null,
+                actThreads: {},
+                activeThreadId: null,
+                activeThreadPerformerKey: null,
             })
             get().initRealtimeEvents()
             get().loadDraftsFromDisk()
@@ -140,13 +145,49 @@ export async function saveStage(get: GetFn, set: SetFn) {
 function parseActs(data: any): any[] {
     if (!Array.isArray(data.acts)) return []
 
-    return data.acts.map((act: any, index: number) => ({
-        ...act,
-        relations: Array.isArray(act.relations) ? act.relations : [],
-        position: act.position || { x: 200, y: 200 + index * 120 },
-        width: act.width || 340,
-        height: act.height || 80,
-    }))
+    const normalizeSubscriptions = (subscriptions: any) => {
+        if (!subscriptions) return subscriptions
+        const callboardKeys = subscriptions.callboardKeys || subscriptions.boardKeys
+        return {
+            ...subscriptions,
+            ...(callboardKeys ? { callboardKeys, boardKeys: callboardKeys } : {}),
+        }
+    }
+
+    const normalizePermissions = (permissions: any) => {
+        if (!permissions) return permissions
+        const callboardKeys = permissions.callboardKeys || permissions.boardKeys
+        return {
+            ...permissions,
+            ...(callboardKeys ? { callboardKeys, boardKeys: callboardKeys } : {}),
+        }
+    }
+
+    return data.acts.map((act: any, index: number) => {
+        const performers = typeof act.performers === 'object' && act.performers
+            ? Object.fromEntries(
+                Object.entries(act.performers).map(([key, binding]: [string, any], performerIndex) => [key, {
+                    ...binding,
+                    subscriptions: normalizeSubscriptions(binding?.subscriptions),
+                    position: binding?.position || { x: performerIndex * 300, y: 100 },
+                }]),
+            )
+            : {}
+
+        return {
+            ...act,
+            performers,
+            relations: Array.isArray(act.relations)
+                ? act.relations.map((relation: any) => ({
+                    ...relation,
+                    permissions: normalizePermissions(relation?.permissions),
+                }))
+                : [],
+            position: act.position || { x: 200, y: 200 + index * 120 },
+            width: act.width || 340,
+            height: act.height || 80,
+        }
+    })
 }
 
 // ────────────────────────────────────────
@@ -215,7 +256,9 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             drafts: {},
             acts: parseActs(data),
             selectedActId: null,
-            editingActId: null,
+            layoutActId: null,
+            selectedActParticipantKey: null,
+            selectedRelationId: null,
             markdownEditors: loadedMarkdownEditors,
             editingTarget: null,
             selectedPerformerId: null,
@@ -254,6 +297,9 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             lspDiagnostics: {},
             stageDirty: false,
             workingDir,
+            actThreads: {},
+            activeThreadId: null,
+            activeThreadPerformerKey: null,
         })
         get().initRealtimeEvents()
 

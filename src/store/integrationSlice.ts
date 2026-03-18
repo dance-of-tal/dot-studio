@@ -203,7 +203,7 @@ export const createIntegrationSlice: StateCreator<
                 return '// Prompt preview unavailable.'
             }
             try {
-                // Standalone performers pass empty relatedPerformers (Act uses mailbox tools instead)
+                // Standalone performers pass empty relatedPerformers (Act uses callboard tools instead)
                 const relatedPerformers: Array<{ performerId: string; performerName: string; description: string }> = []
                 const res = await api.compile(
                     performer.id,

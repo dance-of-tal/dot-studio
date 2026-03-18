@@ -78,6 +78,10 @@ If new behavior starts making route modules act like application services, extra
 
 ## Core Model
 
+Act 관련 세부 모델 중 copy-based orchestration 설명은 legacy다.
+Act feature는 `PRD-003` 기준으로 ref-first choreography + rewrite-first 방향으로 정리한다.
+매크로 스택은 유지하지만, Act domain 내부 구현은 레거시 보존보다 새 모델 정합성을 우선한다.
+
 - One stage exists per `workingDir`.
 - Runtime is ref-first:
 

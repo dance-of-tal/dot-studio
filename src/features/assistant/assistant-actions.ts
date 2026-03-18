@@ -18,18 +18,24 @@ export function handleAssistantToolCall(_callId: string, name: string, args: Rec
             }
             case 'assistant_add_performer_to_act': {
                 // In the choreography model, we bind a performer ref to an act
-                const performer = store.performers.find((p: any) => p.id === args.performerId)
-                if (performer) {
-                    const ref = performer.meta?.derivedFrom
-                        ? { kind: 'registry' as const, urn: performer.meta.derivedFrom }
-                        : { kind: 'draft' as const, draftId: args.performerId }
-                    store.bindPerformerToAct(args.actId, ref)
-                }
+                store.attachPerformerToAct(args.actId, args.performerId)
                 return { success: true, action: 'addPerformerToAct' }
             }
             case 'assistant_connect_performers': {
-                store.addRelation(args.actId, [args.sourcePerformerId, args.targetPerformerId], 'both')
-                return { success: true, action: 'connectPerformers' }
+                if (args.actId) {
+                    const sourceKey = store.attachPerformerToAct(args.actId, args.sourcePerformerId)
+                    const targetKey = store.attachPerformerToAct(args.actId, args.targetPerformerId)
+                    if (sourceKey && targetKey && sourceKey !== targetKey) {
+                        const relationId = store.addRelation(args.actId, [sourceKey, targetKey], 'both')
+                        if (relationId) {
+                            store.selectRelation(relationId)
+                        }
+                    }
+                    return { success: true, action: 'connectPerformers' }
+                }
+
+                const actId = store.createActFromPerformers([args.sourcePerformerId, args.targetPerformerId])
+                return { success: !!actId, action: 'connectPerformers', actId }
             }
             case 'assistant_set_performer_model': {
                 store.setPerformerModel(args.performerId, {

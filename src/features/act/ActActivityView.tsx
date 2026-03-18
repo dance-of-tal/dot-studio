@@ -1,5 +1,6 @@
 /**
  * ActActivityView — Real-time event timeline for Act threads.
+ * Shows callboard/runtime activity for the selected thread.
  *
  * PRD §17.2: Shows performer collaboration flow, board artifacts, active performers.
  */
@@ -14,6 +15,7 @@ import './ActFrame.css'
 interface ActActivityViewProps {
     actId: string
     threadId?: string | null
+    mode?: 'activity' | 'callboard'
 }
 
 interface ActivityEvent {
@@ -25,7 +27,7 @@ interface ActivityEvent {
     payload: Record<string, any>
 }
 
-export default function ActActivityView({ actId, threadId }: ActActivityViewProps) {
+export default function ActActivityView({ actId, threadId, mode = 'activity' }: ActActivityViewProps) {
     const [events, setEvents] = useState<ActivityEvent[]>([])
     const [loading, setLoading] = useState(false)
 
@@ -76,9 +78,9 @@ export default function ActActivityView({ actId, threadId }: ActActivityViewProp
             case 'message.delivered':
                 return `${payload.to} ← message delivered from ${source}`
             case 'board.posted':
-                return `${source} → post_to_board("${payload.key}")`
+                return `${source} → post_to_callboard("${payload.key}")`
             case 'board.updated':
-                return `${source} → update_board("${payload.key}")`
+                return `${source} → update_callboard("${payload.key}")`
             case 'runtime.idle':
                 return 'Runtime idle'
             default:
@@ -96,7 +98,7 @@ export default function ActActivityView({ actId, threadId }: ActActivityViewProp
             <div className="act-activity-view">
                 <div className="act-activity-view__empty">
                     <Activity size={16} />
-                    <span>Select a thread to view activity</span>
+                    <span>{mode === 'callboard' ? 'Select a thread to view the callboard' : 'Select a thread to view activity'}</span>
                 </div>
             </div>
         )
@@ -106,7 +108,7 @@ export default function ActActivityView({ actId, threadId }: ActActivityViewProp
         <div className="act-activity-view">
             <div className="act-activity-view__header">
                 <Activity size={12} />
-                <span>Activity</span>
+                <span>{mode === 'callboard' ? 'Callboard' : 'Activity'}</span>
                 <button
                     className="icon-btn"
                     onClick={loadEvents}
@@ -120,7 +122,7 @@ export default function ActActivityView({ actId, threadId }: ActActivityViewProp
             <div className="act-activity-view__timeline">
                 {events.length === 0 ? (
                     <div className="act-activity-view__empty">
-                        <span>No events yet</span>
+                        <span>{mode === 'callboard' ? 'No callboard activity yet' : 'No events yet'}</span>
                     </div>
                 ) : (
                     events.map((event) => (

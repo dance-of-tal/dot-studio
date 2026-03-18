@@ -12,10 +12,12 @@ import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
 import ActFrame from '../../features/act/ActFrame';
 import ActPerformerFrame from '../../features/act/ActPerformerFrame';
 import ActInspectorPanel from '../../features/act/ActInspectorPanel';
-// PerformerRelationEdge removed — edges now live inside Act edit mode only
+import ActLayoutToolbar from '../../features/act/ActLayoutToolbar';
+// PerformerRelationEdge removed — edges now live inside Act layout mode only
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
 import StageToolbar from '../toolbar/StageToolbar';
+import { buildActLayoutEdges, buildActLayoutNodes } from './act-layout-helpers';
 
 function assetRefLabel(
     ref: { kind: 'registry'; urn: string } | { kind: 'draft'; draftId: string } | null | undefined,
@@ -86,7 +88,7 @@ function CustomControls() {
     const [isFitted, setIsFitted] = useState(false);
     const prevViewport = useRef<Viewport | null>(null);
 
-    const { selectedPerformerId, selectedActId, focusedPerformerId, enterFocusMode, exitFocusMode, focusSnapshot, exitActEditFocus } = useStudioStore();
+    const { selectedPerformerId, selectedActId, focusedPerformerId, enterFocusMode, exitFocusMode, focusSnapshot, exitActLayoutMode } = useStudioStore();
 
     const toggleFitView = useCallback(() => {
         if (isFitted && prevViewport.current) {
@@ -123,9 +125,9 @@ function CustomControls() {
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
-                // Act edit focus takes priority
+                // Act layout mode takes priority
                 if (focusSnapshot?.type === 'act') {
-                    exitActEditFocus();
+                    exitActLayoutMode();
                     setTimeout(() => {
                         fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
                     }, 50);
@@ -141,7 +143,7 @@ function CustomControls() {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [focusedPerformerId, exitFocusMode, focusSnapshot, exitActEditFocus, fitView]);
+    }, [focusedPerformerId, exitFocusMode, focusSnapshot, exitActLayoutMode, fitView]);
 
     return (
         <div className="canvas-controls">
@@ -201,13 +203,15 @@ export default function CanvasArea() {
         setCanvasCenter,
         acts,
         selectedActId,
-        editingActId,
+        layoutActId,
         selectAct,
         updateActPosition,
-        exitActEditFocus,
+        exitActLayoutMode,
         addRelation,
+        createActFromPerformers,
+        attachPerformerToAct,
         updateActPerformerPosition,
-        selectActPerformer,
+        selectActParticipant,
         selectRelation,
         focusSnapshot,
     } = useStudioStore();
@@ -400,7 +404,7 @@ export default function CanvasArea() {
         hidden: act.hidden,
         zIndex: getCanvasWindowZIndex({
             selected: selectedActId === act.id,
-            editing: editingActId === act.id,
+            editing: layoutActId === act.id,
             transformActive: transformTarget?.type === 'act' && transformTarget.id === act.id,
         }),
         data: {
@@ -410,28 +414,21 @@ export default function CanvasArea() {
             onActivateTransform: () => activateTransformTarget('act', act.id),
             onDeactivateTransform: () => deactivateTransformTarget('act', act.id),
         } as Record<string, unknown>,
-    })), [acts, selectedActId, editingActId, transformTarget, activateTransformTarget, deactivateTransformTarget])
+    })), [acts, selectedActId, layoutActId, transformTarget, activateTransformTarget, deactivateTransformTarget])
 
-    const isActEditFocus = !!(focusSnapshot?.type === 'act' && editingActId)
+    const isActLayoutMode = !!(focusSnapshot?.type === 'act' && layoutActId)
 
-    // Build act-internal performer nodes for Act edit focus mode
+    // Build act-internal performer nodes for Act layout mode
     const buildActPerformerNodes = useCallback(() => {
-        if (!isActEditFocus || !editingActId) return []
-        const act = acts.find((a) => a.id === editingActId)
-        if (!act) return []
-        return Object.entries(act.performers).map(([key, perf]) => ({
-            id: `act-p-${key}`,
-            type: 'act-performer' as const,
-            position: perf.position,
-            dragHandle: '.canvas-frame__header',
-            data: { performerKey: key, actId: editingActId },
-        }))
-    }, [isActEditFocus, editingActId, acts])
+        if (!isActLayoutMode || !layoutActId) return []
+        const act = acts.find((a) => a.id === layoutActId)
+        return buildActLayoutNodes(act, layoutActId)
+    }, [isActLayoutMode, layoutActId, acts])
 
     // Sync from store to local state when performers change
     useEffect(() => {
-        if (isActEditFocus) {
-            // In act edit focus, only show act-internal performer nodes
+        if (isActLayoutMode) {
+            // In act layout mode, only show act-internal performer nodes
             setNodes(buildActPerformerNodes());
         } else {
             setNodes([
@@ -442,33 +439,18 @@ export default function CanvasArea() {
                 ...buildActNodes(),
             ]);
         }
-    }, [isActEditFocus, buildActPerformerNodes, buildPerformerNodes, buildMarkdownEditorNodes, buildCanvasTerminalNodes, buildTrackingNodes, buildActNodes, setNodes]);
+    }, [isActLayoutMode, buildActPerformerNodes, buildPerformerNodes, buildMarkdownEditorNodes, buildCanvasTerminalNodes, buildTrackingNodes, buildActNodes, setNodes]);
 
     const relationEdges = useCallback((): Edge[] => {
-        if (!isActEditFocus || !editingActId) return []
-        const act = acts.find((a) => a.id === editingActId)
-        if (!act) return []
-        return act.relations.map((rel) => {
-            return {
-                id: rel.id,
-                source: `act-p-${rel.between[0]}`,
-                target: `act-p-${rel.between[1]}`,
-                type: 'default',
-                animated: rel.direction === 'one-way',
-                label: rel.name || rel.description || undefined,
-                style: {
-                    stroke: rel.direction === 'one-way' ? 'var(--info, #58f)' : 'var(--accent)',
-                    strokeWidth: 1.5,
-                    strokeDasharray: rel.direction === 'one-way' ? '5 3' : undefined,
-                },
-            }
-        })
-    }, [isActEditFocus, editingActId, acts])
+        if (!isActLayoutMode || !layoutActId) return []
+        const act = acts.find((a) => a.id === layoutActId)
+        return buildActLayoutEdges(act)
+    }, [isActLayoutMode, layoutActId, acts])
 
     const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
-        if (!isActEditFocus || !editingActId) return
+        if (!isActLayoutMode || !layoutActId) return
         selectRelation(edge.id)
-    }, [isActEditFocus, editingActId, selectRelation])
+    }, [isActLayoutMode, layoutActId, selectRelation])
 
 
     const onNodeDragStop = useCallback(
@@ -492,15 +474,15 @@ export default function CanvasArea() {
                 return;
             }
 
-            if (node.type === 'act-performer' && editingActId) {
+            if (node.type === 'act-performer' && layoutActId) {
                 const performerKey = node.id.replace(/^act-p-/, '')
-                updateActPerformerPosition(editingActId, performerKey, Math.round(node.position.x), Math.round(node.position.y));
+                updateActPerformerPosition(layoutActId, performerKey, Math.round(node.position.x), Math.round(node.position.y));
                 return;
             }
 
             updatePerformerPosition(node.id, Math.round(node.position.x), Math.round(node.position.y));
         },
-        [updateMarkdownEditorPosition, updatePerformerPosition, updateCanvasTerminalPosition, updateTrackingWindowPosition, updateActPosition, editingActId, updateActPerformerPosition]
+        [updateMarkdownEditorPosition, updatePerformerPosition, updateCanvasTerminalPosition, updateTrackingWindowPosition, updateActPosition, layoutActId, updateActPerformerPosition]
     );
 
     const onNodeClick = useCallback(
@@ -538,7 +520,7 @@ export default function CanvasArea() {
             }
             if (node.type === 'act-performer') {
                 const performerKey = node.id.replace(/^act-p-/, '')
-                selectActPerformer(performerKey)
+                selectActParticipant(performerKey)
                 return;
             }
             if (editingTarget && !(editingTarget.type === 'performer' && editingTarget.id === node.id)) {
@@ -547,7 +529,7 @@ export default function CanvasArea() {
             selectPerformer(node.id);
             setActiveChatPerformer(node.id);
         },
-        [clearTransformTarget, closeEditor, editingTarget, selectMarkdownEditor, selectPerformer, setActiveChatPerformer, selectAct, selectActPerformer]
+        [clearTransformTarget, closeEditor, editingTarget, selectMarkdownEditor, selectPerformer, setActiveChatPerformer, selectAct, selectActParticipant]
     );
 
     const onPaneClick = useCallback(() => {
@@ -556,20 +538,39 @@ export default function CanvasArea() {
         selectPerformer(null);
         selectMarkdownEditor(null);
         selectAct(null);
-        // In Act edit focus, deselect act performer and relation
-        if (isActEditFocus) {
-            selectActPerformer(null);
+        // In Act layout mode, deselect participant and relation
+        if (isActLayoutMode) {
+            selectActParticipant(null);
             selectRelation(null);
         }
-    }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, selectAct, editingActId, isActEditFocus, selectActPerformer, selectRelation]);
+    }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, selectAct, layoutActId, isActLayoutMode, selectActParticipant, selectRelation]);
 
     const onConnect = useCallback((connection: Connection) => {
-        if (isActEditFocus && editingActId && connection.source && connection.target) {
+        if (isActLayoutMode && layoutActId && connection.source && connection.target) {
             const fromKey = connection.source.replace(/^act-p-/, '')
             const toKey = connection.target.replace(/^act-p-/, '')
-            addRelation(editingActId, [fromKey, toKey], 'both')
+            addRelation(layoutActId, [fromKey, toKey], 'both')
+            return
         }
-    }, [isActEditFocus, editingActId, addRelation]);
+
+        if (!isActLayoutMode && connection.source && connection.target) {
+            const sourceNode = nodes.find((node) => node.id === connection.source)
+            const targetNode = nodes.find((node) => node.id === connection.target)
+            if (sourceNode?.type === 'performer' && targetNode?.type === 'performer') {
+                createActFromPerformers([connection.source, connection.target])
+                return
+            }
+
+            if (sourceNode?.type === 'performer' && targetNode?.type === 'act') {
+                attachPerformerToAct(connection.target, connection.source)
+                return
+            }
+
+            if (sourceNode?.type === 'act' && targetNode?.type === 'performer') {
+                attachPerformerToAct(connection.source, connection.target)
+            }
+        }
+    }, [isActLayoutMode, layoutActId, addRelation, nodes, createActFromPerformers, attachPerformerToAct]);
 
     const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
         // Filter out 'select' changes — selection is driven externally by Zustand selectedPerformerId
@@ -600,52 +601,18 @@ export default function CanvasArea() {
     }, [nodes, onNodesChange, updateMarkdownEditorSize, updatePerformerSize, updateCanvasTerminalSize, updateTrackingWindowSize]);
 
     const canvasDropLabel = active?.data?.current?.kind === 'performer'
-        ? 'Drop to add this performer to the current stage'
+        ? layoutActId
+            ? 'Drop to add this performer to the act layout'
+            : 'Drop to add this performer to the current stage'
         : null;
 
     return (
-        <div className={`canvas-area ${(focusedPerformerId || isActEditFocus) ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
+        <div className={`canvas-area ${(focusedPerformerId || isActLayoutMode) ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
             <div className="canvas-top-right-bar">
                 <CustomControls />
                 <StageToolbar />
             </div>
-            {isActEditFocus && editingActId && (() => {
-                const currentAct = acts.find(a => a.id === editingActId);
-                const performerCount = currentAct ? Object.keys(currentAct.performers).length : 0;
-                const relationCount = currentAct?.relations?.length || 0;
-                return (
-                    <div className="act-edit-toolbar">
-                        <div className="act-edit-toolbar__left">
-                            <span className="act-edit-toolbar__icon">⚡</span>
-                            <span className="act-edit-toolbar__name">{currentAct?.name || 'Act'}</span>
-                            <span className="act-edit-toolbar__badge">{performerCount}p · {relationCount}r</span>
-                            {performerCount === 0 && (
-                                <span className="act-edit-toolbar__hint">
-                                    ← Drag performers from the Asset Library to bind them
-                                </span>
-                            )}
-                            {performerCount > 0 && performerCount < 2 && (
-                                <span className="act-edit-toolbar__hint">
-                                    Drag another performer to create relations
-                                </span>
-                            )}
-                            {performerCount >= 2 && relationCount === 0 && (
-                                <span className="act-edit-toolbar__hint">
-                                    Connect performers by dragging from one handle to another
-                                </span>
-                            )}
-                        </div>
-                        <div className="act-edit-toolbar__right">
-                            <button
-                                className="act-edit-toolbar__btn act-edit-toolbar__btn--exit"
-                                onClick={() => exitActEditFocus()}
-                            >
-                                Exit Edit
-                            </button>
-                        </div>
-                    </div>
-                );
-            })()}
+            {isActLayoutMode && <ActLayoutToolbar />}
             {canvasDropLabel && (
                 <div className={`canvas-drop-overlay ${isCanvasDropOver ? 'is-active' : ''}`}>
                     <div className="canvas-drop-overlay__card">
@@ -685,11 +652,11 @@ export default function CanvasArea() {
                 zoomOnScroll={!focusedPerformerId}
                 zoomOnPinch={!focusedPerformerId}
                 zoomOnDoubleClick={!focusedPerformerId}
-                nodesDraggable={!focusedPerformerId || isActEditFocus}
+                nodesDraggable={!focusedPerformerId || isActLayoutMode}
             >
                 <Background color={focusedPerformerId ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>
-            {isActEditFocus && <ActInspectorPanel />}
+            {(isActLayoutMode || selectedActId) && <ActInspectorPanel />}
         </div>
     );
 }

@@ -1,8 +1,8 @@
 /**
- * ActInspectorPanel — Right-side panel for Act edit focus mode.
+ * ActInspectorPanel — Right-side panel for selected or focused Acts.
  *
  * Context-sensitive: shows Act meta when nothing selected,
- * Performer binding when a performer is selected,
+ * Participant binding when a performer is selected,
  * Relation detail when a relation is selected.
  */
 import { useState, useMemo, useEffect } from 'react'
@@ -12,35 +12,93 @@ import {
     AlertTriangle,
 } from 'lucide-react'
 import { useStudioStore } from '../../store'
-import type { ActRelation } from '../../types'
+import type { ActRelation, PerformerNode } from '../../types'
+import { resolveActParticipantLabel } from './participant-labels'
 import './ActInspectorPanel.css'
+
+function getCallboardKeys(subs: any) {
+    return subs.callboardKeys || subs.boardKeys || []
+}
+
+function nextSubscriptions(subs: any, patch: Record<string, unknown>) {
+    const next = { ...subs, ...patch }
+    if ('callboardKeys' in patch) {
+        next.boardKeys = patch.callboardKeys
+    }
+    return next
+}
+
+function isPerformerAttachedToAct(act: any, performer: PerformerNode) {
+    const derivedFrom = performer.meta?.derivedFrom?.trim()
+    return Object.values(act.performers).some((binding: any) => (
+        (binding.performerRef.kind === 'draft' && binding.performerRef.draftId === performer.id)
+        || (binding.performerRef.kind === 'registry' && !!derivedFrom && binding.performerRef.urn === derivedFrom)
+    ))
+}
 
 // ── Act Meta View ───────────────────────────────────────
 function ActMetaView() {
-    const { acts, editingActId, renameAct, updateActAuthoringMeta, updateActDescription } = useStudioStore()
+    const {
+        acts,
+        layoutActId,
+        selectedActId,
+        renameAct,
+        updateActAuthoringMeta,
+        updateActDescription,
+        performers,
+        autoLayoutActParticipants,
+        selectActParticipant,
+        selectRelation,
+        setAssetLibraryOpen,
+        addRelation,
+        attachPerformerToAct,
+    } = useStudioStore()
     const updateActRules = useStudioStore((s) => s.updateActRules)
-    const act = acts.find((a) => a.id === editingActId)
-    if (!act || !editingActId) return null
+    const activeActId = layoutActId || selectedActId
+    const act = acts.find((a) => a.id === activeActId)
+    if (!act || !activeActId) return null
 
     const meta = act.meta?.authoring || {}
     const [localName, setLocalName] = useState(act.name)
     const [localDesc, setLocalDesc] = useState(act.description || meta.description || '')
     const [ruleInput, setRuleInput] = useState('')
+    const [participantDraftId, setParticipantDraftId] = useState('')
+    const [relationDraft, setRelationDraft] = useState<{
+        source: string
+        target: string
+        direction: 'both' | 'one-way'
+    }>({ source: '', target: '', direction: 'both' })
+
+    const availablePerformers = useMemo(
+        () => performers.filter((performer) => performer.scope === 'shared' && performer.id !== 'studio-assistant' && !isPerformerAttachedToAct(act, performer)),
+        [act, performers],
+    )
 
     useEffect(() => {
         setLocalName(act.name)
         setLocalDesc(act.description || act.meta?.authoring?.description || '')
     }, [act.name, act.description, act.meta?.authoring?.description])
 
+    useEffect(() => {
+        const [first = '', second = ''] = performerKeys
+        setRelationDraft((current) => ({
+            source: performerKeys.includes(current.source) ? current.source : first,
+            target: performerKeys.includes(current.target) && current.target !== current.source
+                ? current.target
+                : second || first,
+            direction: current.direction,
+        }))
+    }, [act.id, performerKeys.join('|')])
+
     const commitName = () => {
         if (localName.trim() && localName !== act.name) {
-            renameAct(editingActId, localName.trim())
+            renameAct(activeActId, localName.trim())
         }
     }
 
     const commitDesc = () => {
-        updateActDescription(editingActId, localDesc)
-        updateActAuthoringMeta(editingActId, {
+        updateActDescription(activeActId, localDesc)
+        updateActAuthoringMeta(activeActId, {
             ...act.meta,
             authoring: { ...meta, description: localDesc },
         })
@@ -104,6 +162,166 @@ function ActMetaView() {
                 </div>
             </div>
 
+            <div className="act-panel__section">
+                <label className="act-panel__label">Participants</label>
+                {performerKeys.length > 0 ? (
+                    <div className="act-panel__list">
+                        {performerKeys.map((key) => (
+                            <button
+                                key={key}
+                                className="act-panel__edge-link"
+                                onClick={() => selectActParticipant(key)}
+                                title="Open participant binding"
+                            >
+                                <span className="act-panel__edge-dir">●</span>
+                                <span className="act-panel__edge-target">{resolveActParticipantLabel(act, key, useStudioStore.getState().performers)}</span>
+                                <span className="act-panel__edge-badge">binding</span>
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="act-panel__list">
+                        <span className="act-panel__empty">No performers bound yet</span>
+                        <button
+                            className="act-panel__toggle"
+                            onClick={() => {
+                                setAssetLibraryOpen(true)
+                            }}
+                        >
+                            Open Asset Library
+                        </button>
+                    </div>
+                )}
+                {performerKeys.length > 1 && (
+                    <button
+                        className="act-panel__toggle"
+                        onClick={() => autoLayoutActParticipants(activeActId)}
+                    >
+                        Auto Layout
+                    </button>
+                )}
+            </div>
+
+            <div className="act-panel__section">
+                <label className="act-panel__label">Add Existing Performer</label>
+                {availablePerformers.length > 0 ? (
+                    <>
+                        <select
+                            className="act-panel__input"
+                            value={participantDraftId}
+                            onChange={(e) => setParticipantDraftId(e.target.value)}
+                        >
+                            <option value="">Choose a performer…</option>
+                            {availablePerformers.map((performer) => (
+                                <option key={performer.id} value={performer.id}>{performer.name}</option>
+                            ))}
+                        </select>
+                        <button
+                            className="act-panel__toggle"
+                            onClick={() => {
+                                if (!participantDraftId) return
+                                attachPerformerToAct(activeActId, participantDraftId)
+                                setParticipantDraftId('')
+                            }}
+                        >
+                            Add Participant
+                        </button>
+                    </>
+                ) : (
+                    <span className="act-panel__empty">No standalone performers available to attach</span>
+                )}
+            </div>
+
+            <div className="act-panel__section">
+                <label className="act-panel__label">Relations</label>
+                {act.relations.length > 0 ? (
+                    <div className="act-panel__list">
+                        {act.relations.map((rel) => (
+                            <button
+                                key={rel.id}
+                                className="act-panel__edge-link"
+                                onClick={() => selectRelation(rel.id)}
+                                title="Open relation"
+                            >
+                                <span className="act-panel__edge-dir">
+                                    {rel.direction === 'both' ? '↔' : '→'}
+                                </span>
+                                <span className="act-panel__edge-target">
+                                    {resolveActParticipantLabel(act, rel.between[0], useStudioStore.getState().performers)}
+                                    {' · '}
+                                    {resolveActParticipantLabel(act, rel.between[1], useStudioStore.getState().performers)}
+                                </span>
+                                <span className="act-panel__edge-badge">
+                                    {rel.name || 'relation'}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <span className="act-panel__empty">No relations yet</span>
+                )}
+            </div>
+
+            {performerKeys.length >= 2 && (
+                <div className="act-panel__section">
+                    <label className="act-panel__label">Quick Relation</label>
+                    <div className="act-panel__row">
+                        <div className="act-panel__section act-panel__section--half">
+                            <label className="act-panel__label">From</label>
+                            <select
+                                className="act-panel__input"
+                                value={relationDraft.source}
+                                onChange={(e) => setRelationDraft((current) => ({ ...current, source: e.target.value }))}
+                            >
+                                {performerKeys.map((key) => (
+                                    <option key={key} value={key}>{resolveActParticipantLabel(act, key, useStudioStore.getState().performers)}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="act-panel__section act-panel__section--half">
+                            <label className="act-panel__label">To</label>
+                            <select
+                                className="act-panel__input"
+                                value={relationDraft.target}
+                                onChange={(e) => setRelationDraft((current) => ({ ...current, target: e.target.value }))}
+                            >
+                                {performerKeys.map((key) => (
+                                    <option key={key} value={key}>{resolveActParticipantLabel(act, key, useStudioStore.getState().performers)}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="act-panel__toggle-group">
+                        <button
+                            className={`act-panel__toggle ${relationDraft.direction === 'both' ? 'active' : ''}`}
+                            onClick={() => setRelationDraft((current) => ({ ...current, direction: 'both' }))}
+                        >
+                            Both
+                        </button>
+                        <button
+                            className={`act-panel__toggle ${relationDraft.direction === 'one-way' ? 'active' : ''}`}
+                            onClick={() => setRelationDraft((current) => ({ ...current, direction: 'one-way' }))}
+                        >
+                            One-way
+                        </button>
+                    </div>
+                    <button
+                        className="act-panel__toggle"
+                        onClick={() => {
+                            if (!relationDraft.source || !relationDraft.target || relationDraft.source === relationDraft.target) {
+                                return
+                            }
+                            const relationId = addRelation(activeActId, [relationDraft.source, relationDraft.target], relationDraft.direction)
+                            if (relationId) {
+                                selectRelation(relationId)
+                            }
+                        }}
+                    >
+                        Add Relation
+                    </button>
+                </div>
+            )}
+
             {/* Act Rules */}
             <div className="act-panel__section">
                 <label className="act-panel__label">Act Rules</label>
@@ -111,7 +329,7 @@ function ActMetaView() {
                     {(act.actRules || []).map((rule, i) => (
                         <span key={i} className="act-panel__tag" onClick={() => {
                             const updated = (act.actRules || []).filter((_, idx) => idx !== i)
-                            updateActRules(editingActId, updated)
+                            updateActRules(activeActId, updated)
                         }}>
                             {rule} ×
                         </span>
@@ -124,7 +342,7 @@ function ActMetaView() {
                         onChange={(e) => setRuleInput(e.target.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter' && ruleInput.trim()) {
-                                updateActRules(editingActId, [...(act.actRules || []), ruleInput.trim()])
+                                updateActRules(activeActId, [...(act.actRules || []), ruleInput.trim()])
                                 setRuleInput('')
                             }
                         }}
@@ -162,26 +380,27 @@ function ActMetaView() {
     )
 }
 
-// ── Performer Binding View ──────────────────────────────
+// ── Participant Binding View ────────────────────────────
 function PerformerView() {
     const {
-        acts, performers, editingActId, selectedActPerformerKey,
-        selectRelation, updatePerformerBinding,
+        acts, performers, layoutActId, selectedActId, selectedActParticipantKey,
+        selectRelation, updatePerformerBinding, unbindPerformerFromAct, selectActParticipant,
     } = useStudioStore()
 
-    const act = useMemo(() => acts.find((a) => a.id === editingActId), [acts, editingActId])
-    const binding = act && selectedActPerformerKey ? act.performers[selectedActPerformerKey] : null
+    const activeActId = layoutActId || selectedActId
+    const act = useMemo(() => acts.find((a) => a.id === activeActId), [acts, activeActId])
+    const binding = act && selectedActParticipantKey ? act.performers[selectedActParticipantKey] : null
 
     const relatedRelations = useMemo(() => {
-        if (!act || !selectedActPerformerKey) return []
+        if (!act || !selectedActParticipantKey) return []
         return act.relations.filter(
-            (r) => r.between.includes(selectedActPerformerKey),
+            (r) => r.between.includes(selectedActParticipantKey),
         )
-    }, [act, selectedActPerformerKey])
+    }, [act, selectedActParticipantKey])
 
-    const [subInput, setSubInput] = useState({ messagesFrom: '', messageTags: '', boardKeys: '' })
+    const [subInput, setSubInput] = useState({ messagesFrom: '', messageTags: '', callboardKeys: '' })
 
-    if (!act || !binding || !selectedActPerformerKey || !editingActId) return null
+    if (!act || !binding || !selectedActParticipantKey || !activeActId) return null
 
     // Show performer ref info
     const refLabel = binding.performerRef.kind === 'registry'
@@ -193,29 +412,43 @@ function PerformerView() {
     const addSubItem = (field: keyof typeof subInput) => {
         const value = subInput[field].trim()
         if (!value) return
-        const current = (subs as any)[field] || []
+        const current = field === 'callboardKeys'
+            ? getCallboardKeys(subs)
+            : (subs as any)[field] || []
         if (current.includes(value)) return
-        updatePerformerBinding(editingActId, selectedActPerformerKey, {
-            subscriptions: { ...subs, [field]: [...current, value] },
+        updatePerformerBinding(activeActId, selectedActParticipantKey, {
+            subscriptions: nextSubscriptions(subs, { [field]: [...current, value] }),
         })
         setSubInput((prev) => ({ ...prev, [field]: '' }))
     }
 
     const removeSubItem = (field: string, value: string) => {
-        const current = (subs as any)[field] || []
-        updatePerformerBinding(editingActId, selectedActPerformerKey, {
-            subscriptions: { ...subs, [field]: current.filter((v: string) => v !== value) },
+        const current = field === 'callboardKeys'
+            ? getCallboardKeys(subs)
+            : (subs as any)[field] || []
+        updatePerformerBinding(activeActId, selectedActParticipantKey, {
+            subscriptions: nextSubscriptions(subs, { [field]: current.filter((v: string) => v !== value) }),
         })
     }
 
     return (
         <div className="act-panel__content">
-            {/* Performer binding summary */}
+            {/* Participant binding summary */}
             <div className="act-panel__item-header">
                 <User size={14} className="act-panel__item-icon" />
                 <span className="act-panel__item-name act-panel__item-name--edge">
-                    {selectedActPerformerKey}
+                    {resolveActParticipantLabel(act, selectedActParticipantKey, performers)}
                 </span>
+                <button
+                    className="icon-btn act-panel__danger-btn"
+                    title="Remove participant"
+                    onClick={() => {
+                        unbindPerformerFromAct(activeActId, selectedActParticipantKey)
+                        selectActParticipant(null)
+                    }}
+                >
+                    <Trash2 size={12} />
+                </button>
             </div>
 
             <div className="act-panel__section">
@@ -249,7 +482,7 @@ function PerformerView() {
                         const next = current.includes(danceUrn)
                             ? current.filter((id) => id !== danceUrn)
                             : [...current, danceUrn]
-                        updatePerformerBinding(editingActId!, selectedActPerformerKey!, {
+                        updatePerformerBinding(activeActId!, selectedActParticipantKey!, {
                             activeDanceIds: next,
                         })
                     }
@@ -292,7 +525,7 @@ function PerformerView() {
                 {relatedRelations.length > 0 ? (
                     <div className="act-panel__list">
                         {relatedRelations.map((rel) => {
-                            const otherKey = rel.between[0] === selectedActPerformerKey ? rel.between[1] : rel.between[0]
+                            const otherKey = rel.between[0] === selectedActParticipantKey ? rel.between[1] : rel.between[0]
                             return (
                                 <div
                                     key={rel.id}
@@ -303,7 +536,7 @@ function PerformerView() {
                                     <span className="act-panel__edge-dir">
                                         {rel.direction === 'both' ? '↔' : '→'}
                                     </span>
-                                    <span className="act-panel__edge-target">{otherKey}</span>
+                                    <span className="act-panel__edge-target">{resolveActParticipantLabel(act, otherKey, performers)}</span>
                                     <span className="act-panel__edge-badge">
                                         {rel.direction}
                                     </span>
@@ -336,7 +569,7 @@ function PerformerView() {
                             value={subInput.messagesFrom}
                             onChange={(e) => setSubInput((p) => ({ ...p, messagesFrom: e.target.value }))}
                             onKeyDown={(e) => e.key === 'Enter' && addSubItem('messagesFrom')}
-                            placeholder="performer key"
+                            placeholder="participant key"
                         />
                     </div>
                 </div>
@@ -362,12 +595,12 @@ function PerformerView() {
                     </div>
                 </div>
 
-                {/* boardKeys */}
+                {/* callboardKeys */}
                 <div className="act-panel__sub-field">
-                    <span className="act-panel__sub-label">Board Keys</span>
+                    <span className="act-panel__sub-label">Callboard Keys</span>
                     <div className="act-panel__tags">
-                        {(subs.boardKeys || []).map((v) => (
-                            <span key={v} className="act-panel__tag" onClick={() => removeSubItem('boardKeys', v)}>
+                        {getCallboardKeys(subs).map((v: string) => (
+                            <span key={v} className="act-panel__tag" onClick={() => removeSubItem('callboardKeys', v)}>
                                 {v} ×
                             </span>
                         ))}
@@ -375,10 +608,10 @@ function PerformerView() {
                     <div className="act-panel__sub-input-row">
                         <input
                             className="act-panel__input act-panel__input--small"
-                            value={subInput.boardKeys}
-                            onChange={(e) => setSubInput((p) => ({ ...p, boardKeys: e.target.value }))}
-                            onKeyDown={(e) => e.key === 'Enter' && addSubItem('boardKeys')}
-                            placeholder="key pattern (e.g. api-spec, review-*)"
+                            value={subInput.callboardKeys}
+                            onChange={(e) => setSubInput((p) => ({ ...p, callboardKeys: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && addSubItem('callboardKeys')}
+                            placeholder="key pattern (e.g. launch-brief, signal-*)"
                         />
                     </div>
                 </div>
@@ -390,14 +623,16 @@ function PerformerView() {
 // ── Relation View (Communication Contract) ──────────────
 function RelationView() {
     const {
-        acts, editingActId, selectedRelationId,
+        acts, layoutActId, selectedActId, selectedRelationId,
         updateRelation, removeRelation, selectRelation,
     } = useStudioStore()
 
-    const act = acts.find((a) => a.id === editingActId)
+    const activeActId = layoutActId || selectedActId
+    const act = acts.find((a) => a.id === activeActId)
     const relation = act?.relations.find((r) => r.id === selectedRelationId)
 
     const [form, setForm] = useState<Partial<ActRelation>>({})
+    const [permissionInput, setPermissionInput] = useState({ callboardKeys: '', messageTags: '' })
 
     useEffect(() => {
         if (relation) {
@@ -407,15 +642,48 @@ function RelationView() {
                 direction: relation.direction,
                 maxCalls: relation.maxCalls,
                 timeout: relation.timeout,
+                sessionPolicy: relation.sessionPolicy,
             })
         }
     }, [relation])
 
-    if (!relation || !act || !editingActId || !selectedRelationId) return null
+    if (!relation || !act || !activeActId || !selectedRelationId) return null
 
     const update = (field: string, value: any) => {
         setForm((prev) => ({ ...prev, [field]: value }))
-        updateRelation(editingActId, selectedRelationId, { [field]: value })
+        updateRelation(activeActId, selectedRelationId, { [field]: value })
+    }
+
+    const permissions = relation.permissions || {}
+
+    const addPermissionItem = (field: 'callboardKeys' | 'messageTags') => {
+        const value = permissionInput[field].trim()
+        if (!value) return
+        const current = (permissions as any)[field] || []
+        if (current.includes(value)) return
+        updateRelation(activeActId, selectedRelationId, {
+            permissions: {
+                ...permissions,
+                [field]: [...current, value],
+                ...(field === 'callboardKeys'
+                    ? { boardKeys: [...current, value] }
+                    : {}),
+            },
+        })
+        setPermissionInput((prev) => ({ ...prev, [field]: '' }))
+    }
+
+    const removePermissionItem = (field: 'callboardKeys' | 'messageTags', value: string) => {
+        const current = (permissions as any)[field] || []
+        updateRelation(activeActId, selectedRelationId, {
+            permissions: {
+                ...permissions,
+                [field]: current.filter((entry: string) => entry !== value),
+                ...(field === 'callboardKeys'
+                    ? { boardKeys: current.filter((entry: string) => entry !== value) }
+                    : {}),
+            },
+        })
     }
 
     return (
@@ -424,13 +692,13 @@ function RelationView() {
             <div className="act-panel__item-header">
                 <ArrowRightLeft size={14} className="act-panel__item-icon" />
                 <span className="act-panel__item-name act-panel__item-name--edge">
-                    {relation.between[0]} ↔ {relation.between[1]}
+                    {resolveActParticipantLabel(act, relation.between[0], useStudioStore.getState().performers)} ↔ {resolveActParticipantLabel(act, relation.between[1], useStudioStore.getState().performers)}
                 </span>
                 <button
                     className="icon-btn act-panel__danger-btn"
                     title="Delete relation"
                     onClick={() => {
-                        removeRelation(editingActId, selectedRelationId)
+                        removeRelation(activeActId, selectedRelationId)
                         selectRelation(null)
                     }}
                 >
@@ -480,6 +748,50 @@ function RelationView() {
                 </div>
             </div>
 
+            <div className="act-panel__section">
+                <label className="act-panel__label">Permissions</label>
+
+                <div className="act-panel__sub-field">
+                    <span className="act-panel__sub-label">Callboard Keys</span>
+                    <div className="act-panel__tags">
+                        {((permissions as any).callboardKeys || (permissions as any).boardKeys || []).map((v: string) => (
+                            <span key={v} className="act-panel__tag" onClick={() => removePermissionItem('callboardKeys', v)}>
+                                {v} ×
+                            </span>
+                        ))}
+                    </div>
+                    <div className="act-panel__sub-input-row">
+                        <input
+                            className="act-panel__input act-panel__input--small"
+                            value={permissionInput.callboardKeys}
+                            onChange={(e) => setPermissionInput((prev) => ({ ...prev, callboardKeys: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && addPermissionItem('callboardKeys')}
+                            placeholder="key pattern"
+                        />
+                    </div>
+                </div>
+
+                <div className="act-panel__sub-field">
+                    <span className="act-panel__sub-label">Message Tags</span>
+                    <div className="act-panel__tags">
+                        {((permissions as any).messageTags || []).map((v: string) => (
+                            <span key={v} className="act-panel__tag" onClick={() => removePermissionItem('messageTags', v)}>
+                                {v} ×
+                            </span>
+                        ))}
+                    </div>
+                    <div className="act-panel__sub-input-row">
+                        <input
+                            className="act-panel__input act-panel__input--small"
+                            value={permissionInput.messageTags}
+                            onChange={(e) => setPermissionInput((prev) => ({ ...prev, messageTags: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && addPermissionItem('messageTags')}
+                            placeholder="tag name"
+                        />
+                    </div>
+                </div>
+            </div>
+
             {/* MaxCalls + Timeout */}
             <div className="act-panel__row">
                 <div className="act-panel__section act-panel__section--half">
@@ -505,24 +817,43 @@ function RelationView() {
                     />
                 </div>
             </div>
+
+            <div className="act-panel__section">
+                <label className="act-panel__label">Session Policy</label>
+                <div className="act-panel__toggle-group">
+                    <button
+                        className={`act-panel__toggle ${form.sessionPolicy !== 'fresh' ? 'active' : ''}`}
+                        onClick={() => update('sessionPolicy', 'reuse')}
+                    >
+                        Reuse
+                    </button>
+                    <button
+                        className={`act-panel__toggle ${form.sessionPolicy === 'fresh' ? 'active' : ''}`}
+                        onClick={() => update('sessionPolicy', 'fresh')}
+                    >
+                        Fresh
+                    </button>
+                </div>
+            </div>
         </div>
     )
 }
 
 // ── Main Panel ──────────────────────────────────────────
 export default function ActInspectorPanel() {
-    const { editingActId, selectedActPerformerKey, selectedRelationId } = useStudioStore()
+    const { layoutActId, selectedActId, selectedActParticipantKey, selectedRelationId } = useStudioStore()
 
-    if (!editingActId) return null
+    const activeActId = layoutActId || selectedActId
+    if (!activeActId) return null
 
     // Determine which view to show
     const mode = selectedRelationId ? 'relation'
-        : selectedActPerformerKey ? 'performer'
+        : selectedActParticipantKey ? 'performer'
         : 'act'
 
     const modeLabels = {
-        act: { icon: <Settings size={12} />, label: 'Act Settings' },
-        performer: { icon: <User size={12} />, label: 'Performer Binding' },
+        act: { icon: <Settings size={12} />, label: 'Act Config' },
+        performer: { icon: <User size={12} />, label: 'Participant Binding' },
         relation: { icon: <ArrowRightLeft size={12} />, label: 'Relation' },
     }
 

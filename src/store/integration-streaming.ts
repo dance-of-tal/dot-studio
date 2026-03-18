@@ -95,11 +95,15 @@ function performerIdForSession(sessionMap: Record<string, string>, sessionId: st
 
 export type SessionStreamTarget =
     | { kind: 'performer'; performerId: string }
+    | { kind: 'act-participant'; chatKey: string }
 
 export function resolveSessionTarget(state: StudioState, sessionId: string): SessionStreamTarget | null {
     // All sessions (performer + assistant) are in sessionMap
     const performerId = performerIdForSession(state.sessionMap, sessionId)
     if (performerId) {
+        if (performerId.startsWith('act:')) {
+            return { kind: 'act-participant', chatKey: performerId }
+        }
         return { kind: 'performer', performerId }
     }
 
@@ -116,6 +120,15 @@ export function updateTargetMessages(
             chats: {
                 ...state.chats,
                 [target.performerId]: updater(state.chats[target.performerId] || []),
+            },
+        }
+    }
+
+    if (target.kind === 'act-participant') {
+        return {
+            chats: {
+                ...state.chats,
+                [target.chatKey]: updater(state.chats[target.chatKey] || []),
             },
         }
     }

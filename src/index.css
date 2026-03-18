@@ -199,8 +199,8 @@ html {
     display: none !important;
 }
 
-/* Act edit toolbar */
-.act-edit-toolbar {
+/* Act layout toolbar */
+.act-layout-toolbar {
     position: absolute;
     top: 8px;
     left: 50%;
@@ -216,23 +216,23 @@ html {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.act-edit-toolbar__left {
+.act-layout-toolbar__left {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.act-edit-toolbar__icon {
+.act-layout-toolbar__icon {
     font-size: 14px;
 }
 
-.act-edit-toolbar__name {
+.act-layout-toolbar__name {
     font-size: 13px;
     font-weight: 600;
     color: var(--text);
 }
 
-.act-edit-toolbar__badge {
+.act-layout-toolbar__badge {
     font-size: 11px;
     padding: 2px 6px;
     border-radius: 4px;
@@ -240,7 +240,7 @@ html {
     color: var(--text-muted);
 }
 
-.act-edit-toolbar__hint {
+.act-layout-toolbar__hint {
     font-size: 10px;
     color: var(--text-muted);
     font-style: italic;
@@ -253,13 +253,13 @@ html {
     to { opacity: 0.8; transform: translateX(0); }
 }
 
-.act-edit-toolbar__right {
+.act-layout-toolbar__right {
     display: flex;
     align-items: center;
     gap: 6px;
 }
 
-.act-edit-toolbar__btn {
+.act-layout-toolbar__btn {
     font-size: 11px;
     padding: 4px 10px;
     border: 1px solid var(--border);
@@ -270,18 +270,18 @@ html {
     transition: background 0.15s, border-color 0.15s;
 }
 
-.act-edit-toolbar__btn:hover {
+.act-layout-toolbar__btn:hover {
     background: var(--bg-hover);
     border-color: var(--border-strong);
 }
 
-.act-edit-toolbar__btn--exit {
+.act-layout-toolbar__btn--exit {
     background: color-mix(in srgb, var(--accent) 15%, transparent);
     border-color: var(--accent);
     color: var(--accent);
 }
 
-.act-edit-toolbar__btn--exit:hover {
+.act-layout-toolbar__btn--exit:hover {
     background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 

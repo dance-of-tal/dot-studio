@@ -182,6 +182,7 @@ export interface ChatSlice {
     ) => Promise<void>
     sendActMessage: (
         actId: string,
+        threadId: string,
         performerKey: string,
         message: string,
     ) => Promise<void>
@@ -243,8 +244,8 @@ export interface ActThreadState {
 export interface ActSlice {
     acts: StageAct[]
     selectedActId: string | null
-    editingActId: string | null
-    selectedActPerformerKey: string | null
+    layoutActId: string | null
+    selectedActParticipantKey: string | null
     selectedRelationId: string | null
 
     // ── Act Thread state ────────────────────────
@@ -261,15 +262,19 @@ export interface ActSlice {
     selectAct: (id: string | null) => void
     toggleActVisibility: (id: string) => void
 
-    // ── Performer Binding (ref-based) ───────────
+    // ── Participant Binding (ref-based) ─────────
     bindPerformerToAct: (actId: string, performerRef: StageActPerformerBinding['performerRef']) => string
+    attachPerformerRefToAct: (actId: string, performerRef: StageActPerformerBinding['performerRef']) => string | null
+    createActFromPerformers: (performerIds: [string, string], options?: { name?: string }) => string | null
+    attachPerformerToAct: (actId: string, performerId: string) => string | null
+    autoLayoutActParticipants: (actId: string) => void
     unbindPerformerFromAct: (actId: string, performerKey: string) => void
     updatePerformerBinding: (actId: string, performerKey: string, update: Partial<StageActPerformerBinding>) => void
-    selectActPerformer: (key: string | null) => void
+    selectActParticipant: (key: string | null) => void
     updateActPerformerPosition: (actId: string, performerKey: string, x: number, y: number) => void
 
     // ── Relation (communication contract) ───────
-    addRelation: (actId: string, between: [string, string], direction: 'both' | 'one-way') => void
+    addRelation: (actId: string, between: [string, string], direction: 'both' | 'one-way') => string | null
     removeRelation: (actId: string, relationId: string) => void
     updateRelation: (actId: string, relationId: string, update: Partial<ActRelation>) => void
     selectRelation: (id: string | null) => void
@@ -279,8 +284,8 @@ export interface ActSlice {
     updateActSize: (id: string, width: number, height: number) => void
 
     // ── Focus mode ──────────────────────────────
-    enterActEditFocus: (actId: string) => void
-    exitActEditFocus: () => void
+    enterActLayoutMode: (actId: string) => void
+    exitActLayoutMode: () => void
 
     // ── Authoring / import ──────────────────────
     updateActAuthoringMeta: (id: string, meta: StageAct['meta']) => void
@@ -303,4 +308,3 @@ export interface AssistantSlice {
 }
 
 export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice & ActSlice & AssistantSlice
-

@@ -12,7 +12,7 @@
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
-import { useStore } from '@xyflow/react'
+import { Handle, Position, useStore } from '@xyflow/react'
 
 import { useStudioStore } from '../../store'
 import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries'
@@ -245,6 +245,8 @@ export default function AgentFrame({ data, id }: any) {
     // ─── Render ───────────────────────────────────────
     return (
         <div className="performer-node-shell">
+            <Handle type="target" position={Position.Left} className="performer-node-shell__handle" />
+            <Handle type="source" position={Position.Right} className="performer-node-shell__handle" />
             <CanvasWindowFrame
                 className={`nowheel ${isFocused ? 'canvas-frame--focused' : ''}`}
                 width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}

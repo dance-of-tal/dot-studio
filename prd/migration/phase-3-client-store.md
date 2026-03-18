@@ -1,183 +1,199 @@
 # Phase 3 — Client Store & State (Frontend)
 
-> Act 관련 Zustand store를 choreography 모델로 전면 교체한다.
-> Thread 관리, Sidebar 계층, performer session 추적 구현.
-> PRD §5, §7, §17 범위.
+> Revised plan.
+> Dedicated `Act Edit` focus mode를 제거하고,
+> definition/runtime separation과 thread-scoped session identity를 store에 정착시키는 phase다.
+> PRD §5, §10, §17 범위.
+
+이 phase는 incremental cleanup이 아니라 **rewrite-first** 기준으로 진행한다.
 
 ---
 
 ## 목표
 
-- `actSlice.ts` 전면 재작성 — orchestration 기반 상태 제거, Thread 중심 상태 관리 도입
-- Thread → Performer Session 계층 구조의 client state
-- Sidebar 3단 계층 (Act → Thread → Performer 대화) 데이터 모델
-- Act 정의 편집 (relation = communication contract, performer binding, subscriptions)
+- `actSlice.ts`를 selection-based authoring model로 재구성
+- standalone performer / act binding / thread participant session의 identity 분리
+- act participant session key에 `threadId`를 포함시켜 thread 간 session 충돌 방지
+- `mailbox / board` 모델을 `callboard` 중심 용어와 state shape으로 정리
+- 좌측 메뉴가 definition navigation과 runtime navigation을 모두 지원하도록 selector 재구성
 
 ---
 
-## 삭제 대상
+## 현재 코드 기준 문제
 
-### `src/store/actSlice.ts` — 전체 재작성
+### 1. Focus mode 상태가 store를 과도하게 지배
 
-삭제할 상태/액션:
+현재 `editingActId`, `enterActEditFocus`, `exitActEditFocus`가 authoring 진입점이다.
+새 방향에서는 Act 편집이 main canvas selection flow로 들어와야 하므로,
+focus-mode 전용 상태는 핵심 상태가 아니어야 한다.
 
-| 상태/액션 | 삭제 사유 |
+### 2. Act chat key가 thread scope를 반영하지 않음
+
+현재:
+
+```ts
+const chatKey = `act:${actId}:${performerKey}`
+```
+
+이 구조는 같은 Act 안의 다른 thread가 서로 다른 performer sessions를 가져야 한다는 PRD와 충돌한다.
+
+### 3. Binding 과 runtime participant 사이 구분이 약함
+
+Act binding은 ref overlay인데, store가 thread start 시점의 runtime snapshot 정책을 더 분명히 가져야 한다.
+
+---
+
+## 삭제/축소 대상
+
+### `src/store/actSlice.ts`
+
+축소 또는 제거:
+
+| 상태/액션 | 처리 방향 |
 |----------|----------|
-| `executionMode` 관련 (`setActExecutionMode`) | orchestration 패턴 잔재 |
-| `entryPerformerKey` 관련 (`setActEntryPerformer`) | 중앙 entry 강제 제거 (PRD §8) |
-| `copyPerformerConfig()` | performer copy 모델 → ref binding으로 교체 |
-| `addPerformerToAct()` (copy 기반) | performer ref binding 방식으로 교체 |
-| `syncPerformerFromCanvas()` | copy sync 불필요 — ref 직접 참조 |
-| `addRelationInAct()` (from/to 단방향) | `between` 양방향 relation으로 교체 |
-| `importActFromAsset()` (nodes/edges 기반) | 새 registry schema 기반으로 교체 |
+| `editingActId` | 제거 또는 `inspectedActId`로 축소 |
+| `enterActEditFocus()` | 제거 |
+| `exitActEditFocus()` | 제거 |
+| focus snapshot 의존 로직 | 제거 |
+| act-specific hidden/show state for focus mode | 제거 |
 
-### `src/store/types.ts` 내 `ActSlice` 타입
+### `src/store/types.ts`
 
-- 위 액션들의 시그니처 전부 교체
+`ActSlice` 타입에서 focus-mode 중심 API를 제거하고,
+selection + runtime navigation API로 교체한다.
 
 ---
 
-## 새로 작성할 Store
+## 새 store shape
 
-### `src/store/actSlice.ts` [REWRITE]
+### 핵심 selection 상태
 
 ```ts
 interface ActSlice {
-    // ── Act Definition 상태 ─────────────────────
+    // ── Definitions ─────────────────────────────
     acts: StageAct[]
     selectedActId: string | null
-    editingActId: string | null
-    selectedActPerformerKey: string | null
-    selectedRelationId: string | null
+    selectedActParticipantKey: string | null
+    selectedActRelationId: string | null
 
-    // ── Act Thread 상태 ─────────────────────────
-    actThreads: Record<string, ActThreadState[]>  // actId → threads
-    activeThreadId: string | null
-    activeThreadPerformerKey: string | null  // Thread 내 현재 보고 있는 performer
+    // ── Runtime navigation ─────────────────────
+    actThreads: Record<string, ActThreadState[]>
+    selectedActThreadId: string | null
+    selectedActThreadView: 'activity' | 'participant'
+    selectedActThreadParticipantKey: string | null
 
-    // ── Act Definition CRUD ─────────────────────
+    // ── CRUD / authoring ───────────────────────
     addAct: (name: string) => string
     removeAct: (id: string) => void
     renameAct: (id: string, name: string) => void
     updateActDescription: (id: string, description: string) => void
     updateActRules: (id: string, rules: string[]) => void
     selectAct: (id: string | null) => void
-    toggleActVisibility: (id: string) => void
-    toggleActEdit: (id: string | null) => void
 
-    // ── Performer Binding (ref 기반) ────────────
-    bindPerformerToAct: (actId: string, performerRef: AssetRef) => string  // key 반환
+    bindPerformerToAct: (actId: string, performerRef: AssetRef) => string
     unbindPerformerFromAct: (actId: string, performerKey: string) => void
     updatePerformerBinding: (actId: string, performerKey: string, update: Partial<StageActPerformerBinding>) => void
-    selectActPerformer: (key: string | null) => void
+    selectActParticipant: (key: string | null) => void
 
-    // ── Relation (communication contract) ───────
     addRelation: (actId: string, between: [string, string], direction: 'both' | 'one-way') => void
     removeRelation: (actId: string, relationId: string) => void
     updateRelation: (actId: string, relationId: string, update: Partial<ActRelation>) => void
     selectRelation: (id: string | null) => void
 
-    // ── Thread 관리 ─────────────────────────────
-    createThread: (actId: string) => Promise<string>  // API 호출 → threadId
+    // ── Thread runtime ─────────────────────────
+    createThread: (actId: string) => Promise<string>
     selectThread: (threadId: string | null) => void
-    selectThreadPerformer: (performerKey: string | null) => void
+    selectThreadActivity: () => void
+    selectThreadParticipant: (performerKey: string | null) => void
     loadThreads: (actId: string) => Promise<void>
-
-    // ── Canvas ──────────────────────────────────
-    updateActPosition: (id: string, x: number, y: number) => void
-    updateActSize: (id: string, width: number, height: number) => void
-    updateActPerformerPosition: (actId: string, performerKey: string, x: number, y: number) => void
-
-    // ── Focus mode ──────────────────────────────
-    enterActEditFocus: (actId: string) => void
-    exitActEditFocus: () => void
-
-    // ── Import ──────────────────────────────────
-    importActFromAsset: (asset: any) => void  // 새 registry schema 기반
 }
 ```
 
-### `src/store/actSlice.ts` 내 Thread Client State
+### thread-scoped session identity
 
 ```ts
-interface ActThreadState {
-    id: string
+type ChatTargetKey =
+    | `performer:${string}`
+    | `act:${string}:thread:${string}:participant:${string}`
+```
+
+원칙:
+
+- standalone performer session = `performer:${performerId}`
+- act participant session = `act:${actId}:thread:${threadId}:participant:${performerKey}`
+- 같은 `performerKey`라도 `threadId`가 다르면 다른 session이다
+
+---
+
+## Chat / Session 연동 변경
+
+### `src/store/chatSlice.ts`
+
+`sendActMessage()`는 다음을 만족해야 한다.
+
+- 현재 선택된 `threadId`가 없으면 전송하지 않음
+- chat key에 `threadId` 포함
+- session lookup도 `threadId` 포함 key 기반
+- thread start 시 participant sessions를 lazy-create 하거나 API가 돌려준 session map을 사용
+
+예시:
+
+```ts
+const chatKey = `act:${actId}:thread:${threadId}:participant:${performerKey}`
+```
+
+### snapshot 정책
+
+- thread 생성 시 `ActPerformerBinding`을 resolve해서 runtime payload를 만든다
+- 실행 중 thread는 그 snapshot을 기준으로 계속 간다
+- standalone performer 정의 변경은 새 thread에만 자동 반영한다
+
+---
+
+## Sidebar selector 변경
+
+store는 아래 의미를 바로 뽑을 수 있어야 한다.
+
+```ts
+interface ActSidebarNode {
     actId: string
-    status: 'active' | 'idle' | 'completed' | 'interrupted'
-    performerSessions: Record<string, string>  // performerKey → sessionId
-    createdAt: number
+    label: string
+    threads: Array<{
+        threadId: string
+        status: ActThreadState['status']
+        inbox: { unreadCount?: number }
+        participants: Array<{
+            performerKey: string
+            label: string
+            sessionId: string | null
+        }>
+    }>
 }
 ```
 
----
+중요한 점:
 
-## API 연동
-
-### `src/api.ts` 추가 함수
-
-```ts
-// Thread management
-createActThread(actId: string): Promise<{ threadId: string }>
-listActThreads(actId: string): Promise<ActThreadState[]>
-
-// Act runtime events (Activity View용)
-subscribeActEvents(actId: string, threadId: string): EventSource
-
-// Thread performer session
-getThreadPerformerSession(actId: string, threadId: string, performerKey: string): Promise<string>
-```
+- `Performers` 섹션은 definition tree
+- `Acts` 섹션은 runtime tree
+- 같은 이름이라도 경로가 다르면 다른 target이다
 
 ---
 
-## Sidebar 데이터 모델
+## 구현 단계
 
-PRD §5.4 3단 계층:
-
-```
-Acts
-├── 웹앱 개발 (act)
-│   ├── Thread 1
-│   │   ├── Coder (performer 대화)
-│   │   ├── Reviewer
-│   │   └── Tester
-│   ├── Thread 2
-│   │   ├── Coder
-│   │   └── Reviewer
-│   └── + New Thread
-└── 데이터 파이프라인
-    └── Thread 1
-        ├── Architect
-        └── Implementer
-```
-
-Store에서 sidebar 렌더에 필요한 derived state:
-
-```ts
-// selector
-function selectActSidebarTree(state: StudioState): ActSidebarNode[] {
-    return state.acts.map(act => ({
-        actId: act.id,
-        actName: act.name,
-        threads: (state.actThreads[act.id] || []).map(thread => ({
-            threadId: thread.id,
-            status: thread.status,
-            performers: Object.entries(act.performers).map(([key, binding]) => ({
-                performerKey: key,
-                performerName: resolvePerformerName(binding.performerRef),
-                sessionId: thread.performerSessions[key] || null,
-            }))
-        }))
-    }))
-}
-```
+1. `sessionMap` key 규칙에 `threadId`를 추가한다
+2. `sendActMessage`, `ActChatPanel`이 새 key 규칙을 사용하게 바꾼다
+3. `editingActId`와 focus-mode 의존 상태를 제거한다
+4. selection state를 `selectedActId / selectedActThreadId / selectedActThreadParticipantKey`로 재구성한다
+5. sidebar selector를 definition/runtime separation에 맞춰 갱신한다
 
 ---
 
 ## 검증 기준
 
-- [ ] Act 생성 → performer binding → relation 추가가 새 타입으로 동작
-- [ ] Thread 생성 API → client state 반영
-- [ ] Sidebar tree가 Act → Thread → Performer 3단 계층 표시
-- [ ] Thread 내 performer 선택 시 해당 session 연결
-- [ ] Act edit focus mode가 새 구조에서 동작
+- [ ] standalone performer session과 act participant session이 섞이지 않는다
+- [ ] 같은 Act의 서로 다른 thread가 서로 다른 participant sessions를 가진다
+- [ ] thread가 선택되지 않은 상태에서는 act message 전송이 차단된다
+- [ ] sidebar tree가 `Act -> Thread -> Inbox/Participant` 구조를 표시한다
+- [ ] focus-mode 제거 후에도 act definition 편집이 가능하다
 - [ ] `npm run build` 성공

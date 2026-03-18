@@ -17,24 +17,31 @@ export interface MailboxMessage {
     status: 'pending' | 'delivered'
 }
 
+export type CallboardMessage = MailboxMessage
+
 // ── Board ───────────────────────────────────────────────
 
 export interface BoardEntry {
     id: string
     key: string
-    kind: 'artifact' | 'fact' | 'task'
+    kind: 'artifact' | 'fact' | 'task' | 'note'
     author: string
+    sourceType?: 'performer' | 'user' | 'system'
     content: string
     metadata?: Record<string, unknown>
     version: number
     timestamp: number
+    pinned?: boolean
+    locked?: boolean
     ownership: 'authoritative' | 'collaborative'
     updateMode: 'replace' | 'append'
-    writePolicy?: 'author-only' | 'relation-peers' | 'any'
+    writePolicy?: 'author-only' | 'relation-peers' | 'any' | 'user-only'
     status?: 'open' | 'in_progress' | 'done'   // kind='task'
     threadId?: string
     correlationId?: string
 }
+
+export type CallboardEntry = BoardEntry
 
 // ── Events ──────────────────────────────────────────────
 
@@ -53,6 +60,9 @@ export interface MailboxEvent {
     timestamp: number
     payload: Record<string, unknown>
 }
+
+export type CallboardEventType = MailboxEventType
+export type CallboardEvent = MailboxEvent
 
 // ── WakeCondition ───────────────────────────────────────
 
@@ -78,6 +88,7 @@ export interface PerformerSubscriptions {
     messagesFrom?: string[]
     messageTags?: string[]
     boardKeys?: string[]
+    callboardKeys?: string[]
     eventTypes?: MailboxEventType[]
 }
 
@@ -91,6 +102,7 @@ export interface ActRelation {
     description?: string
     permissions?: {
         boardKeys?: string[]
+        callboardKeys?: string[]
         messageTags?: string[]
     }
     maxCalls: number
@@ -123,6 +135,8 @@ export interface MailboxState {
     board: Record<string, BoardEntry>
     wakeConditions: WakeCondition[]
 }
+
+export type CallboardState = MailboxState
 
 // ── Act Thread ──────────────────────────────────────────
 

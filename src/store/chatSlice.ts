@@ -33,6 +33,9 @@ export const createChatSlice: StateCreator<
     [],
     ChatSlice
 > = (set, get) => {
+    const buildActParticipantChatKey = (actId: string, threadId: string, performerKey: string) =>
+        `act:${actId}:thread:${threadId}:participant:${performerKey}`
+
     const createFreshSession = async (
         performerId: string,
         options?: {
@@ -250,15 +253,15 @@ export const createChatSlice: StateCreator<
         },
 
         // ── Act chat (choreography model) ─────────────
-        sendActMessage: async (actId, performerKey, text) => {
+        sendActMessage: async (actId, threadId, performerKey, text) => {
             const act = get().acts.find((a) => a.id === actId)
-            if (!act) return
+            if (!act || !threadId) return
 
             const binding = act.performers[performerKey]
             if (!binding) return
 
-            // Namespaced session key: prevents collision with standalone performer sessions
-            const chatKey = `act:${actId}:${performerKey}`
+            // Thread-scoped session key: separates participant sessions across threads
+            const chatKey = buildActParticipantChatKey(actId, threadId, performerKey)
 
             // Resolve performer config from the ref binding
             // The binding references a standalone performer — look it up
@@ -299,6 +302,20 @@ export const createChatSlice: StateCreator<
                     sessionId = res.sessionId
                     set((s) => ({
                         sessionMap: { ...s.sessionMap, [chatKey]: res.sessionId },
+                        actThreads: {
+                            ...s.actThreads,
+                            [actId]: (s.actThreads[actId] || []).map((thread) =>
+                                thread.id !== threadId
+                                    ? thread
+                                    : {
+                                        ...thread,
+                                        performerSessions: {
+                                            ...thread.performerSessions,
+                                            [performerKey]: res.sessionId,
+                                        },
+                                    },
+                            ),
+                        },
                     }))
                     await get().listSessions()
                 } catch (err) {
@@ -332,7 +349,7 @@ export const createChatSlice: StateCreator<
             try {
                 get().initRealtimeEvents()
 
-                // Choreography model: performer collaboration uses mailbox tools (send_message, post_to_board)
+                // Choreography model: performer collaboration uses callboard tools
                 // No relatedPerformers needed — Act context + tools are injected server-side
                 await api.chat.send(sessionId, {
                     message: text,
@@ -349,7 +366,7 @@ export const createChatSlice: StateCreator<
                         planMode: runtimeConfig.planMode,
                     },
                     actId,
-                    actThreadId: get().activeThreadId || undefined,
+                    actThreadId: threadId,
                 })
                 scheduleSessionFallbackSync(set as any, get, chatKey, sessionId, Date.now())
             } catch (err: any) {
