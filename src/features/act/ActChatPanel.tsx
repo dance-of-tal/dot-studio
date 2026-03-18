@@ -124,6 +124,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             )}
 
             {/* Performer tabs */}
+            {performerKeys.length > 0 && (
             <div className="act-chat__filters">
                 {performerKeys.length === 1 ? (
                     <span className="act-chat__performer-label">
@@ -149,6 +150,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                     })
                 )}
             </div>
+            )}
 
             {/* Thread */}
             <ThreadBody

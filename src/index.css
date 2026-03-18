@@ -240,6 +240,19 @@ html {
     color: var(--text-muted);
 }
 
+.act-edit-toolbar__hint {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+    opacity: 0.8;
+    animation: hint-fade-in 0.3s ease;
+}
+
+@keyframes hint-fade-in {
+    from { opacity: 0; transform: translateX(-4px); }
+    to { opacity: 0.8; transform: translateX(0); }
+}
+
 .act-edit-toolbar__right {
     display: flex;
     align-items: center;

@@ -14,7 +14,6 @@ import ActPerformerFrame from '../../features/act/ActPerformerFrame';
 import ActInspectorPanel from '../../features/act/ActInspectorPanel';
 // PerformerRelationEdge removed — edges now live inside Act edit mode only
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
-import { showToast } from '../../lib/toast';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
 import StageToolbar from '../toolbar/StageToolbar';
 
@@ -618,26 +617,30 @@ export default function CanvasArea() {
             {isActEditFocus && editingActId && (() => {
                 const currentAct = acts.find(a => a.id === editingActId);
                 const performerCount = currentAct ? Object.keys(currentAct.performers).length : 0;
+                const relationCount = currentAct?.relations?.length || 0;
                 return (
                     <div className="act-edit-toolbar">
                         <div className="act-edit-toolbar__left">
                             <span className="act-edit-toolbar__icon">⚡</span>
                             <span className="act-edit-toolbar__name">{currentAct?.name || 'Act'}</span>
-                            <span className="act-edit-toolbar__badge">{performerCount} performer{performerCount !== 1 ? 's' : ''}</span>
+                            <span className="act-edit-toolbar__badge">{performerCount}p · {relationCount}r</span>
+                            {performerCount === 0 && (
+                                <span className="act-edit-toolbar__hint">
+                                    ← Drag performers from the Asset Library to bind them
+                                </span>
+                            )}
+                            {performerCount > 0 && performerCount < 2 && (
+                                <span className="act-edit-toolbar__hint">
+                                    Drag another performer to create relations
+                                </span>
+                            )}
+                            {performerCount >= 2 && relationCount === 0 && (
+                                <span className="act-edit-toolbar__hint">
+                                    Connect performers by dragging from one handle to another
+                                </span>
+                            )}
                         </div>
                         <div className="act-edit-toolbar__right">
-                            <button
-                                className="act-edit-toolbar__btn"
-                                onClick={() => {
-                                    // TODO (Phase 4): Open performer picker to bind a performer ref
-                                    showToast('Use the asset library to drag a performer onto the canvas.', 'info', {
-                                        title: 'Bind Performer',
-                                        dedupeKey: 'act-bind-performer-hint',
-                                    })
-                                }}
-                            >
-                                + Bind Performer
-                            </button>
                             <button
                                 className="act-edit-toolbar__btn act-edit-toolbar__btn--exit"
                                 onClick={() => exitActEditFocus()}
