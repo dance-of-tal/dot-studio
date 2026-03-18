@@ -36,6 +36,7 @@ import {
 import {
     reconnectManagedEventSource,
     closeManagedEventSource,
+    resetManagedEventSource,
 } from './integration-eventsource'
 import type { EventSourceSlot } from './integration-eventsource'
 import {
@@ -179,6 +180,17 @@ export const createIntegrationSlice: StateCreator<
             reconnectAdapterEventSource()
         },
 
+        forceReconnectRealtimeEvents: () => {
+            // Reset the chat SSE slot so that the next reconnect picks up
+            // any new execution directories (e.g. newly created safe-mode
+            // performer sessions) that weren't subscribed to before.
+            resetManagedEventSource(chatSlot)
+            reconnectEventSource()
+            // Adapter stream also depends on directory scope.
+            resetManagedEventSource(adapterSlot)
+            reconnectAdapterEventSource()
+        },
+
         cleanupRealtimeEvents: () => {
             closeManagedEventSource(chatSlot)
             closeManagedEventSource(adapterSlot)
@@ -206,7 +218,6 @@ export const createIntegrationSlice: StateCreator<
                     runtimeConfig.modelVariant,
                     runtimeConfig.agentId,
                     runtimeConfig.mcpServerNames,
-                    get().drafts,
                     runtimeConfig.planMode,
                     runtimeConfig.danceDeliveryMode,
                     relatedPerformers,

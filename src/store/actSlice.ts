@@ -1,30 +1,13 @@
-// DOT Studio — Act Slice
-// Act entity: performer copy management + internal relations + canvas position
+// DOT Studio — Act Slice (Choreography Model)
+// Act entity: performer ref binding + communication contract relations + canvas position
 
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { StudioState, ActSlice } from './types'
-import type { ActPerformer, ActRelation, PerformerNode, StageAct } from '../types'
+import type { StageAct, StageActPerformerBinding, ActRelation } from '../types'
 
 const ACT_DEFAULT_WIDTH = 340
 const ACT_DEFAULT_HEIGHT = 80
-
-function copyPerformerConfig(performer: PerformerNode): ActPerformer {
-    return {
-        sourcePerformerId: performer.id,
-        name: performer.name,
-        position: { x: 0, y: 0 },
-        talRef: performer.talRef ? { ...performer.talRef } : null,
-        danceRefs: performer.danceRefs.map((ref) => ({ ...ref })),
-        model: performer.model ? { ...performer.model } : null,
-        modelVariant: performer.modelVariant ?? null,
-        mcpServerNames: [...performer.mcpServerNames],
-        mcpBindingMap: { ...(performer.mcpBindingMap || {}) },
-        agentId: performer.agentId ?? null,
-        planMode: performer.planMode ?? false,
-        danceDeliveryMode: performer.danceDeliveryMode ?? 'inject',
-    }
-}
 
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
     acts: [],
@@ -33,13 +16,14 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     selectedActPerformerKey: null,
     selectedRelationId: null,
 
+    // ── Act Definition CRUD ─────────────────────────────
+
     addAct: (name) => {
         const id = nanoid(12)
         const center = get().canvasCenter
         const act: StageAct = {
             id,
             name,
-            executionMode: 'direct',
             position: center ? { x: center.x, y: center.y + 200 } : { x: 200, y: 200 },
             width: ACT_DEFAULT_WIDTH,
             height: ACT_DEFAULT_HEIGHT,
@@ -67,15 +51,29 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    setActExecutionMode: (id, mode) => {
+    updateActDescription: (id, description) => {
         set((s) => ({
-            acts: s.acts.map((a) => (a.id === id ? { ...a, executionMode: mode } : a)),
+            acts: s.acts.map((a) => (a.id === id ? { ...a, description } : a)),
+            stageDirty: true,
+        }))
+    },
+
+    updateActRules: (id, rules) => {
+        set((s) => ({
+            acts: s.acts.map((a) => (a.id === id ? { ...a, actRules: rules } : a)),
             stageDirty: true,
         }))
     },
 
     selectAct: (id) => {
-        set({ selectedActId: id })
+        set({ selectedActId: id, selectedPerformerId: null })
+    },
+
+    toggleActVisibility: (id) => {
+        set((s) => ({
+            acts: s.acts.map((a) => (a.id === id ? { ...a, hidden: !a.hidden } : a)),
+            stageDirty: true,
+        }))
     },
 
     toggleActEdit: (id) => {
@@ -84,89 +82,40 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    updateActPosition: (id, x, y) => {
-        set((s) => ({
-            acts: s.acts.map((a) => (a.id === id ? { ...a, position: { x, y } } : a)),
-            stageDirty: true,
-        }))
-    },
+    // ── Performer Binding (ref-based) ───────────────────
 
-    updateActSize: (id, width, height) => {
-        set((s) => ({
-            acts: s.acts.map((a) => (a.id === id ? { ...a, width, height } : a)),
-            stageDirty: true,
-        }))
-    },
-
-    // ── Performer management (copy-based) ──────────────
-
-    addPerformerToAct: (actId, performerId) => {
-        const performer = get().performers.find((p) => p.id === performerId)
-        if (!performer) return
-
-        set((s) => {
-            const act = s.acts.find((a) => a.id === actId)
-            if (!act || act.performers[performerId]) return s  // not found or already in act
-            const existingKeys = Object.keys(act.performers)
-            const newPos = { x: existingKeys.length * 300, y: 100 }
-            return {
-                acts: s.acts.map((a) => {
-                    if (a.id !== actId) return a
-                    return {
-                        ...a,
-                        performers: {
-                            ...a.performers,
-                            [performerId]: { ...copyPerformerConfig(performer), position: newPos },
-                        },
-                    }
-                }),
-                stageDirty: true,
-            }
-        })
-    },
-
-    addNewPerformerInAct: (actId, name) => {
-        const newId = nanoid(12)
-        const newPerformer: ActPerformer = {
-            sourcePerformerId: '',
-            name,
-            position: { x: 0, y: 0 },
-            talRef: null,
-            danceRefs: [],
-            model: null,
-            modelVariant: null,
-            mcpServerNames: [],
-            mcpBindingMap: {},
-            agentId: null,
-            planMode: false,
-            danceDeliveryMode: 'auto',
-        }
+    bindPerformerToAct: (actId, performerRef) => {
+        const newKey = nanoid(12)
         set((s) => {
             const act = s.acts.find((a) => a.id === actId)
             const existingKeys = act ? Object.keys(act.performers) : []
-            newPerformer.position = { x: existingKeys.length * 300, y: 100 }
+            const newPos = { x: existingKeys.length * 300, y: 100 }
+            const binding: StageActPerformerBinding = {
+                performerRef,
+                position: newPos,
+            }
             return {
                 acts: s.acts.map((a) => {
                     if (a.id !== actId) return a
                     return {
                         ...a,
-                        performers: { ...a.performers, [newId]: newPerformer },
+                        performers: { ...a.performers, [newKey]: binding },
                     }
                 }),
                 stageDirty: true,
             }
         })
-        return newId
+        return newKey
     },
 
-    removePerformerFromAct: (actId, performerKey) => {
+    unbindPerformerFromAct: (actId, performerKey) => {
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
                 const { [performerKey]: _removed, ...rest } = a.performers
-                // Also remove relations involving this performer
+                // Remove relations involving this performer
                 const relations = a.relations.filter(
-                    (r) => r.from !== performerKey && r.to !== performerKey,
+                    (r) => !r.between.includes(performerKey),
                 )
                 return { ...a, performers: rest, relations }
             }),
@@ -174,33 +123,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    syncPerformerFromCanvas: (actId, performerKey) => {
-        const act = get().acts.find((a) => a.id === actId)
-        const actPerformer = act?.performers[performerKey]
-        if (!actPerformer) return
-
-        const sourceId = actPerformer.sourcePerformerId
-        if (!sourceId) return
-
-        const canvasPerformer = get().performers.find((p) => p.id === sourceId)
-        if (!canvasPerformer) return
-
-        set((s) => ({
-            acts: s.acts.map((a) => {
-                if (a.id !== actId || !a.performers[performerKey]) return a
-                return {
-                    ...a,
-                    performers: {
-                        ...a.performers,
-                        [performerKey]: copyPerformerConfig(canvasPerformer),
-                    },
-                }
-            }),
-            stageDirty: true,
-        }))
-    },
-
-    updateActPerformer: (actId, performerKey, update) => {
+    updatePerformerBinding: (actId, performerKey, update) => {
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId || !a.performers[performerKey]) return a
@@ -216,77 +139,8 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    // ── Focus mode for Act editing ─────────────────────
-
-    enterActEditFocus: (actId) => {
-        const state = get()
-        const act = state.acts.find((a) => a.id === actId)
-        if (!act) return
-
-        const focusSnapshot = {
-            type: 'act' as const,
-            actId,
-            hiddenPerformerIds: state.performers.filter((p) => p.hidden).map((p) => p.id),
-            hiddenActIds: state.acts.filter((a) => (a as any).hidden).map((a) => a.id),
-            hiddenEditorIds: state.markdownEditors.filter((e) => e.hidden).map((e) => e.id),
-            hiddenTerminalIds: [] as string[],
-            nodeSize: { width: 0, height: 0 }, // not used for Act focus
-            assetLibraryOpen: state.isAssetLibraryOpen,
-            assistantOpen: state.isAssistantOpen,
-            terminalOpen: state.isTerminalOpen,
-        }
-
-        set({
-            editingActId: actId,
-            selectedActId: actId,
-            selectedActPerformerKey: null,
-            focusSnapshot,
-            // Hide all main canvas nodes
-            performers: state.performers.map((p) => ({ ...p, hidden: true })),
-            markdownEditors: state.markdownEditors.map((e) => ({ ...e, hidden: true })),
-            // Close panels that interfere
-            isAssistantOpen: false,
-            isTerminalOpen: false,
-            // Keep asset library available for DnD
-            editingTarget: null,
-            inspectorFocus: null,
-            // Clear performer focus if active
-            focusedPerformerId: null,
-        })
-    },
-
-    exitActEditFocus: () => {
-        const state = get()
-        const snapshot = state.focusSnapshot
-        if (!snapshot || snapshot.type !== 'act') return
-
-        set({
-            editingActId: null,
-            selectedActPerformerKey: null,
-            focusSnapshot: null,
-            // Restore performer hidden states
-            performers: state.performers.map((p) => ({
-                ...p,
-                hidden: snapshot.hiddenPerformerIds.includes(p.id),
-            })),
-            // Restore markdown editors
-            markdownEditors: state.markdownEditors.map((e) => ({
-                ...e,
-                hidden: snapshot.hiddenEditorIds.includes(e.id),
-            })),
-            // Restore panels
-            isAssetLibraryOpen: snapshot.assetLibraryOpen,
-            isAssistantOpen: snapshot.assistantOpen,
-            isTerminalOpen: snapshot.terminalOpen,
-        })
-    },
-
     selectActPerformer: (key) => {
         set({ selectedActPerformerKey: key, selectedRelationId: null })
-    },
-
-    selectRelation: (id) => {
-        set({ selectedRelationId: id, selectedActPerformerKey: null })
     },
 
     updateActPerformerPosition: (actId, performerKey, x, y) => {
@@ -305,40 +159,34 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    // ── Relation management (Act-internal edges) ────────
+    // ── Relation (communication contract) ───────────────
 
-    addRelationInAct: (actId, from, to) => {
-        const act = get().acts.find((a) => a.id === actId)
-        if (!act) return
-        const fromPerf = act.performers[from]
-        const toPerf = act.performers[to]
-        const autoName = fromPerf && toPerf
-            ? `${fromPerf.name.toLowerCase().replace(/\s+/g, '_')}_to_${toPerf.name.toLowerCase().replace(/\s+/g, '_')}`
-            : `rel_${Date.now()}`
+    addRelation: (actId, between, direction) => {
         const relation: ActRelation = {
             id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            from,
-            to,
-            name: autoName,
-            description: '',
-            invocation: 'optional',
-            await: true,
-            sessionPolicy: 'fresh',
+            between,
+            direction,
+            name: `${between[0]}_to_${between[1]}`,
             maxCalls: 10,
             timeout: 300,
         }
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
-                // Prevent duplicates
-                if (a.relations.some((r) => r.from === from && r.to === to)) return a
+                // Prevent duplicates (same pair)
+                const exists = a.relations.some(
+                    (r) =>
+                        (r.between[0] === between[0] && r.between[1] === between[1]) ||
+                        (r.between[0] === between[1] && r.between[1] === between[0]),
+                )
+                if (exists) return a
                 return { ...a, relations: [...a.relations, relation] }
             }),
             stageDirty: true,
         }))
     },
 
-    removeRelationFromAct: (actId, relationId) => {
+    removeRelation: (actId, relationId) => {
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
@@ -363,6 +211,85 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
+    selectRelation: (id) => {
+        set({ selectedRelationId: id, selectedActPerformerKey: null })
+    },
+
+    // ── Canvas ──────────────────────────────────────────
+
+    updateActPosition: (id, x, y) => {
+        set((s) => ({
+            acts: s.acts.map((a) => (a.id === id ? { ...a, position: { x, y } } : a)),
+            stageDirty: true,
+        }))
+    },
+
+    updateActSize: (id, width, height) => {
+        set((s) => ({
+            acts: s.acts.map((a) => (a.id === id ? { ...a, width, height } : a)),
+            stageDirty: true,
+        }))
+    },
+
+    // ── Focus mode for Act editing ──────────────────────
+
+    enterActEditFocus: (actId) => {
+        const state = get()
+        const act = state.acts.find((a) => a.id === actId)
+        if (!act) return
+
+        const focusSnapshot = {
+            type: 'act' as const,
+            actId,
+            hiddenPerformerIds: state.performers.filter((p) => p.hidden).map((p) => p.id),
+            hiddenActIds: state.acts.filter((a) => (a as any).hidden).map((a) => a.id),
+            hiddenEditorIds: state.markdownEditors.filter((e) => e.hidden).map((e) => e.id),
+            hiddenTerminalIds: [] as string[],
+            nodeSize: { width: 0, height: 0 },
+            assetLibraryOpen: state.isAssetLibraryOpen,
+            assistantOpen: state.isAssistantOpen,
+            terminalOpen: state.isTerminalOpen,
+        }
+
+        set({
+            editingActId: actId,
+            selectedActId: actId,
+            selectedActPerformerKey: null,
+            focusSnapshot,
+            performers: state.performers.map((p) => ({ ...p, hidden: true })),
+            markdownEditors: state.markdownEditors.map((e) => ({ ...e, hidden: true })),
+            isAssistantOpen: false,
+            isTerminalOpen: false,
+            editingTarget: null,
+            inspectorFocus: null,
+            focusedPerformerId: null,
+            focusedNodeType: null,
+        })
+    },
+
+    exitActEditFocus: () => {
+        const state = get()
+        const snapshot = state.focusSnapshot
+        if (!snapshot || snapshot.type !== 'act') return
+
+        set({
+            editingActId: null,
+            selectedActPerformerKey: null,
+            focusSnapshot: null,
+            performers: state.performers.map((p) => ({
+                ...p,
+                hidden: snapshot.hiddenPerformerIds.includes(p.id),
+            })),
+            markdownEditors: state.markdownEditors.map((e) => ({
+                ...e,
+                hidden: snapshot.hiddenEditorIds.includes(e.id),
+            })),
+            isAssetLibraryOpen: snapshot.assetLibraryOpen,
+            isAssistantOpen: snapshot.assistantOpen,
+            isTerminalOpen: snapshot.terminalOpen,
+        })
+    },
+
     // ── Authoring / import ──────────────────────────────
 
     updateActAuthoringMeta: (id, meta) => {
@@ -376,69 +303,58 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         const id = nanoid(12)
         const center = get().canvasCenter
 
-        // Build performers from asset nodes
-        const performers: Record<string, ActPerformer> = {}
-        const idMapping: Record<string, string> = {} // old node id → new key
+        // Build performer bindings from asset
+        const performers: Record<string, StageActPerformerBinding> = {}
+        const idMapping: Record<string, string> = {}
 
         const nodes: any[] = Array.isArray(asset.performers)
             ? asset.performers
-            : Array.isArray(asset.nodes)
-                ? Object.values(asset.nodes)
-                : typeof asset.nodes === 'object' && asset.nodes
-                    ? Object.values(asset.nodes)
-                    : []
+            : typeof asset.performers === 'object' && asset.performers
+                ? Object.values(asset.performers)
+                : []
 
         for (const node of nodes) {
             const newKey = nanoid(8)
             const oldId = node.id || node.name || newKey
             idMapping[oldId] = newKey
 
+            // Build performer ref
+            const performerRef = node.performerRef || (node.urn
+                ? { kind: 'registry' as const, urn: node.urn }
+                : node.draftId
+                    ? { kind: 'draft' as const, draftId: node.draftId }
+                    : { kind: 'draft' as const, draftId: '' })
+
             performers[newKey] = {
-                sourcePerformerId: '',
-                name: node.name || `Performer ${Object.keys(performers).length + 1}`,
+                performerRef,
+                activeDanceIds: node.activeDanceIds,
+                subscriptions: node.subscriptions,
                 position: { x: Object.keys(performers).length * 300, y: 100 },
-                talRef: node.talRef || node.talUrn
-                    ? (node.talRef || { kind: 'registry' as const, urn: node.talUrn })
-                    : null,
-                danceRefs: Array.isArray(node.danceRefs)
-                    ? node.danceRefs
-                    : Array.isArray(node.danceUrns)
-                        ? node.danceUrns.map((urn: string) => ({ kind: 'registry' as const, urn }))
-                        : [],
-                model: node.model || null,
-                modelVariant: node.modelVariant ?? null,
-                mcpServerNames: Array.isArray(node.mcpServerNames) ? node.mcpServerNames : [],
-                mcpBindingMap: node.mcpBindingMap || {},
-                agentId: node.agentId ?? null,
-                planMode: node.planMode ?? false,
-                danceDeliveryMode: node.danceDeliveryMode ?? 'auto',
             }
         }
 
-        // Build relations from asset edges/relations
-        const rawRelations: any[] = Array.isArray(asset.relations)
-            ? asset.relations
-            : Array.isArray(asset.edges)
-                ? asset.edges
-                : []
-
+        // Build relations from asset
+        const rawRelations: any[] = Array.isArray(asset.relations) ? asset.relations : []
         const relations: ActRelation[] = rawRelations.map((r: any) => ({
             id: nanoid(8),
-            from: idMapping[r.from] || r.from,
-            to: idMapping[r.to] || r.to,
+            between: [
+                idMapping[r.between?.[0]] || r.between?.[0] || '',
+                idMapping[r.between?.[1]] || r.between?.[1] || '',
+            ] as [string, string],
+            direction: r.direction || 'both' as const,
             name: r.name || `rel_${nanoid(6)}`,
-            description: r.description || '',
-            invocation: r.invocation || 'optional' as const,
-            await: r.await ?? true,
-            sessionPolicy: r.sessionPolicy || 'fresh' as const,
+            description: r.description,
+            permissions: r.permissions,
             maxCalls: r.maxCalls ?? 10,
             timeout: r.timeout ?? 300,
+            sessionPolicy: r.sessionPolicy,
         }))
 
         const newAct: StageAct = {
             id,
             name: asset.name || `Act ${get().acts.length + 1}`,
-            executionMode: asset.executionMode || 'direct',
+            description: asset.description,
+            actRules: asset.actRules,
             performers,
             relations,
             position: { x: (center?.x ?? 400) - ACT_DEFAULT_WIDTH / 2, y: center?.y ?? 300 },

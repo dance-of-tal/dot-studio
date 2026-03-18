@@ -122,6 +122,12 @@ stages.put('/api/stages', async (c) => {
 
     await fs.writeFile(filePath, JSON.stringify(stage, null, 2), 'utf-8')
     const stat = await fs.stat(filePath)
+
+    // Project assistant agent whenever the stage is saved
+    import('../services/studio-assistant/assistant-service.js').then(({ ensureAssistantAgent }) =>
+        ensureAssistantAgent(workingDir).catch(() => {}),
+    )
+
     return c.json({
         ok: true,
         id,

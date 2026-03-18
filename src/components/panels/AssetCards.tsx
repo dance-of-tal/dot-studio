@@ -16,6 +16,7 @@ import {
     X,
     FolderOpen,
     GitBranch,
+    Trash2,
 } from 'lucide-react';
 import { api } from '../../api';
 import {
@@ -595,6 +596,7 @@ export function PinnedDetailPanel({
     onSaveLocal,
     onPublish,
     onImportToStage,
+    onDeleteDraft,
 }: {
     asset: any | null
     installed: boolean
@@ -605,6 +607,7 @@ export function PinnedDetailPanel({
     onSaveLocal?: (asset: any) => Promise<void>
     onPublish?: (asset: any) => Promise<void>
     onImportToStage?: (asset: any) => Promise<void>
+    onDeleteDraft?: (asset: any) => Promise<void>
 }) {
     const { resolvedAsset, loading } = useResolvedAssetDetail(asset)
 
@@ -659,6 +662,16 @@ export function PinnedDetailPanel({
                         disabled={actionLoading !== null}
                     >
                         {actionLoading === 'import' ? 'Importing…' : 'Import to Stage'}
+                    </button>
+                </div>
+            ) : null}
+            {resolvedAsset?.source === 'draft' && onDeleteDraft ? (
+                <div className="btns">
+                    <button
+                        className="btn btn--danger"
+                        onClick={() => onDeleteDraft(resolvedAsset)}
+                    >
+                        <Trash2 size={11} style={{ marginRight: 4 }} /> Delete Draft
                     </button>
                 </div>
             ) : null}

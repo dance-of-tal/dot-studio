@@ -52,50 +52,50 @@ export async function sendStudioChatMessage(
         )
     }
 
-    const requestTargets = (request.relatedPerformers || []).map((related) => ({
-        performerId: related.performerId,
-        performerName: related.performerName,
-        description: related.description || '',
-    }))
+    // Extract raw performer key for Act-namespaced chatKeys
+    const rawPerformerId = request.actId && performer.performerId.startsWith('act:')
+        ? performer.performerId.split(':').slice(2).join(':')
+        : performer.performerId
 
-    const ensured = await ensurePerformerProjection({
-        performerId: performer.performerId,
-        performerName: performer.performerName,
-        talRef: performer.talRef,
-        danceRefs: [...(performer.danceRefs || []), ...(performer.extraDanceRefs || [])],
-        drafts: performer.drafts || {},
-        model: performer.model,
-        modelVariant: performer.modelVariant || null,
-        mcpServerNames: performer.mcpServerNames || [],
-        executionDir,
-        workingDir,
-        requestTargets,
-        ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
-    })
+    // Note: In the choreography model, inter-performer communication is handled
+    // by the mailbox event router (Phase 2), not by custom tool projection here.
+    // This function now only handles single-performer chat projection.
 
-    for (const related of request.relatedPerformers || []) {
-        if (!related.model) {
-            continue
+    // ── Studio Assistant — agent projected at stage-save / activate time.
+    //    Fallback: re-ensure here in case files were deleted or never created.
+    const isAssistant = rawPerformerId === 'studio-assistant'
+    let ensured: Awaited<ReturnType<typeof ensurePerformerProjection>>
+
+    if (isAssistant) {
+        const { ensureAssistantAgent } = await import('./studio-assistant/assistant-service.js')
+        const agentName = await ensureAssistantAgent(executionDir)
+
+        // Build a minimal "ensured" result compatible with the rest of the function
+        ensured = {
+            compiled: {
+                agentNames: { build: agentName, plan: agentName },
+                agentPaths: { build: '', plan: '' },
+                agentContents: { build: '', plan: '' },
+                allFiles: [],
+            } as any,
+            toolResolution: {
+                selectedMcpServers: [],
+                resolvedTools: [],
+                unavailableTools: [],
+            } as any,
+            capabilitySnapshot: null as any,
         }
-        // Pass B's own outgoing edges as requestTargets so B's agent .md
-        // gets task-allowlist entries (enabling A→B→C chaining).
-        const nestedTargets = (related.relatedPerformerIds || []).map((target) => ({
-            performerId: target.performerId,
-            performerName: target.performerName,
-            description: target.description || '',
-        }))
-        await ensurePerformerProjection({
-            performerId: related.performerId,
-            performerName: related.performerName,
-            talRef: related.talRef,
-            danceRefs: related.danceRefs,
-            drafts: related.drafts || performer.drafts || {},
-            model: related.model,
-            modelVariant: related.modelVariant || null,
-            mcpServerNames: related.mcpServerNames || [],
+    } else {
+        ensured = await ensurePerformerProjection({
+            performerId: rawPerformerId,
+            performerName: performer.performerName,
+            talRef: performer.talRef,
+            danceRefs: [...(performer.danceRefs || []), ...(performer.extraDanceRefs || [])],
+            model: performer.model,
+            modelVariant: performer.modelVariant || null,
+            mcpServerNames: performer.mcpServerNames || [],
             executionDir,
             workingDir,
-            requestTargets: nestedTargets.length > 0 ? nestedTargets : undefined,
             ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
         })
     }
@@ -131,6 +131,12 @@ export async function sendStudioChatMessage(
         sessionID: sessionId,
         directory: executionDir,
         agent: ensured.compiled.agentNames[performer.planMode ? 'plan' : 'build'],
+        // Pass model directly so OpenCode uses the user's selected model,
+        // not the (potentially stale) model cached from the agent file.
+        model: performer.model ? {
+            providerID: performer.model.provider,
+            modelID: performer.model.modelId,
+        } : undefined,
         parts,
     }))
 

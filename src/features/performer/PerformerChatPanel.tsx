@@ -23,7 +23,6 @@ import RevertConfirmModal from '../../components/chat/RevertConfirmModal'
 import ModelVariantSelect from './ModelVariantSelect'
 import PermissionDock from './PermissionDock'
 import QuestionWizard from './QuestionWizard'
-import TodoDock from './TodoDock'
 
 import {
     buildDanceSearchSections,
@@ -114,7 +113,6 @@ export default function PerformerChatPanel({
         revertSession,
         pendingPermissions,
         pendingQuestions,
-        todos,
         respondToPermission,
         respondToQuestion,
         rejectQuestion,
@@ -354,9 +352,6 @@ export default function PerformerChatPanel({
 
     return (
         <>
-            {sessionId && todos[sessionId] ? (
-                <TodoDock todos={todos[sessionId]} />
-            ) : null}
             <ThreadBody
                 messages={messages}
                 loading={shouldShowChatLoading(messages, isLoading)}
@@ -665,9 +660,14 @@ export default function PerformerChatPanel({
                 <RevertConfirmModal
                     messagePreview={revertTarget.messageContent}
                     hasGit={hasGit}
-                    onConfirm={() => {
-                        revertSession(revertTarget.performerId, revertTarget.messageId)
+                    onConfirm={async () => {
+                        const content = revertTarget.messageContent
+                        await revertSession(revertTarget.performerId, revertTarget.messageId)
                         setRevertTarget(null)
+                        // Restore the reverted message text into the input
+                        setInput(content)
+                        // Focus the input after a tick
+                        setTimeout(() => composerInputRef.current?.focus(), 50)
                     }}
                     onCancel={() => setRevertTarget(null)}
                 />

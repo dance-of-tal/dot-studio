@@ -250,8 +250,21 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
     async function disconnectProvider(providerId: string, providerName: string) {
         setError(null)
         setProjectMessage(null)
+        const provider = providers.find((p) => p.id === providerId)
+        const isCustomSource = provider?.source === 'custom'
         try {
             await api.provider.clearAuth(providerId)
+            // For custom-source providers (e.g. OpenCode Zen), also add to disabled_providers
+            // to suppress them from the connected list — mirrors OpenCode web's disableProvider flow.
+            if (isCustomSource) {
+                const projectRes = await api.config.getProject().catch(() => ({ config: {} as any }))
+                const current: string[] = projectRes.config?.disabled_providers ?? []
+                if (!current.includes(providerId)) {
+                    await api.config.update({
+                        disabled_providers: [...current, providerId],
+                    }).catch(() => { /* best-effort */ })
+                }
+            }
             clearProviderFlow(providerId)
             setModelPicker((current) => current?.providerId === providerId ? null : current)
             await refreshProviderState()

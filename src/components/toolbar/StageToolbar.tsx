@@ -9,15 +9,13 @@ import { useServerHealth, useDotStatus, usePerformers } from '../../hooks/querie
 import { useDotLogin } from '../../hooks/useDotLogin';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../hooks/queries';
+import { DropdownMenu } from '../shared/DropdownMenu';
 
 import './StageToolbar.css';
 
 export default function StageToolbar() {
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [markdownMenuOpen, setMarkdownMenuOpen] = useState(false);
     const [publishOpen, setPublishOpen] = useState(false);
-    const [terminalMenuOpen, setTerminalMenuOpen] = useState(false);
-    const [authMenuOpen, setAuthMenuOpen] = useState(false);
 
     const theme = useStudioStore(s => s.theme);
     const toggleTheme = useStudioStore(s => s.toggleTheme);
@@ -102,58 +100,38 @@ export default function StageToolbar() {
                     </span>
                 )}
 
-                <div className="toolbar__dropdown">
-                    <button
-                        className={`toolbar__item dot-auth-status ${authUser?.authenticated ? 'dot-auth-status--ok' : 'dot-auth-status--warn'}`}
-                        onClick={() => {
-                            if (!authUser?.authenticated) {
-                                void startLogin(true);
-                                return;
-                            }
-                            setAuthMenuOpen((open) => !open);
-                        }}
-                        title={authUser?.authenticated
-                            ? `Signed in as @${authUser.username}`
-                            : isAuthenticating
-                                ? 'Waiting for DOT login to complete in the browser'
-                                : 'Review the DOT Terms of Service and sign in'
-                        }
-                        style={{
-                            cursor: authUser?.authenticated ? 'pointer' : 'pointer',
-                            border: 'none',
-                            background: 'none',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '0 6px',
-                            fontSize: '11px',
-                        }}
-                    >
-                        {authUser?.authenticated ? <UserRound size={12} /> : <LogIn size={12} />}
-                        <span>
-                            {authUser?.authenticated
-                                ? `@${authUser.username}`
-                                : isAuthenticating
-                                    ? 'Signing in…'
-                                    : 'Sign in'}
-                        </span>
-                        {authUser?.authenticated ? <ChevronDown size={10} /> : null}
-                    </button>
-                    {authUser?.authenticated && authMenuOpen ? (
-                        <div className="toolbar__menu toolbar__menu--right">
+                {authUser?.authenticated ? (
+                    <DropdownMenu
+                        align="right"
+                        trigger={
                             <button
-                                className="toolbar__menu-item"
-                                onClick={() => {
-                                    setAuthMenuOpen(false);
-                                    void logout();
-                                }}
-                                disabled={isLoggingOut}
+                                className="toolbar__item dot-auth-status dot-auth-status--ok"
+                                title={`Signed in as @${authUser.username}`}
+                                style={{ cursor: 'pointer', border: 'none', background: 'none', display: 'flex', alignItems: 'center', gap: '4px', padding: '0 6px', fontSize: '11px' }}
                             >
-                                {isLoggingOut ? 'Signing out…' : 'Log out'}
+                                <UserRound size={12} />
+                                <span>@{authUser.username}</span>
+                                <ChevronDown size={10} />
                             </button>
-                        </div>
-                    ) : null}
-                </div>
+                        }
+                        items={[
+                            { label: isLoggingOut ? 'Signing out…' : 'Log out', onClick: () => void logout(), disabled: isLoggingOut },
+                        ]}
+                    />
+                ) : (
+                    <button
+                        className="toolbar__item dot-auth-status dot-auth-status--warn"
+                        onClick={() => void startLogin(true)}
+                        title={isAuthenticating
+                            ? 'Waiting for DOT login to complete in the browser'
+                            : 'Review the DOT Terms of Service and sign in'
+                        }
+                        style={{ cursor: 'pointer', border: 'none', background: 'none', display: 'flex', alignItems: 'center', gap: '4px', padding: '0 6px', fontSize: '11px' }}
+                    >
+                        <LogIn size={12} />
+                        <span>{isAuthenticating ? 'Signing in…' : 'Sign in'}</span>
+                    </button>
+                )}
 
                 <span
                     className="toolbar__item"
@@ -164,67 +142,35 @@ export default function StageToolbar() {
 
                 <div className="divider-v" />
 
-                <div className="toolbar__dropdown">
-                    <button className="icon-btn" onClick={() => setTerminalMenuOpen(o => !o)} title="Terminal">
-                        <TerminalIcon size={12} className={isTerminalOpen ? 'icon-active' : ''} />
-                        <ChevronDown size={10} />
-                    </button>
-                    {terminalMenuOpen ? (
-                        <div className="toolbar__menu">
-                            <button
-                                className="toolbar__menu-item"
-                                onClick={() => {
-                                    setTerminalOpen(!isTerminalOpen);
-                                    setTerminalMenuOpen(false);
-                                }}
-                            >
-                                {isTerminalOpen ? 'Hide' : 'Show'} Pinned Terminal
-                            </button>
-                            <button
-                                className="toolbar__menu-item"
-                                onClick={() => {
-                                    addCanvasTerminal();
-                                    setTerminalMenuOpen(false);
-                                }}
-                            >
-                                Add Terminal to Canvas
-                            </button>
-                        </div>
-                    ) : null}
-                </div>
+                <DropdownMenu
+                    trigger={
+                        <button className="icon-btn" title="Terminal">
+                            <TerminalIcon size={12} className={isTerminalOpen ? 'icon-active' : ''} />
+                            <ChevronDown size={10} />
+                        </button>
+                    }
+                    items={[
+                        { label: `${isTerminalOpen ? 'Hide' : 'Show'} Pinned Terminal`, onClick: () => setTerminalOpen(!isTerminalOpen) },
+                        { label: 'Add Terminal to Canvas', onClick: () => addCanvasTerminal() },
+                    ]}
+                />
 
                 <button className="icon-btn" onClick={() => setTrackingOpen(!isTrackingOpen)} title="Stage Tracking">
                     <Github size={12} className={isTrackingOpen ? 'icon-active' : ''} />
                 </button>
 
-                <div className="toolbar__dropdown">
-                    <button className="icon-btn" onClick={() => setMarkdownMenuOpen((open) => !open)} title="Markdown editors">
-                        <FileText size={12} />
-                        <ChevronDown size={10} />
-                    </button>
-                    {markdownMenuOpen ? (
-                        <div className="toolbar__menu">
-                            <button
-                                className="toolbar__menu-item"
-                                onClick={() => {
-                                    createMarkdownEditor('tal');
-                                    setMarkdownMenuOpen(false);
-                                }}
-                            >
-                                New Tal Editor
-                            </button>
-                            <button
-                                className="toolbar__menu-item"
-                                onClick={() => {
-                                    createMarkdownEditor('dance');
-                                    setMarkdownMenuOpen(false);
-                                }}
-                            >
-                                New Dance Editor
-                            </button>
-                        </div>
-                    ) : null}
-                </div>
+                <DropdownMenu
+                    trigger={
+                        <button className="icon-btn" title="Markdown editors">
+                            <FileText size={12} />
+                            <ChevronDown size={10} />
+                        </button>
+                    }
+                    items={[
+                        { label: 'New Tal Editor', onClick: () => createMarkdownEditor('tal') },
+                        { label: 'New Dance Editor', onClick: () => createMarkdownEditor('dance') },
+                    ]}
+                />
 
                 <button className="icon-btn" onClick={() => setPublishOpen(true)} title="Save or publish selected asset">
                     <Upload size={12} />

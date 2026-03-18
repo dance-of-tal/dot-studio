@@ -26,6 +26,8 @@ export type DragAsset = Omit<Partial<AssetCard>, 'kind'> & {
     value?: unknown;
     mcpConfig?: Record<string, unknown> | null;
     mcpBindingMap?: Record<string, string>;
+    /** Structured draft content for performer/act drafts */
+    draftContent?: unknown;
 };
 
 export type DropTargetData = {
@@ -154,59 +156,28 @@ export function parseActPerformerDropId(dropId: string): { performerKey: string 
 }
 
 /**
- * Apply a asset drop to an Act performer (routes to updateActPerformer).
+ * Apply an asset drop to an Act performer binding.
+ * In the choreography model, Act performers are refs — we can only bind performer refs.
+ * Direct config drops (tal, dance, model, mcp) are not supported on Act performer bindings.
  */
 export function applyAssetToActPerformer(
     store: StudioState,
     actId: string,
-    performerKey: string,
-    dropType: string | undefined,
+    _performerKey: string,
+    _dropType: string | undefined,
     asset: DragAsset,
-    showDropWarning: (message: string) => void,
+    _showDropWarning: (message: string) => void,
 ): boolean {
-    if (dropType === 'tal' && asset.kind === 'tal') {
+    if (asset.kind === 'performer') {
+        // In choreography model, bind performer ref to act
         const ref = assetRefFromDragAsset(asset)
         if (ref) {
-            store.updateActPerformer(actId, performerKey, { talRef: ref })
+            store.bindPerformerToAct(actId, ref)
         }
         return true
     }
 
-    if (dropType === 'dance' && asset.kind === 'dance') {
-        const ref = assetRefFromDragAsset(asset)
-        if (ref) {
-            // Append to existing danceRefs
-            const act = store.acts.find((a) => a.id === actId)
-            const performer = act?.performers[performerKey]
-            if (performer) {
-                store.updateActPerformer(actId, performerKey, {
-                    danceRefs: [...performer.danceRefs, ref],
-                })
-            }
-        }
-        return true
-    }
-
-    if (dropType === 'model' && asset.kind === 'model') {
-        store.updateActPerformer(actId, performerKey, {
-            model: { provider: asset.provider as string, modelId: asset.modelId as string },
-        })
-        if (asset.connected === false) {
-            showDropWarning(`${asset.providerName || asset.provider} is not connected yet.`)
-        }
-        return true
-    }
-
-    if (dropType === 'mcp' && asset.kind === 'mcp') {
-        const act = store.acts.find((a) => a.id === actId)
-        const performer = act?.performers[performerKey]
-        if (performer && asset.name) {
-            store.updateActPerformer(actId, performerKey, {
-                mcpServerNames: [...new Set([...performer.mcpServerNames, asset.name])],
-            })
-        }
-        return true
-    }
-
+    // Other asset types (tal, dance, model, mcp) cannot be directly applied
+    // to Act performer bindings in the choreography model — they're ref-based
     return false
 }

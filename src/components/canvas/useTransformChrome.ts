@@ -17,9 +17,14 @@ type UseTransformChromeOptions = {
 export default function useTransformChrome({ active, onActivate, onDeactivate }: UseTransformChromeOptions) {
     const [isResizeActive, setIsResizeActive] = useState(false)
 
-    const activateTransformChrome = useCallback(() => {
-        onActivate?.()
-    }, [onActivate])
+    /** Toggle resize chrome on/off via button click */
+    const toggleTransformChrome = useCallback(() => {
+        if (active) {
+            onDeactivate?.()
+        } else {
+            onActivate?.()
+        }
+    }, [active, onActivate, onDeactivate])
 
     const handleFramePointerDownCapture = useCallback((event: ReactPointerEvent<HTMLElement>) => {
         const target = event.target as HTMLElement | null
@@ -42,7 +47,7 @@ export default function useTransformChrome({ active, onActivate, onDeactivate }:
     return {
         isTransformChromeActive: active,
         showResizeChrome: active || isResizeActive,
-        activateTransformChrome,
+        toggleTransformChrome,
         handleFramePointerDownCapture,
         handleResizeStart,
         handleResizeEnd,

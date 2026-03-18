@@ -8,25 +8,18 @@ import type { Posture } from './projection-manifest.js'
 export type { Posture } from './projection-manifest.js'
 import type { CompiledSkill } from './dance-compiler.js'
 import type { ModelSelection } from '../../../shared/model-types.js'
+import { readDraftTextContent } from '../draft-service.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
     | { kind: 'draft'; draftId: string }
 
-type DraftAsset = {
-    id: string
-    kind: string
-    name: string
-    content: unknown
-    description?: string
-    derivedFrom?: string | null
-}
+
 
 export interface PerformerCompileInput {
     performerId: string
     performerName: string
     talRef: AssetRef | null
-    drafts: Record<string, DraftAsset>
     model: ModelSelection
     modelVariant?: string | null
     stageHash: string
@@ -48,40 +41,20 @@ type AgentFile = {
 
 export interface CompiledPerformer {
     performerId: string
-    agentNames: Record<Posture, string>
-    agentPaths: Record<Posture, string>
-    agentContents: Record<Posture, string>
+    agentNames: Partial<Record<Posture, string>>
+    agentPaths: Partial<Record<Posture, string>>
+    agentContents: Partial<Record<Posture, string>>
     skills: CompiledSkill[]
     projectionHash: string
     allFiles: string[]
 }
 
-function extractDraftTextContent(draft: DraftAsset | undefined | null): string | null {
-    if (!draft) {
-        return null
-    }
 
-    if (typeof draft.content === 'string') {
-        return draft.content
-    }
 
-    if (draft.content && typeof draft.content === 'object') {
-        const content = draft.content as Record<string, unknown>
-        if (typeof content.content === 'string') {
-            return content.content
-        }
-        if (typeof content.body === 'string') {
-            return content.body
-        }
-    }
-
-    return null
-}
 
 async function resolveTalContent(
     cwd: string,
     ref: AssetRef | null,
-    drafts: Record<string, DraftAsset>,
 ): Promise<string | null> {
     if (!ref) {
         return null
@@ -91,17 +64,10 @@ async function resolveTalContent(
         return getAssetPayload(cwd, ref.urn)
     }
 
-    return extractDraftTextContent(drafts[ref.draftId])
+    return readDraftTextContent(cwd, 'tal', ref.draftId)
 }
 
-function buildSystemPreamble() {
-    return [
-        '# Runtime Instructions',
-        'The section named Core Instructions is the always-on instruction layer for your role, rules, and operating logic.',
-        'Use only the minimum context and tools needed to complete the task well.',
-        'Do not mention internal runtime wiring unless the user asks about it directly.',
-    ].join('\n')
-}
+
 
 function buildTalSection(talContent: string | null) {
     if (!talContent) {
@@ -125,7 +91,6 @@ function buildBody(input: {
     relationPromptSection?: string | null
 }) {
     return [
-        buildSystemPreamble(),
         buildTalSection(input.talContent),
         input.relationPromptSection || null,
     ].filter(Boolean).join('\n\n')
@@ -238,7 +203,7 @@ export async function compilePerformer(
     input: PerformerCompileInput,
     skills: CompiledSkill[],
 ): Promise<CompiledPerformer> {
-    const talContent = await resolveTalContent(cwd, input.talRef, input.drafts)
+    const talContent = await resolveTalContent(cwd, input.talRef)
 
     let resolvedVariantId: string | null = null
     if (input.model) {
@@ -277,49 +242,56 @@ export async function compilePerformer(
         body,
     })
 
-    const planFile = buildAgentFile({
-        stageHash: input.stageHash,
-        performerId: input.performerId,
-        performerName: input.performerName,
-        executionDir: input.executionDir,
-        scope: input.scope || 'stage',
-        actId: input.actId,
-        model: input.model,
-        posture: 'plan',
-        variantId: resolvedVariantId,
-        skillNames: input.skillNames,
-        toolMap: input.toolMap,
-        taskAllowlist: input.taskAllowlist,
-        body,
-    })
+    // Act scope: build-only (no plan agent — complex multi-performer Acts
+    // make plan mode impractical to control across the whole graph).
+    const includePlan = (input.scope || 'stage') !== 'act'
+    const planFile = includePlan
+        ? buildAgentFile({
+            stageHash: input.stageHash,
+            performerId: input.performerId,
+            performerName: input.performerName,
+            executionDir: input.executionDir,
+            scope: input.scope || 'stage',
+            actId: input.actId,
+            model: input.model,
+            posture: 'plan',
+            variantId: resolvedVariantId,
+            skillNames: input.skillNames,
+            toolMap: input.toolMap,
+            taskAllowlist: input.taskAllowlist,
+            body,
+        })
+        : null
 
     const hashInput = [
         buildFile.content,
-        planFile.content,
+        planFile?.content,
         ...skills.map((skill) => skill.content),
-    ].join('\n\n')
+    ].filter(Boolean).join('\n\n')
     const projectionHash = createHash('sha256').update(hashInput).digest('hex').slice(0, 16)
+
+    const allFiles = [
+        buildFile.relativePath,
+        ...(planFile ? [planFile.relativePath] : []),
+        ...skills.map((skill) => skill.relativePath),
+    ]
 
     return {
         performerId: input.performerId,
         agentNames: {
             build: buildFile.agentName,
-            plan: planFile.agentName,
+            ...(planFile ? { plan: planFile.agentName } : {}),
         },
         agentPaths: {
             build: buildFile.filePath,
-            plan: planFile.filePath,
+            ...(planFile ? { plan: planFile.filePath } : {}),
         },
         agentContents: {
             build: buildFile.content,
-            plan: planFile.content,
+            ...(planFile ? { plan: planFile.content } : {}),
         },
         skills,
         projectionHash,
-        allFiles: [
-            buildFile.relativePath,
-            planFile.relativePath,
-            ...skills.map((skill) => skill.relativePath),
-        ],
+        allFiles,
     }
 }

@@ -64,6 +64,10 @@
     --status-neutral-dim: #9ca3af;
 
 
+    /* Terminal */
+    --terminal-bg: #f7f7f7;
+    --terminal-fg: #1e1e1e;
+    --terminal-output: #555555;
 
     color-scheme: light;
 }
@@ -106,6 +110,10 @@
     --status-neutral-dim: #6b7280;
 
 
+    /* Terminal */
+    --terminal-bg: #1e1e1e;
+    --terminal-fg: #d4d4d4;
+    --terminal-output: #a3a3a3;
 
     color-scheme: dark;
 }

@@ -3,7 +3,6 @@
  *
  * Domain logic is split into:
  *   - chat/chat-internals.ts   — shared helpers (sync, fallback poller, system messages)
- *   - chat/act-chat.ts         — Act-scoped chat (sendActMessage)
  *   - chat/chat-approvals.ts   — permission / question / todo handlers
  *
  * This file owns performer standalone chat, session management, and slash commands.
@@ -26,7 +25,6 @@ import {
     syncPerformerMessages,
     scheduleSessionFallbackSync,
 } from './chat/chat-internals'
-import { createActChat } from './chat/act-chat'
 import { createChatApprovals } from './chat/chat-approvals'
 
 export const createChatSlice: StateCreator<
@@ -39,10 +37,13 @@ export const createChatSlice: StateCreator<
         performerId: string,
         options?: {
             resetMessages?: Array<{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }>
+            actId?: string
+            executionMode?: 'direct' | 'safe'
+            performerName?: string
         }
     ) => {
         const performer = getPerformerById(get, performerId)
-        const name = performer?.name || 'Untitled Performer'
+        const name = options?.performerName || performer?.name || 'Untitled Performer'
         const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
             talRef: null,
             danceRefs: [],
@@ -61,11 +62,13 @@ export const createChatSlice: StateCreator<
             }
         }
 
+        const executionMode = options?.executionMode || (performer?.executionMode === 'safe' ? 'safe' : 'direct')
         const res = await api.chat.createSession(
             performerId,
             name,
             '',
-            performer?.executionMode === 'safe' ? 'safe' : 'direct',
+            executionMode,
+            options?.actId,
         )
         const sessionId = res.sessionId
         const nextState: Record<string, any> = {
@@ -84,6 +87,13 @@ export const createChatSlice: StateCreator<
         set(() => {
             return nextState
         })
+
+        // Safe-mode sessions run in a new shadow workspace directory that
+        // may not have been subscribed to by the existing SSE stream.
+        // Force-reconnect so the server-side EventSource picks up the new dir.
+        if (performer?.executionMode === 'safe') {
+            get().forceReconnectRealtimeEvents()
+        }
 
         await get().listSessions()
         return {
@@ -119,21 +129,24 @@ export const createChatSlice: StateCreator<
                 },
                 sessionMap: nextSessionMap,
                 selectedPerformerSessionId: state.selectedPerformerId === performerId ? null : state.selectedPerformerSessionId,
+                // Clear activeSessionId on the performer so it doesn't
+                // get persisted through stage save/load and restored
+                // as a stale session.
+                performers: state.performers.map((p) =>
+                    p.id === performerId ? { ...p, activeSessionId: undefined } : p,
+                ),
             }
         })
     }
 
     // ── Delegated sub-modules ────────────────────────
-    const actChat = createActChat(set as any, get)
     const approvals = createChatApprovals(set as any, get)
 
     return {
         chats: {},
-        actChats: {},
         chatPrefixes: {},
         activeChatPerformerId: null,
         sessionMap: {},
-        actSessionMap: {},
         loadingPerformerId: null,
         sessions: [],
         pendingPermissions: {},
@@ -200,7 +213,7 @@ export const createChatSlice: StateCreator<
                 get().initRealtimeEvents()
 
                 // Pass the prompt over proxy
-                // Standalone performers no longer have edges — delegation only inside Act
+                // Build relatedPerformers from @-mentions
                 const relationTargetIds = new Set<string>()
                 for (const mention of mentionedPerformers) {
                     relationTargetIds.add(mention.performerId)
@@ -214,7 +227,6 @@ export const createChatSlice: StateCreator<
                         talRef: runtimeConfig.talRef,
                         danceRefs: runtimeConfig.danceRefs,
                         extraDanceRefs,
-                        drafts: get().drafts,
                         model: runtimeConfig.model,
                         modelVariant: runtimeConfig.modelVariant,
                         agentId: runtimeConfig.agentId,
@@ -224,26 +236,6 @@ export const createChatSlice: StateCreator<
                     },
                     attachments,
                     mentions: mentionedPerformers.map((mention) => ({ performerId: mention.performerId })),
-                    relatedPerformers: [...relationTargetIds]
-                        .map((targetPerformerId) => {
-                            const related = getPerformerById(get, targetPerformerId)
-                            if (!related || !hasModelConfig(related.model)) {
-                                return null
-                            }
-                            const relatedConfig = resolvePerformerRuntimeConfig(related)
-                            return {
-                                performerId: related.id,
-                                performerName: related.name,
-                                description: '',
-                                talRef: relatedConfig.talRef,
-                                danceRefs: relatedConfig.danceRefs,
-                                drafts: get().drafts,
-                                model: relatedConfig.model,
-                                modelVariant: relatedConfig.modelVariant,
-                                mcpServerNames: relatedConfig.mcpServerNames,
-                            }
-                        })
-                        .filter((value): value is NonNullable<typeof value> => value !== null),
                 })
                 scheduleSessionFallbackSync(set as any, get, performerId, sessionId, Date.now())
             } catch (err: any) {
@@ -257,8 +249,118 @@ export const createChatSlice: StateCreator<
             }
         },
 
-        // ── Act chat (delegated) ────────────────────
-        sendActMessage: actChat.sendActMessage,
+        // ── Act chat (choreography model) ─────────────
+        sendActMessage: async (actId, performerKey, text) => {
+            const act = get().acts.find((a) => a.id === actId)
+            if (!act) return
+
+            const binding = act.performers[performerKey]
+            if (!binding) return
+
+            // Namespaced session key: prevents collision with standalone performer sessions
+            const chatKey = `act:${actId}:${performerKey}`
+
+            // Resolve performer config from the ref binding
+            // The binding references a standalone performer — look it up
+            let performer: ReturnType<typeof getPerformerById> = null
+            if (binding.performerRef.kind === 'draft') {
+                const draftId = binding.performerRef.draftId
+                // Draft performer — find by draftId in performers
+                performer = get().performers.find((p) => (p.meta?.derivedFrom === draftId) || p.id === draftId) || null
+            } else {
+                const urn = binding.performerRef.urn
+                // Registry performer — find by URN
+                performer = get().performers.find((p) => p.meta?.derivedFrom === urn) || null
+            }
+
+            const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
+                talRef: null,
+                danceRefs: [],
+                model: null,
+                modelVariant: null,
+                agentId: 'build',
+                mcpServerNames: [],
+                danceDeliveryMode: 'auto' as const,
+                planMode: false,
+            }
+            if (!hasModelConfig(runtimeConfig.model)) return
+
+            // Ensure session exists
+            let sessionId: string | undefined = get().sessionMap[chatKey]
+            if (!sessionId) {
+                try {
+                    const res = await api.chat.createSession(
+                        chatKey,
+                        performer?.name || 'Performer',
+                        '',
+                        'direct',
+                        actId,
+                    )
+                    sessionId = res.sessionId
+                    set((s) => ({
+                        sessionMap: { ...s.sessionMap, [chatKey]: res.sessionId },
+                    }))
+                    await get().listSessions()
+                } catch (err) {
+                    console.error('Failed to create Act session', err)
+                    appendPerformerSystemMessage(set as any, get, chatKey, formatStudioApiErrorMessage(err))
+                    return
+                }
+            }
+
+            if (!sessionId) {
+                set({ loadingPerformerId: null })
+                return
+            }
+
+            // Add user message to UI
+            addChatMessageHelper(set as any, get, chatKey, {
+                id: Date.now().toString(),
+                role: 'user',
+                content: text,
+                timestamp: Date.now(),
+                metadata: {
+                    agentName: runtimeConfig.agentId || 'build',
+                    modelId: runtimeConfig.model?.modelId,
+                    provider: runtimeConfig.model?.provider,
+                    variant: runtimeConfig.modelVariant || undefined,
+                },
+            })
+
+            set({ loadingPerformerId: chatKey })
+
+            try {
+                get().initRealtimeEvents()
+
+                // Choreography model: no relatedPerformers or actRelations needed.
+                // Delegation happens via mailbox tools (send_message, post_to_board, etc.)
+                await api.chat.send(sessionId, {
+                    message: text,
+                    performer: {
+                        performerId: chatKey,
+                        performerName: performer?.name || 'Performer',
+                        talRef: runtimeConfig.talRef,
+                        danceRefs: runtimeConfig.danceRefs,
+                        model: runtimeConfig.model,
+                        modelVariant: runtimeConfig.modelVariant,
+                        agentId: runtimeConfig.agentId,
+                        mcpServerNames: runtimeConfig.mcpServerNames,
+                        danceDeliveryMode: runtimeConfig.danceDeliveryMode,
+                        planMode: runtimeConfig.planMode,
+                    },
+                    actId,
+                })
+                scheduleSessionFallbackSync(set as any, get, chatKey, sessionId, Date.now())
+            } catch (err: any) {
+                addChatMessageHelper(set as any, get, chatKey, {
+                    id: `msg-${Date.now()}`,
+                    role: 'system',
+                    content: formatStudioApiErrorMessage(err),
+                    timestamp: Date.now(),
+                })
+                set({ loadingPerformerId: null })
+            }
+        },
 
         // ── Slash commands ──────────────────────────
         executeSlashCommand: async (performerId, cmd) => {
@@ -302,6 +404,9 @@ export const createChatSlice: StateCreator<
                 chatPrefixes: newChatPrefixes,
                 sessionMap: newSessionMap,
                 selectedPerformerSessionId: s.selectedPerformerId === performerId ? null : s.selectedPerformerSessionId,
+                performers: s.performers.map((p) =>
+                    p.id === performerId ? { ...p, activeSessionId: undefined } : p,
+                ),
             }
         }),
 
@@ -366,12 +471,33 @@ export const createChatSlice: StateCreator<
             const sessionEntries = Object.entries(state.sessionMap)
             if (sessionEntries.length === 0) return
 
+            const stalePerformerIds: string[] = []
+
             for (const [performerId, sessionId] of sessionEntries) {
                 try {
                     await syncPerformerMessages(set as any, get, performerId, sessionId)
                 } catch (err) {
                     console.error(`Failed to rehydrate session for performer ${performerId}:`, err)
+                    // Session likely no longer exists on the server.
+                    // Mark as stale so we clean it up below.
+                    stalePerformerIds.push(performerId)
                 }
+            }
+
+            // Remove stale sessions that couldn't be rehydrated
+            if (stalePerformerIds.length > 0) {
+                set((s) => {
+                    const nextMap = { ...s.sessionMap }
+                    for (const id of stalePerformerIds) {
+                        delete nextMap[id]
+                    }
+                    return {
+                        sessionMap: nextMap,
+                        performers: s.performers.map((p) =>
+                            stalePerformerIds.includes(p.id) ? { ...p, activeSessionId: undefined } : p,
+                        ),
+                    }
+                })
             }
         },
 
@@ -423,17 +549,24 @@ export const createChatSlice: StateCreator<
                 const { sessionMap, chats } = get()
                 const newMap = { ...sessionMap }
                 const newChats = { ...chats }
+                const affectedPerformerIds: string[] = []
                 for (const [performerId, sid] of Object.entries(newMap)) {
                     if (sid === sessionId) {
                         delete newMap[performerId]
                         delete newChats[performerId]
+                        affectedPerformerIds.push(performerId)
                     }
                 }
-                set({
+                set((state) => ({
                     sessionMap: newMap,
                     chats: newChats,
-                    selectedPerformerSessionId: get().selectedPerformerSessionId === sessionId ? null : get().selectedPerformerSessionId,
-                })
+                    selectedPerformerSessionId: state.selectedPerformerSessionId === sessionId ? null : state.selectedPerformerSessionId,
+                    performers: affectedPerformerIds.length > 0
+                        ? state.performers.map((p) =>
+                            affectedPerformerIds.includes(p.id) ? { ...p, activeSessionId: undefined } : p,
+                        )
+                        : state.performers,
+                }))
                 // Refresh list
                 get().listSessions()
             } catch (err) {

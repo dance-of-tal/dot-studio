@@ -1,49 +1,46 @@
-/* ── ActChatPanel — Chat mode styles ── */
+/* ── ActChatPanel ── */
 
 .act-chat {
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-height: 0;
+    height: 100%;
     overflow: hidden;
 }
 
-/* ── Messages ── */
-.act-chat__msg {
-    padding: 6px 10px;
-}
-.act-chat__msg--user {
-    background: var(--bg-elevated, var(--bg-hover));
-    border-radius: 6px;
-    margin: 2px 6px;
-}
-.act-chat__msg--assistant {
-    margin: 2px 6px;
-}
-.act-chat__msg--system {
-    margin: 2px 6px;
-}
-.act-chat__system {
-    font-size: 10px;
-    color: var(--text-muted);
-    font-style: italic;
-}
-.act-chat__content {
-    font-size: 12px;
-    line-height: 1.5;
+/* ── Filter tabs ── */
+.act-chat__filters {
+    display: flex;
+    gap: 2px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-main);
+    overflow-x: auto;
+    flex-shrink: 0;
 }
 
-/* ── Performer label on assistant messages ── */
-.act-chat__performer-label {
-    display: flex;
+.act-chat__filter-tab {
+    display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 9px;
-    font-weight: 700;
-    color: var(--act-accent, #f59e0b);
-    margin-bottom: 2px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    gap: 3px;
+    padding: 2px 8px;
+    font-size: 10px;
+    border: 1px solid var(--border-main);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.act-chat__filter-tab:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.act-chat__filter-tab--active {
+    background: var(--accent-primary);
+    color: var(--text-on-accent, #fff);
+    border-color: var(--accent-primary);
 }
 
 /* ── Empty state ── */
@@ -51,99 +48,95 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 32px 16px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 11px;
-}
-.act-chat__empty svg {
-    opacity: 0.3;
+    text-align: center;
 }
 
-/* ── Loading ── */
-.act-chat__loading {
-    padding: 8px 16px;
-}
-.act-chat__dot-pulse {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--act-accent, #f59e0b);
-    animation: act-dot-pulse 1s ease-in-out infinite;
-}
-@keyframes act-dot-pulse {
-    0%, 100% { opacity: 0.3; transform: scale(0.8); }
-    50% { opacity: 1; transform: scale(1.2); }
+/* ── System message ── */
+.act-chat__system {
+    padding: 4px 8px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-style: italic;
+    background: var(--bg-hover);
+    border-radius: 4px;
 }
 
 /* ── Composer ── */
 .act-chat__composer {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    border-top: 1px solid var(--border-main);
     padding: 6px 8px;
-    border-top: 1px solid var(--border-subtle);
-    background: var(--bg-panel);
+    flex-shrink: 0;
 }
 
-.act-chat__caller-select {
-    font-size: 10px;
-    padding: 3px 6px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 4px;
-    background: var(--bg-panel);
-    color: var(--text-secondary);
-    cursor: pointer;
-    align-self: flex-start;
+.act-chat__entry-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    color: var(--accent-primary);
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+    white-space: nowrap;
 }
 
 .act-chat__input-row {
     display: flex;
-    gap: 4px;
     align-items: flex-end;
+    gap: 6px;
 }
 
 .act-chat__input {
     flex: 1;
     resize: none;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--border-main);
     border-radius: 6px;
     padding: 6px 8px;
-    font-size: 12px;
-    font-family: inherit;
-    background: var(--bg-panel);
-    color: var(--text-primary);
-    min-height: 32px;
-    max-height: 120px;
+    font-size: 11px;
     line-height: 1.4;
+    background: var(--bg-main);
+    color: var(--text-primary);
+    font-family: inherit;
+    min-height: 28px;
+    max-height: 80px;
+    overflow-y: auto;
 }
+
 .act-chat__input:focus {
     outline: none;
-    border-color: var(--act-accent, #f59e0b);
+    border-color: var(--accent-primary);
 }
+
 .act-chat__input:disabled {
     opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .act-chat__send-btn {
-    width: 30px;
-    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: none;
+    width: 28px;
+    height: 28px;
     border-radius: 6px;
-    background: var(--act-accent, #f59e0b);
-    color: white;
+    border: none;
+    background: var(--accent-primary);
+    color: var(--text-on-accent, #fff);
     cursor: pointer;
-    transition: opacity 0.15s;
     flex-shrink: 0;
+    transition: opacity 0.15s;
 }
+
 .act-chat__send-btn:disabled {
-    opacity: 0.3;
+    opacity: 0.4;
     cursor: not-allowed;
 }
+
 .act-chat__send-btn:hover:not(:disabled) {
     opacity: 0.85;
 }

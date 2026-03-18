@@ -14,6 +14,7 @@ import ActPerformerFrame from '../../features/act/ActPerformerFrame';
 import ActInspectorPanel from '../../features/act/ActInspectorPanel';
 // PerformerRelationEdge removed — edges now live inside Act edit mode only
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers';
+import { showToast } from '../../lib/toast';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
 import StageToolbar from '../toolbar/StageToolbar';
 
@@ -86,7 +87,7 @@ function CustomControls() {
     const [isFitted, setIsFitted] = useState(false);
     const prevViewport = useRef<Viewport | null>(null);
 
-    const { selectedPerformerId, focusedPerformerId, enterFocusMode, exitFocusMode, focusSnapshot, exitActEditFocus } = useStudioStore();
+    const { selectedPerformerId, selectedActId, focusedPerformerId, enterFocusMode, exitFocusMode, focusSnapshot, exitActEditFocus } = useStudioStore();
 
     const toggleFitView = useCallback(() => {
         if (isFitted && prevViewport.current) {
@@ -105,17 +106,19 @@ function CustomControls() {
             setTimeout(() => {
                 fitView({ duration: 400, padding: 0.2, maxZoom: 1 });
             }, 50);
-        } else if (selectedPerformerId) {
-            // Calculate viewport size from the canvas area element
+        } else {
+            const nodeId = selectedPerformerId || selectedActId;
+            const nodeType = selectedPerformerId ? 'performer' as const : 'act' as const;
+            if (!nodeId) return;
             const canvasEl = document.querySelector('.canvas-area');
             const rect = canvasEl?.getBoundingClientRect();
             const viewportSize = {
                 width: rect?.width ?? 1200,
                 height: rect?.height ?? 800,
             };
-            enterFocusMode(selectedPerformerId, viewportSize);
+            enterFocusMode(nodeId, nodeType, viewportSize);
         }
-    }, [focusedPerformerId, selectedPerformerId, enterFocusMode, exitFocusMode, fitView]);
+    }, [focusedPerformerId, selectedPerformerId, selectedActId, enterFocusMode, exitFocusMode, fitView]);
 
     // Escape key to exit focus mode
     useEffect(() => {
@@ -153,8 +156,8 @@ function CustomControls() {
                     </button>
                 </>
             )}
-            {selectedPerformerId && (
-                <button className="canvas-controls__btn" onClick={toggleFocus} title={focusedPerformerId ? "Exit Focus Mode" : "Focus Selected Performer"}>
+            {(selectedPerformerId || selectedActId) && (
+                <button className="canvas-controls__btn" onClick={toggleFocus} title={focusedPerformerId ? "Exit Focus Mode" : "Focus Selected"}>
                     {focusedPerformerId ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                 </button>
             )}
@@ -203,7 +206,7 @@ export default function CanvasArea() {
         selectAct,
         updateActPosition,
         exitActEditFocus,
-        addRelationInAct,
+        addRelation,
         updateActPerformerPosition,
         selectActPerformer,
         selectRelation,
@@ -395,6 +398,7 @@ export default function CanvasArea() {
         type: 'act' as const,
         position: act.position,
         dragHandle: '.canvas-frame__header',
+        hidden: act.hidden,
         zIndex: getCanvasWindowZIndex({
             selected: selectedActId === act.id,
             editing: editingActId === act.id,
@@ -402,7 +406,7 @@ export default function CanvasArea() {
         }),
         data: {
             width: act.width,
-            height: editingActId === act.id ? Math.max(400, act.height) : 80,
+            height: act.height || 420,
             transformActive: transformTarget?.type === 'act' && transformTarget.id === act.id,
             onActivateTransform: () => activateTransformTarget('act', act.id),
             onDeactivateTransform: () => deactivateTransformTarget('act', act.id),
@@ -446,19 +450,17 @@ export default function CanvasArea() {
         const act = acts.find((a) => a.id === editingActId)
         if (!act) return []
         return act.relations.map((rel) => {
-            const isRequired = rel.invocation === 'required'
-            const isFireAndForget = !rel.await
             return {
                 id: rel.id,
-                source: `act-p-${rel.from}`,
-                target: `act-p-${rel.to}`,
+                source: `act-p-${rel.between[0]}`,
+                target: `act-p-${rel.between[1]}`,
                 type: 'default',
-                animated: isFireAndForget,
+                animated: rel.direction === 'one-way',
                 label: rel.name || rel.description || undefined,
                 style: {
-                    stroke: isFireAndForget ? 'var(--info, #58f)' : 'var(--accent)',
-                    strokeWidth: isRequired ? 3 : 1.5,
-                    strokeDasharray: isRequired ? undefined : '5 3',
+                    stroke: rel.direction === 'one-way' ? 'var(--info, #58f)' : 'var(--accent)',
+                    strokeWidth: 1.5,
+                    strokeDasharray: rel.direction === 'one-way' ? '5 3' : undefined,
                 },
             }
         })
@@ -554,6 +556,7 @@ export default function CanvasArea() {
         closeEditor();
         selectPerformer(null);
         selectMarkdownEditor(null);
+        selectAct(null);
         // In Act edit focus, deselect act performer and relation
         if (isActEditFocus) {
             selectActPerformer(null);
@@ -564,15 +567,15 @@ export default function CanvasArea() {
         if (editingActId) {
             useStudioStore.getState().toggleActEdit(editingActId);
         }
-    }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, editingActId, isActEditFocus, selectActPerformer, selectRelation]);
+    }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, selectAct, editingActId, isActEditFocus, selectActPerformer, selectRelation]);
 
     const onConnect = useCallback((connection: Connection) => {
         if (isActEditFocus && editingActId && connection.source && connection.target) {
             const fromKey = connection.source.replace(/^act-p-/, '')
             const toKey = connection.target.replace(/^act-p-/, '')
-            addRelationInAct(editingActId, fromKey, toKey)
+            addRelation(editingActId, [fromKey, toKey], 'both')
         }
-    }, [isActEditFocus, editingActId, addRelationInAct]);
+    }, [isActEditFocus, editingActId, addRelation]);
 
     const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {
         // Filter out 'select' changes — selection is driven externally by Zustand selectedPerformerId
@@ -626,29 +629,14 @@ export default function CanvasArea() {
                             <button
                                 className="act-edit-toolbar__btn"
                                 onClick={() => {
-                                    const name = `Performer ${performerCount + 1}`;
-                                    const store = useStudioStore.getState();
-                                    store.addNewPerformerInAct(editingActId, name);
-                                    // Re-position to viewport center
-                                    if (reactFlowInstance && canvasAreaRef.current) {
-                                        const rect = canvasAreaRef.current.getBoundingClientRect();
-                                        const center = reactFlowInstance.screenToFlowPosition({
-                                            x: rect.left + rect.width / 2,
-                                            y: rect.top + rect.height / 2,
-                                        });
-                                        // Find the newly added performer key
-                                        const updatedAct = useStudioStore.getState().acts.find(a => a.id === editingActId);
-                                        if (updatedAct) {
-                                            const keys = Object.keys(updatedAct.performers);
-                                            const newKey = keys[keys.length - 1];
-                                            if (newKey) {
-                                                store.updateActPerformerPosition(editingActId, newKey, Math.round(center.x - 170), Math.round(center.y - 240));
-                                            }
-                                        }
-                                    }
+                                    // TODO (Phase 4): Open performer picker to bind a performer ref
+                                    showToast('Use the asset library to drag a performer onto the canvas.', 'info', {
+                                        title: 'Bind Performer',
+                                        dedupeKey: 'act-bind-performer-hint',
+                                    })
                                 }}
                             >
-                                + Add Performer
+                                + Bind Performer
                             </button>
                             <button
                                 className="act-edit-toolbar__btn act-edit-toolbar__btn--exit"

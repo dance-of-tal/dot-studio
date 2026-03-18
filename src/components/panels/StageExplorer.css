@@ -239,6 +239,14 @@
     background: var(--bg-selected);
 }
 
+.thread-card--hidden .thread-card__name {
+    color: var(--text-muted);
+}
+
+.thread-card--hidden .thread-card__icon {
+    opacity: 0.4;
+}
+
 .thread-card.muted .thread-card__name {
     color: var(--text-muted);
 }

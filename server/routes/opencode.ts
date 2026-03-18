@@ -12,7 +12,7 @@ import { restartOpencodeSidecar, isManagedOpencode } from '../lib/opencode-sidec
 import { OPENCODE_URL } from '../lib/config.js'
 import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
 import { jsonOpencodeError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
-import { listRuntimeModels } from '../lib/model-catalog.js'
+import { listRuntimeModels, listProviderSummaries, invalidateProviderListCache } from '../lib/model-catalog.js'
 import { readProjectConfigFile, readProjectMcpCatalog, summarizeProjectMcpCatalog } from '../lib/project-config.js'
 import {
     opencodeModeMeta,
@@ -75,21 +75,7 @@ opencode.get('/api/models', async (c) => {
 opencode.get('/api/providers', async (c) => {
     try {
         const cwd = resolveRequestWorkingDir(c)
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.provider.list({ directory: cwd }))
-        const connected = new Set<string>((data?.connected || []) as string[])
-
-        const providers = ((data?.all || []) as any[]).map((provider) => ({
-            id: provider.id,
-            name: provider.name || provider.id,
-            source: provider.source || 'builtin',
-            env: Array.isArray(provider.env) ? provider.env : [],
-            connected: connected.has(provider.id),
-            modelCount: provider.models ? Object.keys(provider.models).length : 0,
-            defaultModel: data?.default?.[provider.id] || null,
-        }))
-
-        return c.json(providers)
+        return c.json(await listProviderSummaries(cwd))
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 503 })
     }
@@ -229,6 +215,7 @@ opencode.post('/api/provider/:id/oauth/callback', async (c) => {
             ...(code ? { code } : {}),
         }))
         await oc.global.dispose()
+        invalidateProviderListCache()
         return c.json(data)
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
@@ -244,6 +231,7 @@ opencode.put('/api/provider/:id/auth', async (c) => {
             auth,
         }))
         await oc.global.dispose()
+        invalidateProviderListCache()
         return c.json(data)
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
@@ -255,6 +243,7 @@ opencode.delete('/api/provider/:id/auth', async (c) => {
         const oc = await getOpencode()
         await clearStoredProviderAuth(c.req.param('id'))
         await oc.global.dispose()
+        invalidateProviderListCache()
         return c.json({ ok: true })
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })

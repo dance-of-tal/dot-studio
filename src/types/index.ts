@@ -171,48 +171,48 @@ export interface PerformerNode {
     }
 }
 
-/** Act-internal relation between two Act performers (Edge Attribute Model) */
-export interface ActRelation {
-    id: string
-    from: string
-    to: string
-    name: string
-    description: string
-    invocation: 'optional' | 'required'
-    await: boolean
-    sessionPolicy: 'fresh' | 'reuse'
-    maxCalls: number
-    timeout: number
-}
+// Re-export choreography Act types from shared
+export type {
+    ActRelation,
+    ActPerformerBinding,
+    PerformerSubscriptions,
+    MailboxMessage,
+    BoardEntry,
+    MailboxEvent,
+    MailboxEventType,
+    WakeCondition,
+    ConditionExpr,
+    ActDefinition,
+    MailboxState,
+    ActThread,
+    ActThreadStatus,
+} from '../../shared/act-types'
 
-/** Act performer — standalone에서 복사된 독립 config (PRD §7.2) */
-export interface ActPerformer {
-    sourcePerformerId: string
-    name: string
+// Local import for types used within this file
+import type { ActRelation, PerformerSubscriptions } from '../../shared/act-types'
+
+/** Canvas-specific performer binding (extends ActPerformerBinding with UI position) */
+export interface StageActPerformerBinding {
+    performerRef: AssetRef
+    activeDanceIds?: string[]
+    subscriptions?: PerformerSubscriptions
     position: { x: number; y: number }
-    talRef: AssetRef | null
-    danceRefs: AssetRef[]
-    model: ModelConfig | null
-    modelVariant: string | null
-    mcpServerNames: string[]
-    mcpBindingMap: Record<string, string | null>
-    agentId: string | null
-    planMode: boolean
-    danceDeliveryMode: DanceDeliveryMode
 }
 
 export interface StageAct {
     id: string
     name: string
-    executionMode: ExecutionMode
+    description?: string
+    actRules?: string[]
     /** Canvas position */
     position: { x: number; y: number }
     width: number
     height: number
-    /** 복사된 performer configs (key = internal performer id) */
-    performers: Record<string, ActPerformer>
-    /** Act-internal edges between performers */
+    /** Performer bindings (key = internal performer key) */
+    performers: Record<string, StageActPerformerBinding>
+    /** Communication contract relations between performers */
     relations: ActRelation[]
+    hidden?: boolean
     createdAt: number
     meta?: {
         derivedFrom?: string | null

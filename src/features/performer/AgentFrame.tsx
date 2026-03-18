@@ -12,7 +12,7 @@
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
-import { Handle, Position, useStore } from '@xyflow/react'
+import { useStore } from '@xyflow/react'
 
 import { useStudioStore } from '../../store'
 import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries'
@@ -26,7 +26,7 @@ import SafeReviewModal from '../../components/modals/SafeReviewModal'
 import PerformerEditPanel from './PerformerEditPanel'
 import PerformerChatPanel from './PerformerChatPanel'
 
-import { Pencil, EyeOff } from 'lucide-react'
+import { Pencil, EyeOff, Maximize2, Minimize2 } from 'lucide-react'
 import './AgentFrame.css'
 import './AgentChat.css'
 import './AgentInput.css'
@@ -72,6 +72,7 @@ export default function AgentFrame({ data, id }: any) {
         refreshSafeOwner, applySafeOwner, discardSafeOwnerFile,
         discardAllSafeOwner, undoLastSafeApply,
         detachPerformerSession,
+        enterFocusMode, exitFocusMode,
     } = useStudioStore()
 
     // ─── Local State ──────────────────────────────────
@@ -114,7 +115,6 @@ export default function AgentFrame({ data, id }: any) {
     const selectedAgentId = performer
         ? resolvePerformerAgentId(performer)
         : (data.agentId || (data.planMode ? 'plan' : 'build'))
-    const selectedAgent = useMemo(() => agents.find((a) => a.name === selectedAgentId) || null, [agents, selectedAgentId])
     const buildAgent = useMemo(() => agents.find((a) => a.name === 'build') || null, [agents])
     const planAgent = useMemo(() => agents.find((a) => a.name === 'plan') || null, [agents])
 
@@ -245,8 +245,6 @@ export default function AgentFrame({ data, id }: any) {
     // ─── Render ───────────────────────────────────────
     return (
         <div className="performer-node-shell">
-            <Handle type="target" position={Position.Left} className="performer-node-shell__handle" />
-            <Handle type="source" position={Position.Right} className="performer-node-shell__handle" />
             <CanvasWindowFrame
                 className={`nowheel ${isFocused ? 'canvas-frame--focused' : ''}`}
                 width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}
@@ -269,6 +267,26 @@ export default function AgentFrame({ data, id }: any) {
                             pendingCount={safeSummary?.pendingCount || 0}
                             conflictCount={safeSummary?.conflictCount || 0}
                         />
+                        <button
+                            className={`icon-btn ${isFocused ? 'icon-btn--active' : ''}`}
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                if (isFocused) {
+                                    exitFocusMode()
+                                } else {
+                                    const canvasEl = document.querySelector('.canvas-area')
+                                    const rect = canvasEl?.getBoundingClientRect()
+                                    enterFocusMode(id, 'performer', {
+                                        width: rect?.width ?? 1200,
+                                        height: rect?.height ?? 800,
+                                    })
+                                }
+                            }}
+                            title={isFocused ? 'Exit focus mode' : 'Focus mode'}
+                            style={{ padding: '0 4px', opacity: 0.7 }}
+                        >
+                            {isFocused ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+                        </button>
                         {!isEditMode && (
                             <button
                                 className="icon-btn"
@@ -298,7 +316,6 @@ export default function AgentFrame({ data, id }: any) {
                         performer={performer}
                         presentation={performerPresentation}
                         runtimeTools={runtimeTools || null}
-                        selectedAgent={selectedAgent}
                         requestRelations={requestRelations}
                         mcpBindingRows={mcpBindingRows}
                         mcpBindingOptions={mcpBindingOptions}
@@ -314,7 +331,6 @@ export default function AgentFrame({ data, id }: any) {
                         onDanceDeliveryModeChange={(value) => setPerformerDanceDeliveryMode(id, value)}
                         onModelChange={(model) => setPerformerModel(id, model)}
                         onModelVariantChange={(variant) => setPerformerModelVariant(id, variant)}
-                        onAgentIdChange={(agentId) => setPerformerAgentId(id, agentId)}
                         onRemoveDance={removePerformerDance}
                         onRemoveMcp={removePerformerMcp}
                         onSetMcpBinding={setPerformerMcpBinding}

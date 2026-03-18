@@ -8,11 +8,9 @@ export type AssetScope = 'local' | 'registry'
 export type SourceFilter = 'all' | 'global' | 'stage' | 'draft'
 export type LocalSection = 'installed' | 'runtime'
 export type RegistryKind = 'all' | InstalledKind
-export type ModelProviderFilter = 'popular' | 'all' | 'anthropic' | 'openai' | 'google' | 'xai' | 'other'
-export type ModelAvailabilityFilter = 'ready' | 'all'
+export type ModelProviderFilter = 'all' | 'anthropic' | 'openai' | 'google' | 'xai' | 'other'
 
 export const INSTALLED_KIND_ORDER: InstalledKind[] = ['performer', 'tal', 'dance', 'act']
-export const POPULAR_MODEL_PROVIDER_CATEGORIES: Array<Exclude<ModelProviderFilter, 'popular' | 'all'>> = ['anthropic', 'openai', 'google', 'xai']
 export const MAX_MODELS_PER_PROVIDER = 8
 
 export function displayUrn(urn: string) {
@@ -152,7 +150,7 @@ export function labelForInstalledKind(kind: InstalledKind) {
     return 'Act'
 }
 
-export function classifyModelProvider(model: any): Exclude<ModelProviderFilter, 'popular' | 'all'> {
+export function classifyModelProvider(model: any): Exclude<ModelProviderFilter, 'all'> {
     const key = `${model.provider || ''} ${model.providerName || ''}`.toLowerCase()
     if (key.includes('anthropic')) return 'anthropic'
     if (key.includes('openai')) return 'openai'
@@ -161,7 +159,7 @@ export function classifyModelProvider(model: any): Exclude<ModelProviderFilter, 
     return 'other'
 }
 
-export function labelForModelProviderFilter(filter: Exclude<ModelProviderFilter, 'popular' | 'all'>) {
+export function labelForModelProviderFilter(filter: Exclude<ModelProviderFilter, 'all'>) {
     if (filter === 'anthropic') return 'Anthropic'
     if (filter === 'openai') return 'OpenAI'
     if (filter === 'google') return 'Google'
@@ -196,9 +194,6 @@ export function buildDraftAssetCards(
     drafts: Record<string, DraftAsset>,
     installedKind: InstalledKind,
 ): AssetCard[] {
-    if (installedKind !== 'tal' && installedKind !== 'dance') {
-        return []
-    }
 
     return Object.values(drafts)
         .filter((draft): draft is DraftAsset => !!draft && draft.kind === installedKind)
@@ -213,6 +208,10 @@ export function buildDraftAssetCards(
             source: 'draft',
             tags: Array.isArray(draft.tags) ? draft.tags : [],
             content: typeof draft.content === 'string' ? draft.content : '',
+            // Carry structured draft content for performer/act drag payloads
+            ...(draft.kind === 'performer' || draft.kind === 'act'
+                ? { draftContent: draft.content }
+                : {}),
         }))
 }
 
@@ -229,26 +228,19 @@ export function filterInstalledAssets(
 export function groupModels(
     models: any[],
     queryText: string,
-    modelAvailabilityFilter: ModelAvailabilityFilter,
     modelProviderFilter: ModelProviderFilter,
 ) {
     const searched = models.filter((model) => !queryText || buildModelHaystack(model).includes(queryText))
-    const availabilityFiltered = searched.filter((model) => {
-        if (modelAvailabilityFilter === 'all') {
-            return true
-        }
-        return !!model.connected
-    })
+    const availabilityFiltered = searched.filter((model) => !!model.connected)
     const providerFiltered = availabilityFiltered.filter((model) => {
         const category = classifyModelProvider(model)
         if (modelProviderFilter === 'all') return true
-        if (modelProviderFilter === 'popular') return POPULAR_MODEL_PROVIDER_CATEGORIES.includes(category)
         return category === modelProviderFilter
     })
 
     const groups = new Map<string, {
         key: string
-        category: Exclude<ModelProviderFilter, 'popular' | 'all'>
+        category: Exclude<ModelProviderFilter, 'all'>
         label: string
         connected: boolean
         items: any[]
@@ -284,8 +276,9 @@ export function groupModels(
         .sort((left, right) => {
             const connectedDiff = Number(right.connected) - Number(left.connected)
             if (connectedDiff !== 0) return connectedDiff
-            const leftPriority = POPULAR_MODEL_PROVIDER_CATEGORIES.indexOf(left.category)
-            const rightPriority = POPULAR_MODEL_PROVIDER_CATEGORIES.indexOf(right.category)
+            const providerSortOrder = ['anthropic', 'openai', 'google', 'xai']
+            const leftPriority = providerSortOrder.indexOf(left.category)
+            const rightPriority = providerSortOrder.indexOf(right.category)
             const normalizedLeft = leftPriority === -1 ? 999 : leftPriority
             const normalizedRight = rightPriority === -1 ? 999 : rightPriority
             if (normalizedLeft !== normalizedRight) return normalizedLeft - normalizedRight
@@ -314,7 +307,7 @@ type AuthorableAsset = {
     actUrn?: string | null
     model?: unknown
     mcpConfig?: Record<string, unknown> | null
-    // Legacy Act fields
+    // Registry compat: pre-studio-v1 Act schema
     entryNode?: string | null
     nodes?: Record<string, unknown>
     edges?: unknown[]

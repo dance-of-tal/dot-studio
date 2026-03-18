@@ -17,11 +17,18 @@ export function handleAssistantToolCall(_callId: string, name: string, args: Rec
                 return { success: true, action: 'createAct' }
             }
             case 'assistant_add_performer_to_act': {
-                store.addPerformerToAct(args.actId, args.performerId)
+                // In the choreography model, we bind a performer ref to an act
+                const performer = store.performers.find((p: any) => p.id === args.performerId)
+                if (performer) {
+                    const ref = performer.meta?.derivedFrom
+                        ? { kind: 'registry' as const, urn: performer.meta.derivedFrom }
+                        : { kind: 'draft' as const, draftId: args.performerId }
+                    store.bindPerformerToAct(args.actId, ref)
+                }
                 return { success: true, action: 'addPerformerToAct' }
             }
             case 'assistant_connect_performers': {
-                store.addRelationInAct(args.actId, args.sourcePerformerId, args.targetPerformerId)
+                store.addRelation(args.actId, [args.sourcePerformerId, args.targetPerformerId], 'both')
                 return { success: true, action: 'connectPerformers' }
             }
             case 'assistant_set_performer_model': {

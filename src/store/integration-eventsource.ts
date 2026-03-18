@@ -20,6 +20,27 @@ export interface EventSourceSlot {
     setExtraKey?: (key: string | null) => void
 }
 
+// ── Auto-reconnect tracking ─────────────────────────────
+
+const MAX_RECONNECT_ATTEMPTS = 5
+const BASE_RECONNECT_DELAY_MS = 2000
+
+const slotReconnectAttempts = new WeakMap<EventSourceSlot, number>()
+const slotReconnectTimers = new WeakMap<EventSourceSlot, ReturnType<typeof setTimeout>>()
+
+function getReconnectAttempts(slot: EventSourceSlot): number {
+    return slotReconnectAttempts.get(slot) || 0
+}
+
+function resetReconnectAttempts(slot: EventSourceSlot) {
+    slotReconnectAttempts.set(slot, 0)
+    const timer = slotReconnectTimers.get(slot)
+    if (timer) {
+        clearTimeout(timer)
+        slotReconnectTimers.delete(slot)
+    }
+}
+
 // ── Factory ─────────────────────────────────────────────
 
 export interface ReconnectOptions {
@@ -43,6 +64,10 @@ export interface ReconnectOptions {
  * 2. Close stale instance (if any).
  * 3. Update slot metadata.
  * 4. Create new EventSource and wire onmessage/onerror.
+ *
+ * On error the handler auto-reconnects with exponential backoff
+ * (up to MAX_RECONNECT_ATTEMPTS). The retry counter resets on every
+ * successful message, so transient failures don't exhaust the budget.
  */
 export function reconnectManagedEventSource(opts: ReconnectOptions): void {
     const { slot, resolveWorkingDir, resolveExtraKey, createEventSource, onMessage } = opts
@@ -59,12 +84,13 @@ export function reconnectManagedEventSource(opts: ReconnectOptions): void {
         return
     }
 
-    // Close stale connection.
+    // Close stale connection and cancel pending reconnect timer.
     const existing = slot.getInstance()
     if (existing) {
         existing.close()
         slot.setInstance(null)
     }
+    resetReconnectAttempts(slot)
 
     // Update tracked metadata.
     slot.setWorkingDir(workingDir)
@@ -79,6 +105,8 @@ export function reconnectManagedEventSource(opts: ReconnectOptions): void {
     slot.setInstance(es)
 
     es.onmessage = (event) => {
+        // Successful message — reset reconnect budget.
+        resetReconnectAttempts(slot)
         try {
             const data = JSON.parse(event.data)
             onMessage(data)
@@ -93,6 +121,28 @@ export function reconnectManagedEventSource(opts: ReconnectOptions): void {
             current.close()
             slot.setInstance(null)
         }
+
+        // Auto-reconnect with exponential backoff.
+        const attempt = getReconnectAttempts(slot)
+        if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+            // Exhausted retries — give up until the next explicit
+            // initRealtimeEvents() call (e.g. on next sendMessage).
+            return
+        }
+
+        slotReconnectAttempts.set(slot, attempt + 1)
+        const delay = BASE_RECONNECT_DELAY_MS * Math.pow(2, attempt) // 2s, 4s, 8s, 16s, 32s
+        const timer = setTimeout(() => {
+            slotReconnectTimers.delete(slot)
+            try {
+                // Clear workingDir so the guard at the top doesn't no-op.
+                slot.setWorkingDir(null)
+                reconnectManagedEventSource(opts)
+            } catch {
+                // Ignore — next sendMessage will also call initRealtimeEvents.
+            }
+        }, delay)
+        slotReconnectTimers.set(slot, timer)
     }
 }
 
@@ -105,4 +155,20 @@ export function closeManagedEventSource(slot: EventSourceSlot): void {
         es.close()
         slot.setInstance(null)
     }
+}
+
+/**
+ * Reset a managed EventSource slot — close the existing connection AND
+ * clear the tracked workingDir so the next `reconnectManagedEventSource`
+ * call will establish a fresh SSE subscription with updated directory sets.
+ *
+ * Use this when the set of subscribed execution directories has changed
+ * (e.g. after creating a new safe-mode performer session) but the
+ * workingDir itself hasn't.
+ */
+export function resetManagedEventSource(slot: EventSourceSlot): void {
+    closeManagedEventSource(slot)
+    resetReconnectAttempts(slot)
+    slot.setWorkingDir(null)
+    slot.setExtraKey?.(null)
 }

@@ -378,47 +378,36 @@ export function buildPerformerAssetPayload(
 
 /**
  * Build Act asset payload for registry publish (schema: studio-v1).
- * Serializes Act's copied performers and edges into flat relation graph.
+ * Serializes Act's performer bindings and communication contract relations.
  */
 export function buildActAssetPayload(
     act: import('../types').StageAct,
     options: { description?: string; tags?: string[] } = {},
 ) {
-    const performers = Object.values(act.performers).map((p) => ({
-        name: p.name,
-        sourceUrn: p.sourcePerformerId ? `performer:${p.sourcePerformerId}` : undefined,
-        ...(p.talRef?.kind === 'registry' ? { tal: p.talRef.urn } : {}),
-        ...(p.danceRefs.length > 0
-            ? {
-                  dance: p.danceRefs
-                      .filter((r) => r.kind === 'registry')
-                      .map((r) => r.urn),
-              }
-            : {}),
-        ...(p.model ? { model: { provider: p.model.provider, modelId: p.model.modelId } } : {}),
+    const performers = Object.entries(act.performers).map(([key, binding]) => ({
+        key,
+        performerRef: binding.performerRef,
+        activeDanceIds: binding.activeDanceIds,
+        subscriptions: binding.subscriptions,
     }))
 
-    const relations = act.relations.map((rel) => {
-        const fromP = act.performers[rel.from]
-        const toP = act.performers[rel.to]
-        return {
-            from: fromP?.name || rel.from,
-            to: toP?.name || rel.to,
-            name: rel.name,
-            description: rel.description || '',
-            invocation: rel.invocation,
-            await: rel.await,
-            sessionPolicy: rel.sessionPolicy,
-            maxCalls: rel.maxCalls,
-            timeout: rel.timeout,
-        }
-    })
+    const relations = act.relations.map((rel) => ({
+        between: rel.between,
+        direction: rel.direction,
+        name: rel.name,
+        description: rel.description || '',
+        permissions: rel.permissions,
+        maxCalls: rel.maxCalls,
+        timeout: rel.timeout,
+        sessionPolicy: rel.sessionPolicy,
+    }))
 
     return {
         schema: 'studio-v1' as const,
         name: act.name,
-        description: options.description?.trim() || act.name,
+        description: options.description?.trim() || act.description || act.name,
         tags: (options.tags || []).filter((t) => t.trim().length > 0),
+        actRules: act.actRules,
         performers,
         relations,
     }

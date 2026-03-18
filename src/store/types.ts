@@ -15,7 +15,8 @@ import type {
     SafeOwnerKind,
     SafeOwnerSummary,
     StageAct,
-    ActPerformer,
+    StageActPerformerBinding,
+    ActRelation,
 } from '../types'
 import type { AdapterViewProjection } from '../../shared/adapter-view'
 import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
@@ -47,6 +48,7 @@ export interface WorkspaceSlice {
     selectedPerformerSessionId: string | null
     selectedMarkdownEditorId: string | null
     focusedPerformerId: string | null
+    focusedNodeType: 'performer' | 'act' | null
     focusSnapshot: FocusSnapshot | null
     inspectorFocus: string | null
     stageList: SavedStageSummary[]
@@ -94,9 +96,9 @@ export interface WorkspaceSlice {
     selectPerformerSession: (sessionId: string | null) => void
     selectMarkdownEditor: (id: string | null) => void
     setFocusedPerformer: (id: string | null) => void
-    enterFocusMode: (performerId: string, viewportSize: { width: number; height: number }) => void
+    enterFocusMode: (nodeId: string, nodeType: 'performer' | 'act', viewportSize: { width: number; height: number }) => void
     exitFocusMode: () => void
-    switchFocusTarget: (performerId: string) => void
+    switchFocusTarget: (nodeId: string, nodeType: 'performer' | 'act') => void
     setInspectorFocus: (focus: string | null) => void
     openPerformerEditor: (id: string, focus?: string | null) => void
     closeEditor: () => void
@@ -132,6 +134,11 @@ export interface WorkspaceSlice {
     updateTrackingWindowPosition: (x: number, y: number) => void
     updateTrackingWindowSize: (width: number, height: number) => void
     upsertDraft: (draft: DraftAsset) => void
+    savePerformerAsDraft: (performerId: string) => Promise<void>
+    saveActAsDraft: (actId: string) => Promise<void>
+    loadDraftsFromDisk: () => Promise<void>
+    addPerformerFromDraft: (name: string, draftContent: Record<string, any>) => void
+    importActFromDraft: (name: string, draftContent: Record<string, any>) => void
     createMarkdownEditor: (
         kind: MarkdownEditorKind,
         options?: {
@@ -155,11 +162,9 @@ export interface WorkspaceSlice {
 
 export interface ChatSlice {
     chats: Record<string, ChatMessage[]>
-    actChats: Record<string, ChatMessage[]>
     chatPrefixes: Record<string, ChatMessage[]>
     activeChatPerformerId: string | null
     sessionMap: Record<string, string>
-    actSessionMap: Record<string, string>
     loadingPerformerId: string | null
     sessions: Array<{ id: string; title?: string; createdAt?: number }>
     pendingPermissions: Record<string, PermissionRequest>
@@ -177,7 +182,7 @@ export interface ChatSlice {
     ) => Promise<void>
     sendActMessage: (
         actId: string,
-        callerPerformerId: string,
+        performerKey: string,
         message: string,
     ) => Promise<void>
     executeSlashCommand: (performerId: string, cmd: string) => Promise<void>
@@ -204,6 +209,7 @@ export interface IntegrationSlice {
 
     fetchLspStatus: () => Promise<void>
     initRealtimeEvents: () => void
+    forceReconnectRealtimeEvents: () => void
     cleanupRealtimeEvents: () => void
 
     // Compile Prompt (imperative, used by chat)
@@ -232,43 +238,51 @@ export interface ActSlice {
     editingActId: string | null
     selectedActPerformerKey: string | null
     selectedRelationId: string | null
+
+    // ── Act Definition CRUD ─────────────────────
     addAct: (name: string) => string
     removeAct: (id: string) => void
     renameAct: (id: string, name: string) => void
-    setActExecutionMode: (id: string, mode: ExecutionMode) => void
+    updateActDescription: (id: string, description: string) => void
+    updateActRules: (id: string, rules: string[]) => void
     selectAct: (id: string | null) => void
+    toggleActVisibility: (id: string) => void
     toggleActEdit: (id: string) => void
+
+    // ── Performer Binding (ref-based) ───────────
+    bindPerformerToAct: (actId: string, performerRef: StageActPerformerBinding['performerRef']) => string
+    unbindPerformerFromAct: (actId: string, performerKey: string) => void
+    updatePerformerBinding: (actId: string, performerKey: string, update: Partial<StageActPerformerBinding>) => void
+    selectActPerformer: (key: string | null) => void
+    updateActPerformerPosition: (actId: string, performerKey: string, x: number, y: number) => void
+
+    // ── Relation (communication contract) ───────
+    addRelation: (actId: string, between: [string, string], direction: 'both' | 'one-way') => void
+    removeRelation: (actId: string, relationId: string) => void
+    updateRelation: (actId: string, relationId: string, update: Partial<ActRelation>) => void
+    selectRelation: (id: string | null) => void
+
+    // ── Canvas ──────────────────────────────────
     updateActPosition: (id: string, x: number, y: number) => void
     updateActSize: (id: string, width: number, height: number) => void
-    // Focus mode for Act editing
+
+    // ── Focus mode ──────────────────────────────
     enterActEditFocus: (actId: string) => void
     exitActEditFocus: () => void
-    selectActPerformer: (key: string | null) => void
-    selectRelation: (id: string | null) => void
-    updateActPerformerPosition: (actId: string, performerKey: string, x: number, y: number) => void
-    // Performer management (copy-based)
-    addPerformerToAct: (actId: string, performerId: string) => void
-    addNewPerformerInAct: (actId: string, name: string) => string
-    removePerformerFromAct: (actId: string, performerKey: string) => void
-    syncPerformerFromCanvas: (actId: string, performerKey: string) => void
-    updateActPerformer: (actId: string, performerKey: string, update: Partial<ActPerformer>) => void
-    // Relation management (Act-internal edges)
-    addRelationInAct: (actId: string, from: string, to: string) => void
-    removeRelationFromAct: (actId: string, relationId: string) => void
-    updateRelation: (actId: string, relationId: string, update: Partial<import('../types').ActRelation>) => void
-    // Authoring / import
+
+    // ── Authoring / import ──────────────────────
     updateActAuthoringMeta: (id: string, meta: StageAct['meta']) => void
     importActFromAsset: (asset: any) => void
 }
 
+
 export interface AssistantSlice {
     isAssistantOpen: boolean
-    assistantMessages: ChatMessage[]
-    assistantSessionId: string | null
 
     toggleAssistant: () => void
-    sendAssistantMessage: (message: string, model?: string) => Promise<void>
-    clearAssistantHistory: () => void
+    /** Ensure the hidden 'studio-assistant' performer node exists with the given model */
+    ensureAssistantPerformer: (model: { provider: string; modelId: string }) => void
 }
 
 export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice & ActSlice & AssistantSlice
+

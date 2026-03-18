@@ -118,7 +118,10 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
     } = props
 
     const connected = useMemo(
-        () => providers.filter((p) => p.connected),
+        // Exclude 'opencode' provider from connected list — same as OpenCode web.
+        // In managed mode, opencode reports connected=true even without a Zen API key.
+        // This lets users see it in the Popular section and enter their Zen key.
+        () => providers.filter((p) => p.connected && p.id !== 'opencode'),
         [providers],
     )
 
@@ -200,9 +203,14 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                                                 Choose Model
                                             </button>
                                         )}
-                                        <button className="btn" onClick={() => disconnectProvider(provider.id, provider.name)}>
-                                            Disconnect
-                                        </button>
+                                        {provider.source === 'env'
+                                            ? <span className="stg-tag stg-tag--subtle">Set via environment</span>
+                                            : (
+                                                <button className="btn" onClick={() => disconnectProvider(provider.id, provider.name)}>
+                                                    Disconnect
+                                                </button>
+                                            )
+                                        }
                                     </div>
                                     {flow && (
                                         <ProviderFlowPanel

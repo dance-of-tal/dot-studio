@@ -60,6 +60,7 @@ export async function newStage(get: GetFn, set: SetFn) {
                 selectedPerformerSessionId: null,
                 selectedMarkdownEditorId: null,
                 focusedPerformerId: null,
+                focusedNodeType: null,
                 focusSnapshot: null,
                 inspectorFocus: null,
                 chats: {},
@@ -75,6 +76,7 @@ export async function newStage(get: GetFn, set: SetFn) {
                 stageDirty: true,
             })
             get().initRealtimeEvents()
+            get().loadDraftsFromDisk()
             api.studio.activate(dir).catch(err => console.warn('[studio] activate failed', err))
         }
     } catch (err) {
@@ -97,7 +99,6 @@ export async function newStage(get: GetFn, set: SetFn) {
 export async function saveStage(get: GetFn, set: SetFn) {
     const {
         performers,
-        drafts,
         markdownEditors,
         sessionMap,
         workingDir,
@@ -117,7 +118,6 @@ export async function saveStage(get: GetFn, set: SetFn) {
         schemaVersion: 5,
         workingDir: normalizePath(workingDir),
         performers: performersWithSessions,
-        drafts,
         markdownEditors,
         canvasTerminals: get().canvasTerminals.map(t => ({
             ...t,
@@ -212,7 +212,7 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
         set({
             stageId,
             performers: loadedPerformers,
-            drafts: data.drafts || {},
+            drafts: {},
             acts: parseActs(data),
             selectedActId: null,
             editingActId: null,
@@ -222,6 +222,7 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
             focusedPerformerId: null,
+            focusedNodeType: null,
             focusSnapshot: null,
             inspectorFocus: null,
             activeChatPerformerId: null,
@@ -263,6 +264,9 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
 
         get().rehydrateSessions()
         get().listSessions()
+
+        // Load all drafts from disk into memory
+        get().loadDraftsFromDisk()
     } catch (err) {
         const apiError = coerceStudioApiError(err)
         if (apiError.status !== 404) {

@@ -1,6 +1,6 @@
 /**
- * SettingsModels — Model visibility management panel.
- * Mirrors OpenCode's settings-models.tsx: search, group by provider, toggle.
+ * SettingsModels — Connected model browser.
+ * Shows all available connected models grouped by provider (read-only).
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -27,7 +27,6 @@ export default function SettingsModels() {
     const [models, setModels] = useState<ModelEntry[]>([])
     const [loading, setLoading] = useState(true)
     const [query, setQuery] = useState('')
-    const [disabledModels, setDisabledModels] = useState<Set<string>>(new Set())
 
     useEffect(() => {
         let cancelled = false
@@ -84,18 +83,6 @@ export default function SettingsModels() {
         return result
     }, [filtered])
 
-    function toggleModel(key: string) {
-        setDisabledModels((prev) => {
-            const next = new Set(prev)
-            if (next.has(key)) {
-                next.delete(key)
-            } else {
-                next.add(key)
-            }
-            return next
-        })
-    }
-
     return (
         <div className="stg-panel">
             <div className="stg-panel__header">
@@ -133,7 +120,6 @@ export default function SettingsModels() {
                             <div className="stg-group">
                                 {group.models.map((model) => {
                                     const key = `${model.provider}:${model.id}`
-                                    const visible = !disabledModels.has(key)
                                     return (
                                         <div key={key} className="stg-row">
                                             <div className="stg-row__text">
@@ -144,14 +130,6 @@ export default function SettingsModels() {
                                                     {model.reasoning ? ' · reasoning' : ''}
                                                 </span>
                                             </div>
-                                            <label className="stg-toggle">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={visible}
-                                                    onChange={() => toggleModel(key)}
-                                                />
-                                                <span className="stg-toggle__track" />
-                                            </label>
                                         </div>
                                     )
                                 })}

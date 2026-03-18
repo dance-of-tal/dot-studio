@@ -214,7 +214,7 @@ export function handleMessagePartUpdated(
         }
 
         // Auto-execute assistant tools on completion
-        if (target.kind === 'assistant' && state.status === 'completed' && part.tool?.startsWith('assistant_')) {
+        if (target.kind === 'performer' && target.performerId === 'studio-assistant' && state.status === 'completed' && part.tool?.startsWith('assistant_')) {
             // Ensure we only execute once (we can check if it already ran, but state.status edge is safe enough)
             // Wait, part.state is what we have. Let's use requestAnimationFrame or just execute it directly.
             // A better way is to see if we haven't executed it yet. Since integration handlers are idempotent-ish,
@@ -505,11 +505,18 @@ export function handlePermissionAsked(
         return
     }
 
+    // The session is now paused waiting for user approval — clear the
+    // loading spinner so the permission UI is visible and the composer
+    // is not disabled.
+    const { target } = context
     set((state) => ({
         pendingPermissions: {
             ...state.pendingPermissions,
             [request.sessionID]: request,
         },
+        ...(target.kind === 'performer' && state.loadingPerformerId === target.performerId
+            ? { loadingPerformerId: null }
+            : {}),
     }))
 }
 
@@ -549,11 +556,17 @@ export function handleQuestionAsked(
         return
     }
 
+    // The session is now paused waiting for user answers — clear the
+    // loading spinner so the question UI is visible.
+    const { target } = context
     set((state) => ({
         pendingQuestions: {
             ...state.pendingQuestions,
             [request.sessionID]: request,
         },
+        ...(target.kind === 'performer' && state.loadingPerformerId === target.performerId
+            ? { loadingPerformerId: null }
+            : {}),
     }))
 }
 

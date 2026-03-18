@@ -35,3 +35,6 @@ pnpm-debug.log*
 AGENT.md
 REFACTOR.md
 prd/
+
+#opencode-source
+.opencode-source/

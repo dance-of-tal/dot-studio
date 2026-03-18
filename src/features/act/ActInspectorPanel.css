@@ -2,7 +2,7 @@
 
 .act-panel {
     position: absolute;
-    top: 48px;
+    top: 60px;
     right: 8px;
     z-index: 50;
     width: 280px;
@@ -388,4 +388,47 @@
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--accent);
     border-radius: 3px;
+}
+
+/* Validation */
+.act-panel__validation {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.act-panel__validation-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 11px;
+    line-height: 1.4;
+    padding: 4px 6px;
+    border-radius: 4px;
+}
+
+.act-panel__validation-item--error {
+    background: color-mix(in srgb, var(--status-danger) 10%, transparent);
+    color: var(--status-danger);
+}
+
+.act-panel__validation-item--warning {
+    background: color-mix(in srgb, var(--status-warning) 10%, transparent);
+    color: var(--status-warning);
+}
+
+.act-panel__validation-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+}
+
+.act-panel__validation-item--error .act-panel__validation-dot {
+    background: var(--status-danger);
+}
+
+.act-panel__validation-item--warning .act-panel__validation-dot {
+    background: var(--status-warning);
 }

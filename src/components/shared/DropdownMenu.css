@@ -1,0 +1,108 @@
+/* ═══════════════════════════════════════════
+   DROPDOWN MENU — unified dropdown component
+   ═══════════════════════════════════════════ */
+
+.dropdown-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+.dropdown-menu__trigger {
+    display: inline-flex;
+    cursor: pointer;
+}
+
+/* ── Panel ─────────────────────────────────── */
+
+.dropdown-menu__panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 60;
+    min-width: 168px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-dropdown);
+    animation: dropdown-in 0.12s ease-out;
+}
+
+.dropdown-menu__panel--right {
+    left: auto;
+    right: 0;
+}
+
+@keyframes dropdown-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Item ──────────────────────────────────── */
+
+.dropdown-menu__item {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: var(--radius-lg);
+    font-size: var(--font-base);
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+    white-space: nowrap;
+}
+
+.dropdown-menu__item:hover {
+    background: var(--bg-hover);
+}
+
+.dropdown-menu__item.is-active {
+    background: rgba(var(--primary-rgb), 0.1);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.dropdown-menu__item--danger {
+    color: var(--danger, #ef4444);
+}
+
+.dropdown-menu__item--danger:hover {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.dropdown-menu__item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Group ─────────────────────────────────── */
+
+.dropdown-menu__group-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    padding: 8px 10px 4px;
+}
+
+/* ── Separator ─────────────────────────────── */
+
+.dropdown-menu__separator {
+    height: 1px;
+    background: var(--border-light);
+    margin: 4px 6px;
+}

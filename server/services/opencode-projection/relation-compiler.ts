@@ -179,7 +179,7 @@ export function compileRelations(
     }
 }
 
-// ── Legacy compat (used by chat-service @mention flow) ──
+// ── @mention support (used by chat-service @mention flow) ──
 
 export interface RequestRelationTarget {
     performerId: string

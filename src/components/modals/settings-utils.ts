@@ -79,17 +79,22 @@ export type ProjectConfig = {
 export type ProjectMcpEntryDraft = {
     key: string
     name: string
-    type: 'local' | 'remote'
     enabled: boolean
-    commandText: string
+    /** Unified server field — URL (http/https) = remote, otherwise = local command */
+    serverText: string
     environmentText: string
     timeoutText: string
-    url: string
     headersText: string
     oauthEnabled: boolean
     oauthClientId: string
     oauthClientSecret: string
     oauthScope: string
+}
+
+/** Auto-detect: server text starting with http(s):// is a remote MCP server */
+export function isRemoteServer(serverText: string): boolean {
+    const trimmed = serverText.trim().toLowerCase()
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://')
 }
 
 export type ProjectSettingsDraft = {
@@ -240,12 +245,10 @@ export function buildProjectMcpDrafts(catalog: ProjectMcpCatalog): ProjectMcpEnt
                 return {
                     key: `mcp:${name}`,
                     name,
-                    type: 'remote' as const,
                     enabled: entry.enabled !== false,
-                    commandText: '',
+                    serverText: entry.url,
                     environmentText: '',
                     timeoutText: typeof entry.timeout === 'number' ? String(entry.timeout) : '',
-                    url: entry.url,
                     headersText: kvTextFromRecord(entry.headers),
                     oauthEnabled: entry.oauth !== false,
                     oauthClientId: entry.oauth && typeof entry.oauth === 'object' ? entry.oauth.clientId || '' : '',
@@ -258,12 +261,10 @@ export function buildProjectMcpDrafts(catalog: ProjectMcpCatalog): ProjectMcpEnt
                 return {
                     key: `mcp:${name}`,
                     name,
-                    type: 'local' as const,
                     enabled: entry.enabled !== false,
-                    commandText: entry.command.join(' '),
+                    serverText: entry.command.join(' '),
                     environmentText: kvTextFromRecord(entry.environment),
                     timeoutText: typeof entry.timeout === 'number' ? String(entry.timeout) : '',
-                    url: '',
                     headersText: '',
                     oauthEnabled: true,
                     oauthClientId: '',
@@ -275,12 +276,10 @@ export function buildProjectMcpDrafts(catalog: ProjectMcpCatalog): ProjectMcpEnt
             return {
                 key: `mcp:${name}`,
                 name,
-                type: 'local' as const,
                 enabled: entry.enabled !== false,
-                commandText: '',
+                serverText: '',
                 environmentText: '',
                 timeoutText: '',
-                url: '',
                 headersText: '',
                 oauthEnabled: true,
                 oauthClientId: '',
@@ -299,10 +298,10 @@ export function serializeProjectMcpEntries(entries: ProjectMcpEntryDraft[]): Pro
                 const name = entry.name.trim()
                 const timeout = entry.timeoutText.trim() ? Number(entry.timeoutText.trim()) : undefined
 
-                if (entry.type === 'remote') {
+                if (isRemoteServer(entry.serverText)) {
                     return [name, {
                         type: 'remote',
-                        url: entry.url.trim(),
+                        url: entry.serverText.trim(),
                         enabled: entry.enabled,
                         ...(typeof timeout === 'number' && Number.isFinite(timeout) ? { timeout } : {}),
                         ...(parseKeyValueText(entry.headersText) ? { headers: parseKeyValueText(entry.headersText) } : {}),
@@ -318,7 +317,7 @@ export function serializeProjectMcpEntries(entries: ProjectMcpEntryDraft[]): Pro
                     }]
                 }
 
-                const command = entry.commandText
+                const command = entry.serverText
                     .trim()
                     .split(/\s+/)
                     .filter(Boolean)

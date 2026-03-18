@@ -24,7 +24,7 @@ export interface McpCatalogState {
     pendingMcpAuthName: string | null
     mcpServers: ReturnType<typeof useMcpServers>['data']
     updateMcpEntry: (key: string, updater: (entry: ProjectMcpEntryDraft) => ProjectMcpEntryDraft) => void
-    addMcpEntry: (type: 'local' | 'remote') => void
+    addMcpEntry: () => void
     removeMcpEntry: (key: string) => void
     saveMcpCatalog: () => Promise<void>
     resetMcpCatalog: () => void
@@ -111,19 +111,17 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         setMcpDraftEntries((current) => current.map((entry) => entry.key === key ? updater(entry) : entry))
     }
 
-    const addMcpEntry = (type: 'local' | 'remote') => {
+    const addMcpEntry = () => {
         const key = makeId('asset-mcp')
         setMcpDraftEntries((current) => [
             ...current,
             {
                 key,
                 name: '',
-                type,
                 enabled: true,
-                commandText: '',
+                serverText: '',
                 environmentText: '',
                 timeoutText: '',
-                url: '',
                 headersText: '',
                 oauthEnabled: true,
                 oauthClientId: '',
@@ -171,17 +169,11 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         setMcpCatalogStatus(null)
         try {
             const invalidEntry = mcpDraftEntries.find((entry) => (
-                entry.name.trim()
-                && (
-                    (entry.type === 'local' && !entry.commandText.trim())
-                    || (entry.type === 'remote' && !entry.url.trim())
-                )
+                entry.name.trim() && !entry.serverText.trim()
             ))
             if (invalidEntry) {
                 throw new Error(
-                    invalidEntry.type === 'local'
-                        ? `MCP '${invalidEntry.name}' needs a command before saving.`
-                        : `MCP '${invalidEntry.name}' needs a URL before saving.`,
+                    `MCP '${invalidEntry.name}' needs a server command or URL before saving.`,
                 )
             }
 

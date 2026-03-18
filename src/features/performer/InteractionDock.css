@@ -1,0 +1,330 @@
+/* ═══════════════════════════════════════════════════════════
+   Interaction Docks — Permission, Question, Todo
+   Uses DOT Studio design system primitives & tokens.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Shared Dock Container ─────────────────────────────── */
+
+.interaction-dock {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    overflow: hidden;
+    font-size: var(--font-md);
+}
+
+/* ── Permission Dock ────────────────────────────────────── */
+
+.permission-dock {
+    border-color: var(--status-warning);
+    background: var(--status-warning-bg);
+}
+
+.permission-dock__body {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+}
+
+.permission-dock__icon {
+    flex: 0 0 auto;
+    color: var(--status-warning);
+    margin-top: 1px;
+}
+
+.permission-dock__info {
+    flex: 1;
+    min-width: 0;
+}
+
+.permission-dock__title {
+    font-weight: 600;
+    font-size: var(--font-md);
+    color: var(--text-primary);
+}
+
+.permission-dock__patterns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.permission-dock__pattern {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-hover);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.permission-dock__fallback {
+    margin-top: 4px;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+}
+
+.permission-dock__actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    padding: 0 12px 10px;
+}
+
+/* ── Question Wizard ────────────────────────────────────── */
+
+.question-dock {
+    border-color: var(--accent);
+}
+
+.question-dock__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px 0;
+}
+
+.question-dock__icon {
+    flex: 0 0 auto;
+    color: var(--accent);
+}
+
+.question-dock__title {
+    flex: 1;
+    font-weight: 600;
+    font-size: var(--font-md);
+    color: var(--text-primary);
+}
+
+.question-dock__step {
+    font-size: var(--font-xs);
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--bg-selected);
+    color: var(--accent);
+    white-space: nowrap;
+}
+
+.question-dock__body {
+    padding: 8px 12px 0 36px;
+}
+
+.question-dock__question-text {
+    font-size: var(--font-md);
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+.question-dock__options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 10px;
+}
+
+.question-dock__option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.question-dock__option:hover {
+    background: var(--bg-hover);
+}
+
+.question-dock__option input[type="radio"],
+.question-dock__option input[type="checkbox"] {
+    margin-top: 2px;
+    accent-color: var(--accent);
+}
+
+.question-dock__option-label {
+    font-weight: 500;
+    font-size: var(--font-md);
+    color: var(--text-primary);
+}
+
+.question-dock__option-desc {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
+.question-dock__custom-input {
+    width: 100%;
+    min-height: 48px;
+    padding: 8px;
+    margin-top: 8px;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-sm);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: var(--font-md);
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.15s;
+}
+
+.question-dock__custom-input:focus {
+    border-color: var(--accent);
+}
+
+.question-dock__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-light);
+    margin-top: 10px;
+}
+
+.question-dock__footer-end {
+    display: flex;
+    gap: 6px;
+}
+
+/* ── Todo Dock ──────────────────────────────────────────── */
+
+.todo-dock {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    max-width: 90%;
+    width: 380px;
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-dropdown);
+}
+
+.todo-dock__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.1s;
+}
+
+.todo-dock__header:hover {
+    background: var(--bg-hover);
+}
+
+.todo-dock__header-icon {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+}
+
+.todo-dock__summary {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+}
+
+.todo-dock__summary strong {
+    font-weight: 700;
+}
+
+.todo-dock__counter {
+    color: var(--text-muted);
+}
+
+.todo-dock__active-preview {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    max-width: 180px;
+}
+
+.todo-dock__active-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+}
+
+.todo-dock__chevron {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+}
+
+.todo-dock__list {
+    border-top: 1px solid var(--border-light);
+    max-height: 280px;
+    overflow-y: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.todo-dock__item {
+    display: flex;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    transition: background 0.1s;
+}
+
+.todo-dock__item--active {
+    background: var(--bg-selected);
+}
+
+.todo-dock__item--pending {
+    opacity: 0.55;
+}
+
+.todo-dock__item-icon {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
+.todo-dock__item-content {
+    flex: 1;
+    font-size: var(--font-md);
+    color: var(--text-primary);
+    line-height: 1.45;
+}
+
+.todo-dock__item-text--done {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.todo-dock__item-text--cancelled {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.todo-dock__item-desc {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* ── Spinner ────────────────────────────────────────────── */
+
+@keyframes dock-spin {
+    to { transform: rotate(360deg); }
+}
+
+.dock-spin {
+    animation: dock-spin 1s linear infinite;
+}

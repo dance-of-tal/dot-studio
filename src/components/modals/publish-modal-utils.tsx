@@ -65,19 +65,12 @@ export function getActIssue(act: StageAct): string | undefined {
 
     const connectedIds = new Set<string>()
     for (const rel of act.relations) {
-        connectedIds.add(rel.from)
-        connectedIds.add(rel.to)
+        connectedIds.add(rel.between[0])
+        connectedIds.add(rel.between[1])
     }
     const disconnected = performerIds.filter((id) => !connectedIds.has(id))
     if (disconnected.length > 0) {
-        const names = disconnected.map((id) => act.performers[id]?.name || id)
-        return `Disconnected: ${names.join(', ')}`
-    }
-
-    const noModel = performerIds.filter((id) => !act.performers[id]?.model)
-    if (noModel.length > 0) {
-        const names = noModel.map((id) => act.performers[id]?.name || id)
-        return `No model: ${names.join(', ')}`
+        return `Disconnected: ${disconnected.join(', ')}`
     }
 
     return undefined
@@ -98,27 +91,19 @@ export function getActPublishBlockReasons(act: StageAct): string[] {
     if (performerIds.length > 0 && act.relations.length > 0) {
         const connectedIds = new Set<string>()
         for (const rel of act.relations) {
-            connectedIds.add(rel.from)
-            connectedIds.add(rel.to)
+            connectedIds.add(rel.between[0])
+            connectedIds.add(rel.between[1])
         }
         const disconnected = performerIds.filter((id) => !connectedIds.has(id))
         if (disconnected.length > 0) {
-            const names = disconnected.map((id) => act.performers[id]?.name || id)
-            reasons.push(`Disconnected performer${disconnected.length > 1 ? 's' : ''}: ${names.join(', ')}. All performers must be connected by relations.`)
+            reasons.push(`Disconnected performer${disconnected.length > 1 ? 's' : ''}: ${disconnected.join(', ')}. All performers must be connected by relations.`)
         }
 
         // Dangling relations
-        const dangling = act.relations.filter((r) => !act.performers[r.from] || !act.performers[r.to])
+        const dangling = act.relations.filter((r) => !act.performers[r.between[0]] || !act.performers[r.between[1]])
         if (dangling.length > 0) {
             reasons.push(`${dangling.length} relation(s) reference performers not in this Act.`)
         }
-    }
-
-    // Missing models
-    const noModel = performerIds.filter((id) => !act.performers[id]?.model)
-    if (noModel.length > 0) {
-        const names = noModel.map((id) => act.performers[id]?.name || id)
-        reasons.push(`No model configured for: ${names.join(', ')}.`)
     }
 
     return reasons

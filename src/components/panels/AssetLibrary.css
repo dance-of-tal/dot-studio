@@ -551,15 +551,12 @@
     padding: 4px 12px;
 }
 
-.registry-kind-select {
+.registry-filters .select,
+.asset-mcp-editor__field .select,
+.sub-scope-row .select {
     flex: 1;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-main);
-    border-radius: var(--radius-sm);
-    padding: 4px 6px;
     font-size: var(--font-sm);
-    color: var(--text-primary);
-    cursor: pointer;
+    padding: 4px 24px 4px 6px;
 }
 
 .registry-search-btn {

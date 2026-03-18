@@ -1,10 +1,10 @@
-import { Move } from 'lucide-react'
+import { Scan } from 'lucide-react'
 import './CanvasDragHandle.css'
 
 type CanvasDragHandleProps = {
     active?: boolean
     interactive?: boolean
-    onActivate?: () => void
+    onToggle?: () => void
     stopPropagation?: boolean
     title?: string
 }
@@ -12,16 +12,16 @@ type CanvasDragHandleProps = {
 export default function CanvasDragHandle({
     active = false,
     interactive = true,
-    onActivate,
+    onToggle,
     stopPropagation = false,
-    title = 'Move and resize window',
+    title = 'Toggle resize handles',
 }: CanvasDragHandleProps) {
     const className = `canvas-drag-handle${interactive ? ' canvas-drag-handle--interactive' : ''}${active ? ' canvas-drag-handle--active' : ''}`
 
     if (!interactive) {
         return (
             <span className={className} aria-hidden="true">
-                <Move size={12} strokeWidth={1.8} />
+                <Scan size={11} strokeWidth={1.8} />
             </span>
         )
     }
@@ -36,19 +36,18 @@ export default function CanvasDragHandle({
                     event.stopPropagation()
                     return
                 }
-                onActivate?.()
+                onToggle?.()
             }}
             onClick={(event) => {
                 if (stopPropagation) {
                     event.preventDefault()
                     event.stopPropagation()
                 }
-                onActivate?.()
             }}
             title={title}
             aria-label={title}
         >
-            <Move size={12} strokeWidth={1.8} />
+            <Scan size={11} strokeWidth={1.8} />
         </button>
     )
 }

@@ -118,6 +118,18 @@
     font-size: var(--font-xs);
 }
 
+/* Danger (destructive actions) */
+.btn--danger {
+    border-color: var(--danger, #e53e3e);
+    color: var(--danger, #e53e3e);
+}
+
+.btn--danger:hover {
+    background: var(--danger, #e53e3e);
+    border-color: var(--danger, #e53e3e);
+    color: #fff;
+}
+
 /* ── Inputs ──────────────────────────────────────────────── */
 
 .input {

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, Wrench, Terminal, FileEdit } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, Wrench, Terminal, FileEdit, ListTodo, CheckCircle2, Circle, XCircle } from 'lucide-react'
 import type { ChatMessageToolInfo } from '../../types'
 import { useUISettings } from '../../store/settingsSlice'
+import { useStudioStore } from '../../store'
 import './ToolGroup.css'
 
 function formatToolDuration(time: ChatMessageToolInfo['time']) {
@@ -33,20 +34,93 @@ function ToolStatusIcon({ status }: { status: ChatMessageToolInfo['status'] }) {
     return null
 }
 
+const SHELL_NAMES = new Set([
+    'bash', 'shell', 'execute_command', 'execute_background_command',
+    'run_terminal_command', 'run_command',
+])
+
+const EDIT_NAMES = new Set([
+    'replace_in_file', 'multi_replace_file_content', 'write_to_file',
+    'str_replace_editor', 'apply_patch', 'create_file',
+])
+
+const TODO_NAMES = new Set(['todos', 'todowrite', 'todo', 'todoread'])
+
+function extractShellCommand(input: Record<string, unknown> | undefined): string {
+    if (!input) return ''
+    // OpenCode bash tool uses input.command; some providers use args array
+    if (input.command) return String(input.command)
+    if (input.CommandLine) return String(input.CommandLine)
+    if (Array.isArray(input.args) && input.args.length > 0) return input.args.join(' ')
+    return ''
+}
+
+function TodoInlineList({ input, output }: { input?: Record<string, unknown>; output?: string }) {
+    // Try to extract todos from the tool output or input
+    let items: Array<{ content: string; status: string }> = []
+
+    // Parse from output (JSON array of todos)
+    if (output) {
+        try {
+            const parsed = JSON.parse(output)
+            if (Array.isArray(parsed)) {
+                items = parsed.map((t: any) => ({ content: t.content || t.title || String(t), status: t.status || 'pending' }))
+            }
+        } catch (e) {
+            // Try line-based parse
+            items = output.split('\n').filter(Boolean).map(line => ({ content: line, status: 'pending' }))
+        }
+    }
+
+    // Also check store todos for the current session
+    const sessionTodos = useStudioStore.getState().todos
+    // Find the most recent session's todos if inline items are empty
+    if (items.length === 0) {
+        const allTodos = Object.values(sessionTodos).flat()
+        if (allTodos.length > 0) items = allTodos.map((t: any) => ({ content: t.content, status: t.status }))
+    }
+
+    if (items.length === 0 && input) {
+        // Show input as fallback
+        return <pre className="tool-row__pre">{JSON.stringify(input, null, 2)}</pre>
+    }
+
+    const iconFor = (status: string) => {
+        if (status === 'completed') return <CheckCircle2 size={13} style={{ color: '#10b981' }} />
+        if (status === 'in_progress') return <Loader2 size={13} className="spin-icon" style={{ color: 'var(--accent)' }} />
+        if (status === 'cancelled') return <XCircle size={13} style={{ color: 'var(--text-muted)' }} />
+        return <Circle size={13} style={{ color: 'var(--text-muted)' }} />
+    }
+
+    return (
+        <div className="todo-inline-list">
+            {items.map((item, i) => (
+                <div key={i} className={`todo-inline-item ${item.status === 'in_progress' ? 'todo-inline-item--active' : ''} ${item.status === 'completed' || item.status === 'cancelled' ? 'todo-inline-item--done' : ''}`}>
+                    {iconFor(item.status)}
+                    <span className={item.status === 'completed' || item.status === 'cancelled' ? 'todo-inline-text--done' : ''}>{item.content}</span>
+                </div>
+            ))}
+        </div>
+    )
+}
+
 export function ToolCallRow({ tool }: { tool: ChatMessageToolInfo }) {
     const { shellToolPartsExpanded, editToolPartsExpanded } = useUISettings()
-    const isShell = tool.name === 'execute_command' || tool.name === 'execute_background_command' || tool.name === 'run_terminal_command' || tool.name === 'run_command'
-    const isEdit = tool.name === 'replace_in_file' || tool.name === 'multi_replace_file_content' || tool.name === 'write_to_file' || tool.name === 'str_replace_editor'
+    const isShell = SHELL_NAMES.has(tool.name)
+    const isEdit = EDIT_NAMES.has(tool.name)
+    const isTodo = TODO_NAMES.has(tool.name)
     
     // Determine title block
     let displayTitle = tool.title || tool.name
     let displayDesc = ''
     if (isShell) {
-        displayDesc = String(tool.input?.command || tool.input?.CommandLine || '')
+        displayDesc = extractShellCommand(tool.input)
         displayTitle = 'Run Command'
     } else if (isEdit) {
         displayDesc = String(tool.input?.path || tool.input?.TargetFile || tool.input?.file || '')
         displayTitle = 'Edit File'
+    } else if (isTodo) {
+        displayTitle = tool.title || `${tool.input?.todos ? (tool.input.todos as any[]).length : ''} todos`
     }
 
     const initialState = isShell ? shellToolPartsExpanded : isEdit ? editToolPartsExpanded : false
@@ -62,15 +136,17 @@ export function ToolCallRow({ tool }: { tool: ChatMessageToolInfo }) {
                     <ToolStatusIcon status={tool.status} />
                 </span>
                 {isShell ? (
-                    <Terminal size={10} className="tool-row__wrench" style={{ color: 'var(--text-secondary)' }} />
+                    <Terminal size={10} className="tool-row__wrench" />
                 ) : isEdit ? (
-                    <FileEdit size={10} className="tool-row__wrench" style={{ color: 'var(--text-secondary)' }} />
+                    <FileEdit size={10} className="tool-row__wrench" />
+                ) : isTodo ? (
+                    <ListTodo size={10} className="tool-row__wrench" />
                 ) : (
                     <Wrench size={10} className="tool-row__wrench" />
                 )}
                 <span className="tool-row__name">{displayTitle}</span>
-                {displayDesc && <span className="tool-row__desc" style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>{displayDesc}</span>}
-                {durationLabel ? <span className="tool-row__duration" style={{ marginLeft: 'auto', fontSize: '10px' }}>{durationLabel}</span> : null}
+                {displayDesc && <span className="tool-row__desc">{displayDesc}</span>}
+                {durationLabel ? <span className="tool-row__duration">{durationLabel}</span> : null}
                 <span className="tool-row__chevron">
                     {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                 </span>
@@ -81,24 +157,24 @@ export function ToolCallRow({ tool }: { tool: ChatMessageToolInfo }) {
                         <div className="tool-row__section tool-row__section--terminal">
                             {tool.input && (
                                 <div className="terminal-command">
-                                    <span style={{ color: 'var(--accent)', marginRight: '8px' }}>$</span>
-                                    {String(tool.input.command || tool.input.CommandLine || '')}
+                                    <span className="terminal-prompt">$</span>
+                                    {extractShellCommand(tool.input)}
                                 </div>
                             )}
                             {tool.output && (
                                 <div className="terminal-output">{tool.output}</div>
                             )}
                             {tool.error && (
-                                <div className="terminal-error" style={{ color: 'var(--error-fg)' }}>{tool.error}</div>
+                                <div className="terminal-error">{tool.error}</div>
                             )}
                             {tool.status === 'running' && !tool.output && !tool.error && (
-                                <div className="terminal-output" style={{ opacity: 0.5 }}>...</div>
+                                <div className="terminal-output" style={{ opacity: 0.4 }}>...</div>
                             )}
                         </div>
                     ) : isEdit ? (
                         <div className="tool-row__section tool-row__section--edit">
                             {tool.input?.path || tool.input?.TargetFile || tool.input?.file ? (
-                                <div style={{ fontSize: '11px', padding: '4px 8px', background: 'var(--bg-default)', borderBottom: '1px solid var(--border-light)', fontFamily: 'monospace' }}>
+                                <div className="edit-file-path">
                                     {String(tool.input.path || tool.input.TargetFile || tool.input.file || '')}
                                 </div>
                             ) : null}
@@ -108,11 +184,15 @@ export function ToolCallRow({ tool }: { tool: ChatMessageToolInfo }) {
                                 </pre>
                             )}
                             {tool.output && (
-                                <pre className="tool-row__pre" style={{ borderTop: '1px outset var(--border-light)', margin: 0, borderLeft: 'none', borderRight: 'none', borderBottom: 'none' }}>{tool.output}</pre>
+                                <pre className="tool-row__pre">{tool.output}</pre>
                             )}
                             {tool.error && (
                                 <pre className="tool-row__pre tool-row__section--error">{tool.error}</pre>
                             )}
+                        </div>
+                    ) : isTodo ? (
+                        <div className="tool-row__section" style={{ padding: '6px 8px' }}>
+                            <TodoInlineList input={tool.input} output={tool.output} />
                         </div>
                     ) : (
                         <>

@@ -63,6 +63,12 @@ health.post('/api/studio/activate', async (c) => {
 
     setActiveProjectDir(resolved)
     invalidateAll()  // flush all caches — assets, models, MCP are project-scoped
+
+    // Project assistant agent into the new working directory
+    import('../services/studio-assistant/assistant-service.js').then(({ ensureAssistantAgent }) =>
+        ensureAssistantAgent(resolved).catch(() => {}),
+    )
+
     console.log(`🎯 Active project dir switched to: ${getActiveProjectDir()}`)
     return c.json({ ok: true, activeProjectDir: getActiveProjectDir() })
 })

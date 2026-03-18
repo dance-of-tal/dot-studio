@@ -1,31 +1,299 @@
-.tool-row__section--terminal {
-    background: #1e1e1e;
-    color: #cccccc;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 11px;
-    border-radius: 4px;
-    padding: 8px;
+/* ═══════════════════════════════════════════
+   TOOL CARDS — OpenCode-style
+   ═══════════════════════════════════════════ */
+
+/* ── Single tool row ── */
+.tool-row {
+    margin: 2px 0;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-panel);
+}
+
+.tool-row--running {
+    border-color: color-mix(in srgb, var(--accent) 30%, var(--border-light));
+}
+
+.tool-row--error {
+    border-color: color-mix(in srgb, var(--status-danger, #ef4444) 30%, var(--border-light));
+}
+
+.tool-row__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+    line-height: 1.4;
+    transition: background 0.12s;
+}
+
+.tool-row__header:hover {
+    background: var(--bg-hover);
+}
+
+.tool-row__indicator {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 14px;
+    justify-content: center;
+}
+
+.tool-row--completed .tool-row__indicator {
+    color: #10b981;
+}
+
+.tool-row--error .tool-row__indicator {
+    color: var(--status-danger, #ef4444);
+}
+
+.tool-row--running .tool-row__indicator,
+.tool-row--pending .tool-row__indicator {
+    color: var(--accent);
+}
+
+.tool-row__wrench {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.tool-row__name {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.tool-row__desc {
+    margin-left: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 180px;
+    font-family: var(--font-mono);
+}
+
+.tool-row__duration {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.tool-row__chevron {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    margin-left: 4px;
+}
+
+.tool-row__detail {
+    border-top: 1px solid var(--border-light);
+}
+
+.tool-row__section {
+    padding: 0;
+}
+
+.tool-row__section-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    padding: 4px 8px 2px;
+}
+
+.tool-row__pre {
+    margin: 0;
+    padding: 6px 8px;
     overflow-x: auto;
-    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-primary);
+    word-break: break-all;
+    white-space: pre-wrap;
+    background: var(--bg-default);
+}
+
+/* Terminal section */
+.tool-row__section--terminal {
+    background: var(--terminal-bg, #1e1e1e);
+    color: var(--terminal-fg, #d4d4d4);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 6px 8px;
+    max-height: 300px;
+    overflow: auto;
 }
 
 .terminal-command {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     color: #e5e5e5;
     white-space: pre-wrap;
     word-break: break-all;
 }
 
+.terminal-command .terminal-prompt {
+    color: var(--accent);
+    margin-right: 6px;
+}
+
 .terminal-output {
-    color: #a3a3a3;
+    color: var(--terminal-output, #a3a3a3);
     white-space: pre-wrap;
     word-break: break-all;
 }
 
+.terminal-error {
+    color: var(--status-danger, #ef4444);
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* Edit section */
 .tool-row__section--edit {
-    border: 1px solid var(--border-light);
-    border-radius: 4px;
+    border-top: 1px solid var(--border-light);
     overflow: hidden;
-    margin-top: 4px;
+    background: var(--bg-default);
+}
+
+.tool-row__section--edit .tool-row__pre {
+    border: none;
+}
+
+.tool-row__section--error {
+    background: color-mix(in srgb, var(--status-danger, #ef4444) 5%, var(--bg-default));
+    color: var(--status-danger, #ef4444);
+}
+
+/* Edit file path bar */
+.edit-file-path {
+    font-size: 10px;
+    padding: 3px 8px;
     background: var(--bg-panel);
+    border-bottom: 1px solid var(--border-light);
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
+
+/* ── Tool Group (multiple tools) ── */
+.tool-group {
+    margin: 2px 0;
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--bg-panel);
+}
+
+.tool-group__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+    transition: background 0.12s;
+}
+
+.tool-group__header:hover {
+    background: var(--bg-hover);
+}
+
+.tool-group__indicator {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    width: 14px;
+    justify-content: center;
+    color: #10b981;
+}
+
+.tool-group__wrench {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.tool-group__label {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.tool-group__error-badge {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--status-danger, #ef4444);
+    background: color-mix(in srgb, var(--status-danger, #ef4444) 12%, transparent);
+    padding: 1px 6px;
+    border-radius: 999px;
+}
+
+.tool-group__chevron {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+.tool-group__list {
+    border-top: 1px solid var(--border-light);
+}
+
+.tool-group__list .tool-row {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.tool-group__list .tool-row:last-child {
+    border-bottom: none;
+}
+
+/* ── Todo Inline (inside tool-row detail) ── */
+
+.todo-inline-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.todo-inline-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+    transition: background 0.1s;
+}
+
+.todo-inline-item--active {
+    background: var(--bg-selected);
+}
+
+.todo-inline-item--done {
+    opacity: 0.6;
+}
+
+.todo-inline-text--done {
+    text-decoration: line-through;
+    color: var(--text-muted);
 }

@@ -199,12 +199,44 @@ export default function App() {
         return false;
       }
 
+      const isActEditFocus = !!(store.focusSnapshot?.type === 'act' && store.editingActId);
+
+      // Act edit mode: dropping performer onto canvas adds new Act performer
+      if (isActEditFocus && store.editingActId) {
+        if (asset.kind === 'performer') {
+          // In choreography model, bind performer ref to act
+          const ref = asset.source === 'draft' && asset.draftId
+            ? { kind: 'draft' as const, draftId: asset.draftId as string }
+            : asset.urn
+              ? { kind: 'registry' as const, urn: asset.urn }
+              : null;
+          if (ref) {
+            store.bindPerformerToAct(store.editingActId, ref);
+          }
+          return true;
+        }
+        // Don't handle other drops on canvas root in act-edit mode
+        return false;
+      }
+
       if (asset.kind === 'performer') {
+        // Draft performer: create from draft content
+        if (asset.source === 'draft' && asset.draftContent) {
+          const cfg = asset.draftContent as Record<string, any>;
+          store.addPerformerFromDraft(asset.name || 'Draft Performer', cfg);
+          return true;
+        }
         store.addPerformerFromAsset(await resolvePerformerAssetForStudio(asset));
         return true;
       }
 
       if (asset.kind === 'act') {
+        // Draft act: create from draft content
+        if (asset.source === 'draft' && asset.draftContent) {
+          const cfg = asset.draftContent as Record<string, any>;
+          store.importActFromDraft(asset.name || 'Draft Act', cfg);
+          return true;
+        }
         store.importActFromAsset(asset);
         return true;
       }

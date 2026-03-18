@@ -7,6 +7,7 @@ import type {
     ModelConfig,
     PromptPreview,
     SavedStageSummary,
+    DraftAssetKind,
 } from './types'
 import type { RuntimeModelCatalogEntry } from '../shared/model-variants'
 import type { AdapterViewActionRequest, AdapterViewProjection } from '../shared/adapter-view'
@@ -164,6 +165,24 @@ export const api = {
             deleteJSON<{ ok: boolean }>(`/api/stages/${id}`),
     },
 
+    // ── Drafts ──────────────────────────────────────────
+    drafts: {
+        list: (kind?: DraftAssetKind) =>
+            fetchJSON<{ drafts: DraftAsset[] }>(`/api/drafts${kind ? `?kind=${kind}` : ''}`).then(r => r.drafts),
+
+        get: (kind: DraftAssetKind, id: string) =>
+            fetchJSON<{ draft: DraftAsset }>(`/api/drafts/${kind}/${id}`).then(r => r.draft),
+
+        create: (body: { kind: DraftAssetKind; name: string; content: unknown; id?: string; slug?: string; description?: string; tags?: string[]; derivedFrom?: string | null }) =>
+            postJSON<{ draft: DraftAsset }>('/api/drafts', body).then(r => r.draft),
+
+        update: (kind: DraftAssetKind, id: string, patch: { name?: string; content?: unknown; slug?: string; description?: string; tags?: string[]; derivedFrom?: string | null }) =>
+            putJSON<{ draft: DraftAsset }>(`/api/drafts/${kind}/${id}`, patch).then(r => r.draft),
+
+        delete: (kind: DraftAssetKind, id: string) =>
+            deleteJSON<{ ok: boolean }>(`/api/drafts/${kind}/${id}`),
+    },
+
     // ── Compile ─────────────────────────────────────────
     compile: (
         performerId: string | null,
@@ -174,7 +193,6 @@ export const api = {
         modelVariant: string | null,
         agentId: string | null,
         mcpServerNames: string[],
-        drafts: Record<string, DraftAsset>,
         planMode = false,
         danceDeliveryMode: DanceDeliveryMode = 'auto',
         relatedPerformers?: Array<{
@@ -188,7 +206,6 @@ export const api = {
             performerName: performerName || undefined,
             talRef,
             danceRefs,
-            drafts,
             model,
             modelVariant,
             agentId,
@@ -219,7 +236,6 @@ export const api = {
                     talRef: AssetRef | null
                     danceRefs: AssetRef[]
                     extraDanceRefs?: AssetRef[]
-                    drafts?: Record<string, DraftAsset>
                     model?: ModelConfig | null
                     modelVariant?: string | null
                     agentId?: string | null
@@ -230,16 +246,32 @@ export const api = {
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
                 mentions?: Array<{ performerId: string }>
                 actId?: string
+                actRelations?: Array<{
+                    id: string
+                    from: string
+                    to: string
+                    name: string
+                    description: string
+                    invocation: 'optional' | 'required'
+                    await: boolean
+                    sessionPolicy: 'fresh' | 'reuse'
+                    maxCalls: number
+                    timeout: number
+                }>
                 relatedPerformers?: Array<{
                     performerId: string
                     performerName: string
                     description?: string
                     talRef: AssetRef | null
                     danceRefs: AssetRef[]
-                    drafts?: Record<string, DraftAsset>
                     model?: ModelConfig | null
                     modelVariant?: string | null
                     mcpServerNames?: string[]
+                    relatedPerformerIds?: Array<{
+                        performerId: string
+                        performerName: string
+                        description?: string
+                    }>
                 }>
             }
         ) =>

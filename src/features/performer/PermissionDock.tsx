@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { PermissionRequest } from '@opencode-ai/sdk/v2';
-import { ShieldAlert, Check, X } from 'lucide-react';
-import './AgentInput.css';
+import { ShieldAlert } from 'lucide-react';
+import './InteractionDock.css';
 
 interface PermissionDockProps {
     request: PermissionRequest;
@@ -10,7 +10,6 @@ interface PermissionDockProps {
 }
 
 export default function PermissionDock({ request, onDecide, responding }: PermissionDockProps) {
-    // Generate a human-readable title from the permission string
     const title = useMemo(() => {
         const parts = request.permission.split('.');
         if (parts.length > 0) {
@@ -21,51 +20,44 @@ export default function PermissionDock({ request, onDecide, responding }: Permis
     }, [request.permission]);
 
     return (
-        <div className="chat-input__warning">
-            <div className="warning-content">
-                <ShieldAlert size={16} className="warning-icon" />
-                <div className="warning-text">
-                    <strong>{title}</strong>
-                    <div className="warning-description" style={{ marginTop: '4px', fontSize: '12px', opacity: 0.8 }}>
-                        {request.patterns.length > 0 ? (
-                            <div style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                                {request.patterns.map((p, i) => (
-                                    <span key={i} style={{ background: 'var(--bg-tertiary)', padding: '2px 4px', borderRadius: '4px', marginRight: '4px' }}>
-                                        {p}
-                                    </span>
-                                ))}
-                            </div>
-                        ) : (
-                            'The AI is requesting permission to perform an action.'
-                        )}
-                    </div>
+        <div className="interaction-dock permission-dock">
+            <div className="permission-dock__body">
+                <ShieldAlert size={16} className="permission-dock__icon" />
+                <div className="permission-dock__info">
+                    <div className="permission-dock__title">{title}</div>
+                    {request.patterns.length > 0 ? (
+                        <div className="permission-dock__patterns">
+                            {request.patterns.map((p, i) => (
+                                <span key={i} className="permission-dock__pattern">{p}</span>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="permission-dock__fallback">
+                            The AI is requesting permission to perform an action.
+                        </div>
+                    )}
                 </div>
             </div>
-            <div className="warning-actions" style={{ marginTop: '8px', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <div className="permission-dock__actions">
                 <button
-                    className="warning-action-btn reject"
+                    className="btn btn--sm"
                     onClick={() => onDecide('reject')}
                     disabled={responding}
-                    style={{ background: 'transparent', color: 'var(--text-secondary)' }}
                 >
-                    <X size={12} style={{ marginRight: '4px' }} />
                     Deny
                 </button>
                 <button
-                    className="warning-action-btn once"
+                    className="btn btn--sm"
                     onClick={() => onDecide('once')}
                     disabled={responding}
                 >
-                    <Check size={12} style={{ marginRight: '4px' }} />
                     Allow Once
                 </button>
                 <button
-                    className="warning-action-btn always"
+                    className="btn btn--sm btn--primary"
                     onClick={() => onDecide('always')}
                     disabled={responding}
-                    style={{ background: 'var(--accent-color)', color: 'white' }}
                 >
-                    <Check size={12} style={{ marginRight: '4px' }} />
                     Allow Always
                 </button>
             </div>

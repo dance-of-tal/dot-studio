@@ -47,7 +47,7 @@ export default function ModelVariantSelect({
         <label className={className || 'model-variant-select'}>
             {!compact ? <span>Variant</span> : null}
             <select
-                className="text-input"
+                className="select"
                 value={value || ''}
                 disabled={disabled}
                 onChange={(event) => onChange(event.target.value || null)}

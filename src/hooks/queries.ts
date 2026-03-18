@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { api } from '../api'
-import type { AssetRef, DraftAsset } from '../types'
+import type { AssetRef } from '../types'
 import type { AssetCard, McpServer, ModelConfig, RuntimeToolResolution } from '../types'
 import { useStudioStore } from '../store'
 import type { RuntimeModelCatalogEntry } from '../../shared/model-variants'
@@ -204,7 +204,6 @@ export function useCompilePrompt() {
             modelVariant,
             agentId,
             mcpServerNames,
-            drafts,
             planMode,
             danceDeliveryMode,
             relatedPerformers,
@@ -217,10 +216,9 @@ export function useCompilePrompt() {
             modelVariant: string | null
             agentId: string | null
             mcpServerNames: string[]
-            drafts: Record<string, DraftAsset>
             planMode?: boolean
             danceDeliveryMode?: 'auto' | 'tool' | 'inline'
             relatedPerformers?: Array<{ performerId: string; performerName: string }>
-        }) => api.compile(performerId, performerName, talRef, danceRefs, model, modelVariant, agentId, mcpServerNames, drafts, planMode || false, danceDeliveryMode || 'auto', relatedPerformers),
+        }) => api.compile(performerId, performerName, talRef, danceRefs, model, modelVariant, agentId, mcpServerNames, planMode || false, danceDeliveryMode || 'auto', relatedPerformers),
     })
 }

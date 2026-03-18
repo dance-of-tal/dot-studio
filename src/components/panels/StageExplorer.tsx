@@ -5,6 +5,7 @@ import { useStudioStore } from '../../store';
 import { mapSessionMessagesToChatMessages } from '../../lib/chat-messages';
 import { parseStudioSessionTitle, renameStudioSessionTitle } from '../../../shared/session-metadata';
 import {
+    Archive,
     Check,
     ChevronRight,
     Eye,
@@ -13,10 +14,9 @@ import {
     MessageSquare,
     Pencil,
     Plus,
-    Send,
     Trash2,
     X,
-    Zap,
+    Workflow,
 } from 'lucide-react';
 import './StageExplorer.css';
 import {
@@ -82,22 +82,20 @@ export default function StageExplorer() {
         deleteSession,
         togglePerformerVisibility,
         removePerformer,
+        savePerformerAsDraft,
+        saveActAsDraft,
     } = useStudioStore();
 
     const acts = useStudioStore((s) => s.acts);
     const selectedActId = useStudioStore((s) => s.selectedActId);
     const selectAct = useStudioStore((s) => s.selectAct);
     const removeAct = useStudioStore((s) => s.removeAct);
-    const setActExecutionMode = useStudioStore((s) => s.setActExecutionMode);
-    const sendActMessage = useStudioStore((s) => s.sendActMessage);
-    const loadingPerformerId = useStudioStore((s) => s.loadingPerformerId);
-    const actChats = useStudioStore((s) => s.actChats);
+    const enterActEditFocus = useStudioStore((s) => s.enterActEditFocus);
+    const toggleActVisibility = useStudioStore((s) => s.toggleActVisibility);
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
     const [renamingSession, setRenamingSession] = useState<ExplorerRenamingSession>(null);
-    const [actMessage, setActMessage] = useState('');
-    const [actCaller, setActCaller] = useState<string | null>(null);
 
     useEffect(() => {
         listStages();
@@ -105,7 +103,7 @@ export default function StageExplorer() {
     }, [listSessions, listStages, workingDir]);
 
     const sharedPerformers = useMemo(
-        () => performers.filter((performer) => performer.scope === 'shared'),
+        () => performers.filter((performer) => performer.scope === 'shared' && performer.id !== 'studio-assistant'),
         [performers],
     );
 
@@ -217,7 +215,7 @@ export default function StageExplorer() {
             chats: { ...state.chats, [performerId]: [] },
         }));
         if (focusedPerformerId && focusedPerformerId !== performerId) {
-            switchFocusTarget(performerId);
+            switchFocusTarget(performerId, 'performer');
         }
         selectPerformer(performerId);
         setActiveChatPerformer(performerId);
@@ -248,7 +246,7 @@ export default function StageExplorer() {
         }
         closeEditor();
         if (focusedPerformerId && focusedPerformerId !== performerId) {
-            switchFocusTarget(performerId);
+            switchFocusTarget(performerId, 'performer');
         }
         selectPerformer(performerId);
         selectPerformerSession(session.id);
@@ -298,7 +296,7 @@ export default function StageExplorer() {
                             title="Add Act"
                             disabled={!stageId}
                         >
-                            <Zap size={12} />
+                            <Workflow size={12} />
                         </button>
                     </div>
                 </div>
@@ -395,6 +393,19 @@ export default function StageExplorer() {
                                                     <Pencil size={11} />
                                                 </button>
                                                 <button
+                                                    className="icon-btn"
+                                                    onClick={() => {
+                                                        savePerformerAsDraft(row.id);
+                                                        showToast(`Saved "${row.label}" as draft`, 'success', {
+                                                            title: 'Draft saved',
+                                                            dedupeKey: `draft:save:${row.id}`,
+                                                        });
+                                                    }}
+                                                    title="Save performer as draft"
+                                                >
+                                                    <Archive size={11} />
+                                                </button>
+                                                <button
                                                     className="icon-btn remove-btn"
                                                     onClick={() => setPendingDelete(rowKey)}
                                                     title="Delete performer"
@@ -456,22 +467,31 @@ export default function StageExplorer() {
                                     className={[
                                         'thread-card',
                                         isActSelected ? 'active' : '',
+                                        act.hidden ? 'thread-card--hidden' : '',
                                     ].filter(Boolean).join(' ')}
-                                    onClick={() => selectAct(isActSelected ? null : act.id)}
+                                    onClick={() => {
+                                        if (focusedPerformerId && focusedPerformerId !== act.id) {
+                                            switchFocusTarget(act.id, 'act');
+                                        }
+                                        selectAct(act.id);
+                                    }}
                                     onKeyDown={(event) => {
                                         if (event.key === 'Enter' || event.key === ' ') {
                                             event.preventDefault();
-                                            selectAct(isActSelected ? null : act.id);
+                                            if (focusedPerformerId && focusedPerformerId !== act.id) {
+                                                switchFocusTarget(act.id, 'act');
+                                            }
+                                            selectAct(act.id);
                                         }
                                     }}
                                 >
                                     <span className="thread-card__icon">
-                                        <Zap size={13} />
+                                        <Workflow size={13} />
                                     </span>
                                     <span className="thread-card__body">
                                         <span className="thread-card__name">{act.name}</span>
                                         <span className="thread-card__meta">
-                                            {performerCount}p · {act.relations.length}r · {act.executionMode}
+                                            {performerCount}p · {act.relations.length}r
                                         </span>
                                     </span>
                                     <span
@@ -479,11 +499,31 @@ export default function StageExplorer() {
                                         onClick={(event) => event.stopPropagation()}
                                     >
                                         <button
-                                            className={`icon-btn ${act.executionMode === 'safe' ? 'icon-btn--active' : ''}`}
-                                            onClick={() => setActExecutionMode(act.id, act.executionMode === 'direct' ? 'safe' : 'direct')}
-                                            title={`Switch to ${act.executionMode === 'direct' ? 'safe' : 'direct'} mode`}
+                                            className="icon-btn"
+                                            onClick={() => enterActEditFocus(act.id)}
+                                            title="Edit Act"
                                         >
-                                            {act.executionMode === 'safe' ? <Eye size={11} /> : <EyeOff size={11} />}
+                                            <Pencil size={11} />
+                                        </button>
+                                        <button
+                                            className="icon-btn"
+                                            onClick={() => {
+                                                saveActAsDraft(act.id);
+                                                showToast(`Saved "${act.name}" as draft`, 'success', {
+                                                    title: 'Draft saved',
+                                                    dedupeKey: `draft:save:act:${act.id}`,
+                                                });
+                                            }}
+                                            title="Save act as draft"
+                                        >
+                                            <Archive size={11} />
+                                        </button>
+                                        <button
+                                            className={`icon-btn ${act.hidden ? 'icon-btn--active' : ''}`}
+                                            onClick={() => toggleActVisibility(act.id)}
+                                            title={act.hidden ? 'Show on canvas' : 'Hide from canvas'}
+                                        >
+                                            {act.hidden ? <EyeOff size={11} /> : <Eye size={11} />}
                                         </button>
                                         <button
                                             className="icon-btn remove-btn"
@@ -495,57 +535,8 @@ export default function StageExplorer() {
                                     </span>
                                 </div>
                                 {isActSelected && performerCount > 0 && (
-                                    <div className="act-chat-input">
-                                        {(actChats[act.id] || []).length > 0 && (
-                                            <div className="act-chat-messages">
-                                                {(actChats[act.id] || []).slice(-5).map((msg) => (
-                                                    <div key={msg.id} className={`act-chat-msg act-chat-msg--${msg.role}`}>
-                                                        <span className="act-chat-msg__role">{msg.role === 'user' ? '▸' : msg.role === 'assistant' ? '◂' : '●'}</span>
-                                                        <span className="act-chat-msg__text">{typeof msg.content === 'string' ? msg.content.slice(0, 120) : '...'}{typeof msg.content === 'string' && msg.content.length > 120 ? '…' : ''}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        <select
-                                            className="act-chat-input__caller"
-                                            value={actCaller && act.performers[actCaller] ? actCaller : Object.keys(act.performers)[0] || ''}
-                                            onChange={(e) => setActCaller(e.target.value)}
-                                        >
-                                            {Object.entries(act.performers).map(([id, p]) => (
-                                                <option key={id} value={id}>{p.name}</option>
-                                            ))}
-                                        </select>
-                                        <input
-                                            className="act-chat-input__message"
-                                            type="text"
-                                            placeholder="Send message as performer..."
-                                            value={actMessage}
-                                            onChange={(e) => setActMessage(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && actMessage.trim()) {
-                                                    const caller = actCaller && act.performers[actCaller] ? actCaller : Object.keys(act.performers)[0];
-                                                    if (caller) {
-                                                        sendActMessage(act.id, caller, actMessage.trim());
-                                                        setActMessage('');
-                                                    }
-                                                }
-                                            }}
-                                            disabled={!!loadingPerformerId}
-                                        />
-                                        <button
-                                            className="icon-btn"
-                                            title="Send"
-                                            disabled={!actMessage.trim() || !!loadingPerformerId}
-                                            onClick={() => {
-                                                const caller = actCaller && act.performers[actCaller] ? actCaller : Object.keys(act.performers)[0];
-                                                if (caller && actMessage.trim()) {
-                                                    sendActMessage(act.id, caller, actMessage.trim());
-                                                    setActMessage('');
-                                                }
-                                            }}
-                                        >
-                                            <Send size={11} />
-                                        </button>
+                                    <div className="act-chat-input" style={{ padding: '4px 8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                                        ⚡ {performerCount} performer{performerCount !== 1 ? 's' : ''} bound
                                     </div>
                                 )}
                             </div>

@@ -10,6 +10,7 @@ import { createAdapterViewSlice } from './adapterViewSlice'
 import { createSafeModeSlice } from './safeModeSlice'
 import { createActSlice } from './actSlice'
 import { createAssistantSlice } from './assistantSlice'
+import { initDraftAutoSave } from './draft-auto-save'
 
 export const useStudioStore = create<StudioState>()((...a) => ({
     ...createPerformerRelationSlice(...a),
@@ -21,5 +22,8 @@ export const useStudioStore = create<StudioState>()((...a) => ({
     ...createActSlice(...a),
     ...createAssistantSlice(...a),
 }))
+
+// Auto-save performer drafts when config changes on derived-from-asset performers
+initDraftAutoSave(useStudioStore.subscribe)
 
 export * from './types'

@@ -90,6 +90,7 @@ type AssetRef =
 - Performer and Act both support `executionMode: 'direct' | 'safe'`.
 - Act copies performer config at add time (complete copy, not reference).
   - Performers can be added by dragging standalone performers into Act edit mode, or creating new ones inside Act.
+  - Performer/Act **drafts** can also be dragged onto the canvas to create performers/acts from saved draft content.
   - Agent config (Tal, Dance, model, MCP) is owned by Act after copy. Standalone changes don't affect Act.
   - `derivedFrom` metadata records original performer id/urn (provenance only, no runtime link).
   - Sessions are Act-scoped (separate from the performer's standalone chat).
@@ -106,9 +107,9 @@ type AssetRef =
 - Tal is always-on system context.
 - Dance is projected to OpenCode native skills.
 - Runtime projection is OpenCode-native:
-  - Tal -> generated agent prompt body
-  - Dance -> generated skill
-  - Performer -> generated agent
+  - Tal → generated agent prompt body (no boilerplate — Tal content only, with relation prompt for Acts)
+  - Dance → generated skill (SKILL.md)
+  - Performer → generated agent (build + plan for stage, build-only for Act)
 - Performer chat and act runtime are separate session models.
 - **Correction over v1**: OpenCode natively tracks `{agent, model, variant}` on a **per-message** basis. Changing Tal, Dance, MCP (which generates a new agent name) or changing the model/variant mid-session **does not** require rolling the OpenCode session. The new config applies naturally to the next turn.
 - OpenCode remains the execution authority in both direct and safe modes.
@@ -116,6 +117,50 @@ type AssetRef =
 - Studio compiles Performer config into OpenCode native agent/skill projections. See PRD-001 §6.
 - At chat send time, Studio passes only the compiled `agent` name. The projected agent `.md` file already contains the model, variant, tools, and system prompt — no inline override is passed to `promptAsync()`.
 - Model `variant` (e.g., `full-thinking`, `normal`) is set in the agent `.md` frontmatter `variant:` field. OpenCode reads it at prompt time.
+- No custom assistant tools are projected. Performers and the Studio Assistant rely on OpenCode built-in tools (bash, edit, read, etc.).
+- Delegation tools (Act relations) are the only custom tool files Studio projects.
+
+## Projection Architecture
+
+All Studio-generated files live under `.opencode/` namespaced by `dot-studio/`.
+
+### File Layout
+
+```
+.opencode/
+  agents/dot-studio/
+    studio-assistant.md                              # Studio Assistant agent
+    stage/<hash>/<performerId>--build.md              # Stage performer (build posture)
+    stage/<hash>/<performerId>--plan.md               # Stage performer (plan posture)
+    act/<hash>/<actId>/<performerId>--build.md        # Act performer (build only)
+  skills/dot-studio/
+    studio-assistant-<name>/SKILL.md                  # Studio Assistant dance-skills
+    stage/<hash>/<performerId>/<danceName>/SKILL.md   # Performer dance-skills
+  tools/
+    dot_studio__<hash>__<actId>__<name>.ts             # Act delegation tools only
+```
+
+### Agent Posture Rules
+
+| Scope | Postures | Rationale |
+|-------|----------|-----------|
+| Stage performer | `build` + `plan` | OpenCode `/plan` mode support |
+| Act performer | `build` only | Multi-performer Acts make plan mode impractical |
+| Studio Assistant | single agent | No posture distinction |
+
+### Agent Body Content
+
+Agent `.md` body contains only:
+1. **Tal content** — the always-on system context (no `# Runtime Instructions` or `# Core Instructions` boilerplate)
+2. **Relation prompt** (Act only) — delegation instructions injected by `relation-compiler.ts`
+
+### Dispose & Hot-Reload
+
+- OpenCode **does not** hot-reload agent/skill files. `instance.dispose()` is required for changes to take effect.
+- Studio calls `oc.instance.dispose()` after projection file changes (in `stage-projection-service.ts`).
+- Dispose clears all cached state and emits `server.instance.disposed` → SSE streams close → frontend connection drops.
+- **Known limitation**: dispose is instance-wide. If Performer A is streaming while Performer B's config is saved, Performer A's SSE stream will also close. LLM responses continue server-side and are saved to DB, but real-time UI streaming is interrupted.
+- `global.dispose()` is used separately for auth/config changes (in `opencode.ts`).
 
 ## Safe Mode Rules
 
@@ -236,6 +281,8 @@ This repository should remain compatible with a future `Performer Adapter View` 
 ## UI Rules
 
 - Performer and act-performer composition is drag-and-drop first.
+- Draft performers and acts can be dragged from AssetLibrary onto the canvas to create new performers/acts from draft content.
+- In Act edit mode, performer assets (including drafts) can be dropped onto the canvas to add new Act performers, or onto existing Act performers to apply config.
 - Asset Library is the supply surface for Tal, Dance, Performer, Act, model, and MCP.
 - MCP CRUD lives in Asset Library, not Settings.
 - Threads sidebar child rows are renameable inline.
@@ -249,6 +296,79 @@ This repository should remain compatible with a future `Performer Adapter View` 
 - Act UI:
   - safe/direct toggle and review affordances may live in existing act header/runtime controls
   - do not add act undo controls in v1
+
+## Draft CRUD
+
+Drafts are project-local authoring assets stored on disk at `.dance-of-tal/drafts/<kind>/<id>.json`. They are **not** inline in stage files or memory-only.
+
+### Storage
+
+```
+.dance-of-tal/drafts/
+  ├── tal/        # Markdown string content
+  ├── dance/      # Markdown string content
+  ├── performer/  # Structured PerformerDraftContent object
+  └── act/        # Structured ActDraftContent object
+```
+
+### Typed Content (`shared/draft-contracts.ts`)
+
+`DraftFile<T = unknown>` is generic. Use `TypedDraftFile<K>` for kind-safe access:
+
+| Kind | Content Type | Shape |
+|------|-------------|-------|
+| `tal` | `string` | Markdown text |
+| `dance` | `string` | Markdown text |
+| `performer` | `PerformerDraftContent` | `{ talRef, danceRefs, model, mcpServerNames, ... }` |
+| `act` | `ActDraftContent` | `{ executionMode, entryPerformerKey, performers, relations }` |
+
+### Server API (`server/routes/drafts.ts` → `server/services/draft-service.ts`)
+
+| Method | Route | Action |
+|--------|-------|--------|
+| GET | `/api/drafts` | List all drafts |
+| GET | `/api/drafts/:kind/:id` | Get single draft |
+| POST | `/api/drafts` | Create (optional caller-specified `id`) |
+| PUT | `/api/drafts/:kind/:id` | Update |
+| DELETE | `/api/drafts/:kind/:id` | Delete |
+
+### Client API (`src/api.ts` → `api.drafts`)
+
+Mirrors server routes. Client store methods:
+
+| Method | Purpose |
+|--------|---------|
+| `upsertDraft()` | Memory update + 1.5s debounced disk persist |
+| `savePerformerAsDraft()` | Copy performer config to draft |
+| `saveActAsDraft()` | Copy act config to draft |
+| `loadDraftsFromDisk()` | Load all drafts from disk into store |
+| `addPerformerFromDraft()` | Create canvas performer from draft content |
+| `importActFromDraft()` | Create canvas act from draft content |
+
+### Auto-Save (`src/store/draft-auto-save.ts`)
+
+- Zustand subscriber watches performer config changes
+- If `meta.derivedFrom` is present (performer derived from named asset), triggers debounced auto-save
+- Draft ID: `auto-{performerId}` — stable per performer
+- Includes `derivedFrom` field in draft
+
+### Draft Lifecycle
+
+1. **Create** — Markdown editor "New Tal/Dance", StageExplorer Archive button, or auto-save
+2. **Read** — Server resolves `{ kind: 'draft', draftId }` refs from disk at projection time
+3. **Update** — `upsertDraft()` debounces to disk; explicit `api.drafts.update()`
+4. **Delete** — AssetLibrary "Delete Draft" button; automatic on promotion
+5. **Promote** — "Save Local Fork" on a draft asset deletes the draft file after save
+6. **Import** — Drag draft from AssetLibrary onto canvas creates performer/act from draft content
+
+### Stage Load Integration
+
+- `loadStage()` and `newStage()` call `loadDraftsFromDisk()` automatically
+- Legacy `Stage.drafts` (inline in JSON) are migrated to disk on load
+
+### Draft Resolution at Projection
+
+Server reads draft content from `.dance-of-tal/drafts/<kind>/<id>.json` when encountering `AssetRef { kind: 'draft', draftId }`. No inline `drafts` dictionary is passed in chat/projection requests.
 
 ## Publish Rules
 
@@ -279,7 +399,7 @@ Validation is implemented in `src/components/modals/publish-modal-utils.tsx` (`g
 
 ## Act Architecture
 
-An Act defines a performer relation graph. Relations (edges) are projected as Custom Tool → Hono BFF → OpenCode SDK for subagent execution. See PRD-001 §7 for full details.
+An Act defines a performer relation graph. Relations (edges) are projected as Custom Tool → Hono BFF → OpenCode SDK for subagent execution. Act performers generate only `build` posture agents (no `plan`). See PRD-001 §7 for full details.
 
 ### Act Entity
 
@@ -406,14 +526,19 @@ Both `dot-authoring.ts` normalizer and `asset-service.ts` reader handle both for
 ## Read First
 
 - [prd/001-opencode-native-projection.md](./prd/001-opencode-native-projection.md)
+- [shared/draft-contracts.ts](./shared/draft-contracts.ts)
 - [src/types/index.ts](./src/types/index.ts)
 - [src/store/workspaceSlice.ts](./src/store/workspaceSlice.ts)
 - [src/store/chatSlice.ts](./src/store/chatSlice.ts)
 - [src/store/actSlice.ts](./src/store/actSlice.ts)
 - [src/store/performerRelationSlice.ts](./src/store/performerRelationSlice.ts)
 - [src/store/safeModeSlice.ts](./src/store/safeModeSlice.ts)
+- [src/store/draft-auto-save.ts](./src/store/draft-auto-save.ts)
 - [src/lib/performers.ts](./src/lib/performers.ts)
+- [src/lib/dnd-handlers.ts](./src/lib/dnd-handlers.ts)
 - [src/components/panels/AssetLibrary.tsx](./src/components/panels/AssetLibrary.tsx)
+- [src/components/panels/AssetCards.tsx](./src/components/panels/AssetCards.tsx)
+- [src/components/panels/asset-library-utils.ts](./src/components/panels/asset-library-utils.ts)
 - [src/components/modals/publish-modal-utils.tsx](./src/components/modals/publish-modal-utils.tsx)
 - [src/features/performer/AgentFrame.tsx](./src/features/performer/AgentFrame.tsx)
 - [src/features/act/ActFrame.tsx](./src/features/act/ActFrame.tsx)
@@ -421,14 +546,17 @@ Both `dot-authoring.ts` normalizer and `asset-service.ts` reader handle both for
 - [src/features/act/ActChatPanel.tsx](./src/features/act/ActChatPanel.tsx)
 - [src/components/modals/SafeReviewModal.tsx](./src/components/modals/SafeReviewModal.tsx)
 - [server/routes/chat.ts](./server/routes/chat.ts)
+- [server/routes/drafts.ts](./server/routes/drafts.ts)
 - [server/routes/safe.ts](./server/routes/safe.ts)
 - [server/services/chat-service.ts](./server/services/chat-service.ts)
+- [server/services/draft-service.ts](./server/services/draft-service.ts)
 - [server/services/opencode-projection/stage-projection-service.ts](./server/services/opencode-projection/stage-projection-service.ts)
 - [server/services/opencode-projection/performer-compiler.ts](./server/services/opencode-projection/performer-compiler.ts)
 - [server/services/opencode-projection/dance-compiler.ts](./server/services/opencode-projection/dance-compiler.ts)
 - [server/services/opencode-projection/relation-compiler.ts](./server/services/opencode-projection/relation-compiler.ts)
 - [server/services/opencode-projection/act-compiler.ts](./server/services/opencode-projection/act-compiler.ts)
 - [server/services/opencode-projection/projection-manifest.ts](./server/services/opencode-projection/projection-manifest.ts)
+- [server/services/studio-assistant/assistant-service.ts](./server/services/studio-assistant/assistant-service.ts)
 - [server/lib/safe-mode.ts](./server/lib/safe-mode.ts)
 - [server/lib/dot-authoring.ts](./server/lib/dot-authoring.ts)
 - [server/lib/session-execution.ts](./server/lib/session-execution.ts)

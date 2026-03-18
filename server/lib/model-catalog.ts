@@ -64,10 +64,87 @@ function isModelVisibleForAuthType(providerId: string, modelId: string, authType
     return !blocked.has(modelId)
 }
 
+// ── Cached provider.list() ──────────────────────────────
+// Both /api/providers and /api/models need the same raw data from
+// oc.provider.list().  We cache for a short window to avoid duplicate
+// round trips when the two routes are hit close together (which is the
+// common case — the client fetches both on Settings open / refresh).
+
+const CACHE_TTL_MS = 3_000
+
+let _cachedPromise: Promise<any> | null = null
+let _cachedCwd: string | null = null
+let _cacheTs = 0
+
+/**
+ * Fetch the raw oc.provider.list() data with a short TTL cache
+ * keyed on the working directory.
+ */
+export async function fetchProviderListData(cwd: string): Promise<any> {
+    const now = Date.now()
+    if (_cachedPromise && _cachedCwd === cwd && now - _cacheTs < CACHE_TTL_MS) {
+        return _cachedPromise
+    }
+
+    _cachedCwd = cwd
+    _cacheTs = now
+    _cachedPromise = (async () => {
+        const oc = await getOpencode()
+        const res = await oc.provider.list({ directory: cwd })
+        return (res as any).data
+    })()
+
+    // On failure, clear the cache so the next call retries immediately.
+    _cachedPromise.catch(() => {
+        _cachedPromise = null
+    })
+
+    return _cachedPromise
+}
+
+/** Invalidate the cache (e.g. after auth changes). */
+export function invalidateProviderListCache() {
+    _cachedPromise = null
+    _cachedCwd = null
+    _cacheTs = 0
+}
+
+// ── Provider summary (used by /api/providers) ───────────
+
+export interface ProviderSummary {
+    id: string
+    name: string
+    source: string
+    env: string[]
+    connected: boolean
+    modelCount: number
+    defaultModel: string | null
+}
+
+export async function listProviderSummaries(cwd: string): Promise<ProviderSummary[]> {
+    const data = await fetchProviderListData(cwd)
+
+    if (!data?.all || !Array.isArray(data.all)) {
+        return []
+    }
+
+    const connected = new Set<string>((data?.connected || []) as string[])
+
+    return ((data.all || []) as any[]).map((provider) => ({
+        id: provider.id,
+        name: provider.name || provider.id,
+        source: provider.source || 'builtin',
+        env: Array.isArray(provider.env) ? provider.env : [],
+        connected: connected.has(provider.id),
+        modelCount: provider.models ? Object.keys(provider.models).length : 0,
+        defaultModel: data?.default?.[provider.id] || null,
+    }))
+}
+
+// ── Model catalog (used by /api/models) ─────────────────
+
 export async function listRuntimeModels(cwd: string): Promise<RuntimeModelCatalogEntry[]> {
-    const oc = await getOpencode()
-    const res = await oc.provider.list({ directory: cwd })
-    const data = (res as any).data
+    const data = await fetchProviderListData(cwd)
 
     if (!data?.all || !Array.isArray(data.all)) {
         return []

@@ -25,6 +25,7 @@ import {
 } from '../../hooks/queries';
 import './AssetLibrary.css';
 import { useStudioStore } from '../../store';
+import { showToast } from '../../lib/toast';
 
 
 import { slugifyAssetName } from '../../lib/performers';
@@ -40,8 +41,8 @@ import type {
     LocalSection,
     RegistryKind,
     ModelProviderFilter,
-    ModelAvailabilityFilter,
 } from './asset-library-utils';
+import { isRemoteServer } from '../modals/settings-utils';
 import {
     MAX_MODELS_PER_PROVIDER,
     isInstalledAssetKind,
@@ -80,8 +81,8 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const [installedKind, setInstalledKind] = useState<InstalledKind>('performer')
     const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>('models')
     const [registryKind, setRegistryKind] = useState<RegistryKind>('all')
-    const [modelProviderFilter, setModelProviderFilter] = useState<ModelProviderFilter>('popular')
-    const [modelAvailabilityFilter, setModelAvailabilityFilter] = useState<ModelAvailabilityFilter>('ready')
+    const [modelProviderFilter, setModelProviderFilter] = useState<ModelProviderFilter>('all')
+
     const [registryQuery, setRegistryQuery] = useState('')
     const [searchEnabled, setSearchEnabled] = useState(false)
     const [selectedAsset, setSelectedAsset] = useState<any | null>(null)
@@ -149,7 +150,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
 
     useEffect(() => {
         setExpandedModelProviders({})
-    }, [filter, modelAvailabilityFilter, modelProviderFilter])
+    }, [filter, modelProviderFilter])
 
     const installedUrns = useMemo(
         () => new Set(assetInventory.map((asset) => getAssetUrn(asset)).filter(Boolean) as string[]),
@@ -213,6 +214,17 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                 }
                 const result = await api.dot.saveLocalAsset(asset.kind, targetSlug, payload, authUser.username)
                 await invalidateInstalledAssetQueries(asset.kind)
+
+                // Draft promotion: delete draft from disk after successful save
+                if (asset.source === 'draft' && asset.draftId) {
+                    api.drafts.delete(asset.kind, asset.draftId).catch(() => {})
+                    useStudioStore.setState((s) => {
+                        const next = { ...s.drafts }
+                        delete next[asset.draftId]
+                        return { drafts: next }
+                    })
+                }
+
                 setDetailActionStatus(result.existed
                     ? `Updated local ${asset.kind} asset at ${result.urn}.`
                     : `Saved local ${asset.kind} asset at ${result.urn}.`)
@@ -232,6 +244,29 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         }
     }
 
+    const handleDeleteDraft = async (asset: any) => {
+        if (!asset?.draftId || !asset?.kind) return
+        try {
+            await api.drafts.delete(asset.kind, asset.draftId)
+            // Remove from Zustand store
+            useStudioStore.setState((s) => {
+                const next = { ...s.drafts }
+                delete next[asset.draftId]
+                return { drafts: next }
+            })
+            setSelectedAsset(null)
+            showToast(`Deleted draft "${asset.name}"`, 'success', {
+                title: 'Draft deleted',
+                dedupeKey: `draft:delete:${asset.draftId}`,
+            })
+        } catch (err: any) {
+            showToast(err?.message || 'Failed to delete draft', 'error', {
+                title: 'Delete failed',
+                dedupeKey: `draft:delete-error:${asset.draftId}`,
+            })
+        }
+    }
+
 
     const queryText = filter.trim().toLowerCase()
 
@@ -241,13 +276,8 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     )
 
     const groupedModels = useMemo(
-        () => groupModels(models, queryText, modelAvailabilityFilter, modelProviderFilter),
-        [modelAvailabilityFilter, modelProviderFilter, models, queryText],
-    )
-
-    const readyModelCount = useMemo(
-        () => models.filter((model) => model.connected).length,
-        [models],
+        () => groupModels(models, queryText, modelProviderFilter),
+        [modelProviderFilter, models, queryText],
     )
 
     const filteredMcps = useMemo(
@@ -285,18 +315,12 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     ]
 
     const modelProviderTabs: Array<{ key: ModelProviderFilter; label: string }> = [
-        { key: 'popular', label: 'Popular' },
+        { key: 'all', label: 'All' },
         { key: 'anthropic', label: 'Anthropic' },
         { key: 'openai', label: 'OpenAI' },
         { key: 'google', label: 'Google' },
         { key: 'xai', label: 'xAI/Grok' },
         { key: 'other', label: 'Other' },
-        { key: 'all', label: 'All' },
-    ]
-
-    const modelAvailabilityTabs: Array<{ key: ModelAvailabilityFilter; label: string; count: number }> = [
-        { key: 'ready', label: 'Ready', count: readyModelCount },
-        { key: 'all', label: 'All', count: models.length },
     ]
 
     const localPlaceholder = placeholderForLocalSection(localSection, runtimeKind)
@@ -441,11 +465,8 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     {showMcps && (
                         <div className="asset-mcp-manager">
                             <div className="asset-authoring-row">
-                                <button className="btn" onClick={() => addMcpEntry('local')}>
-                                    <Plus size={10} /> Local
-                                </button>
-                                <button className="btn" onClick={() => addMcpEntry('remote')}>
-                                    <Plus size={10} /> Remote
+                                <button className="btn" onClick={() => addMcpEntry()}>
+                                    <Plus size={10} /> Add Server
                                 </button>
                                 <div className="asset-authoring-row__note">
                                     Drag connected servers onto performers.
@@ -457,8 +478,9 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                     {mcpDraftEntries.map((entry) => {
                                         const live = mcpServers.find((server) => server.name === entry.name.trim())
                                         const liveStatus = live?.status || (entry.enabled ? 'disconnected' : 'disabled')
-                                        const canAuthenticate = entry.type === 'remote' && (liveStatus === 'needs_auth' || liveStatus === 'failed')
-                                        const canClearAuth = entry.type === 'remote' && !!live && (live.authStatus === 'needs_auth' || live.status === 'connected' || live.status === 'failed')
+                                        const isRemote = isRemoteServer(entry.serverText)
+                                        const canAuthenticate = isRemote && (liveStatus === 'needs_auth' || liveStatus === 'failed')
+                                        const canClearAuth = isRemote && !!live && (live.authStatus === 'needs_auth' || live.status === 'connected' || live.status === 'failed')
                                         const isExpanded = !!expandedMcpEntries[entry.key]
                                         return (
                                             <div key={entry.key} className="asset-mcp-editor">
@@ -471,7 +493,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                                         <div>
                                                             <div className="asset-mcp-editor__title">{entry.name.trim() || 'New MCP Server'}</div>
                                                             <div className="asset-mcp-editor__meta">
-                                                                <span>{entry.type}</span>
+                                                                <span>{isRemote ? 'remote' : 'local'}</span>
                                                                 <span>{live?.tools?.length || 0} tools</span>
                                                                 <span>{live?.resources?.length || 0} resources</span>
                                                             </div>
@@ -504,22 +526,20 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                                                     onClick={(e) => e.stopPropagation()}
                                                                 />
                                                             </label>
-                                                            <label className="asset-mcp-editor__field">
-                                                                <span>Type</span>
-                                                                <select
-                                                                    className="registry-kind-select"
-                                                                    value={entry.type}
-                                                                    onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, type: e.target.value as 'local' | 'remote' }))}
+                                                            <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
+                                                                <span>Server</span>
+                                                                <input
+                                                                    className="text-input"
+                                                                    value={entry.serverText}
+                                                                    onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, serverText: e.target.value }))}
+                                                                    placeholder="npx -y @mcp/server or https://example.com/mcp"
                                                                     onClick={(e) => e.stopPropagation()}
-                                                                >
-                                                                    <option value="local">Local</option>
-                                                                    <option value="remote">Remote</option>
-                                                                </select>
+                                                                />
                                                             </label>
                                                             <label className="asset-mcp-editor__field">
                                                                 <span>Enabled</span>
                                                                 <select
-                                                                    className="registry-kind-select"
+                                                                    className="select"
                                                                     value={entry.enabled ? 'enabled' : 'disabled'}
                                                                     onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, enabled: e.target.value === 'enabled' }))}
                                                                     onClick={(e) => e.stopPropagation()}
@@ -540,17 +560,8 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                                             </label>
                                                         </div>
 
-                                                        {entry.type === 'local' ? (
+                                                        {!isRemote ? (
                                                             <div className="asset-mcp-editor__grid">
-                                                                <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                                    <span>Command</span>
-                                                                    <input
-                                                                        className="text-input"
-                                                                        value={entry.commandText}
-                                                                        onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, commandText: e.target.value }))}
-                                                                        placeholder="npx -y @modelcontextprotocol/server-github"
-                                                                    />
-                                                                </label>
                                                                 <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
                                                                     <span>Environment</span>
                                                                     <textarea
@@ -565,15 +576,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                                             <>
                                                                 <div className="asset-mcp-editor__grid">
                                                                     <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                                        <span>URL</span>
-                                                                        <input
-                                                                            className="text-input"
-                                                                            value={entry.url}
-                                                                            onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, url: e.target.value }))}
-                                                                            placeholder="https://example.com/mcp"
-                                                                        />
-                                                                    </label>
-                                                                    <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
                                                                         <span>Static Headers</span>
                                                                         <textarea
                                                                             className="text-input asset-mcp-editor__textarea"
@@ -587,7 +589,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                                                                     <label className="asset-mcp-editor__field">
                                                                         <span>OAuth</span>
                                                                         <select
-                                                                            className="registry-kind-select"
+                                                                            className="select"
                                                                             value={entry.oauthEnabled ? 'enabled' : 'disabled'}
                                                                             onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, oauthEnabled: e.target.value === 'enabled' }))}
                                                                         >
@@ -686,30 +688,17 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     )}
 
                     {showModels && (
-                        <>
-                            <div className="sub-scope-row">
-                                {modelAvailabilityTabs.map((tab) => (
-                                    <button
-                                        key={tab.key}
-                                        className={`sub-scope-tag ${modelAvailabilityFilter === tab.key ? 'active' : ''}`}
-                                        onClick={() => setModelAvailabilityFilter(tab.key)}
-                                    >
-                                        {tab.label} <span className="sub-scope-tag__count">{tab.count}</span>
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="sub-scope-row">
+                        <div className="sub-scope-row">
+                            <select
+                                className="select"
+                                value={modelProviderFilter}
+                                onChange={(e) => setModelProviderFilter(e.target.value as ModelProviderFilter)}
+                            >
                                 {modelProviderTabs.map((tab) => (
-                                    <button
-                                        key={tab.key}
-                                        className={`sub-scope-tag ${modelProviderFilter === tab.key ? 'active' : ''}`}
-                                        onClick={() => setModelProviderFilter(tab.key)}
-                                    >
-                                        {tab.label}
-                                    </button>
+                                    <option key={tab.key} value={tab.key}>{tab.label}</option>
                                 ))}
-                            </div>
-                        </>
+                            </select>
+                        </div>
                     )}
 
                     <div className="asset-library-body">
@@ -790,6 +779,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                             onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
                             onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
                             onImportToStage={undefined}
+                            onDeleteDraft={handleDeleteDraft}
                         />
                     </div>
                 </>
@@ -813,7 +803,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
 
                     <div className="registry-filters">
                         <select
-                            className="registry-kind-select"
+                            className="select"
                             value={registryKind}
                             onChange={(e) => {
                                 setRegistryKind(e.target.value as RegistryKind)
@@ -884,6 +874,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                             onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
                             onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
                             onImportToStage={undefined}
+                            onDeleteDraft={handleDeleteDraft}
                         />
                     </div>
                 </>

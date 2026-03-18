@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from 'react'
+import { useRef, useEffect, type ReactNode, type RefObject } from 'react'
 import { NodeResizer } from '@xyflow/react'
 import CanvasDragHandle from './CanvasDragHandle'
 import useTransformChrome from './useTransformChrome'
@@ -47,10 +47,12 @@ export default function CanvasWindowFrame({
     bodyRef,
     children,
 }: CanvasWindowFrameProps) {
+    const frameRef = useRef<HTMLDivElement>(null)
+
     const {
         isTransformChromeActive,
         showResizeChrome,
-        activateTransformChrome,
+        toggleTransformChrome,
         handleFramePointerDownCapture,
         handleResizeStart,
         handleResizeEnd,
@@ -59,6 +61,19 @@ export default function CanvasWindowFrame({
         onActivate: onActivateTransform,
         onDeactivate: onDeactivateTransform,
     })
+
+    // Block Ctrl+wheel (trackpad pinch) inside the frame to prevent browser zoom
+    useEffect(() => {
+        const el = frameRef.current
+        if (!el) return
+        const handler = (e: WheelEvent) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault()
+            }
+        }
+        el.addEventListener('wheel', handler, { passive: false })
+        return () => el.removeEventListener('wheel', handler)
+    }, [])
 
     const hasFrameChrome = selected || showResizeChrome
 
@@ -74,8 +89,9 @@ export default function CanvasWindowFrame({
 
     return (
         <div
+            ref={frameRef}
             className={`canvas-frame ${hasFrameChrome ? 'canvas-frame--active' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''} ${className}`.trim()}
-            style={{ width, height }}
+            style={{ width, height, touchAction: 'none' }}
             onPointerDownCapture={handleFramePointerDownCapture}
         >
             {resizable && (
@@ -96,7 +112,7 @@ export default function CanvasWindowFrame({
                 />
             )}
             <div className="canvas-frame__header">
-                <CanvasDragHandle active={isTransformChromeActive} onActivate={activateTransformChrome} />
+                <CanvasDragHandle active={isTransformChromeActive} onToggle={toggleTransformChrome} />
                 <div className="canvas-frame__header-start">
                     {headerStart}
                 </div>

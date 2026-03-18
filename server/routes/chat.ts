@@ -175,10 +175,12 @@ chat.get('/api/chat/events', async (c) => {
     try {
         const oc = await getOpencode()
         const workingDir = resolveRequestWorkingDir(c)
-        const extraDirs = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
+        const extraPerformerDirs = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
+        const extraActDirs = await listSessionExecutionContextsForWorkingDir(workingDir, 'act')
         const directories = Array.from(new Set([
             workingDir,
-            ...extraDirs.map((context) => context.executionDir),
+            ...extraPerformerDirs.map((context) => context.executionDir),
+            ...extraActDirs.map((context) => context.executionDir),
         ]))
         const subscriptions = await Promise.all(
             directories.map((directory) => oc.event.subscribe({ directory })),
@@ -362,10 +364,12 @@ chat.get('/api/chat/sessions', async (c) => {
     try {
         const oc = await getOpencode()
         const workingDir = resolveRequestWorkingDir(c)
-        const executionContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
+        const performerContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
+        const actContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'act')
         const directories = Array.from(new Set([
             workingDir,
-            ...executionContexts.map((context) => context.executionDir),
+            ...performerContexts.map((context) => context.executionDir),
+            ...actContexts.map((context) => context.executionDir),
         ]))
         const lists = await Promise.all(
             directories.map(async (directory) => unwrapOpencodeResult<any[]>(await oc.session.list({ directory }))),

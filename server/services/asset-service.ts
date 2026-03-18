@@ -33,7 +33,7 @@ function normalizeAsset(
                 : []
         // Accept model as string or object {provider, modelId}
         const modelValue = typeof content.model === 'string' ? content.model
-            : (content.model && typeof content.model === 'object' && typeof (content.model as any).provider === 'string')
+            : (content.model && typeof content.model === 'object' && 'provider' in content.model && typeof content.model.provider === 'string')
                 ? content.model
                 : null
         return {

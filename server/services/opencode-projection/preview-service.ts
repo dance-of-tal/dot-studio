@@ -11,7 +11,6 @@ export async function compileProjectionPreview(
         performerName: request.performerName || 'Preview',
         talRef: request.talRef,
         danceRefs: request.danceRefs,
-        drafts: request.drafts || {},
         model: request.model,
         modelVariant: request.modelVariant || null,
         mcpServerNames: request.mcpServerNames || [],

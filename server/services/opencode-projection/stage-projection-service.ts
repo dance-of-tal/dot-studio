@@ -19,14 +19,7 @@ type AssetRef =
     | { kind: 'registry'; urn: string }
     | { kind: 'draft'; draftId: string }
 
-type DraftAsset = {
-    id: string
-    kind: string
-    name: string
-    content: unknown
-    description?: string
-    derivedFrom?: string | null
-}
+
 
 type CapabilitySnapshot = {
     toolCall: boolean
@@ -44,7 +37,6 @@ export interface PerformerProjectionInput {
     performerName: string
     talRef: AssetRef | null
     danceRefs: AssetRef[]
-    drafts: Record<string, DraftAsset>
     model: ModelSelection
     modelVariant?: string | null
     mcpServerNames: string[]
@@ -143,7 +135,6 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         skills.push(await compileDance(
             input.executionDir,
             ref,
-            input.drafts,
             stageHash,
             input.performerId,
             input.executionDir,
@@ -166,7 +157,6 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             performerId: input.performerId,
             performerName: input.performerName,
             talRef: input.talRef,
-            drafts: input.drafts,
             model: input.model,
             modelVariant: input.modelVariant || null,
             stageHash,
@@ -195,8 +185,10 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
     for (const skill of skills) {
         changed = (await writeIfChanged(skill.filePath, skill.content)) || changed
     }
-    changed = (await writeIfChanged(compiled.agentPaths.build, compiled.agentContents.build)) || changed
-    changed = (await writeIfChanged(compiled.agentPaths.plan, compiled.agentContents.plan)) || changed
+    changed = (await writeIfChanged(compiled.agentPaths.build!, compiled.agentContents.build!)) || changed
+    if (compiled.agentPaths.plan && compiled.agentContents.plan) {
+        changed = (await writeIfChanged(compiled.agentPaths.plan, compiled.agentContents.plan)) || changed
+    }
 
     await updateManifestGroup(
         input.executionDir,

@@ -1,19 +1,13 @@
 import path from 'path'
 import { getAssetPayload, readAsset } from 'dance-of-tal/lib/registry'
 import { localSkillProjectionDir, toRelativePath } from './projection-manifest.js'
+import { readDraft } from '../draft-service.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
     | { kind: 'draft'; draftId: string }
 
-type DraftAsset = {
-    id: string
-    kind: string
-    name: string
-    content: unknown
-    description?: string
-    derivedFrom?: string | null
-}
+
 
 export interface CompiledSkill {
     logicalName: string
@@ -32,29 +26,9 @@ function sanitizeSegment(value: string) {
         .replace(/^-+|-+$/g, '')
 }
 
-function extractDraftTextContent(draft: DraftAsset | undefined | null): string | null {
-    if (!draft) {
-        return null
-    }
 
-    if (typeof draft.content === 'string') {
-        return draft.content
-    }
 
-    if (draft.content && typeof draft.content === 'object') {
-        const content = draft.content as Record<string, unknown>
-        if (typeof content.content === 'string') {
-            return content.content
-        }
-        if (typeof content.body === 'string') {
-            return content.body
-        }
-    }
-
-    return null
-}
-
-function extractDraftDescription(draft: DraftAsset | undefined | null): string {
+function extractDraftDescription(draft: { description?: string; content?: unknown } | undefined | null): string {
     if (!draft) {
         return ''
     }
@@ -91,7 +65,6 @@ function buildFrontmatter(name: string, description: string) {
 export async function compileDance(
     cwd: string,
     ref: AssetRef,
-    drafts: Record<string, DraftAsset>,
     stageHash: string,
     performerId: string,
     executionDir: string,
@@ -131,8 +104,8 @@ export async function compileDance(
         }
     }
 
-    const draft = drafts[ref.draftId]
-    const body = extractDraftTextContent(draft)
+    const draft = await readDraft(cwd, 'dance', ref.draftId)
+    const body = draft ? (typeof draft.content === 'string' ? draft.content : null) : null
     if (!draft || !body) {
         throw new Error(`Dance draft '${ref.draftId}' was not found or has no content.`)
     }

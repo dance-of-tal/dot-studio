@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { StudioState, WorkspaceSlice } from './types'
+import type { DraftAsset } from '../types'
 import { api, setApiWorkingDirContext } from '../api'
 import {
     createPerformerNode,
@@ -45,6 +46,17 @@ function makeId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+// Debounce draft persistence to disk
+const _draftPersistTimers = new Map<string, ReturnType<typeof setTimeout>>()
+function scheduleDraftPersist(draftId: string, fn: () => void, delay = 1500) {
+    const existing = _draftPersistTimers.get(draftId)
+    if (existing) clearTimeout(existing)
+    _draftPersistTimers.set(draftId, setTimeout(() => {
+        _draftPersistTimers.delete(draftId)
+        fn()
+    }, delay))
+}
+
 export const createWorkspaceSlice: StateCreator<
     StudioState,
     [],
@@ -60,6 +72,7 @@ export const createWorkspaceSlice: StateCreator<
     selectedPerformerSessionId: null,
     selectedMarkdownEditorId: null,
     focusedPerformerId: null,
+    focusedNodeType: null,
     focusSnapshot: null,
     inspectorFocus: null,
     stageList: [],
@@ -192,6 +205,8 @@ export const createWorkspaceSlice: StateCreator<
         selectedPerformerId: id,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
+        // Clear act selection only when selecting a real performer (not when deselecting)
+        selectedActId: id ? null : s.selectedActId,
         // Preserve focus mode when switching performers in focus mode
         focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
         inspectorFocus: null,
@@ -204,56 +219,89 @@ export const createWorkspaceSlice: StateCreator<
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         focusedPerformerId: null,
+        focusedNodeType: null,
         inspectorFocus: null,
     }),
 
     setFocusedPerformer: (id) => set({ focusedPerformerId: id }),
 
-    enterFocusMode: (performerId, viewportSize) => {
+    enterFocusMode: (nodeId, nodeType, viewportSize) => {
         const state = get()
-        const performer = state.performers.find(p => p.id === performerId)
-        if (!performer) return
-
-        // Snapshot current state for later restoration
         const FOCUS_PADDING = 48
-        const focusSnapshot = {
-            type: 'performer' as const,
+        const focusWidth = viewportSize.width - FOCUS_PADDING
+        const focusHeight = viewportSize.height - FOCUS_PADDING
+
+        const focusSnapshotBase = {
             hiddenPerformerIds: state.performers.filter(p => p.hidden).map(p => p.id),
             hiddenActIds: state.acts.filter(a => (a as any).hidden).map(a => a.id),
             hiddenEditorIds: state.markdownEditors.filter(e => e.hidden).map(e => e.id),
             hiddenTerminalIds: [] as string[],
-            nodeSize: { width: performer.width ?? 400, height: performer.height ?? 500 },
             assetLibraryOpen: state.isAssetLibraryOpen,
             assistantOpen: state.isAssistantOpen,
             terminalOpen: state.isTerminalOpen,
         }
 
-        const focusWidth = viewportSize.width - FOCUS_PADDING
-        const focusHeight = viewportSize.height - FOCUS_PADDING
+        if (nodeType === 'performer') {
+            const performer = state.performers.find(p => p.id === nodeId)
+            if (!performer) return
 
-        set({
-            focusedPerformerId: performerId,
-            focusSnapshot,
-            selectedPerformerId: performerId,
-            selectedPerformerSessionId: state.selectedPerformerSessionId,
-            activeChatPerformerId: performerId,
-            // Hide all other performers
-            performers: state.performers.map(p => {
-                if (p.id === performerId) {
-                    return { ...p, hidden: false, width: focusWidth, height: focusHeight }
-                }
-                return { ...p, hidden: true }
-            }),
-            // Hide all markdown editors
-            markdownEditors: state.markdownEditors.map(e => ({ ...e, hidden: true })),
-            // Close panels
-            isAssetLibraryOpen: false,
-            isAssistantOpen: false,
-            isTerminalOpen: false,
-            // Close editor if open
-            editingTarget: null,
-            inspectorFocus: null,
-        })
+            set({
+                focusedPerformerId: nodeId,
+                focusedNodeType: 'performer',
+                focusSnapshot: {
+                    ...focusSnapshotBase,
+                    type: 'performer',
+                    nodeSize: { width: performer.width ?? 400, height: performer.height ?? 500 },
+                },
+                selectedPerformerId: nodeId,
+                selectedPerformerSessionId: state.selectedPerformerSessionId,
+                activeChatPerformerId: nodeId,
+                selectedActId: null,
+                performers: state.performers.map(p => {
+                    if (p.id === nodeId) {
+                        return { ...p, hidden: false, width: focusWidth, height: focusHeight }
+                    }
+                    return { ...p, hidden: true }
+                }),
+                acts: state.acts.map(a => ({ ...a, hidden: true })),
+                markdownEditors: state.markdownEditors.map(e => ({ ...e, hidden: true })),
+                isAssetLibraryOpen: false,
+                isAssistantOpen: false,
+                isTerminalOpen: false,
+                editingTarget: null,
+                inspectorFocus: null,
+            })
+        } else {
+            // Act focus
+            const act = state.acts.find(a => a.id === nodeId)
+            if (!act) return
+
+            set({
+                focusedPerformerId: nodeId, // reuse field for any focused node id
+                focusedNodeType: 'act',
+                focusSnapshot: {
+                    ...focusSnapshotBase,
+                    type: 'act',
+                    actId: nodeId,
+                    nodeSize: { width: act.width ?? 400, height: act.height ?? 420 },
+                },
+                selectedActId: nodeId,
+                selectedPerformerId: null,
+                performers: state.performers.map(p => ({ ...p, hidden: true })),
+                acts: state.acts.map(a => {
+                    if (a.id === nodeId) {
+                        return { ...a, hidden: false, width: focusWidth, height: focusHeight }
+                    }
+                    return { ...a, hidden: true }
+                }),
+                markdownEditors: state.markdownEditors.map(e => ({ ...e, hidden: true })),
+                isAssetLibraryOpen: false,
+                isAssistantOpen: false,
+                isTerminalOpen: false,
+                editingTarget: null,
+                inspectorFocus: null,
+            })
+        }
     },
 
     exitFocusMode: () => {
@@ -262,79 +310,161 @@ export const createWorkspaceSlice: StateCreator<
         if (!snapshot || !state.focusedPerformerId) return
 
         const focusedId = state.focusedPerformerId
+        const focusedType = state.focusedNodeType || snapshot.type
 
-        set({
-            focusedPerformerId: null,
-            focusSnapshot: null,
-            // Restore performer sizes and hidden states
-            performers: state.performers.map(p => {
-                if (p.id === focusedId) {
+        if (focusedType === 'performer') {
+            set({
+                focusedPerformerId: null,
+                focusedNodeType: null,
+                focusSnapshot: null,
+                performers: state.performers.map(p => {
+                    if (p.id === focusedId) {
+                        return {
+                            ...p,
+                            width: snapshot.nodeSize.width,
+                            height: snapshot.nodeSize.height,
+                            hidden: snapshot.hiddenPerformerIds.includes(p.id),
+                        }
+                    }
                     return {
                         ...p,
-                        width: snapshot.nodeSize.width,
-                        height: snapshot.nodeSize.height,
                         hidden: snapshot.hiddenPerformerIds.includes(p.id),
                     }
-                }
-                // Restore hidden state: only re-hide if it was hidden before focus
-                return {
+                }),
+                acts: state.acts.map(a => ({
+                    ...a,
+                    hidden: snapshot.hiddenActIds.includes(a.id),
+                })),
+                markdownEditors: state.markdownEditors.map(e => ({
+                    ...e,
+                    hidden: snapshot.hiddenEditorIds.includes(e.id),
+                })),
+                isAssetLibraryOpen: snapshot.assetLibraryOpen,
+                isAssistantOpen: snapshot.assistantOpen,
+                isTerminalOpen: snapshot.terminalOpen,
+            })
+        } else {
+            // Act was focused
+            set({
+                focusedPerformerId: null,
+                focusedNodeType: null,
+                focusSnapshot: null,
+                performers: state.performers.map(p => ({
                     ...p,
                     hidden: snapshot.hiddenPerformerIds.includes(p.id),
-                }
-            }),
-            // Restore markdown editors
-            markdownEditors: state.markdownEditors.map(e => ({
-                ...e,
-                hidden: snapshot.hiddenEditorIds.includes(e.id),
-            })),
-            // Restore panels
-            isAssetLibraryOpen: snapshot.assetLibraryOpen,
-            isAssistantOpen: snapshot.assistantOpen,
-            isTerminalOpen: snapshot.terminalOpen,
-        })
+                })),
+                acts: state.acts.map(a => {
+                    if (a.id === focusedId) {
+                        return {
+                            ...a,
+                            width: snapshot.nodeSize.width,
+                            height: snapshot.nodeSize.height,
+                            hidden: snapshot.hiddenActIds.includes(a.id),
+                        }
+                    }
+                    return {
+                        ...a,
+                        hidden: snapshot.hiddenActIds.includes(a.id),
+                    }
+                }),
+                markdownEditors: state.markdownEditors.map(e => ({
+                    ...e,
+                    hidden: snapshot.hiddenEditorIds.includes(e.id),
+                })),
+                isAssetLibraryOpen: snapshot.assetLibraryOpen,
+                isAssistantOpen: snapshot.assistantOpen,
+                isTerminalOpen: snapshot.terminalOpen,
+            })
+        }
     },
 
-    switchFocusTarget: (performerId) => {
+    switchFocusTarget: (nodeId, nodeType) => {
         const state = get()
         const snapshot = state.focusSnapshot
         if (!snapshot || !state.focusedPerformerId) return
 
         const prevId = state.focusedPerformerId
-        const nextPerformer = state.performers.find(p => p.id === performerId)
-        if (!nextPerformer || performerId === prevId) return
+        const prevType = state.focusedNodeType || snapshot.type
 
-        // Find the current focus node to get its expanded size
-        const currentFocused = state.performers.find(p => p.id === prevId)
-        const focusWidth = currentFocused?.width || 800
-        const focusHeight = currentFocused?.height || 600
+        if (nodeId === prevId && nodeType === prevType) return
 
-        set({
-            focusedPerformerId: performerId,
-            selectedPerformerId: performerId,
-            activeChatPerformerId: performerId,
-            // Update snapshot to store the previous node's original size
-            focusSnapshot: {
-                ...snapshot,
-                // Keep the original snapshot's hidden IDs — they don't change
-                // But save the new node's original size
-                nodeSize: { width: nextPerformer.width ?? 400, height: nextPerformer.height ?? 500 },
-            },
-            // Restore prev node size, hide it; show new focus node expanded
-            performers: state.performers.map(p => {
-                if (p.id === prevId) {
-                    return {
-                        ...p,
-                        width: snapshot.nodeSize.width,
-                        height: snapshot.nodeSize.height,
-                        hidden: true,
+        // Get current focused node's expanded size for the new node
+        let focusWidth = 800
+        let focusHeight = 600
+        if (prevType === 'performer') {
+            const prev = state.performers.find(p => p.id === prevId)
+            focusWidth = prev?.width || 800
+            focusHeight = prev?.height || 600
+        } else {
+            const prev = state.acts.find(a => a.id === prevId)
+            focusWidth = prev?.width || 800
+            focusHeight = prev?.height || 600
+        }
+
+        if (nodeType === 'performer') {
+            const nextNode = state.performers.find(p => p.id === nodeId)
+            if (!nextNode) return
+
+            set({
+                focusedPerformerId: nodeId,
+                focusedNodeType: 'performer',
+                selectedPerformerId: nodeId,
+                selectedActId: null,
+                activeChatPerformerId: nodeId,
+                focusSnapshot: {
+                    ...snapshot,
+                    type: 'performer',
+                    nodeSize: { width: nextNode.width ?? 400, height: nextNode.height ?? 500 },
+                },
+                performers: state.performers.map(p => {
+                    if (p.id === prevId && prevType === 'performer') {
+                        return { ...p, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
                     }
-                }
-                if (p.id === performerId) {
-                    return { ...p, hidden: false, width: focusWidth, height: focusHeight }
-                }
-                return { ...p, hidden: true }
-            }),
-        })
+                    if (p.id === nodeId) {
+                        return { ...p, hidden: false, width: focusWidth, height: focusHeight }
+                    }
+                    return { ...p, hidden: true }
+                }),
+                acts: state.acts.map(a => {
+                    if (a.id === prevId && prevType === 'act') {
+                        return { ...a, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
+                    }
+                    return { ...a, hidden: true }
+                }),
+            })
+        } else {
+            // Switching to act
+            const nextAct = state.acts.find(a => a.id === nodeId)
+            if (!nextAct) return
+
+            set({
+                focusedPerformerId: nodeId,
+                focusedNodeType: 'act',
+                selectedActId: nodeId,
+                selectedPerformerId: null,
+                focusSnapshot: {
+                    ...snapshot,
+                    type: 'act',
+                    actId: nodeId,
+                    nodeSize: { width: nextAct.width ?? 400, height: nextAct.height ?? 420 },
+                },
+                performers: state.performers.map(p => {
+                    if (p.id === prevId && prevType === 'performer') {
+                        return { ...p, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
+                    }
+                    return { ...p, hidden: true }
+                }),
+                acts: state.acts.map(a => {
+                    if (a.id === prevId && prevType === 'act') {
+                        return { ...a, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
+                    }
+                    if (a.id === nodeId) {
+                        return { ...a, hidden: false, width: focusWidth, height: focusHeight }
+                    }
+                    return { ...a, hidden: true }
+                }),
+            })
+        }
     },
 
     setInspectorFocus: (focus) => set({ inspectorFocus: focus }),
@@ -345,6 +475,7 @@ export const createWorkspaceSlice: StateCreator<
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
         focusedPerformerId: null,
+        focusedNodeType: null,
         inspectorFocus: focus,
     }),
 
@@ -371,13 +502,12 @@ export const createWorkspaceSlice: StateCreator<
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
             focusedPerformerId: null,
+            focusedNodeType: null,
             focusSnapshot: null,
             chats: {},
-            actChats: {},
             chatPrefixes: {},
             activeChatPerformerId: null,
             sessionMap: {},
-            actSessionMap: {},
             sessions: [],
             inspectorFocus: null,
             lspServers: [],
@@ -424,8 +554,6 @@ export const createWorkspaceSlice: StateCreator<
                 acts: [],
                 selectedActId: null,
                 editingActId: null,
-                actSessionMap: {},
-                actChats: {},
             })
             api.studio.updateConfig({ lastStage: undefined }).catch(err => console.warn('[studio] clear lastStage failed', err))
         }
@@ -552,13 +680,236 @@ export const createWorkspaceSlice: StateCreator<
         stageDirty: true,
     })),
 
-    upsertDraft: (draft) => set((s) => ({
-        drafts: {
-            ...s.drafts,
-            [draft.id]: draft,
-        },
-        stageDirty: true,
-    })),
+    upsertDraft: (draft) => {
+        set((s) => ({
+            drafts: {
+                ...s.drafts,
+                [draft.id]: draft,
+            },
+            stageDirty: true,
+        }))
+
+        // Debounced persist to disk
+        scheduleDraftPersist(draft.id, () => {
+            const current = get().drafts[draft.id]
+            if (!current) return
+            const kind = current.kind as 'tal' | 'dance' | 'performer' | 'act'
+            api.drafts.update(kind, draft.id, {
+                name: current.name,
+                content: current.content,
+                slug: current.slug,
+                description: current.description,
+                tags: current.tags,
+                derivedFrom: current.derivedFrom,
+            }).catch((err) => {
+                // Draft may not exist on disk yet — create it
+                api.drafts.create({
+                    kind,
+                    name: current.name,
+                    content: current.content,
+                    slug: current.slug,
+                    description: current.description,
+                    tags: current.tags,
+                    derivedFrom: current.derivedFrom,
+                }).catch(() => {
+                    console.warn('Failed to persist draft to disk', err)
+                })
+            })
+        })
+    },
+
+    savePerformerAsDraft: async (performerId) => {
+        const performer = get().performers.find((p) => p.id === performerId)
+        if (!performer) return
+
+        const draftContent = {
+            talRef: performer.talRef || null,
+            danceRefs: performer.danceRefs || [],
+            model: performer.model || null,
+            modelVariant: performer.modelVariant || null,
+            mcpServerNames: performer.mcpServerNames || [],
+            mcpBindingMap: performer.mcpBindingMap || {},
+            danceDeliveryMode: performer.danceDeliveryMode || 'auto',
+            planMode: performer.planMode || false,
+            agentId: performer.agentId || null,
+        }
+
+        try {
+            const draft = await api.drafts.create({
+                kind: 'performer',
+                name: performer.name,
+                content: draftContent,
+                description: performer.name,
+            })
+
+            set((s) => ({
+                drafts: {
+                    ...s.drafts,
+                    [draft.id]: {
+                        id: draft.id,
+                        kind: 'performer' as const,
+                        name: draft.name,
+                        content: draft.content,
+                        description: draft.description,
+                        updatedAt: draft.updatedAt,
+                    },
+                },
+                stageDirty: true,
+            }))
+        } catch (err) {
+            console.error('Failed to save performer as draft', err)
+        }
+    },
+
+    loadDraftsFromDisk: async () => {
+        try {
+            const drafts = await api.drafts.list()
+            const draftsMap: Record<string, DraftAsset> = {}
+            for (const draft of drafts) {
+                draftsMap[draft.id] = {
+                    id: draft.id,
+                    kind: draft.kind,
+                    name: draft.name,
+                    content: draft.content,
+                    slug: draft.slug,
+                    description: draft.description,
+                    tags: draft.tags,
+                    derivedFrom: draft.derivedFrom,
+                    updatedAt: draft.updatedAt || Date.now(),
+                }
+            }
+            set({ drafts: draftsMap })
+        } catch (err) {
+            console.warn('Failed to load drafts from disk', err)
+        }
+    },
+
+    saveActAsDraft: async (actId) => {
+        const act = get().acts.find((a) => a.id === actId)
+        if (!act) return
+
+        const draftContent = {
+            description: act.description,
+            actRules: act.actRules,
+            performers: Object.fromEntries(
+                Object.entries(act.performers).map(([key, p]) => [key, {
+                    performerRef: p.performerRef,
+                    activeDanceIds: p.activeDanceIds,
+                    subscriptions: p.subscriptions,
+                }]),
+            ),
+            relations: act.relations.map((r) => ({
+                id: r.id,
+                between: r.between,
+                direction: r.direction,
+                name: r.name,
+                description: r.description,
+                permissions: r.permissions,
+                maxCalls: r.maxCalls,
+                timeout: r.timeout,
+                sessionPolicy: r.sessionPolicy,
+            })),
+        }
+
+        try {
+            const draft = await api.drafts.create({
+                kind: 'act',
+                name: act.name,
+                content: draftContent,
+                description: act.meta?.authoring?.description || act.name,
+            })
+
+            set((s) => ({
+                drafts: {
+                    ...s.drafts,
+                    [draft.id]: {
+                        id: draft.id,
+                        kind: 'act' as const,
+                        name: draft.name,
+                        content: draft.content,
+                        description: draft.description,
+                        updatedAt: draft.updatedAt,
+                    },
+                },
+                stageDirty: true,
+            }))
+        } catch (err) {
+            console.error('Failed to save act as draft', err)
+        }
+    },
+
+    addPerformerFromDraft: (name, draftContent) => {
+        performerIdCounter.value++
+        const id = `performer-${performerIdCounter.value}`
+        const finalX = get().canvasCenter?.x ?? (60 + (get().performers.length * 28))
+        const finalY = get().canvasCenter?.y ?? (60 + (get().performers.length * 20))
+
+        const node = createPerformerNode({
+            id,
+            name,
+            x: finalX,
+            y: finalY,
+            talRef: draftContent.talRef || null,
+            danceRefs: draftContent.danceRefs || [],
+            model: draftContent.model || null,
+            modelVariant: draftContent.modelVariant || null,
+            mcpServerNames: draftContent.mcpServerNames || [],
+            mcpBindingMap: draftContent.mcpBindingMap || {},
+            danceDeliveryMode: draftContent.danceDeliveryMode || 'auto',
+            planMode: draftContent.planMode || false,
+        })
+
+        set((s) => ({
+            performers: [...s.performers, node],
+            editingTarget: null,
+            selectedPerformerId: id,
+            selectedPerformerSessionId: null,
+            selectedMarkdownEditorId: null,
+            activeChatPerformerId: id,
+            inspectorFocus: null,
+            stageDirty: true,
+        }))
+    },
+
+    importActFromDraft: (name, draftContent) => {
+        const actId = makeId('act')
+        const centerX = get().canvasCenter?.x ?? 200
+        const centerY = get().canvasCenter?.y ?? 200
+
+        // Build performer bindings from draft content (choreography model)
+        const performers: Record<string, any> = {}
+        if (draftContent.performers && typeof draftContent.performers === 'object') {
+            let idx = 0
+            for (const [key, p] of Object.entries(draftContent.performers) as [string, any][]) {
+                performers[key] = {
+                    performerRef: p.performerRef || { kind: 'draft', draftId: '' },
+                    activeDanceIds: p.activeDanceIds,
+                    subscriptions: p.subscriptions,
+                    position: p.position || { x: centerX + idx * 300, y: centerY },
+                }
+                idx++
+            }
+        }
+
+        const newAct = {
+            id: actId,
+            name,
+            description: draftContent.description,
+            actRules: draftContent.actRules,
+            position: { x: centerX, y: centerY },
+            width: 340,
+            height: 80,
+            performers,
+            relations: Array.isArray(draftContent.relations) ? draftContent.relations : [],
+            createdAt: Date.now(),
+        }
+
+        set((s) => ({
+            acts: [...s.acts, newAct],
+            selectedActId: actId,
+            stageDirty: true,
+        }))
+    },
 
     createMarkdownEditor: (kind, options) => {
         markdownEditorIdCounter.value++
@@ -614,9 +965,24 @@ export const createWorkspaceSlice: StateCreator<
             selectedPerformerId: null,
             selectedPerformerSessionId: null,
             focusedPerformerId: null,
+            focusedNodeType: null,
             inspectorFocus: null,
             stageDirty: true,
         }))
+
+        // Persist draft to disk (fire-and-forget, pass draftId for ID consistency)
+        api.drafts.create({
+            kind,
+            id: draftId,
+            name,
+            content,
+            slug,
+            description,
+            tags,
+            derivedFrom: source?.derivedFrom || null,
+        }).catch((err) => {
+            console.warn('Failed to persist new editor draft to disk', err)
+        })
 
         return editorId
     },

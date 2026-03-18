@@ -95,26 +95,12 @@ function performerIdForSession(sessionMap: Record<string, string>, sessionId: st
 
 export type SessionStreamTarget =
     | { kind: 'performer'; performerId: string }
-    | { kind: 'act'; actId: string }
-    | { kind: 'assistant'; sessionId: string }
 
 export function resolveSessionTarget(state: StudioState, sessionId: string): SessionStreamTarget | null {
-    if (state.assistantSessionId === sessionId) {
-        return { kind: 'assistant', sessionId }
-    }
-    // Check performer sessions first
+    // All sessions (performer + assistant) are in sessionMap
     const performerId = performerIdForSession(state.sessionMap, sessionId)
     if (performerId) {
         return { kind: 'performer', performerId }
-    }
-
-    // Check Act sessions — route to act-owned chat
-    if (state.actSessionMap) {
-        for (const [actId, actSessionId] of Object.entries(state.actSessionMap)) {
-            if (actSessionId === sessionId) {
-                return { kind: 'act', actId }
-            }
-        }
     }
 
     return null
@@ -131,21 +117,6 @@ export function updateTargetMessages(
                 ...state.chats,
                 [target.performerId]: updater(state.chats[target.performerId] || []),
             },
-        }
-    }
-
-    if (target.kind === 'act') {
-        return {
-            actChats: {
-                ...state.actChats,
-                [target.actId]: updater(state.actChats[target.actId] || []),
-            },
-        }
-    }
-
-    if (target.kind === 'assistant') {
-        return {
-            assistantMessages: updater(state.assistantMessages || [])
         }
     }
 

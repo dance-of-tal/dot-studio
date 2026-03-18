@@ -1,14 +1,16 @@
 /**
  * ActInspectorPanel — Right-side panel for Act edit focus mode.
  *
+ * NOTE: Minimal stub for Phase 0 (type migration). Will be fully rebuilt in Phase 4.
+ *
  * Context-sensitive: shows Act meta when nothing selected,
- * Performer detail when a performer is selected,
- * Edge detail when an edge/relation is selected.
+ * Relation detail when a relation is selected.
  */
 import { useState, useMemo, useEffect } from 'react'
 import {
-    Settings, User, ArrowRightLeft, Cpu, Hexagon, Zap, Trash2,
-    Clock, Hash, Phone, PhoneForwarded, RefreshCw, RotateCcw,
+    Settings, User, ArrowRightLeft, Hexagon, Zap, Trash2,
+    Clock, Hash, RefreshCw, RotateCcw,
+    AlertTriangle,
 } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import type { ActRelation } from '../../types'
@@ -16,18 +18,18 @@ import './ActInspectorPanel.css'
 
 // ── Act Meta View ───────────────────────────────────────
 function ActMetaView() {
-    const { acts, editingActId, renameAct, updateActAuthoringMeta } = useStudioStore()
+    const { acts, editingActId, renameAct, updateActAuthoringMeta, updateActDescription } = useStudioStore()
     const act = acts.find((a) => a.id === editingActId)
     if (!act || !editingActId) return null
 
     const meta = act.meta?.authoring || {}
     const [localName, setLocalName] = useState(act.name)
-    const [localDesc, setLocalDesc] = useState(meta.description || '')
+    const [localDesc, setLocalDesc] = useState(act.description || meta.description || '')
 
     useEffect(() => {
         setLocalName(act.name)
-        setLocalDesc(act.meta?.authoring?.description || '')
-    }, [act.name, act.meta?.authoring?.description])
+        setLocalDesc(act.description || act.meta?.authoring?.description || '')
+    }, [act.name, act.description, act.meta?.authoring?.description])
 
     const commitName = () => {
         if (localName.trim() && localName !== act.name) {
@@ -36,10 +38,30 @@ function ActMetaView() {
     }
 
     const commitDesc = () => {
+        updateActDescription(editingActId, localDesc)
         updateActAuthoringMeta(editingActId, {
             ...act.meta,
             authoring: { ...meta, description: localDesc },
         })
+    }
+
+    // ── Validation ──────────────────────────────────────
+    const performerKeys = Object.keys(act.performers)
+    const connectedKeys = new Set<string>()
+    for (const rel of act.relations) {
+        connectedKeys.add(rel.between[0])
+        connectedKeys.add(rel.between[1])
+    }
+    const warnings: Array<{ type: 'error' | 'warning'; msg: string }> = []
+
+    if (performerKeys.length === 0) {
+        warnings.push({ type: 'warning', msg: 'No performers bound' })
+    }
+    // Disconnected performers
+    for (const key of performerKeys) {
+        if (!connectedKeys.has(key) && performerKeys.length > 1) {
+            warnings.push({ type: 'warning', msg: `"${key}" is disconnected` })
+        }
     }
 
     return (
@@ -62,7 +84,7 @@ function ActMetaView() {
                     value={localDesc}
                     onChange={(e) => setLocalDesc(e.target.value)}
                     onBlur={commitDesc}
-                    placeholder="이 Act가 수행하는 워크플로우를 설명하세요"
+                    placeholder="Describe the workflow this Act performs"
                     rows={3}
                 />
             </div>
@@ -72,14 +94,29 @@ function ActMetaView() {
                 <div className="act-panel__stat-grid">
                     <div className="act-panel__stat">
                         <User size={12} />
-                        <span>{Object.keys(act.performers).length} performers</span>
+                        <span>{performerKeys.length} performers</span>
                     </div>
                     <div className="act-panel__stat">
                         <ArrowRightLeft size={12} />
-                        <span>{act.relations.length} edges</span>
+                        <span>{act.relations.length} relations</span>
                     </div>
                 </div>
             </div>
+
+            {/* Validation */}
+            {warnings.length > 0 && (
+                <div className="act-panel__section">
+                    <label className="act-panel__label"><AlertTriangle size={11} /> Validation</label>
+                    <div className="act-panel__validation">
+                        {warnings.map((w, i) => (
+                            <div key={i} className={`act-panel__validation-item act-panel__validation-item--${w.type}`}>
+                                <span className="act-panel__validation-dot" />
+                                {w.msg}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {meta.tags && meta.tags.length > 0 && (
                 <div className="act-panel__section">
@@ -95,105 +132,93 @@ function ActMetaView() {
     )
 }
 
-// ── Performer View (summary + edge nav) ─────────────────
+// ── Performer Binding View ──────────────────────────────
 function PerformerView() {
     const {
         acts, editingActId, selectedActPerformerKey,
-        selectRelation, drafts,
+        selectRelation,
     } = useStudioStore()
 
     const act = useMemo(() => acts.find((a) => a.id === editingActId), [acts, editingActId])
-    const performer = act && selectedActPerformerKey ? act.performers[selectedActPerformerKey] : null
+    const binding = act && selectedActPerformerKey ? act.performers[selectedActPerformerKey] : null
 
     const relatedRelations = useMemo(() => {
         if (!act || !selectedActPerformerKey) return []
         return act.relations.filter(
-            (r) => r.from === selectedActPerformerKey || r.to === selectedActPerformerKey,
+            (r) => r.between.includes(selectedActPerformerKey),
         )
     }, [act, selectedActPerformerKey])
 
-    if (!act || !performer || !selectedActPerformerKey || !editingActId) return null
+    if (!act || !binding || !selectedActPerformerKey || !editingActId) return null
 
-    const modelLabel = performer.model
-        ? `${performer.model.provider}/${performer.model.modelId}`
-        : 'No model'
-    const talLabel = performer.talRef
-        ? performer.talRef.kind === 'draft'
-            ? drafts[performer.talRef.draftId]?.name || 'Draft Tal'
-            : performer.talRef.urn.split('/').pop() || performer.talRef.urn
-        : null
-
-    const getPerformerName = (key: string) => act.performers[key]?.name || key
+    // Show performer ref info
+    const refLabel = binding.performerRef.kind === 'registry'
+        ? binding.performerRef.urn.split('/').pop() || binding.performerRef.urn
+        : `Draft: ${binding.performerRef.draftId}`
 
     return (
         <div className="act-panel__content">
-            {/* Performer summary */}
+            {/* Performer binding summary */}
             <div className="act-panel__item-header">
                 <User size={14} className="act-panel__item-icon" />
                 <span className="act-panel__item-name act-panel__item-name--edge">
-                    {performer.name}
+                    {selectedActPerformerKey}
                 </span>
             </div>
 
-            {/* Quick config badges */}
             <div className="act-panel__section">
                 <div className="act-panel__stat-grid">
                     <div className="act-panel__stat">
-                        <Cpu size={11} />
-                        <span>{modelLabel}</span>
+                        <Hexagon size={11} />
+                        <span>{refLabel}</span>
                     </div>
-                    {talLabel && (
-                        <div className="act-panel__stat">
-                            <Hexagon size={11} />
-                            <span>{talLabel}</span>
-                        </div>
-                    )}
-                    {performer.danceRefs.length > 0 && (
+                    {binding.activeDanceIds && binding.activeDanceIds.length > 0 && (
                         <div className="act-panel__stat">
                             <Zap size={11} />
-                            <span>{performer.danceRefs.length} dance{performer.danceRefs.length !== 1 ? 's' : ''}</span>
+                            <span>{binding.activeDanceIds.length} dance{binding.activeDanceIds.length !== 1 ? 's' : ''}</span>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Connected Edges — clickable to navigate */}
+            {/* Connected Relations */}
             <div className="act-panel__section">
-                <label className="act-panel__label"><ArrowRightLeft size={11} /> Edges ({relatedRelations.length})</label>
+                <label className="act-panel__label"><ArrowRightLeft size={11} /> Relations ({relatedRelations.length})</label>
                 {relatedRelations.length > 0 ? (
                     <div className="act-panel__list">
                         {relatedRelations.map((rel) => {
-                            const isFrom = rel.from === selectedActPerformerKey
-                            const otherKey = isFrom ? rel.to : rel.from
+                            const otherKey = rel.between[0] === selectedActPerformerKey ? rel.between[1] : rel.between[0]
                             return (
                                 <div
                                     key={rel.id}
                                     className="act-panel__edge-link"
                                     onClick={() => selectRelation(rel.id)}
-                                    title="Click to edit edge"
+                                    title="Click to edit relation"
                                 >
-                                    <span className="act-panel__edge-dir">{isFrom ? '→' : '←'}</span>
-                                    <span className="act-panel__edge-target">{getPerformerName(otherKey)}</span>
-                                    <span className={`act-panel__edge-badge act-panel__edge-badge--${rel.invocation}`}>
-                                        {rel.invocation}
+                                    <span className="act-panel__edge-dir">
+                                        {rel.direction === 'both' ? '↔' : '→'}
+                                    </span>
+                                    <span className="act-panel__edge-target">{otherKey}</span>
+                                    <span className="act-panel__edge-badge">
+                                        {rel.direction}
                                     </span>
                                 </div>
                             )
                         })}
                     </div>
                 ) : (
-                    <span className="act-panel__empty">Drag handles to connect</span>
+                    <span className="act-panel__empty">No relations defined</span>
                 )}
             </div>
         </div>
     )
 }
 
-// ── Edge View ───────────────────────────────────────────
-function EdgeView() {
+// ── Relation View (Communication Contract) ──────────────
+function RelationView() {
     const {
         acts, editingActId, selectedRelationId,
-        updateRelation, removeRelationFromAct, selectRelation,
+        updateRelation, removeRelation, selectRelation,
     } = useStudioStore()
 
     const act = acts.find((a) => a.id === editingActId)
@@ -206,8 +231,7 @@ function EdgeView() {
             setForm({
                 name: relation.name,
                 description: relation.description,
-                invocation: relation.invocation,
-                await: relation.await,
+                direction: relation.direction,
                 sessionPolicy: relation.sessionPolicy,
                 maxCalls: relation.maxCalls,
                 timeout: relation.timeout,
@@ -216,9 +240,6 @@ function EdgeView() {
     }, [relation])
 
     if (!relation || !act || !editingActId || !selectedRelationId) return null
-
-    const fromPerf = act.performers[relation.from]
-    const toPerf = act.performers[relation.to]
 
     const update = (field: string, value: any) => {
         setForm((prev) => ({ ...prev, [field]: value }))
@@ -231,13 +252,13 @@ function EdgeView() {
             <div className="act-panel__item-header">
                 <ArrowRightLeft size={14} className="act-panel__item-icon" />
                 <span className="act-panel__item-name act-panel__item-name--edge">
-                    {fromPerf?.name || '?'} → {toPerf?.name || '?'}
+                    {relation.between[0]} ↔ {relation.between[1]}
                 </span>
                 <button
                     className="icon-btn act-panel__danger-btn"
-                    title="Delete edge"
+                    title="Delete relation"
                     onClick={() => {
-                        removeRelationFromAct(editingActId, selectedRelationId)
+                        removeRelation(editingActId, selectedRelationId)
                         selectRelation(null)
                     }}
                 >
@@ -245,14 +266,14 @@ function EdgeView() {
                 </button>
             </div>
 
-            {/* Tool Name */}
+            {/* Name */}
             <div className="act-panel__section">
-                <label className="act-panel__label"><Hash size={11} /> Tool Name</label>
+                <label className="act-panel__label"><Hash size={11} /> Name</label>
                 <input
                     className="act-panel__input"
                     value={form.name || ''}
                     onChange={(e) => update('name', e.target.value)}
-                    placeholder="request_code_review"
+                    placeholder="communication_channel_name"
                 />
             </div>
 
@@ -263,33 +284,28 @@ function EdgeView() {
                     className="act-panel__textarea"
                     value={form.description || ''}
                     onChange={(e) => update('description', e.target.value)}
-                    placeholder="LLM이 보는 tool 설명"
+                    placeholder="Communication contract description"
                     rows={2}
                 />
             </div>
 
-            {/* Invocation */}
+            {/* Direction */}
             <div className="act-panel__section">
-                <label className="act-panel__label"><Phone size={11} /> Invocation</label>
+                <label className="act-panel__label"><ArrowRightLeft size={11} /> Direction</label>
                 <div className="act-panel__toggle-group">
                     <button
-                        className={`act-panel__toggle ${form.invocation === 'optional' ? 'active' : ''}`}
-                        onClick={() => update('invocation', 'optional')}
+                        className={`act-panel__toggle ${form.direction === 'both' ? 'active' : ''}`}
+                        onClick={() => update('direction', 'both')}
                     >
-                        <PhoneForwarded size={12} /> Optional
+                        Both
                     </button>
                     <button
-                        className={`act-panel__toggle ${form.invocation === 'required' ? 'active' : ''}`}
-                        onClick={() => update('invocation', 'required')}
+                        className={`act-panel__toggle ${form.direction === 'one-way' ? 'active' : ''}`}
+                        onClick={() => update('direction', 'one-way')}
                     >
-                        <Phone size={12} /> Required
+                        One-way
                     </button>
                 </div>
-                <span className="act-panel__hint">
-                    {form.invocation === 'required'
-                        ? 'LLM must use this tool before completing'
-                        : 'LLM may use this tool when useful'}
-                </span>
             </div>
 
             {/* Session Policy */}
@@ -309,21 +325,6 @@ function EdgeView() {
                         Reuse
                     </button>
                 </div>
-            </div>
-
-            {/* Await */}
-            <div className="act-panel__section">
-                <label className="act-panel__label act-panel__label--checkbox">
-                    <input
-                        type="checkbox"
-                        checked={form.await ?? true}
-                        onChange={(e) => update('await', e.target.checked)}
-                    />
-                    Await Result
-                </label>
-                <span className="act-panel__hint">
-                    {form.await ? 'Caller waits for response' : 'Fire-and-forget mode'}
-                </span>
             </div>
 
             {/* MaxCalls + Timeout */}
@@ -362,14 +363,14 @@ export default function ActInspectorPanel() {
     if (!editingActId) return null
 
     // Determine which view to show
-    const mode = selectedRelationId ? 'edge'
+    const mode = selectedRelationId ? 'relation'
         : selectedActPerformerKey ? 'performer'
         : 'act'
 
     const modeLabels = {
         act: { icon: <Settings size={12} />, label: 'Act Settings' },
-        performer: { icon: <User size={12} />, label: 'Performer' },
-        edge: { icon: <ArrowRightLeft size={12} />, label: 'Edge' },
+        performer: { icon: <User size={12} />, label: 'Performer Binding' },
+        relation: { icon: <ArrowRightLeft size={12} />, label: 'Relation' },
     }
 
     const { icon, label } = modeLabels[mode]
@@ -382,7 +383,7 @@ export default function ActInspectorPanel() {
             </div>
             {mode === 'act' && <ActMetaView />}
             {mode === 'performer' && <PerformerView />}
-            {mode === 'edge' && <EdgeView />}
+            {mode === 'relation' && <RelationView />}
         </div>
     )
 }

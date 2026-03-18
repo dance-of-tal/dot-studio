@@ -1,82 +1,68 @@
+/**
+ * Assistant slice — minimal UI state only.
+ *
+ * The assistant is treated as a hidden performer with ID 'studio-assistant'.
+ * All chat logic (session, sending, streaming) is delegated to chatSlice.
+ *
+ * This slice only manages:
+ *   - isAssistantOpen (sidebar toggle)
+ *   - ensureAssistantPerformer (create/update the hidden performer node with selected model)
+ */
 import type { StateCreator } from 'zustand'
 import type { StudioState, AssistantSlice } from './types'
 
+export const ASSISTANT_PERFORMER_ID = 'studio-assistant'
+
 export const createAssistantSlice: StateCreator<StudioState, [], [], AssistantSlice> = (set, get) => ({
     isAssistantOpen: false,
-    assistantMessages: [],
-    assistantSessionId: null,
 
     toggleAssistant: () => {
         set((state) => ({ isAssistantOpen: !state.isAssistantOpen }))
     },
 
-    sendAssistantMessage: async (message: string, model?: string) => {
-        // Optimistic UI update
-        const userMsg = {
-            id: crypto.randomUUID(),
-            role: 'user' as const,
-            content: message,
-            timestamp: Date.now(),
-        }
-
-        let currentSessionId = get().assistantSessionId
-        
-        // Ensure session exists
-        if (!currentSessionId) {
-            try {
-                const res = await fetch('/api/assistant/session', {
-                    method: 'POST',
-                })
-                const data = await res.json()
-                if (data.sessionId) {
-                    currentSessionId = data.sessionId
-                    set({ assistantSessionId: currentSessionId })
-                }
-            } catch (err) {
-                console.error('Failed to create assistant session:', err)
-                return
-            }
-        }
-
-        set((state) => ({
-            assistantMessages: [...state.assistantMessages, userMsg]
-        }))
-
-        // Capture canvas context
+    ensureAssistantPerformer: (model) => {
         const state = get()
-        const canvasContext = {
-            performers: state.performers.map(p => ({
-                id: p.id,
-                name: p.name,
-                hasTal: !!p.talRef,
-                model: p.model ? typeof p.model === 'string' ? p.model : p.model.modelId : null
-            })),
-            acts: state.acts.map(a => ({
-                id: a.id,
-                name: a.name,
-                performerCount: Object.keys(a.performers).length
-            })),
-            selectedPerformerId: state.selectedPerformerId
+        const existing = state.performers.find((p) => p.id === ASSISTANT_PERFORMER_ID)
+
+        if (existing) {
+            // Update model if changed
+            if (
+                existing.model?.provider !== model.provider ||
+                existing.model?.modelId !== model.modelId
+            ) {
+                set((s) => ({
+                    performers: s.performers.map((p) =>
+                        p.id === ASSISTANT_PERFORMER_ID
+                            ? { ...p, model }
+                            : p,
+                    ),
+                }))
+            }
+            return
         }
 
-        // Send to API
-        try {
-            await fetch('/api/assistant/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sessionId: currentSessionId,
-                    message,
-                    canvasContext,
+        // Create hidden performer node for assistant
+        set((s) => ({
+            performers: [
+                ...s.performers,
+                {
+                    id: ASSISTANT_PERFORMER_ID,
+                    name: 'Studio Assistant',
+                    position: { x: -9999, y: -9999 },
+                    width: 0,
+                    height: 0,
+                    scope: 'shared' as const,
                     model,
-                }),
-            })
-        } catch (err) {
-            console.error('Failed to send assistant message:', err)
-        }
+                    talRef: null,
+                    danceRefs: [],
+                    mcpServerNames: [],
+                    mcpBindingMap: {},
+                    declaredMcpConfig: null,
+                    danceDeliveryMode: 'auto' as const,
+                    executionMode: 'direct' as const,
+                    hidden: true,
+                },
+            ],
+        }))
     },
-
-    clearAssistantHistory: () => {
-        set({ assistantMessages: [], assistantSessionId: null })
-    }
 })
