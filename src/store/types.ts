@@ -260,7 +260,6 @@ export interface ActSlice {
     updateActRules: (id: string, rules: string[]) => void
     selectAct: (id: string | null) => void
     toggleActVisibility: (id: string) => void
-    toggleActEdit: (id: string) => void
 
     // ── Performer Binding (ref-based) ───────────
     bindPerformerToAct: (actId: string, performerRef: StageActPerformerBinding['performerRef']) => string

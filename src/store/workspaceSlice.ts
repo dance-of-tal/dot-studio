@@ -807,7 +807,6 @@ export const createWorkspaceSlice: StateCreator<
                 permissions: r.permissions,
                 maxCalls: r.maxCalls,
                 timeout: r.timeout,
-                sessionPolicy: r.sessionPolicy,
             })),
         }
 

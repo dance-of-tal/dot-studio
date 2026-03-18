@@ -399,7 +399,6 @@ export function buildActAssetPayload(
         permissions: rel.permissions,
         maxCalls: rel.maxCalls,
         timeout: rel.timeout,
-        sessionPolicy: rel.sessionPolicy,
     }))
 
     return {

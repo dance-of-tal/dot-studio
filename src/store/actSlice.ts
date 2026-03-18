@@ -82,12 +82,6 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    toggleActEdit: (id) => {
-        set((s) => ({
-            editingActId: s.editingActId === id ? null : id,
-        }))
-    },
-
     // ── Performer Binding (ref-based) ───────────────────
 
     bindPerformerToAct: (actId, performerRef) => {
@@ -353,7 +347,6 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             permissions: r.permissions,
             maxCalls: r.maxCalls ?? 10,
             timeout: r.timeout ?? 300,
-            sessionPolicy: r.sessionPolicy,
         }))
 
         const newAct: StageAct = {

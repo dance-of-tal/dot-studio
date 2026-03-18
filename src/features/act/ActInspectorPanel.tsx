@@ -8,7 +8,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import {
     Settings, User, ArrowRightLeft, Hexagon, Zap, Trash2,
-    Clock, Hash, RefreshCw, RotateCcw,
+    Clock, Hash, RotateCcw,
     AlertTriangle,
 } from 'lucide-react'
 import { useStudioStore } from '../../store'
@@ -405,7 +405,6 @@ function RelationView() {
                 name: relation.name,
                 description: relation.description,
                 direction: relation.direction,
-                sessionPolicy: relation.sessionPolicy,
                 maxCalls: relation.maxCalls,
                 timeout: relation.timeout,
             })
@@ -477,25 +476,6 @@ function RelationView() {
                         onClick={() => update('direction', 'one-way')}
                     >
                         One-way
-                    </button>
-                </div>
-            </div>
-
-            {/* Session Policy */}
-            <div className="act-panel__section">
-                <label className="act-panel__label"><RefreshCw size={11} /> Session</label>
-                <div className="act-panel__toggle-group">
-                    <button
-                        className={`act-panel__toggle ${form.sessionPolicy === 'fresh' ? 'active' : ''}`}
-                        onClick={() => update('sessionPolicy', 'fresh')}
-                    >
-                        Fresh
-                    </button>
-                    <button
-                        className={`act-panel__toggle ${form.sessionPolicy === 'reuse' ? 'active' : ''}`}
-                        onClick={() => update('sessionPolicy', 'reuse')}
-                    >
-                        Reuse
                     </button>
                 </div>
             </div>

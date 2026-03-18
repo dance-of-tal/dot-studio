@@ -560,11 +560,6 @@ export default function CanvasArea() {
         if (isActEditFocus) {
             selectActPerformer(null);
             selectRelation(null);
-            return;
-        }
-        // Close Act edit mode when clicking on empty canvas
-        if (editingActId) {
-            useStudioStore.getState().toggleActEdit(editingActId);
         }
     }, [clearTransformTarget, closeEditor, selectMarkdownEditor, selectPerformer, selectAct, editingActId, isActEditFocus, selectActPerformer, selectRelation]);
 
