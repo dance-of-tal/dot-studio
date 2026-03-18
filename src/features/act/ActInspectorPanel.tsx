@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import type { ActRelation } from '../../types'
+import ActThreadSelector from './ActThreadSelector'
 import './ActInspectorPanel.css'
 
 // ── Act Meta View ───────────────────────────────────────
@@ -101,6 +102,11 @@ function ActMetaView() {
                         <span>{act.relations.length} relations</span>
                     </div>
                 </div>
+            </div>
+
+            {/* Thread Management */}
+            <div className="act-panel__section">
+                <ActThreadSelector actId={editingActId} />
             </div>
 
             {/* Validation */}

@@ -4,11 +4,12 @@
  * Always renders ActChatPanel (chat mode).
  * Edit button enters Act edit focus mode (separate canvas view with ActPerformerFrame nodes).
  */
-import { useMemo } from 'react'
-import { Workflow, Pencil, EyeOff } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Workflow, Pencil, EyeOff, Activity } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
 import ActChatPanel from './ActChatPanel'
+import ActActivityView from './ActActivityView'
 import './ActFrame.css'
 
 export default function ActFrame({ data, id }: any) {
@@ -18,9 +19,11 @@ export default function ActFrame({ data, id }: any) {
         enterActEditFocus,
         toggleActVisibility,
         updateActSize,
+        activeThreadId,
     } = useStudioStore()
 
     const act = useMemo(() => acts.find((a) => a.id === id), [acts, id])
+    const [showActivity, setShowActivity] = useState(false)
     if (!act) return null
 
     const isSelected = selectedActId === id
@@ -57,6 +60,13 @@ export default function ActFrame({ data, id }: any) {
             headerEnd={
                 <div className="act-frame__header-actions">
                     <button
+                        className={`icon-btn act-frame__activity-btn ${showActivity ? 'active' : ''}`}
+                        title="Activity"
+                        onClick={() => setShowActivity(!showActivity)}
+                    >
+                        <Activity size={11} />
+                    </button>
+                    <button
                         className="icon-btn act-frame__edit-btn"
                         title="Edit Act"
                         onClick={() => enterActEditFocus(id)}
@@ -73,7 +83,11 @@ export default function ActFrame({ data, id }: any) {
                 </div>
             }
         >
-            <ActChatPanel actId={id} />
+            {showActivity ? (
+                <ActActivityView actId={id} threadId={activeThreadId} />
+            ) : (
+                <ActChatPanel actId={id} />
+            )}
         </CanvasWindowFrame>
     )
 }
