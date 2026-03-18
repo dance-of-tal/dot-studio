@@ -26,6 +26,17 @@
     max-width: 180px;
 }
 
+.act-frame__thread-chip {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--act-accent) 15%, transparent);
+    color: var(--act-accent);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 /* ── Header actions ── */
 .act-frame__header-actions {
     display: flex;

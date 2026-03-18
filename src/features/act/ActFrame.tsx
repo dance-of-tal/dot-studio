@@ -20,6 +20,7 @@ export default function ActFrame({ data, id }: any) {
         toggleActVisibility,
         updateActSize,
         activeThreadId,
+        actThreads,
     } = useStudioStore()
 
     const act = useMemo(() => acts.find((a) => a.id === id), [acts, id])
@@ -55,6 +56,18 @@ export default function ActFrame({ data, id }: any) {
                 <div className="act-frame__title" onClick={() => useStudioStore.getState().selectAct(id)}>
                     <Workflow size={12} className="act-frame__icon" />
                     <span className="act-frame__name">{act.name}</span>
+                    {(() => {
+                        const threads = actThreads[id] || []
+                        const currentIdx = threads.findIndex((t) => t.id === activeThreadId)
+                        if (threads.length > 0 && currentIdx >= 0) {
+                            return (
+                                <span className="act-frame__thread-chip">
+                                    #{currentIdx + 1}
+                                </span>
+                            )
+                        }
+                        return null
+                    })()}
                 </div>
             }
             headerEnd={

@@ -6,7 +6,7 @@
  * Wake-up prompts are visually distinguished from user input.
  */
 import { useState, useCallback, useMemo, useRef } from 'react'
-import { Send, Square, Workflow, Users, Plus } from 'lucide-react'
+import { Send, Square, Workflow, Users, Plus, User, Circle } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { hasModelConfig } from '../../lib/performers'
 import ThreadBody from '../chat/ThreadBody'
@@ -97,17 +97,22 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             {/* Thread selector mini bar */}
             {threads.length > 0 && (
                 <div className="act-chat__thread-bar">
-                    {threads.map((thread) => (
-                        <button
-                            key={thread.id}
-                            className={`act-chat__thread-tab ${thread.id === currentThread?.id ? 'act-chat__thread-tab--active' : ''}`}
-                            onClick={() => selectThread(thread.id)}
-                            title={`Thread ${thread.id.slice(0, 6)} (${thread.status})`}
-                        >
-                            <Workflow size={9} />
-                            <span>{thread.id.slice(0, 6)}</span>
-                        </button>
-                    ))}
+                    {threads.map((thread, idx) => {
+                        const statusCls = thread.status === 'active' ? 'act-chat__status--active'
+                            : thread.status === 'completed' ? 'act-chat__status--done'
+                            : 'act-chat__status--idle'
+                        return (
+                            <button
+                                key={thread.id}
+                                className={`act-chat__thread-tab ${thread.id === currentThread?.id ? 'act-chat__thread-tab--active' : ''}`}
+                                onClick={() => selectThread(thread.id)}
+                                title={`Thread #${idx + 1} (${thread.status})`}
+                            >
+                                <span className={`act-chat__status-dot ${statusCls}`} />
+                                <span>#{idx + 1}</span>
+                            </button>
+                        )
+                    })}
                     <button
                         className="act-chat__thread-tab act-chat__thread-tab--add"
                         onClick={handleCreateThread}
@@ -119,19 +124,31 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             )}
 
             {/* Performer tabs */}
-            {performerKeys.length > 1 && (
-                <div className="act-chat__filters">
-                    {performerKeys.map((key) => (
-                        <button
-                            key={key}
-                            className={`act-chat__filter-tab ${activePerformerKey === key ? 'act-chat__filter-tab--active' : ''}`}
-                            onClick={() => selectThreadPerformer(key)}
-                        >
-                            {key}
-                        </button>
-                    ))}
-                </div>
-            )}
+            <div className="act-chat__filters">
+                {performerKeys.length === 1 ? (
+                    <span className="act-chat__performer-label">
+                        <User size={10} />
+                        <span>{performerKeys[0]}</span>
+                        {isLoading && <Circle size={6} className="act-chat__loading-dot" />}
+                    </span>
+                ) : (
+                    performerKeys.map((key) => {
+                        const isActive = activePerformerKey === key
+                        const isKeyLoading = chatKey && loadingPerformerId === `act:${actId}:${key}`
+                        return (
+                            <button
+                                key={key}
+                                className={`act-chat__filter-tab ${isActive ? 'act-chat__filter-tab--active' : ''}`}
+                                onClick={() => selectThreadPerformer(key)}
+                            >
+                                <User size={10} />
+                                <span>{key}</span>
+                                {isKeyLoading && <Circle size={5} className="act-chat__loading-dot" />}
+                            </button>
+                        )
+                    })
+                )}
+            </div>
 
             {/* Thread */}
             <ThreadBody
@@ -157,26 +174,36 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                     <div className="act-chat__empty">
                         {noPerformers ? (
                             <>
-                                <Users size={16} />
-                                <span>Add performers to start</span>
+                                <Users size={20} className="act-chat__empty-icon" />
+                                <strong>No performers bound</strong>
+                                <span>Drag performers onto the Act canvas, or use Edit mode to bind them.</span>
+                                <button
+                                    className="act-chat__action-btn"
+                                    onClick={() => useStudioStore.getState().enterActEditFocus(actId)}
+                                >
+                                    <Workflow size={11} /> Edit Act
+                                </button>
                             </>
                         ) : !modelConfigured ? (
                             <>
-                                <Workflow size={16} />
-                                <span>Configure a model for this performer</span>
+                                <User size={20} className="act-chat__empty-icon" />
+                                <strong>Model not configured</strong>
+                                <span>Set up a model for &ldquo;{activePerformerKey}&rdquo; in the performer editor.</span>
                             </>
                         ) : threads.length === 0 ? (
                             <>
-                                <Workflow size={16} />
-                                <span>Create a thread to start collaboration</span>
-                                <button className="act-chat__create-btn" onClick={handleCreateThread}>
-                                    <Plus size={12} /> New Thread
+                                <Workflow size={20} className="act-chat__empty-icon" />
+                                <strong>Ready to collaborate</strong>
+                                <span>Create a thread to start the choreography.</span>
+                                <button className="act-chat__action-btn" onClick={handleCreateThread}>
+                                    <Plus size={11} /> New Thread
                                 </button>
                             </>
                         ) : (
                             <>
-                                <Workflow size={16} />
-                                <span>Send a message to {activePerformerKey}</span>
+                                <User size={20} className="act-chat__empty-icon" />
+                                <strong>Chat with {activePerformerKey}</strong>
+                                <span>Send a message below to start the conversation.</span>
                             </>
                         )}
                     </div>

@@ -66,13 +66,12 @@ export default function ActPerformerFrame({ id }: any) {
                 headerEnd={(
                     <div className="canvas-frame__header-actions">
                         <button
-                            className="icon-btn"
+                            className="icon-btn act-performer-node__remove-btn"
                             title="Remove from Act"
                             onClick={(e) => {
                                 e.stopPropagation()
                                 handleRemove()
                             }}
-                            style={{ padding: '0 4px', opacity: 0.7 }}
                         >
                             <Trash2 size={11} />
                         </button>
@@ -91,18 +90,26 @@ export default function ActPerformerFrame({ id }: any) {
                             <span>{binding.activeDanceIds.length} dance{binding.activeDanceIds.length !== 1 ? 's' : ''}</span>
                         </div>
                     )}
-                    {subCount > 0 && (
+                    {subCount > 0 ? (
                         <div className="act-performer-body__subs">
                             <Mail size={11} />
-                            <span>{subCount} subscription{subCount !== 1 ? 's' : ''}</span>
-                            <span className="act-performer-body__sub-detail">
-                                {subs.messagesFrom && subs.messagesFrom.length > 0 && `from: ${subs.messagesFrom.join(', ')}`}
-                            </span>
+                            <span className="act-performer-body__sub-title">{subCount} subscription{subCount !== 1 ? 's' : ''}</span>
+                            <div className="act-performer-body__sub-tags">
+                                {(subs.messagesFrom || []).map((v) => (
+                                    <span key={`from-${v}`} className="act-performer-body__tag act-performer-body__tag--from">from: {v}</span>
+                                ))}
+                                {(subs.messageTags || []).map((v) => (
+                                    <span key={`tag-${v}`} className="act-performer-body__tag act-performer-body__tag--tag">#{v}</span>
+                                ))}
+                                {(subs.boardKeys || []).map((v) => (
+                                    <span key={`board-${v}`} className="act-performer-body__tag act-performer-body__tag--board">{v}</span>
+                                ))}
+                            </div>
                         </div>
-                    )}
-                    {subCount === 0 && (
+                    ) : (
                         <div className="act-performer-body__hint">
-                            No subscriptions — click to configure
+                            <Mail size={11} />
+                            <span>No subscriptions — click to configure</span>
                         </div>
                     )}
                 </div>
