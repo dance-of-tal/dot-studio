@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { StudioState, ActSlice } from './types'
 import type { StageAct, StageActPerformerBinding, ActRelation } from '../types'
+import { api } from '../api'
 
 const ACT_DEFAULT_WIDTH = 340
 const ACT_DEFAULT_HEIGHT = 80
@@ -15,6 +16,11 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     editingActId: null,
     selectedActPerformerKey: null,
     selectedRelationId: null,
+
+    // ── Thread state ────────────────────────────────────
+    actThreads: {},
+    activeThreadId: null,
+    activeThreadPerformerKey: null,
 
     // ── Act Definition CRUD ─────────────────────────────
 
@@ -373,6 +379,54 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             acts: [...s.acts, newAct],
             selectedActId: id,
             stageDirty: true,
+        }))
+    },
+
+    // ── Thread management ────────────────────────────────
+
+    createThread: async (actId) => {
+        const result = await api.actRuntime.createThread(actId)
+        const thread = result.thread
+        set((s) => ({
+            actThreads: {
+                ...s.actThreads,
+                [actId]: [
+                    ...(s.actThreads[actId] || []),
+                    {
+                        id: thread.id,
+                        actId: thread.actId,
+                        status: thread.status as any,
+                        performerSessions: {},
+                        createdAt: thread.createdAt,
+                    },
+                ],
+            },
+            activeThreadId: thread.id,
+        }))
+        return thread.id
+    },
+
+    selectThread: (threadId) => {
+        set({ activeThreadId: threadId, activeThreadPerformerKey: null })
+    },
+
+    selectThreadPerformer: (performerKey) => {
+        set({ activeThreadPerformerKey: performerKey })
+    },
+
+    loadThreads: async (actId) => {
+        const result = await api.actRuntime.listThreads(actId)
+        set((s) => ({
+            actThreads: {
+                ...s.actThreads,
+                [actId]: result.threads.map((t) => ({
+                    id: t.id,
+                    actId: t.actId,
+                    status: t.status as any,
+                    performerSessions: t.performerSessions || {},
+                    createdAt: t.createdAt,
+                })),
+            },
         }))
     },
 })

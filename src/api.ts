@@ -246,33 +246,7 @@ export const api = {
                 attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
                 mentions?: Array<{ performerId: string }>
                 actId?: string
-                actRelations?: Array<{
-                    id: string
-                    from: string
-                    to: string
-                    name: string
-                    description: string
-                    invocation: 'optional' | 'required'
-                    await: boolean
-                    sessionPolicy: 'fresh' | 'reuse'
-                    maxCalls: number
-                    timeout: number
-                }>
-                relatedPerformers?: Array<{
-                    performerId: string
-                    performerName: string
-                    description?: string
-                    talRef: AssetRef | null
-                    danceRefs: AssetRef[]
-                    model?: ModelConfig | null
-                    modelVariant?: string | null
-                    mcpServerNames?: string[]
-                    relatedPerformerIds?: Array<{
-                        performerId: string
-                        performerName: string
-                        description?: string
-                    }>
-                }>
+                actThreadId?: string
             }
         ) =>
             postJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, payload satisfies ChatSendRequest),
@@ -317,6 +291,29 @@ export const api = {
             
         rejectQuestion: (questionId: string) =>
             postJSON<{ ok: boolean }>(`/api/chat/questions/${questionId}/reject`),
+    },
+
+    // ── Act Runtime ─────────────────────────────────────
+    actRuntime: {
+        createThread: (actId: string) =>
+            postJSON<{ ok: boolean; thread: { id: string; actId: string; status: string; createdAt: number } }>(
+                `/api/act/${actId}/threads`,
+            ),
+
+        listThreads: (actId: string) =>
+            fetchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: string; createdAt: number; performerSessions: Record<string, string> }> }>(
+                `/api/act/${actId}/threads`,
+            ),
+
+        getThread: (actId: string, threadId: string) =>
+            fetchJSON<{ ok: boolean; thread: any }>(
+                `/api/act/${actId}/thread/${threadId}`,
+            ),
+
+        events: (actId: string, threadId: string, count = 50) =>
+            fetchJSON<{ ok: boolean; events: any[] }>(
+                `/api/act/${actId}/thread/${threadId}/events?count=${count}`,
+            ),
     },
 
     safe: {

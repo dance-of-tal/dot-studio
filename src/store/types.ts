@@ -232,12 +232,25 @@ export interface SafeModeSlice {
     undoLastSafeApply: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<void>
 }
 
+export interface ActThreadState {
+    id: string
+    actId: string
+    status: 'active' | 'idle' | 'completed' | 'interrupted'
+    performerSessions: Record<string, string>  // performerKey → sessionId
+    createdAt: number
+}
+
 export interface ActSlice {
     acts: StageAct[]
     selectedActId: string | null
     editingActId: string | null
     selectedActPerformerKey: string | null
     selectedRelationId: string | null
+
+    // ── Act Thread state ────────────────────────
+    actThreads: Record<string, ActThreadState[]>  // actId → threads
+    activeThreadId: string | null
+    activeThreadPerformerKey: string | null
 
     // ── Act Definition CRUD ─────────────────────
     addAct: (name: string) => string
@@ -273,6 +286,12 @@ export interface ActSlice {
     // ── Authoring / import ──────────────────────
     updateActAuthoringMeta: (id: string, meta: StageAct['meta']) => void
     importActFromAsset: (asset: any) => void
+
+    // ── Thread management ───────────────────────
+    createThread: (actId: string) => Promise<string>
+    selectThread: (threadId: string | null) => void
+    selectThreadPerformer: (performerKey: string | null) => void
+    loadThreads: (actId: string) => Promise<void>
 }
 
 
