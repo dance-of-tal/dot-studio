@@ -332,8 +332,8 @@ export const createChatSlice: StateCreator<
             try {
                 get().initRealtimeEvents()
 
-                // Choreography model: no relatedPerformers or actRelations needed.
-                // Delegation happens via mailbox tools (send_message, post_to_board, etc.)
+                // Choreography model: performer collaboration uses mailbox tools (send_message, post_to_board)
+                // No relatedPerformers needed — Act context + tools are injected server-side
                 await api.chat.send(sessionId, {
                     message: text,
                     performer: {

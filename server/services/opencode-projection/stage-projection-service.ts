@@ -12,8 +12,41 @@ import {
 } from './projection-manifest.js'
 import { compileDance, type CompiledSkill } from './dance-compiler.js'
 import { compilePerformer, type CompiledPerformer, type PerformerCompileInput, type Posture } from './performer-compiler.js'
-import { compileMentionRelations, type RequestRelationTarget } from './relation-compiler.js'
 import type { ModelSelection } from '../../../shared/model-types.js'
+
+// ── @mention relation support (inlined from deleted relation-compiler.ts) ──
+
+interface RequestRelationTarget {
+    performerId: string
+    performerName: string
+    agentName: string
+    description?: string
+}
+
+interface CompiledRequestRelations {
+    taskAllowlist: string[]
+    promptSection: string | null
+}
+
+function compileMentionRelations(targets: RequestRelationTarget[]): CompiledRequestRelations {
+    if (targets.length === 0) {
+        return { taskAllowlist: [], promptSection: null }
+    }
+    const lines = [
+        '# Available Agents',
+        '',
+        'The following agents are available for @mention in this context.',
+        'Use the `task` tool only when it is actually useful, and only with the allowed agent names below.',
+        '',
+    ]
+    for (const target of targets) {
+        lines.push(`- **${target.performerName}**: use \`task\` with agent="${target.agentName}"${target.description ? ` — ${target.description}` : ''}`)
+    }
+    return {
+        taskAllowlist: targets.map((target) => target.agentName),
+        promptSection: lines.join('\n'),
+    }
+}
 
 type AssetRef =
     | { kind: 'registry'; urn: string }

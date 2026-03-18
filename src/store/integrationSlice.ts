@@ -130,10 +130,7 @@ export const createIntegrationSlice: StateCreator<
         })
     }
 
-    // Act event source removed (Phase 2 pending)
-    const reconnectActEventSource = () => {
-        // no-op — Act runtime events were removed
-    }
+    // Act runtime events use polling (ActActivityView) — no SSE needed
 
     const reconnectAdapterEventSource = () => {
         reconnectManagedEventSource({
@@ -176,7 +173,6 @@ export const createIntegrationSlice: StateCreator<
 
         initRealtimeEvents: () => {
             reconnectEventSource()
-            reconnectActEventSource()
             reconnectAdapterEventSource()
         },
 
@@ -207,7 +203,7 @@ export const createIntegrationSlice: StateCreator<
                 return '// Prompt preview unavailable.'
             }
             try {
-                // Standalone performers no longer have edges — delegation only inside Act
+                // Standalone performers pass empty relatedPerformers (Act uses mailbox tools instead)
                 const relatedPerformers: Array<{ performerId: string; performerName: string; description: string }> = []
                 const res = await api.compile(
                     performer.id,
