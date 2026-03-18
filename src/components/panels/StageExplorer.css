@@ -528,3 +528,44 @@
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* ── Thread Card Meta (show for acts) ────────────────── */
+.thread-card__meta {
+    display: block;
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+/* ── Thread Status Indicators ────────────────────────── */
+.thread-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--font-base);
+}
+
+.thread-status-dot {
+    font-size: 8px;
+    line-height: 1;
+}
+
+.thread-status--active {
+    color: #10b981;
+}
+
+.thread-status--completed {
+    color: var(--text-muted);
+}
+
+.thread-status--interrupted {
+    color: #f59e0b;
+}
+
+.thread-status--idle {
+    color: var(--text-muted);
+    opacity: 0.5;
+}

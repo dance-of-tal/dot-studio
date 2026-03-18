@@ -14,18 +14,19 @@ import {
 } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import type { ActRelation } from '../../types'
-import ActThreadSelector from './ActThreadSelector'
 import './ActInspectorPanel.css'
 
 // ── Act Meta View ───────────────────────────────────────
 function ActMetaView() {
     const { acts, editingActId, renameAct, updateActAuthoringMeta, updateActDescription } = useStudioStore()
+    const updateActRules = useStudioStore((s) => s.updateActRules)
     const act = acts.find((a) => a.id === editingActId)
     if (!act || !editingActId) return null
 
     const meta = act.meta?.authoring || {}
     const [localName, setLocalName] = useState(act.name)
     const [localDesc, setLocalDesc] = useState(act.description || meta.description || '')
+    const [ruleInput, setRuleInput] = useState('')
 
     useEffect(() => {
         setLocalName(act.name)
@@ -104,9 +105,33 @@ function ActMetaView() {
                 </div>
             </div>
 
-            {/* Thread Management */}
+            {/* Act Rules */}
             <div className="act-panel__section">
-                <ActThreadSelector actId={editingActId} />
+                <label className="act-panel__label">Act Rules</label>
+                <div className="act-panel__tags">
+                    {(act.actRules || []).map((rule, i) => (
+                        <span key={i} className="act-panel__tag" onClick={() => {
+                            const updated = (act.actRules || []).filter((_, idx) => idx !== i)
+                            updateActRules(editingActId, updated)
+                        }}>
+                            {rule} ×
+                        </span>
+                    ))}
+                </div>
+                <div className="act-panel__sub-input-row">
+                    <input
+                        className="act-panel__input act-panel__input--small"
+                        value={ruleInput}
+                        onChange={(e) => setRuleInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && ruleInput.trim()) {
+                                updateActRules(editingActId, [...(act.actRules || []), ruleInput.trim()])
+                                setRuleInput('')
+                            }
+                        }}
+                        placeholder="Add rule (e.g. 'All code must have tests')"
+                    />
+                </div>
             </div>
 
             {/* Validation */}

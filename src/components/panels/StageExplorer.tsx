@@ -92,6 +92,9 @@ export default function StageExplorer() {
     const removeAct = useStudioStore((s) => s.removeAct);
     const enterActEditFocus = useStudioStore((s) => s.enterActEditFocus);
     const toggleActVisibility = useStudioStore((s) => s.toggleActVisibility);
+    const actThreads = useStudioStore((s) => s.actThreads);
+    const activeThreadId = useStudioStore((s) => s.activeThreadId);
+    const createThread = useStudioStore((s) => s.createThread);
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -457,10 +460,14 @@ export default function StageExplorer() {
                             </div>
                         );
                     })}{acts.map((act) => {
+                        const actKey = `act-${act.id}`;
                         const isActSelected = selectedActId === act.id;
                         const performerCount = Object.keys(act.performers).length;
+                        const actExpanded = expandedRows[actKey] ?? false;
+                        const threads = actThreads[act.id] || [];
+
                         return (
-                            <div key={`act-${act.id}`} className="thread-group">
+                            <div key={actKey} className="thread-group">
                                 <div
                                     role="button"
                                     tabIndex={0}
@@ -485,19 +492,37 @@ export default function StageExplorer() {
                                         }
                                     }}
                                 >
+                                    {/* Toggle chevron */}
+                                    <span
+                                        className={`thread-card__chevron ${actExpanded ? 'is-open' : ''}`}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            toggleExpanded(actKey);
+                                        }}
+                                    >
+                                        <ChevronRight size={12} />
+                                    </span>
+
                                     <span className="thread-card__icon">
                                         <Workflow size={13} />
                                     </span>
                                     <span className="thread-card__body">
                                         <span className="thread-card__name">{act.name}</span>
                                         <span className="thread-card__meta">
-                                            {performerCount}p · {act.relations.length}r
+                                            {performerCount}p · {act.relations.length}r · {threads.length}t
                                         </span>
                                     </span>
                                     <span
                                         className="thread-card__actions"
                                         onClick={(event) => event.stopPropagation()}
                                     >
+                                        <button
+                                            className="icon-btn"
+                                            onClick={() => createThread(act.id)}
+                                            title="New Thread"
+                                        >
+                                            <Plus size={11} />
+                                        </button>
                                         <button
                                             className="icon-btn"
                                             onClick={() => enterActEditFocus(act.id)}
@@ -534,9 +559,35 @@ export default function StageExplorer() {
                                         </button>
                                     </span>
                                 </div>
-                                {isActSelected && performerCount > 0 && (
-                                    <div className="act-chat-input" style={{ padding: '4px 8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
-                                        ⚡ {performerCount} performer{performerCount !== 1 ? 's' : ''} bound
+                                {actExpanded && (
+                                    <div className="thread-children">
+                                        {threads.length > 0 ? threads.map((thread) => {
+                                            const isThreadActive = activeThreadId === thread.id;
+                                            const statusIcon = thread.status === 'active' ? '●' : thread.status === 'completed' ? '✓' : '⏸';
+                                            const statusClass = `thread-status--${thread.status || 'idle'}`;
+                                            return (
+                                                <LayerRow
+                                                    key={thread.id}
+                                                    icon={<MessageSquare size={11} className={isThreadActive ? 'icon-active' : 'icon-muted'} />}
+                                                    label={
+                                                        <span className="thread-label">
+                                                            <span className={`thread-status-dot ${statusClass}`}>{statusIcon}</span>
+                                                            Thread {thread.id.slice(0, 6)}
+                                                        </span>
+                                                    }
+                                                    meta={new Date(thread.createdAt).toLocaleTimeString()}
+                                                    active={isThreadActive}
+                                                    onClick={() => {
+                                                        useStudioStore.setState({ activeThreadId: thread.id });
+                                                        selectAct(act.id);
+                                                    }}
+                                                />
+                                            );
+                                        }) : (
+                                            <div className="empty-state empty-state--tight empty-state--nested">
+                                                No threads — click + to create one
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
