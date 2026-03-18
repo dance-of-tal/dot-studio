@@ -6,7 +6,7 @@
  */
 
 import { nanoid } from 'nanoid'
-import type { ActThread, ActThreadStatus, MailboxEvent } from '../../../shared/act-types.js'
+import type { ActThread, ActThreadStatus, MailboxEvent, ActDefinition } from '../../../shared/act-types.js'
 import { Mailbox } from './mailbox.js'
 import { EventLogger } from './event-logger.js'
 import { saveBoardToFile, loadBoardFromFile } from './board-persistence.js'
@@ -17,6 +17,7 @@ interface ThreadRuntime {
     thread: ActThread
     mailbox: Mailbox
     eventLogger: EventLogger
+    actDefinition?: ActDefinition  // stored from client on thread creation
 }
 
 // ── ThreadManager ───────────────────────────────────────
@@ -31,7 +32,7 @@ export class ThreadManager {
 
     // ── Thread CRUD ─────────────────────────────────
 
-    createThread(actId: string): ActThread {
+    createThread(actId: string, actDefinition?: ActDefinition): ActThread {
         const thread: ActThread = {
             id: nanoid(),
             actId,
@@ -48,7 +49,7 @@ export class ThreadManager {
         const mailbox = new Mailbox()
         const eventLogger = new EventLogger(this._workingDir, actId, thread.id)
 
-        this.threads.set(thread.id, { thread, mailbox, eventLogger })
+        this.threads.set(thread.id, { thread, mailbox, eventLogger, actDefinition })
         return thread
     }
 
@@ -73,6 +74,11 @@ export class ThreadManager {
             }
         }
         return results
+    }
+
+    /** Get the Act definition for a thread (stored from client on creation) */
+    getActDefinition(threadId: string): ActDefinition | undefined {
+        return this.threads.get(threadId)?.actDefinition
     }
 
     // ── Status transitions ──────────────────────────

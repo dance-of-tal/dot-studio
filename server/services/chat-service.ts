@@ -6,6 +6,23 @@ import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-err
 import { getSafeOwnerExecutionDir } from '../lib/safe-mode.js'
 import { registerSessionExecutionContext } from '../lib/session-execution.js'
 import { ensurePerformerProjection } from './opencode-projection/stage-projection-service.js'
+import { projectActTools, writeActToolFiles } from './act-runtime/act-tool-projection.js'
+
+// Shared ThreadManager for Act runtime tools
+let _getThreadManager: ((workingDir: string) => import('./act-runtime/thread-manager.js').ThreadManager) | null = null
+
+async function getThreadManager(workingDir: string) {
+    if (!_getThreadManager) {
+        const mod = await import('./act-runtime/thread-manager.js')
+        // Use lazy singleton matching act-runtime routes
+        let tm: InstanceType<typeof mod.ThreadManager> | null = null
+        _getThreadManager = (wd: string) => {
+            if (!tm) tm = new mod.ThreadManager(wd)
+            return tm
+        }
+    }
+    return _getThreadManager(workingDir)
+}
 
 export async function createStudioChatSession(
     cwd: string,
@@ -57,9 +74,32 @@ export async function sendStudioChatMessage(
         ? performer.performerId.split(':').slice(2).join(':')
         : performer.performerId
 
-    // Note: In the choreography model, inter-performer communication is handled
-    // by the mailbox event router (Phase 2), not by custom tool projection here.
-    // This function now only handles single-performer chat projection.
+    // ── Act tool projection ─────────────────────────────
+    // When running in Act context with a thread, project Act runtime tools
+    // (send_message, post_to_board, read_board, set_wake_condition) into the session.
+    let actExtraTools: Array<{ name: string; content: string }> = []
+    let actContextPrefix = ''
+
+    if (request.actId && request.actThreadId) {
+        try {
+            const tm = await getThreadManager(workingDir)
+            const actDef = tm.getActDefinition(request.actThreadId)
+            if (actDef) {
+                const projection = projectActTools(
+                    rawPerformerId,
+                    actDef,
+                    request.actThreadId,
+                    executionDir,
+                )
+                // Write tool files to execution dir
+                await writeActToolFiles(executionDir, projection)
+                actExtraTools = projection.tools
+                actContextPrefix = projection.contextPrompt
+            }
+        } catch (err) {
+            console.warn('[chat-service] Act tool projection failed:', err)
+        }
+    }
 
     // ── Studio Assistant — agent projected at stage-save / activate time.
     //    Fallback: re-ensure here in case files were deleted or never created.
@@ -97,6 +137,8 @@ export async function sendStudioChatMessage(
             executionDir,
             workingDir,
             ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
+            // Pass Act runtime tools as extraTools so they're included in projection
+            ...(actExtraTools.length > 0 ? { extraTools: actExtraTools } : {}),
         })
     }
 
@@ -108,7 +150,7 @@ export async function sendStudioChatMessage(
         )
     }
 
-    const parts: any[] = [{ type: 'text', text: request.message }]
+    const parts: any[] = [{ type: 'text', text: actContextPrefix ? `${actContextPrefix}\n\n---\n\n${request.message}` : request.message }]
     if (request.attachments && request.attachments.length > 0) {
         if (ensured.capabilitySnapshot && !ensured.capabilitySnapshot.attachment) {
             throw new StudioValidationError(

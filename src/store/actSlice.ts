@@ -385,7 +385,24 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     // ── Thread management ────────────────────────────────
 
     createThread: async (actId) => {
-        const result = await api.actRuntime.createThread(actId)
+        const act = get().acts.find((a) => a.id === actId)
+        // Build ActDefinition to send to server for tool projection
+        const actDefinition = act ? {
+            id: act.id,
+            name: act.name,
+            description: act.description,
+            actRules: act.actRules,
+            performers: Object.fromEntries(
+                Object.entries(act.performers).map(([key, binding]) => [key, {
+                    performerRef: binding.performerRef,
+                    activeDanceIds: binding.activeDanceIds,
+                    subscriptions: binding.subscriptions,
+                }]),
+            ),
+            relations: act.relations,
+        } : undefined
+
+        const result = await api.actRuntime.createThread(actId, actDefinition)
         const thread = result.thread
         set((s) => ({
             actThreads: {

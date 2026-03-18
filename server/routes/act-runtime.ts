@@ -11,6 +11,7 @@ import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import type { MailboxEvent } from '../../shared/act-types.js'
 import { ThreadManager } from '../services/act-runtime/thread-manager.js'
 import { SafetyGuard } from '../services/act-runtime/safety-guard.js'
+import { processWakeCascade } from '../services/act-runtime/wake-cascade.js'
 
 // ── Singleton runtime state ─────────────────────────────
 // In production these would be injected; for now, use module-level singletons.
@@ -90,7 +91,14 @@ actRuntime.post('/api/act/:actId/thread/:threadId/send-message', async (c) => {
         return c.json({ ok: true, warning: budgetCheck.reason })
     }
 
-    return c.json({ ok: true, messageId: message.id })
+    // Wake-up cascade: route event → wake target performers
+    const actDef = tm.getActDefinition(threadId)
+    let cascade = null
+    if (actDef) {
+        cascade = await processWakeCascade(event, actDef, runtime.mailbox, tm, threadId)
+    }
+
+    return c.json({ ok: true, messageId: message.id, cascade })
 })
 
 // ── Post to Board ───────────────────────────────────────
@@ -148,7 +156,14 @@ actRuntime.post('/api/act/:actId/thread/:threadId/post-to-board', async (c) => {
         }
         await tm.logEvent(threadId, event)
 
-        return c.json({ ok: true, entryId: entry.id, version: entry.version })
+        // Wake-up cascade: route event → wake target performers
+        const actDef = tm.getActDefinition(threadId)
+        let cascade = null
+        if (actDef) {
+            cascade = await processWakeCascade(event, actDef, runtime.mailbox, tm, threadId)
+        }
+
+        return c.json({ ok: true, entryId: entry.id, version: entry.version, cascade })
     } catch (err: any) {
         return c.json({ ok: false, error: err.message }, 403)
     }
@@ -204,8 +219,9 @@ actRuntime.post('/api/act/:actId/thread/:threadId/set-wake-condition', async (c)
 actRuntime.post('/api/act/:actId/threads', async (c) => {
     const actId = c.req.param('actId')
     const workingDir = resolveRequestWorkingDir(c)
+    const body = await c.req.json<{ actDefinition?: any }>().catch(() => ({ actDefinition: undefined }))
     const tm = getThreadManager(workingDir)
-    const thread = tm.createThread(actId)
+    const thread = tm.createThread(actId, body.actDefinition)
     return c.json({ ok: true, thread })
 })
 

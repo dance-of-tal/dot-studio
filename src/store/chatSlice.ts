@@ -349,6 +349,7 @@ export const createChatSlice: StateCreator<
                         planMode: runtimeConfig.planMode,
                     },
                     actId,
+                    actThreadId: get().activeThreadId || undefined,
                 })
                 scheduleSessionFallbackSync(set as any, get, chatKey, sessionId, Date.now())
             } catch (err: any) {

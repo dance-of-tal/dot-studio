@@ -295,9 +295,10 @@ export const api = {
 
     // ── Act Runtime ─────────────────────────────────────
     actRuntime: {
-        createThread: (actId: string) =>
+        createThread: (actId: string, actDefinition?: any) =>
             postJSON<{ ok: boolean; thread: { id: string; actId: string; status: string; createdAt: number } }>(
                 `/api/act/${actId}/threads`,
+                actDefinition ? { actDefinition } : undefined,
             ),
 
         listThreads: (actId: string) =>
