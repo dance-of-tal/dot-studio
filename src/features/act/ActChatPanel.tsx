@@ -1,12 +1,12 @@
 /**
- * ActChatPanel — Chat mode for Act canvas node.
+ * ActChatPanel — Thread-based performer chat for Act canvas node.
  *
- * Uses the entry performer's Act-namespaced session for messaging.
- * Session key: `act:{actId}:{entryKey}` — isolated from standalone performer sessions.
- * Includes per-performer filter tabs to show messages by performer.
+ * Choreography model: each Thread has independent performer sessions.
+ * User interacts with individual performers via tabs.
+ * Wake-up prompts are visually distinguished from user input.
  */
 import { useState, useCallback, useMemo, useRef } from 'react'
-import { Send, Square, Zap, Users } from 'lucide-react'
+import { Send, Square, Workflow, Users, Plus } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { hasModelConfig } from '../../lib/performers'
 import ThreadBody from '../chat/ThreadBody'
@@ -21,59 +21,56 @@ interface ActChatPanelProps {
 export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const {
         acts, chats, loadingPerformerId, sendActMessage, abortChat,
+        actThreads, activeThreadId, activeThreadPerformerKey,
+        createThread, selectThread, selectThreadPerformer,
     } = useStudioStore()
 
     const act = useMemo(() => acts.find((a) => a.id === actId), [acts, actId])
     const [input, setInput] = useState('')
-    const [filter, setFilter] = useState<string | null>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
 
-    // Use first performer key as default entry (choreography model has no entryPerformerKey)
-    const entryKey = act ? Object.keys(act.performers)[0] : null
-    const entryPerformer = entryKey ? act?.performers[entryKey] : null
+    // Thread state
+    const threads = actThreads[actId] || []
+    const currentThread = threads.find((t) => t.id === activeThreadId) || threads[0] || null
 
-    // Namespaced chat key matching chatSlice convention
-    const chatKey = entryKey ? `act:${actId}:${entryKey}` : null
+    // Active performer in thread
+    const performerKeys = act ? Object.keys(act.performers) : []
+    const activePerformerKey = activeThreadPerformerKey || performerKeys[0] || null
 
-    // Messages from the Act's namespaced session
-    const allMessages: ChatMessage[] = useMemo(() => {
+    // Namespaced chat key for this thread+performer
+    const chatKey = activePerformerKey && currentThread
+        ? `act:${actId}:${activePerformerKey}`
+        : null
+
+    // Messages
+    const messages: ChatMessage[] = useMemo(() => {
         if (!chatKey) return []
         return chats[chatKey] || []
     }, [chats, chatKey])
 
-    // Filter messages by performer (agent name in metadata)
-    const messages = useMemo(() => {
-        if (!filter) return allMessages
-        return allMessages.filter((m) => {
-            if (m.role === 'system') return true
-            if (m.role === 'user') return filter === entryKey
-            // Assistant messages — match by metadata.agentName
-            return m.metadata?.agentName === filter
-        })
-    }, [allMessages, filter, entryKey])
-
     const isLoading = chatKey ? loadingPerformerId === chatKey : false
 
-    // In choreography model, resolve performer model from standalone performers by ref
+    // Resolve performer model from ref binding
     const resolvedPerformer = (() => {
-        if (!entryPerformer) return null
-        const ref = entryPerformer.performerRef
+        if (!act || !activePerformerKey) return null
+        const binding = act.performers[activePerformerKey]
+        if (!binding) return null
+        const ref = binding.performerRef
         if (ref.kind === 'draft') {
             return useStudioStore.getState().performers.find((p) => p.id === ref.draftId) || null
         } else {
             return useStudioStore.getState().performers.find((p) => p.meta?.derivedFrom === ref.urn) || null
         }
     })()
-    const entryModel = resolvedPerformer?.model || null
-    const modelConfigured = hasModelConfig(entryModel)
+    const modelConfigured = hasModelConfig(resolvedPerformer?.model || null)
 
     const handleSend = useCallback(() => {
-        if (!input.trim() || isLoading || !entryKey || !modelConfigured) return
+        if (!input.trim() || isLoading || !activePerformerKey || !modelConfigured) return
         const text = input.trim()
         setInput('')
-        sendActMessage(actId, entryKey, text)
-    }, [input, isLoading, entryKey, modelConfigured, sendActMessage, actId])
+        sendActMessage(actId, activePerformerKey, text)
+    }, [input, isLoading, activePerformerKey, modelConfigured, sendActMessage, actId])
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.nativeEvent.isComposing) return
@@ -83,30 +80,53 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         }
     }, [handleSend])
 
+    const handleCreateThread = useCallback(async () => {
+        try {
+            await createThread(actId)
+        } catch (err) {
+            console.error('Failed to create thread', err)
+        }
+    }, [actId, createThread])
+
     if (!act) return null
 
-    const noEntry = !entryKey || !entryPerformer
-    const performerKeys = Object.keys(act.performers)
-    const showFilters = performerKeys.length > 1
+    const noPerformers = performerKeys.length === 0
 
     return (
         <div className="act-chat">
-            {/* Performer Filter Tabs */}
-            {showFilters && (
-                <div className="act-chat__filters">
+            {/* Thread selector mini bar */}
+            {threads.length > 0 && (
+                <div className="act-chat__thread-bar">
+                    {threads.map((thread) => (
+                        <button
+                            key={thread.id}
+                            className={`act-chat__thread-tab ${thread.id === currentThread?.id ? 'act-chat__thread-tab--active' : ''}`}
+                            onClick={() => selectThread(thread.id)}
+                            title={`Thread ${thread.id.slice(0, 6)} (${thread.status})`}
+                        >
+                            <Workflow size={9} />
+                            <span>{thread.id.slice(0, 6)}</span>
+                        </button>
+                    ))}
                     <button
-                        className={`act-chat__filter-tab ${filter === null ? 'act-chat__filter-tab--active' : ''}`}
-                        onClick={() => setFilter(null)}
+                        className="act-chat__thread-tab act-chat__thread-tab--add"
+                        onClick={handleCreateThread}
+                        title="New Thread"
                     >
-                        <Users size={10} /> All
+                        <Plus size={9} />
                     </button>
+                </div>
+            )}
+
+            {/* Performer tabs */}
+            {performerKeys.length > 1 && (
+                <div className="act-chat__filters">
                     {performerKeys.map((key) => (
                         <button
                             key={key}
-                            className={`act-chat__filter-tab ${filter === key ? 'act-chat__filter-tab--active' : ''}`}
-                            onClick={() => setFilter(filter === key ? null : key)}
+                            className={`act-chat__filter-tab ${activePerformerKey === key ? 'act-chat__filter-tab--active' : ''}`}
+                            onClick={() => selectThreadPerformer(key)}
                         >
-                            {key === entryKey && <Zap size={9} />}
                             {key}
                         </button>
                     ))}
@@ -124,7 +144,10 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                 <span className="user-input-text">{msg.content}</span>
                             </div>
                         ) : msg.role === 'system' ? (
-                            <div className="act-chat__system">{msg.content}</div>
+                            <div className={`act-chat__system ${(msg.metadata as any)?.isWakeUp ? 'act-chat__system--wakeup' : ''}`}>
+                                {(msg.metadata as any)?.isWakeUp && <Workflow size={10} />}
+                                {msg.content}
+                            </div>
                         ) : (
                             <ChatMessageContent message={msg} />
                         )}
@@ -132,20 +155,28 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                 )}
                 renderEmpty={() => (
                     <div className="act-chat__empty">
-                        {noEntry ? (
+                        {noPerformers ? (
                             <>
-                                <Zap size={16} />
+                                <Users size={16} />
                                 <span>Add performers to start</span>
                             </>
                         ) : !modelConfigured ? (
                             <>
-                                <Zap size={16} />
-                                <span>Configure a model for the entry performer</span>
+                                <Workflow size={16} />
+                                <span>Configure a model for this performer</span>
+                            </>
+                        ) : threads.length === 0 ? (
+                            <>
+                                <Workflow size={16} />
+                                <span>Create a thread to start collaboration</span>
+                                <button className="act-chat__create-btn" onClick={handleCreateThread}>
+                                    <Plus size={12} /> New Thread
+                                </button>
                             </>
                         ) : (
                             <>
-                                <Zap size={16} />
-                                <span>Send a message to start the Act</span>
+                                <Workflow size={16} />
+                                <span>Send a message to {activePerformerKey}</span>
                             </>
                         )}
                     </div>
@@ -174,14 +205,14 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                 }}
                                 onKeyDown={handleKeyDown}
                                 placeholder={
-                                    noEntry
+                                    noPerformers
                                         ? 'Add performers first…'
                                         : !modelConfigured
-                                            ? 'Configure a model for the entry performer…'
-                                            : `Message ${entryKey ?? 'entry'}…`
+                                            ? 'Configure a model for this performer…'
+                                            : `Message ${activePerformerKey ?? 'performer'}…`
                                 }
                                 rows={1}
-                                disabled={noEntry || !modelConfigured || isLoading}
+                                disabled={noPerformers || !modelConfigured || isLoading}
                                 className="text-input"
                             />
                             {isLoading ? (
@@ -189,19 +220,11 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                     <Square size={12} fill="currentColor" />
                                 </button>
                             ) : (
-                                <button className="send-btn" onClick={handleSend} disabled={!input.trim() || noEntry || !modelConfigured}>
+                                <button className="send-btn" onClick={handleSend} disabled={!input.trim() || noPerformers || !modelConfigured}>
                                     <Send size={12} />
                                 </button>
                             )}
                         </div>
-                        {entryPerformer && (
-                            <div className="chat-input__runtime-row">
-                                <span className="act-chat__entry-label">
-                                    <Zap size={9} />
-                                    {entryKey}
-                                </span>
-                            </div>
-                        )}
                     </div>
                 }
             />

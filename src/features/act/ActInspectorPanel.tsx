@@ -136,7 +136,7 @@ function ActMetaView() {
 function PerformerView() {
     const {
         acts, editingActId, selectedActPerformerKey,
-        selectRelation,
+        selectRelation, updatePerformerBinding,
     } = useStudioStore()
 
     const act = useMemo(() => acts.find((a) => a.id === editingActId), [acts, editingActId])
@@ -149,12 +149,34 @@ function PerformerView() {
         )
     }, [act, selectedActPerformerKey])
 
+    const [subInput, setSubInput] = useState({ messagesFrom: '', messageTags: '', boardKeys: '' })
+
     if (!act || !binding || !selectedActPerformerKey || !editingActId) return null
 
     // Show performer ref info
     const refLabel = binding.performerRef.kind === 'registry'
         ? binding.performerRef.urn.split('/').pop() || binding.performerRef.urn
         : `Draft: ${binding.performerRef.draftId}`
+
+    const subs = binding.subscriptions || {}
+
+    const addSubItem = (field: keyof typeof subInput) => {
+        const value = subInput[field].trim()
+        if (!value) return
+        const current = (subs as any)[field] || []
+        if (current.includes(value)) return
+        updatePerformerBinding(editingActId, selectedActPerformerKey, {
+            subscriptions: { ...subs, [field]: [...current, value] },
+        })
+        setSubInput((prev) => ({ ...prev, [field]: '' }))
+    }
+
+    const removeSubItem = (field: string, value: string) => {
+        const current = (subs as any)[field] || []
+        updatePerformerBinding(editingActId, selectedActPerformerKey, {
+            subscriptions: { ...subs, [field]: current.filter((v: string) => v !== value) },
+        })
+    }
 
     return (
         <div className="act-panel__content">
@@ -209,6 +231,74 @@ function PerformerView() {
                 ) : (
                     <span className="act-panel__empty">No relations defined</span>
                 )}
+            </div>
+
+            {/* Subscriptions (PRD §12.1) */}
+            <div className="act-panel__section">
+                <label className="act-panel__label">Subscriptions</label>
+
+                {/* messagesFrom */}
+                <div className="act-panel__sub-field">
+                    <span className="act-panel__sub-label">Messages From</span>
+                    <div className="act-panel__tags">
+                        {(subs.messagesFrom || []).map((v) => (
+                            <span key={v} className="act-panel__tag" onClick={() => removeSubItem('messagesFrom', v)}>
+                                {v} ×
+                            </span>
+                        ))}
+                    </div>
+                    <div className="act-panel__sub-input-row">
+                        <input
+                            className="act-panel__input act-panel__input--small"
+                            value={subInput.messagesFrom}
+                            onChange={(e) => setSubInput((p) => ({ ...p, messagesFrom: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && addSubItem('messagesFrom')}
+                            placeholder="performer key"
+                        />
+                    </div>
+                </div>
+
+                {/* messageTags */}
+                <div className="act-panel__sub-field">
+                    <span className="act-panel__sub-label">Message Tags</span>
+                    <div className="act-panel__tags">
+                        {(subs.messageTags || []).map((v) => (
+                            <span key={v} className="act-panel__tag" onClick={() => removeSubItem('messageTags', v)}>
+                                {v} ×
+                            </span>
+                        ))}
+                    </div>
+                    <div className="act-panel__sub-input-row">
+                        <input
+                            className="act-panel__input act-panel__input--small"
+                            value={subInput.messageTags}
+                            onChange={(e) => setSubInput((p) => ({ ...p, messageTags: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && addSubItem('messageTags')}
+                            placeholder="tag name"
+                        />
+                    </div>
+                </div>
+
+                {/* boardKeys */}
+                <div className="act-panel__sub-field">
+                    <span className="act-panel__sub-label">Board Keys</span>
+                    <div className="act-panel__tags">
+                        {(subs.boardKeys || []).map((v) => (
+                            <span key={v} className="act-panel__tag" onClick={() => removeSubItem('boardKeys', v)}>
+                                {v} ×
+                            </span>
+                        ))}
+                    </div>
+                    <div className="act-panel__sub-input-row">
+                        <input
+                            className="act-panel__input act-panel__input--small"
+                            value={subInput.boardKeys}
+                            onChange={(e) => setSubInput((p) => ({ ...p, boardKeys: e.target.value }))}
+                            onKeyDown={(e) => e.key === 'Enter' && addSubItem('boardKeys')}
+                            placeholder="key pattern (e.g. api-spec, review-*)"
+                        />
+                    </div>
+                </div>
             </div>
         </div>
     )
