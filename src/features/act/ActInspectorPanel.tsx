@@ -165,7 +165,7 @@ function ActMetaView() {
 // ── Performer Binding View ──────────────────────────────
 function PerformerView() {
     const {
-        acts, editingActId, selectedActPerformerKey,
+        acts, performers, editingActId, selectedActPerformerKey,
         selectRelation, updatePerformerBinding,
     } = useStudioStore()
 
@@ -231,6 +231,59 @@ function PerformerView() {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* Active Dances (PRD §10.2) */}
+            <div className="act-panel__section">
+                <label className="act-panel__label"><Zap size={11} /> Active Dances</label>
+                {(() => {
+                    const ref = binding.performerRef
+                    const resolved = ref.kind === 'draft'
+                        ? performers.find((p) => p.id === ref.draftId)
+                        : performers.find((p) => p.meta?.derivedFrom === ref.urn)
+                    const availableDances = resolved?.danceRefs || []
+                    const activeIds = binding.activeDanceIds || []
+
+                    const toggleDance = (danceUrn: string) => {
+                        const current = binding.activeDanceIds || []
+                        const next = current.includes(danceUrn)
+                            ? current.filter((id) => id !== danceUrn)
+                            : [...current, danceUrn]
+                        updatePerformerBinding(editingActId!, selectedActPerformerKey!, {
+                            activeDanceIds: next,
+                        })
+                    }
+
+                    if (availableDances.length === 0) {
+                        return <span className="act-panel__empty">No dances on this performer</span>
+                    }
+
+                    return (
+                        <div className="act-panel__list">
+                            {availableDances.map((dRef) => {
+                                const urn = dRef.kind === 'registry' ? dRef.urn : dRef.draftId
+                                const dLabel = dRef.kind === 'registry'
+                                    ? (dRef.urn.split('/').pop() || dRef.urn)
+                                    : `draft:${dRef.draftId}`
+                                const isActive = activeIds.includes(urn)
+                                return (
+                                    <label
+                                        key={urn}
+                                        className={`act-panel__dance-toggle ${isActive ? 'active' : ''}`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={isActive}
+                                            onChange={() => toggleDance(urn)}
+                                        />
+                                        <Zap size={10} />
+                                        <span>{dLabel}</span>
+                                    </label>
+                                )
+                            })}
+                        </div>
+                    )
+                })()}
             </div>
 
             {/* Connected Relations */}

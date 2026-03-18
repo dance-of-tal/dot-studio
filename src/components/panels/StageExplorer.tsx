@@ -15,6 +15,7 @@ import {
     Pencil,
     Plus,
     Trash2,
+    User,
     X,
     Workflow,
 } from 'lucide-react';
@@ -565,23 +566,68 @@ export default function StageExplorer() {
                                             const isThreadActive = activeThreadId === thread.id;
                                             const statusIcon = thread.status === 'active' ? '●' : thread.status === 'completed' ? '✓' : '⏸';
                                             const statusClass = `thread-status--${thread.status || 'idle'}`;
+                                            const threadKey = `thread-${thread.id}`;
+                                            const threadExpanded = expandedRows[threadKey] ?? false;
+                                            const boundPerformerKeys = Object.keys(act.performers);
                                             return (
-                                                <LayerRow
-                                                    key={thread.id}
-                                                    icon={<MessageSquare size={11} className={isThreadActive ? 'icon-active' : 'icon-muted'} />}
-                                                    label={
-                                                        <span className="thread-label">
-                                                            <span className={`thread-status-dot ${statusClass}`}>{statusIcon}</span>
-                                                            Thread {thread.id.slice(0, 6)}
+                                                <div key={thread.id} className="thread-group">
+                                                    <div
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        className={`layer-row ${isThreadActive ? 'active' : ''}`}
+                                                        onClick={() => {
+                                                            useStudioStore.setState({ activeThreadId: thread.id });
+                                                            selectAct(act.id);
+                                                        }}
+                                                    >
+                                                        {boundPerformerKeys.length > 0 ? (
+                                                            <span
+                                                                className={`thread-card__chevron ${threadExpanded ? 'is-open' : ''}`}
+                                                                onClick={(ev) => {
+                                                                    ev.stopPropagation();
+                                                                    toggleExpanded(threadKey);
+                                                                }}
+                                                            >
+                                                                <ChevronRight size={10} />
+                                                            </span>
+                                                        ) : (
+                                                            <span className="thread-card__chevron-spacer" style={{ width: 10 }} />
+                                                        )}
+                                                        <span className="layer-row__icon">
+                                                            <Workflow size={11} />
                                                         </span>
-                                                    }
-                                                    meta={new Date(thread.createdAt).toLocaleTimeString()}
-                                                    active={isThreadActive}
-                                                    onClick={() => {
-                                                        useStudioStore.setState({ activeThreadId: thread.id });
-                                                        selectAct(act.id);
-                                                    }}
-                                                />
+                                                        <span className="layer-row__body">
+                                                            <span className="layer-row__label">
+                                                                <span className="thread-label">
+                                                                    <span className={`thread-status-dot ${statusClass}`}>{statusIcon}</span>
+                                                                    Thread {thread.id.slice(0, 6)}
+                                                                </span>
+                                                            </span>
+                                                            <span className="layer-row__meta">
+                                                                {new Date(thread.createdAt).toLocaleTimeString()}
+                                                            </span>
+                                                        </span>
+                                                    </div>
+                                                    {threadExpanded && boundPerformerKeys.length > 0 && (
+                                                        <div className="thread-children">
+                                                            {boundPerformerKeys.map((pKey) => (
+                                                                <LayerRow
+                                                                    key={pKey}
+                                                                    icon={<User size={10} />}
+                                                                    label={pKey}
+                                                                    active={isThreadActive && (useStudioStore.getState() as any).activeThreadPerformerKey === pKey}
+                                                                    onClick={() => {
+                                                                        useStudioStore.setState({
+                                                                            activeThreadId: thread.id,
+                                                                            activeThreadPerformerKey: pKey,
+                                                                        } as any);
+                                                                        selectAct(act.id);
+                                                                    }}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             );
                                         }) : (
                                             <div className="empty-state empty-state--tight empty-state--nested">

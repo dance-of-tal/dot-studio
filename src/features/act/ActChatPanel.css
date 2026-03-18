@@ -140,3 +140,82 @@
 .act-chat__send-btn:hover:not(:disabled) {
     opacity: 0.85;
 }
+
+/* ── Thread bar (mini selector inside canvas node) ── */
+.act-chat__thread-bar {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    border-bottom: 1px solid var(--border-main);
+    overflow-x: auto;
+    flex-shrink: 0;
+}
+
+.act-chat__thread-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    font-size: 9px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.12s ease;
+}
+
+.act-chat__thread-tab:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+.act-chat__thread-tab--active {
+    background: color-mix(in srgb, var(--accent-primary, #f59e0b) 15%, transparent);
+    border-color: color-mix(in srgb, var(--accent-primary, #f59e0b) 40%, var(--border-light));
+    color: var(--accent-primary, #f59e0b);
+}
+
+.act-chat__thread-tab--add {
+    border-style: dashed;
+    opacity: 0.6;
+}
+
+.act-chat__thread-tab--add:hover {
+    opacity: 1;
+}
+
+/* ── Create thread button (empty state) ── */
+.act-chat__create-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 10px;
+    border: 1px dashed var(--border-main);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-top: 4px;
+}
+
+.act-chat__create-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary, #f59e0b);
+    color: var(--text-primary);
+}
+
+/* ── Wake-up system message ── */
+.act-chat__system--wakeup {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    background: color-mix(in srgb, var(--accent-primary, #f59e0b) 8%, var(--bg-hover));
+    border-left: 2px solid var(--accent-primary, #f59e0b);
+    color: var(--text-primary);
+    font-style: normal;
+}

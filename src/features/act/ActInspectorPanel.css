@@ -432,3 +432,72 @@
 .act-panel__validation-item--warning .act-panel__validation-dot {
     background: var(--status-warning);
 }
+
+/* Dance toggle */
+.act-panel__dance-toggle {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-inset);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.act-panel__dance-toggle:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-inset));
+    color: var(--text);
+}
+
+.act-panel__dance-toggle.active {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
+}
+
+.act-panel__dance-toggle input[type="checkbox"] {
+    accent-color: var(--accent);
+    margin: 0;
+    width: 12px;
+    height: 12px;
+    cursor: pointer;
+}
+
+.act-panel__dance-toggle span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Subscription sub-fields */
+.act-panel__sub-field {
+    margin-top: 6px;
+}
+
+.act-panel__sub-label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 3px;
+}
+
+.act-panel__sub-input-row {
+    margin-top: 3px;
+}
+
+.act-panel__input--small {
+    font-size: 11px;
+    padding: 4px 6px;
+}
+
+.act-panel__tag {
+    cursor: pointer;
+    transition: opacity 0.12s ease;
+}
+
+.act-panel__tag:hover {
+    opacity: 0.7;
+}
