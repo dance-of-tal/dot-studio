@@ -1,6 +1,6 @@
 /**
  * PerformerEditPanel — Unified edit panel for performer configuration.
- * Shared between standalone AgentFrame and Act's ActPerformerFrame.
+ * Shared between standalone AgentFrame and Act's ActParticipantFrame.
  *
  * Drill-down pattern:
  *   Main view: Compose cards (DnD + "Drag & drop or click to configure")

@@ -97,10 +97,10 @@ export default function StageExplorer() {
     const toggleActVisibility = useStudioStore((s) => s.toggleActVisibility);
     const actThreads = useStudioStore((s) => s.actThreads);
     const activeThreadId = useStudioStore((s) => s.activeThreadId);
-    const activeThreadPerformerKey = useStudioStore((s) => s.activeThreadPerformerKey);
+    const activeThreadParticipantKey = useStudioStore((s) => s.activeThreadParticipantKey);
     const createThread = useStudioStore((s) => s.createThread);
     const selectThread = useStudioStore((s) => s.selectThread);
-    const selectThreadPerformer = useStudioStore((s) => s.selectThreadPerformer);
+    const selectThreadParticipant = useStudioStore((s) => s.selectThreadParticipant);
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -618,10 +618,10 @@ export default function StageExplorer() {
                                                             <LayerRow
                                                                 icon={<Activity size={10} />}
                                                                 label="Callboard / Activity"
-                                                                active={isThreadActive && !activeThreadPerformerKey}
+                                                                active={isThreadActive && !activeThreadParticipantKey}
                                                                 onClick={() => {
                                                                     selectThread(thread.id);
-                                                                    selectThreadPerformer(null);
+                                                                    selectThreadParticipant(null);
                                                                     selectAct(act.id);
                                                                 }}
                                                             />
@@ -630,10 +630,10 @@ export default function StageExplorer() {
                                                                     key={pKey}
                                                                     icon={<User size={10} />}
                                                                     label={resolveActParticipantLabel(act, pKey, performers)}
-                                                                    active={isThreadActive && activeThreadPerformerKey === pKey}
+                                                                    active={isThreadActive && activeThreadParticipantKey === pKey}
                                                                     onClick={() => {
                                                                         selectThread(thread.id);
-                                                                        selectThreadPerformer(pKey);
+                                                                        selectThreadParticipant(pKey);
                                                                         selectAct(act.id);
                                                                     }}
                                                                 />

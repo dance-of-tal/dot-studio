@@ -523,7 +523,7 @@ export const createWorkspaceSlice: StateCreator<
             selectedRelationId: null,
             actThreads: {},
             activeThreadId: null,
-            activeThreadPerformerKey: null,
+            activeThreadParticipantKey: null,
         }))
         get().initRealtimeEvents()
         api.studio.activate(normalized).catch(err => console.warn('[studio] activate failed', err))
@@ -563,7 +563,7 @@ export const createWorkspaceSlice: StateCreator<
                 selectedRelationId: null,
                 actThreads: {},
                 activeThreadId: null,
-                activeThreadPerformerKey: null,
+                activeThreadParticipantKey: null,
             })
             api.studio.updateConfig({ lastStage: undefined }).catch(err => console.warn('[studio] clear lastStage failed', err))
         }

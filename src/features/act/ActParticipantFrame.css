@@ -1,28 +1,28 @@
-/* ActPerformerFrame — Canvas node for Act participant binding */
+/* ActParticipantFrame — Canvas node for Act participant binding */
 
-.act-performer-node__handle {
+.act-participant-node__handle {
     width: 7px !important;
     height: 7px !important;
     background: var(--bg-panel) !important;
     border: 1.5px solid var(--act-accent, #f59e0b) !important;
     border-radius: 50% !important;
 }
-.act-performer-node__handle:hover {
+.act-participant-node__handle:hover {
     background: var(--act-accent, #f59e0b) !important;
 }
 
-.act-performer-node__remove-btn {
+.act-participant-node__remove-btn {
     padding: 0 4px;
     opacity: 0.5;
     transition: opacity 0.15s, color 0.15s;
 }
-.act-performer-node__remove-btn:hover {
+.act-participant-node__remove-btn:hover {
     opacity: 1;
     color: var(--status-danger, #ef4444) !important;
 }
 
 /* ── Body ── */
-.act-performer-body {
+.act-participant-body {
     padding: 10px 12px;
     display: flex;
     flex-direction: column;
@@ -30,41 +30,41 @@
     font-size: 11px;
 }
 
-.act-performer-body__ref {
+.act-participant-body__ref {
     display: flex;
     align-items: center;
     gap: 6px;
     color: var(--text-primary);
     font-weight: 500;
 }
-.act-performer-body__ref svg {
+.act-participant-body__ref svg {
     color: var(--act-accent, #f59e0b);
     flex-shrink: 0;
 }
 
-.act-performer-body__dances {
+.act-participant-body__dances {
     display: flex;
     align-items: center;
     gap: 5px;
     color: var(--text-secondary);
     font-size: 10px;
 }
-.act-performer-body__dances svg {
+.act-participant-body__dances svg {
     color: var(--accent-secondary, #8b5cf6);
 }
 
-.act-performer-body__subs {
+.act-participant-body__subs {
     display: flex;
     flex-direction: column;
     gap: 4px;
     font-size: 10px;
     color: var(--text-secondary);
 }
-.act-performer-body__subs > svg {
+.act-participant-body__subs > svg {
     display: none;
 }
 
-.act-performer-body__sub-title {
+.act-participant-body__sub-title {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -72,13 +72,13 @@
     font-size: 10px;
 }
 
-.act-performer-body__sub-tags {
+.act-participant-body__sub-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 3px;
 }
 
-.act-performer-body__tag {
+.act-participant-body__tag {
     display: inline-flex;
     align-items: center;
     padding: 1px 6px;
@@ -88,22 +88,22 @@
     white-space: nowrap;
 }
 
-.act-performer-body__tag--from {
+.act-participant-body__tag--from {
     background: color-mix(in srgb, #3b82f6 12%, transparent);
     color: #60a5fa;
 }
 
-.act-performer-body__tag--tag {
+.act-participant-body__tag--tag {
     background: color-mix(in srgb, #8b5cf6 12%, transparent);
     color: #a78bfa;
 }
 
-.act-performer-body__tag--board {
+.act-participant-body__tag--board {
     background: color-mix(in srgb, #22c55e 12%, transparent);
     color: #4ade80;
 }
 
-.act-performer-body__hint {
+.act-participant-body__hint {
     display: flex;
     align-items: center;
     gap: 5px;
@@ -113,6 +113,6 @@
     padding: 4px 0;
     opacity: 0.7;
 }
-.act-performer-body__hint svg {
+.act-participant-body__hint svg {
     opacity: 0.5;
 }

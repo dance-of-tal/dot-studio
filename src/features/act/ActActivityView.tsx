@@ -10,7 +10,7 @@ import {
     RefreshCw,
 } from 'lucide-react'
 import { api } from '../../api'
-import './ActFrame.css'
+import './ActActivityView.css'
 
 interface ActActivityViewProps {
     actId: string

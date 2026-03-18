@@ -33,8 +33,8 @@ export const createChatSlice: StateCreator<
     [],
     ChatSlice
 > = (set, get) => {
-    const buildActParticipantChatKey = (actId: string, threadId: string, performerKey: string) =>
-        `act:${actId}:thread:${threadId}:participant:${performerKey}`
+    const buildActParticipantChatKey = (actId: string, threadId: string, participantKey: string) =>
+        `act:${actId}:thread:${threadId}:participant:${participantKey}`
 
     const createFreshSession = async (
         performerId: string,
@@ -253,15 +253,15 @@ export const createChatSlice: StateCreator<
         },
 
         // ── Act chat (choreography model) ─────────────
-        sendActMessage: async (actId, threadId, performerKey, text) => {
+        sendActMessage: async (actId, threadId, participantKey, text) => {
             const act = get().acts.find((a) => a.id === actId)
             if (!act || !threadId) return
 
-            const binding = act.performers[performerKey]
+            const binding = act.performers[participantKey]
             if (!binding) return
 
             // Thread-scoped session key: separates participant sessions across threads
-            const chatKey = buildActParticipantChatKey(actId, threadId, performerKey)
+            const chatKey = buildActParticipantChatKey(actId, threadId, participantKey)
 
             // Resolve performer config from the ref binding
             // The binding references a standalone performer — look it up
@@ -309,9 +309,9 @@ export const createChatSlice: StateCreator<
                                     ? thread
                                     : {
                                         ...thread,
-                                        performerSessions: {
-                                            ...thread.performerSessions,
-                                            [performerKey]: res.sessionId,
+                                        participantSessions: {
+                                            ...thread.participantSessions,
+                                            [participantKey]: res.sessionId,
                                         },
                                     },
                             ),

@@ -145,26 +145,26 @@ export async function applyAssetToPerformerTarget(
     return false;
 }
 
-// ── Act Performer applicators ───────────────────────────
+// ── Act Participant applicators ─────────────────────────
 
 /**
- * Detect whether a drop target belongs to an Act performer.
- * Act performer droppable IDs use the format `act-perf-{type}-act-p-{key}`.
+ * Detect whether a drop target belongs to an Act participant.
+ * Act participant droppable IDs use the format `act-perf-{type}-act-p-{key}`.
  */
-export function parseActPerformerDropId(dropId: string): { performerKey: string } | null {
+export function parseActPerformerDropId(dropId: string): { participantKey: string } | null {
     const match = dropId.match(/^act-perf-\w+-act-p-(.+)$/)
-    return match ? { performerKey: match[1] } : null
+    return match ? { participantKey: match[1] } : null
 }
 
 /**
- * Apply an asset drop to an Act performer binding.
- * In the choreography model, Act performers are refs — we can only bind performer refs.
- * Direct config drops (tal, dance, model, mcp) are not supported on Act performer bindings.
+ * Apply an asset drop to an Act participant binding.
+ * In the choreography model, Act participants are refs — we can only bind performer refs.
+ * Direct config drops (tal, dance, model, mcp) are not supported on Act participant bindings.
  */
 export function applyAssetToActPerformer(
     store: StudioState,
     actId: string,
-    _performerKey: string,
+    _participantKey: string,
     _dropType: string | undefined,
     asset: DragAsset,
     _showDropWarning: (message: string) => void,
@@ -179,6 +179,6 @@ export function applyAssetToActPerformer(
     }
 
     // Other asset types (tal, dance, model, mcp) cannot be directly applied
-    // to Act performer bindings in the choreography model — they're ref-based
+    // to Act participant bindings in the choreography model — they're ref-based
     return false
 }

@@ -78,7 +78,7 @@ export async function newStage(get: GetFn, set: SetFn) {
                 selectedRelationId: null,
                 actThreads: {},
                 activeThreadId: null,
-                activeThreadPerformerKey: null,
+                activeThreadParticipantKey: null,
             })
             get().initRealtimeEvents()
             get().loadDraftsFromDisk()
@@ -299,7 +299,7 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             workingDir,
             actThreads: {},
             activeThreadId: null,
-            activeThreadPerformerKey: null,
+            activeThreadParticipantKey: null,
         })
         get().initRealtimeEvents()
 

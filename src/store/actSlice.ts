@@ -66,7 +66,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     // ── Thread state ────────────────────────────────────
     actThreads: {},
     activeThreadId: null,
-    activeThreadPerformerKey: null,
+    activeThreadParticipantKey: null,
 
     // ── Act Definition CRUD ─────────────────────────────
 
@@ -90,7 +90,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             selectedActParticipantKey: null,
             selectedRelationId: null,
             activeThreadId: null,
-            activeThreadPerformerKey: null,
+            activeThreadParticipantKey: null,
             stageDirty: true,
         }))
         return id
@@ -107,7 +107,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             selectedActParticipantKey: s.selectedActId === id ? null : s.selectedActParticipantKey,
             selectedRelationId: s.selectedActId === id ? null : s.selectedRelationId,
             activeThreadId: s.selectedActId === id ? null : s.activeThreadId,
-            activeThreadPerformerKey: s.selectedActId === id ? null : s.activeThreadPerformerKey,
+            activeThreadParticipantKey: s.selectedActId === id ? null : s.activeThreadParticipantKey,
             stageDirty: true,
         }))
     },
@@ -145,7 +145,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             selectedActParticipantKey: null,
             selectedRelationId: null,
             activeThreadId: nextActiveThreadId,
-            activeThreadPerformerKey: null,
+            activeThreadParticipantKey: null,
         })
         if (id) {
             void get().loadThreads(id)
@@ -401,14 +401,14 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    unbindPerformerFromAct: (actId, performerKey) => {
+    unbindPerformerFromAct: (actId, participantKey) => {
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
-                const { [performerKey]: _removed, ...rest } = a.performers
-                // Remove relations involving this performer
+                const { [participantKey]: _removed, ...rest } = a.performers
+                // Remove relations involving this participant
                 const relations = a.relations.filter(
-                    (r) => !r.between.includes(performerKey),
+                    (r) => !r.between.includes(participantKey),
                 )
                 return { ...a, performers: rest, relations }
             }),
@@ -416,15 +416,15 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    updatePerformerBinding: (actId, performerKey, update) => {
+    updatePerformerBinding: (actId, participantKey, update) => {
         set((s) => ({
             acts: s.acts.map((a) => {
-                if (a.id !== actId || !a.performers[performerKey]) return a
+                if (a.id !== actId || !a.performers[participantKey]) return a
                 return {
                     ...a,
                     performers: {
                         ...a.performers,
-                        [performerKey]: { ...a.performers[performerKey], ...update },
+                        [participantKey]: { ...a.performers[participantKey], ...update },
                     },
                 }
             }),
@@ -436,19 +436,19 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         set({
             selectedActParticipantKey: key,
             selectedRelationId: null,
-            activeThreadPerformerKey: key,
+            activeThreadParticipantKey: key,
         })
     },
 
-    updateActPerformerPosition: (actId, performerKey, x, y) => {
+    updateActParticipantPosition: (actId, participantKey, x, y) => {
         set((s) => ({
             acts: s.acts.map((a) => {
-                if (a.id !== actId || !a.performers[performerKey]) return a
+                if (a.id !== actId || !a.performers[participantKey]) return a
                 return {
                     ...a,
                     performers: {
                         ...a.performers,
-                        [performerKey]: { ...a.performers[performerKey], position: { x, y } },
+                        [participantKey]: { ...a.performers[participantKey], position: { x, y } },
                     },
                 }
             }),
@@ -533,7 +533,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         set({
             selectedRelationId: id,
             selectedActParticipantKey: null,
-            activeThreadPerformerKey: null,
+            activeThreadParticipantKey: null,
         })
     },
 
@@ -731,24 +731,24 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                         id: thread.id,
                         actId: thread.actId,
                         status: thread.status as any,
-                        performerSessions: {},
+                        participantSessions: {},
                         createdAt: thread.createdAt,
                     },
                 ],
             },
             selectedActId: actId,
             activeThreadId: thread.id,
-            activeThreadPerformerKey: null,
+            activeThreadParticipantKey: null,
         }))
         return thread.id
     },
 
     selectThread: (threadId) => {
-        set({ activeThreadId: threadId, activeThreadPerformerKey: null })
+        set({ activeThreadId: threadId, activeThreadParticipantKey: null })
     },
 
-    selectThreadPerformer: (performerKey) => {
-        set({ activeThreadPerformerKey: performerKey })
+    selectThreadParticipant: (participantKey) => {
+        set({ activeThreadParticipantKey: participantKey })
     },
 
     loadThreads: async (actId) => {
@@ -760,7 +760,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     id: t.id,
                     actId: t.actId,
                     status: t.status as any,
-                    performerSessions: t.performerSessions || {},
+                    participantSessions: t.participantSessions || t.performerSessions || {},
                     createdAt: t.createdAt,
                 })),
             },

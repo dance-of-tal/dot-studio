@@ -1,0 +1,84 @@
+.act-activity-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.act-activity-view__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.act-activity-view__list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.act-activity-view__event {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: var(--radius);
+    font-size: 11px;
+    line-height: 1.4;
+    transition: background 0.1s ease;
+}
+
+.act-activity-view__event:hover {
+    background: var(--bg-hover);
+}
+
+.act-activity-view__event-icon {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.act-activity-view__event-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.act-activity-view__event-desc {
+    color: var(--text-primary);
+}
+
+.act-activity-view__event-time {
+    font-size: 9px;
+    color: var(--text-muted);
+}
+
+.act-activity-view__empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 24px;
+    gap: 6px;
+}
+
+.act-activity-view__timeline {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
+}

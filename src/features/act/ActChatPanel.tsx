@@ -20,15 +20,15 @@ interface ActChatPanelProps {
     actId: string
 }
 
-function buildActParticipantChatKey(actId: string, threadId: string, performerKey: string) {
-    return `act:${actId}:thread:${threadId}:participant:${performerKey}`
+function buildActParticipantChatKey(actId: string, threadId: string, participantKey: string) {
+    return `act:${actId}:thread:${threadId}:participant:${participantKey}`
 }
 
 export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const {
         acts, chats, loadingPerformerId, sendActMessage, abortChat,
-        actThreads, activeThreadId, activeThreadPerformerKey,
-        createThread, selectThread, selectThreadPerformer, selectAct, setAssetLibraryOpen,
+        actThreads, activeThreadId, activeThreadParticipantKey,
+        createThread, selectThread, selectThreadParticipant, selectAct, setAssetLibraryOpen,
     } = useStudioStore()
 
     const act = useMemo(() => acts.find((a) => a.id === actId), [acts, actId])
@@ -41,13 +41,13 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const currentThread = threads.find((t) => t.id === activeThreadId) || threads[0] || null
 
     // Active performer in thread
-    const performerKeys = act ? Object.keys(act.performers) : []
-    const isCallboardView = !!currentThread && activeThreadPerformerKey === null
-    const activePerformerKey = isCallboardView ? null : activeThreadPerformerKey || performerKeys[0] || null
+    const participantKeys = act ? Object.keys(act.performers) : []
+    const isCallboardView = !!currentThread && activeThreadParticipantKey === null
+    const activeParticipantKey = isCallboardView ? null : activeThreadParticipantKey || participantKeys[0] || null
 
     // Namespaced chat key for this thread+performer
-    const chatKey = activePerformerKey && currentThread
-        ? buildActParticipantChatKey(actId, currentThread.id, activePerformerKey)
+    const chatKey = activeParticipantKey && currentThread
+        ? buildActParticipantChatKey(actId, currentThread.id, activeParticipantKey)
         : null
 
     // Messages
@@ -73,13 +73,13 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const modelConfigured = hasModelConfig(resolvedPerformer?.model || null)
 
     const handleSend = useCallback(async () => {
-        if (!input.trim() || isLoading || !activePerformerKey || !modelConfigured) return
+        if (!input.trim() || isLoading || !activeParticipantKey || !modelConfigured) return
         const text = input.trim()
         setInput('')
         const threadId = currentThread?.id || await createThread(actId)
         if (!threadId) return
-        await sendActMessage(actId, threadId, activePerformerKey, text)
-    }, [input, isLoading, activePerformerKey, modelConfigured, sendActMessage, actId, currentThread, createThread])
+        await sendActMessage(actId, threadId, activeParticipantKey, text)
+    }, [input, isLoading, activeParticipantKey, modelConfigured, sendActMessage, actId, currentThread, createThread])
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.nativeEvent.isComposing) return
@@ -99,10 +99,10 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
 
     if (!act) return null
 
-    const noPerformers = performerKeys.length === 0
+    const noParticipants = participantKeys.length === 0
     const sharedPerformers = useStudioStore.getState().performers
-    const activeParticipantLabel = activePerformerKey
-        ? resolveActParticipantLabel(act, activePerformerKey, sharedPerformers)
+    const activeParticipantLabel = activeParticipantKey
+        ? resolveActParticipantLabel(act, activeParticipantKey, sharedPerformers)
         : null
 
     return (
@@ -141,22 +141,22 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             <div className="act-chat__filters">
                 <button
                     className={`act-chat__filter-tab ${isCallboardView ? 'act-chat__filter-tab--active' : ''}`}
-                    onClick={() => selectThreadPerformer(null)}
+                    onClick={() => selectThreadParticipant(null)}
                 >
                     <Activity size={10} />
                     <span>Callboard</span>
                 </button>
-                {performerKeys.length === 1 ? (
+                {participantKeys.length === 1 ? (
                     <button
-                        className={`act-chat__filter-tab ${activePerformerKey === performerKeys[0] ? 'act-chat__filter-tab--active' : ''}`}
-                        onClick={() => selectThreadPerformer(performerKeys[0])}
+                        className={`act-chat__filter-tab ${activeParticipantKey === participantKeys[0] ? 'act-chat__filter-tab--active' : ''}`}
+                        onClick={() => selectThreadParticipant(participantKeys[0])}
                     >
                         <User size={10} />
-                        <span>{resolveActParticipantLabel(act, performerKeys[0], sharedPerformers)}</span>
-                        {isLoading && activePerformerKey === performerKeys[0] && <Circle size={6} className="act-chat__loading-dot" />}
+                        <span>{resolveActParticipantLabel(act, participantKeys[0], sharedPerformers)}</span>
+                        {isLoading && activeParticipantKey === participantKeys[0] && <Circle size={6} className="act-chat__loading-dot" />}
                     </button>
-                ) : performerKeys.map((key) => {
-                    const isActive = activePerformerKey === key
+                ) : participantKeys.map((key) => {
+                    const isActive = activeParticipantKey === key
                     const participantChatKey = currentThread
                         ? buildActParticipantChatKey(actId, currentThread.id, key)
                         : null
@@ -165,7 +165,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                         <button
                             key={key}
                             className={`act-chat__filter-tab ${isActive ? 'act-chat__filter-tab--active' : ''}`}
-                            onClick={() => selectThreadPerformer(key)}
+                            onClick={() => selectThreadParticipant(key)}
                         >
                             <User size={10} />
                             <span>{resolveActParticipantLabel(act, key, sharedPerformers)}</span>
@@ -200,7 +200,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                 )}
                 renderEmpty={() => (
                     <div className="act-chat__empty">
-                        {noPerformers ? (
+                        {noParticipants ? (
                             <>
                                 <Users size={20} className="act-chat__empty-icon" />
                                 <strong>No performers bound</strong>

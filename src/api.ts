@@ -302,7 +302,7 @@ export const api = {
             ),
 
         listThreads: (actId: string) =>
-            fetchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: string; createdAt: number; performerSessions: Record<string, string> }> }>(
+            fetchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: string; createdAt: number; performerSessions?: Record<string, string>; participantSessions?: Record<string, string> }> }>(
                 `/api/act/${actId}/threads`,
             ),
 

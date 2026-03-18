@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useStudioStore } from '../../store'
+import './ActLayoutToolbar.css'
 
 export default function ActLayoutToolbar() {
     const { acts, layoutActId, exitActLayoutMode } = useStudioStore()

@@ -7,18 +7,18 @@ function fallbackLabelFromRegistryUrn(urn: string) {
 
 export function resolveActParticipantLabel(
     act: StageAct | null | undefined,
-    performerKey: string,
+    participantKey: string,
     performers: PerformerNode[],
 ) {
-    if (!act) return performerKey
-    const binding = act.performers[performerKey]
-    if (!binding) return performerKey
+    if (!act) return participantKey
+    const binding = act.performers[participantKey]
+    if (!binding) return participantKey
 
     if (binding.performerRef.kind === 'draft') {
-        return performers.find((performer) => performer.id === binding.performerRef.draftId)?.name || performerKey
+        return performers.find((performer) => performer.id === binding.performerRef.draftId)?.name || participantKey
     }
 
     return performers.find((performer) => performer.meta?.derivedFrom === binding.performerRef.urn)?.name
         || fallbackLabelFromRegistryUrn(binding.performerRef.urn)
-        || performerKey
+        || participantKey
 }

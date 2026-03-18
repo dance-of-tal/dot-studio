@@ -1,0 +1,35 @@
+.act-frame__header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.act-frame__edit-btn,
+.act-frame__close-btn {
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+
+.act-frame__edit-btn:hover,
+.act-frame__close-btn:hover {
+    opacity: 1;
+}
+
+.act-frame--editing .act-frame__edit-btn {
+    opacity: 1;
+    color: var(--act-accent);
+}
+
+.act-frame__activity-btn {
+    opacity: 0.5;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.act-frame__activity-btn:hover {
+    opacity: 1;
+}
+
+.act-frame__activity-btn.active {
+    opacity: 1;
+    color: var(--act-accent);
+}

@@ -183,7 +183,7 @@ export interface ChatSlice {
     sendActMessage: (
         actId: string,
         threadId: string,
-        performerKey: string,
+        participantKey: string,
         message: string,
     ) => Promise<void>
     executeSlashCommand: (performerId: string, cmd: string) => Promise<void>
@@ -237,7 +237,7 @@ export interface ActThreadState {
     id: string
     actId: string
     status: 'active' | 'idle' | 'completed' | 'interrupted'
-    performerSessions: Record<string, string>  // performerKey → sessionId
+    participantSessions: Record<string, string>  // participantKey → sessionId
     createdAt: number
 }
 
@@ -251,7 +251,7 @@ export interface ActSlice {
     // ── Act Thread state ────────────────────────
     actThreads: Record<string, ActThreadState[]>  // actId → threads
     activeThreadId: string | null
-    activeThreadPerformerKey: string | null
+    activeThreadParticipantKey: string | null
 
     // ── Act Definition CRUD ─────────────────────
     addAct: (name: string) => string
@@ -268,10 +268,10 @@ export interface ActSlice {
     createActFromPerformers: (performerIds: [string, string], options?: { name?: string }) => string | null
     attachPerformerToAct: (actId: string, performerId: string) => string | null
     autoLayoutActParticipants: (actId: string) => void
-    unbindPerformerFromAct: (actId: string, performerKey: string) => void
-    updatePerformerBinding: (actId: string, performerKey: string, update: Partial<StageActPerformerBinding>) => void
+    unbindPerformerFromAct: (actId: string, participantKey: string) => void
+    updatePerformerBinding: (actId: string, participantKey: string, update: Partial<StageActPerformerBinding>) => void
     selectActParticipant: (key: string | null) => void
-    updateActPerformerPosition: (actId: string, performerKey: string, x: number, y: number) => void
+    updateActParticipantPosition: (actId: string, participantKey: string, x: number, y: number) => void
 
     // ── Relation (communication contract) ───────
     addRelation: (actId: string, between: [string, string], direction: 'both' | 'one-way') => string | null
@@ -294,7 +294,7 @@ export interface ActSlice {
     // ── Thread management ───────────────────────
     createThread: (actId: string) => Promise<string>
     selectThread: (threadId: string | null) => void
-    selectThreadPerformer: (performerKey: string | null) => void
+    selectThreadParticipant: (participantKey: string | null) => void
     loadThreads: (actId: string) => Promise<void>
 }
 
