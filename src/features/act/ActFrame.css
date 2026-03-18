@@ -223,4 +223,20 @@
     color: var(--text-muted);
     font-size: 11px;
     padding: 24px;
+    gap: 6px;
+}
+
+.act-activity-view__timeline {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
 }

@@ -9,7 +9,7 @@ import {
     RefreshCw,
 } from 'lucide-react'
 import { api } from '../../api'
-import './ActChatPanel.css'
+import './ActFrame.css'
 
 interface ActActivityViewProps {
     actId: string
@@ -93,8 +93,8 @@ export default function ActActivityView({ actId, threadId }: ActActivityViewProp
 
     if (!threadId) {
         return (
-            <div className="act-activity">
-                <div className="act-activity__empty">
+            <div className="act-activity-view">
+                <div className="act-activity-view__empty">
                     <Activity size={16} />
                     <span>Select a thread to view activity</span>
                 </div>
@@ -103,8 +103,8 @@ export default function ActActivityView({ actId, threadId }: ActActivityViewProp
     }
 
     return (
-        <div className="act-activity">
-            <div className="act-activity__header">
+        <div className="act-activity-view">
+            <div className="act-activity-view__header">
                 <Activity size={12} />
                 <span>Activity</span>
                 <button
@@ -117,25 +117,25 @@ export default function ActActivityView({ actId, threadId }: ActActivityViewProp
                 </button>
             </div>
 
-            <div className="act-activity__timeline">
+            <div className="act-activity-view__timeline">
                 {events.length === 0 ? (
-                    <div className="act-activity__empty">
+                    <div className="act-activity-view__empty">
                         <span>No events yet</span>
                     </div>
                 ) : (
                     events.map((event) => (
                         <div
                             key={event.id}
-                            className={`act-activity__event act-activity__event--${event.type.split('.')[0]}`}
+                            className={`act-activity-view__event act-activity-view__event--${event.type.split('.')[0]}`}
                         >
-                            <div className="act-activity__event-icon">
+                            <div className="act-activity-view__event-icon">
                                 {getEventIcon(event.type)}
                             </div>
-                            <div className="act-activity__event-body">
-                                <span className="act-activity__event-desc">
+                            <div className="act-activity-view__event-body">
+                                <span className="act-activity-view__event-desc">
                                     {getEventDescription(event)}
                                 </span>
-                                <span className="act-activity__event-time">
+                                <span className="act-activity-view__event-time">
                                     {formatTime(event.timestamp)}
                                 </span>
                             </div>

@@ -1,7 +1,8 @@
-/* ActPerformerFrame — full edit card for Act performers */
+/* ActPerformerFrame — Act performer node in edit focus mode */
 
 .act-performer-node {
     position: relative;
+    cursor: pointer;
 }
 
 .act-performer-node__handle {
@@ -26,4 +27,44 @@
 
 .act-performer-node__frame.canvas-window--selected {
     border-color: var(--accent);
+}
+
+/* ── Body ── */
+.act-performer-body {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.act-performer-body__ref {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.act-performer-body__dances,
+.act-performer-body__subs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.act-performer-body__sub-detail {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 2px;
+}
+
+.act-performer-body__hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.6;
+    font-style: italic;
 }

@@ -1,9 +1,8 @@
 /**
  * ActInspectorPanel — Right-side panel for Act edit focus mode.
  *
- * NOTE: Minimal stub for Phase 0 (type migration). Will be fully rebuilt in Phase 4.
- *
  * Context-sensitive: shows Act meta when nothing selected,
+ * Performer binding when a performer is selected,
  * Relation detail when a relation is selected.
  */
 import { useState, useMemo, useEffect } from 'react'

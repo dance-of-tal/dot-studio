@@ -1,12 +1,12 @@
 /**
- * ActPerformerFrame — Canvas node for an Act performer binding in Act edit focus mode.
+ * ActPerformerFrame — Canvas node for a performer binding in Act edit focus mode.
  *
- * Choreography model: shows performer ref binding info.
- * NOTE: Minimal stub for Phase 0 (type migration). Will be fully rebuilt in Phase 4.
+ * Choreography model: shows performer key, ref source, subscriptions summary,
+ * and active dance count. Clicking selects the performer for inspector editing.
  */
 import { useMemo, useCallback } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { Trash2, Hexagon } from 'lucide-react'
+import { Trash2, Hexagon, Mail, BookOpen } from 'lucide-react'
 
 import { useStudioStore } from '../../store'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
@@ -22,6 +22,7 @@ export default function ActPerformerFrame({ id }: any) {
         editingActId,
         selectedActPerformerKey,
         unbindPerformerFromAct,
+        selectActPerformer,
     } = useStudioStore()
 
     const performerKey = id.replace(/^act-p-/, '')
@@ -35,6 +36,10 @@ export default function ActPerformerFrame({ id }: any) {
         unbindPerformerFromAct(editingActId, performerKey)
     }, [editingActId, performerKey, unbindPerformerFromAct])
 
+    const handleSelect = useCallback(() => {
+        selectActPerformer(performerKey)
+    }, [performerKey, selectActPerformer])
+
     if (!act || !binding || !editingActId) return null
 
     // Display performer ref info
@@ -42,8 +47,12 @@ export default function ActPerformerFrame({ id }: any) {
         ? binding.performerRef.urn.split('/').pop() || binding.performerRef.urn
         : `Draft: ${binding.performerRef.draftId}`
 
+    // Subscriptions summary
+    const subs = binding.subscriptions || {}
+    const subCount = (subs.messagesFrom?.length || 0) + (subs.messageTags?.length || 0) + (subs.boardKeys?.length || 0)
+
     return (
-        <div className="act-performer-node">
+        <div className="act-performer-node" onClick={handleSelect}>
             <Handle type="target" position={Position.Left} className="act-performer-node__handle" />
             <Handle type="source" position={Position.Right} className="act-performer-node__handle" />
             <CanvasWindowFrame
@@ -71,19 +80,29 @@ export default function ActPerformerFrame({ id }: any) {
                 )}
                 bodyClassName="nowheel nodrag"
             >
-                <div style={{ padding: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                        <Hexagon size={14} />
+                <div className="act-performer-body">
+                    <div className="act-performer-body__ref">
+                        <Hexagon size={13} />
                         <span>{refLabel}</span>
                     </div>
                     {binding.activeDanceIds && binding.activeDanceIds.length > 0 && (
-                        <div style={{ marginTop: '4px' }}>
-                            Dances: {binding.activeDanceIds.length}
+                        <div className="act-performer-body__dances">
+                            <BookOpen size={11} />
+                            <span>{binding.activeDanceIds.length} dance{binding.activeDanceIds.length !== 1 ? 's' : ''}</span>
                         </div>
                     )}
-                    {binding.subscriptions && (
-                        <div style={{ marginTop: '4px', opacity: 0.7 }}>
-                            Subscriptions configured
+                    {subCount > 0 && (
+                        <div className="act-performer-body__subs">
+                            <Mail size={11} />
+                            <span>{subCount} subscription{subCount !== 1 ? 's' : ''}</span>
+                            <span className="act-performer-body__sub-detail">
+                                {subs.messagesFrom && subs.messagesFrom.length > 0 && `from: ${subs.messagesFrom.join(', ')}`}
+                            </span>
+                        </div>
+                    )}
+                    {subCount === 0 && (
+                        <div className="act-performer-body__hint">
+                            No subscriptions — click to configure
                         </div>
                     )}
                 </div>
