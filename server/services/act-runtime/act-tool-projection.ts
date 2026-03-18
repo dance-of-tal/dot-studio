@@ -1,15 +1,15 @@
 /**
- * act-tool-projection.ts — Act tool projection for performer sessions
+ * act-tool-projection.ts — Act tool projection for participant sessions
  *
  * Replaces the old act-compiler.ts relation→custom tool approach.
  * Projects Act runtime tools (send_message, post_to_board, read_board, set_wake_condition)
- * and Act context into performer sessions.
+ * and Act context into participant sessions.
  */
 
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import type { ActDefinition } from '../../../shared/act-types.js'
-import { getActToolsForPerformer } from './act-tools.js'
+import { getActToolsForParticipant } from './act-tools.js'
 import { buildActContext } from './act-context-builder.js'
 import { Mailbox } from './mailbox.js'
 
@@ -25,21 +25,21 @@ export interface ActToolProjection {
 // ── Projection ──────────────────────────────────────────
 
 /**
- * Generate Act tool projection for a performer in a thread.
+ * Generate Act tool projection for a participant in a thread.
  * Creates tool definitions and Act context prompt.
  */
 export function projectActTools(
-    performerKey: string,
+    participantKey: string,
     actDefinition: ActDefinition,
     threadId: string,
     _executionDir: string,
 ): ActToolProjection {
     // 1. Act context prompt
     const mailbox = new Mailbox()  // Fresh mailbox for context building (runtime state comes from thread)
-    const contextPrompt = buildActContext(actDefinition, performerKey, mailbox)
+    const contextPrompt = buildActContext(actDefinition, participantKey, mailbox)
 
     // 2. Runtime tool definitions
-    const tools = getActToolsForPerformer(actDefinition.id, threadId, performerKey)
+    const tools = getActToolsForParticipant(actDefinition.id, threadId, participantKey)
 
     return {
         contextPrompt,
@@ -48,7 +48,7 @@ export function projectActTools(
 }
 
 /**
- * Write Act tool files to the performer's execution directory.
+ * Write Act tool files to the participant's execution directory.
  */
 export async function writeActToolFiles(
     executionDir: string,
@@ -68,7 +68,7 @@ export async function writeActToolFiles(
 }
 
 /**
- * Clean up Act tool files from a performer's execution directory.
+ * Clean up Act tool files from a participant's execution directory.
  */
 export async function cleanActToolFiles(
     executionDir: string,

@@ -18,8 +18,8 @@ import {
   getAssetAuthor,
   getAssetSlug,
   applyAssetToPerformerTarget,
-  parseActPerformerDropId,
-  applyAssetToActPerformer,
+  parseActParticipantDropId,
+  applyAssetToActParticipant,
 } from './lib/dnd-handlers';
 import type { DragAsset, DropTargetData, PerformerAssetPayload } from './lib/dnd-handlers';
 
@@ -301,13 +301,13 @@ export default function App() {
 
     // Act participant drops — prefer the current act target when available
     if (dropData.performerId && over?.id) {
-      const actPerf = parseActPerformerDropId(String(over.id));
+      const actParticipant = parseActParticipantDropId(String(over.id));
       const targetActId = store.layoutActId || store.selectedActId;
-      if (actPerf && targetActId) {
-        applyAssetToActPerformer(
+      if (actParticipant && targetActId) {
+        applyAssetToActParticipant(
           store,
           targetActId,
-          actPerf.performerKey,
+          actParticipant.participantKey,
           dropData.type,
           asset,
           showDropWarning,

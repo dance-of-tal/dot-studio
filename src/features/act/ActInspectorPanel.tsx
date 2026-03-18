@@ -80,15 +80,15 @@ function ActMetaView() {
     }, [act.name, act.description, act.meta?.authoring?.description])
 
     useEffect(() => {
-        const [first = '', second = ''] = performerKeys
+        const [first = '', second = ''] = participantKeys
         setRelationDraft((current) => ({
-            source: performerKeys.includes(current.source) ? current.source : first,
-            target: performerKeys.includes(current.target) && current.target !== current.source
+            source: participantKeys.includes(current.source) ? current.source : first,
+            target: participantKeys.includes(current.target) && current.target !== current.source
                 ? current.target
                 : second || first,
             direction: current.direction,
         }))
-    }, [act.id, performerKeys.join('|')])
+    }, [act.id, participantKeys.join('|')])
 
     const commitName = () => {
         if (localName.trim() && localName !== act.name) {
@@ -105,7 +105,7 @@ function ActMetaView() {
     }
 
     // ── Validation ──────────────────────────────────────
-    const performerKeys = Object.keys(act.performers)
+    const participantKeys = Object.keys(act.performers)
     const connectedKeys = new Set<string>()
     for (const rel of act.relations) {
         connectedKeys.add(rel.between[0])
@@ -113,12 +113,12 @@ function ActMetaView() {
     }
     const warnings: Array<{ type: 'error' | 'warning'; msg: string }> = []
 
-    if (performerKeys.length === 0) {
-        warnings.push({ type: 'warning', msg: 'No performers bound' })
+    if (participantKeys.length === 0) {
+        warnings.push({ type: 'warning', msg: 'No participants bound' })
     }
-    // Disconnected performers
-    for (const key of performerKeys) {
-        if (!connectedKeys.has(key) && performerKeys.length > 1) {
+    // Disconnected participants
+    for (const key of participantKeys) {
+        if (!connectedKeys.has(key) && participantKeys.length > 1) {
             warnings.push({ type: 'warning', msg: `"${key}" is disconnected` })
         }
     }
@@ -153,7 +153,7 @@ function ActMetaView() {
                 <div className="act-panel__stat-grid">
                     <div className="act-panel__stat">
                         <User size={12} />
-                        <span>{performerKeys.length} performers</span>
+                        <span>{participantKeys.length} participants</span>
                     </div>
                     <div className="act-panel__stat">
                         <ArrowRightLeft size={12} />
@@ -164,9 +164,9 @@ function ActMetaView() {
 
             <div className="act-panel__section">
                 <label className="act-panel__label">Participants</label>
-                {performerKeys.length > 0 ? (
+                {participantKeys.length > 0 ? (
                     <div className="act-panel__list">
-                        {performerKeys.map((key) => (
+                        {participantKeys.map((key) => (
                             <button
                                 key={key}
                                 className="act-panel__edge-link"
@@ -181,7 +181,7 @@ function ActMetaView() {
                     </div>
                 ) : (
                     <div className="act-panel__list">
-                        <span className="act-panel__empty">No performers bound yet</span>
+                        <span className="act-panel__empty">No participants bound yet</span>
                         <button
                             className="act-panel__toggle"
                             onClick={() => {
@@ -192,7 +192,7 @@ function ActMetaView() {
                         </button>
                     </div>
                 )}
-                {performerKeys.length > 1 && (
+                {participantKeys.length > 1 && (
                     <button
                         className="act-panel__toggle"
                         onClick={() => autoLayoutActParticipants(activeActId)}
@@ -262,7 +262,7 @@ function ActMetaView() {
                 )}
             </div>
 
-            {performerKeys.length >= 2 && (
+            {participantKeys.length >= 2 && (
                 <div className="act-panel__section">
                     <label className="act-panel__label">Quick Relation</label>
                     <div className="act-panel__row">
@@ -273,7 +273,7 @@ function ActMetaView() {
                                 value={relationDraft.source}
                                 onChange={(e) => setRelationDraft((current) => ({ ...current, source: e.target.value }))}
                             >
-                                {performerKeys.map((key) => (
+                                {participantKeys.map((key) => (
                                     <option key={key} value={key}>{resolveActParticipantLabel(act, key, useStudioStore.getState().performers)}</option>
                                 ))}
                             </select>
@@ -285,7 +285,7 @@ function ActMetaView() {
                                 value={relationDraft.target}
                                 onChange={(e) => setRelationDraft((current) => ({ ...current, target: e.target.value }))}
                             >
-                                {performerKeys.map((key) => (
+                                {participantKeys.map((key) => (
                                     <option key={key} value={key}>{resolveActParticipantLabel(act, key, useStudioStore.getState().performers)}</option>
                                 ))}
                             </select>
@@ -381,7 +381,7 @@ function ActMetaView() {
 }
 
 // ── Participant Binding View ────────────────────────────
-function PerformerView() {
+function ParticipantView() {
     const {
         acts, performers, layoutActId, selectedActId, selectedActParticipantKey,
         selectRelation, updatePerformerBinding, unbindPerformerFromAct, selectActParticipant,
@@ -402,7 +402,7 @@ function PerformerView() {
 
     if (!act || !binding || !selectedActParticipantKey || !activeActId) return null
 
-    // Show performer ref info
+    // Show participant ref info
     const refLabel = binding.performerRef.kind === 'registry'
         ? binding.performerRef.urn.split('/').pop() || binding.performerRef.urn
         : `Draft: ${binding.performerRef.draftId}`
@@ -488,7 +488,7 @@ function PerformerView() {
                     }
 
                     if (availableDances.length === 0) {
-                        return <span className="act-panel__empty">No dances on this performer</span>
+                        return <span className="act-panel__empty">No dances on this participant</span>
                     }
 
                     return (
@@ -866,7 +866,7 @@ export default function ActInspectorPanel() {
                 <span>{label}</span>
             </div>
             {mode === 'act' && <ActMetaView />}
-            {mode === 'performer' && <PerformerView />}
+            {mode === 'performer' && <ParticipantView />}
             {mode === 'relation' && <RelationView />}
         </div>
     )

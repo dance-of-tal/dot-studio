@@ -1,14 +1,14 @@
 /**
  * act-tools.ts — Act runtime custom tool definitions
  *
- * PRD §13: Tools exposed to performers in Act context.
+ * PRD §13: Tools exposed to participants in Act context.
  * - send_message (fire-and-forget)
  * - post_to_board
  * - read_board
  * - set_wake_condition
  *
  * These are generated as OpenCode custom tool .ts files and placed in
- * the performer's .opencode/tools/ directory during Act context projection.
+ * the participant's .opencode/tools/ directory during Act context projection.
  */
 
 import type { ConditionExpr } from '../../../shared/act-types.js'
@@ -46,14 +46,14 @@ function sanitizeToolName(name: string): string {
     return name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
 }
 
-export function generateSendMessageTool(actId: string, threadId: string, performerKey: string): { name: string; content: string } {
+export function generateSendMessageTool(actId: string, threadId: string, participantKey: string): { name: string; content: string } {
     const name = `act_send_message_${sanitizeToolName(actId)}`
     const content = `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Send a message to another performer in this Act. Fire-and-forget: you will not receive a direct response.",
+    description: "Send a message to another participant in this Act. Fire-and-forget: you will not receive a direct response.",
     args: {
-        to: tool.schema.string().describe("Target performer key to send the message to"),
+        to: tool.schema.string().describe("Target participant key to send the message to"),
         content: tool.schema.string().describe("Message content"),
         tag: tool.schema.string().optional().describe("Optional tag for the message (e.g. review-request, clarification)"),
     },
@@ -62,7 +62,7 @@ export default tool({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                from: ${JSON.stringify(performerKey)},
+                from: ${JSON.stringify(participantKey)},
                 to: args.to,
                 content: args.content,
                 tag: args.tag,
@@ -77,12 +77,12 @@ export default tool({
     return { name, content }
 }
 
-export function generatePostToBoardTool(actId: string, threadId: string, performerKey: string): { name: string; content: string } {
+export function generatePostToBoardTool(actId: string, threadId: string, participantKey: string): { name: string; content: string } {
     const name = `act_post_to_board_${sanitizeToolName(actId)}`
     const content = `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Post or update an entry on the shared board. Board entries are durable and visible to all performers.",
+    description: "Post or update an entry on the shared board. Board entries are durable and visible to all participants.",
     args: {
         key: tool.schema.string().describe("Board entry key (e.g. api-spec, review-report)"),
         kind: tool.schema.enum(["artifact", "fact", "task"]).describe("Entry kind"),
@@ -94,7 +94,7 @@ export default tool({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                author: ${JSON.stringify(performerKey)},
+                author: ${JSON.stringify(participantKey)},
                 key: args.key,
                 kind: args.kind,
                 content: args.content,
@@ -131,7 +131,7 @@ export default tool({
     return { name, content }
 }
 
-export function generateSetWakeConditionTool(actId: string, threadId: string, performerKey: string): { name: string; content: string } {
+export function generateSetWakeConditionTool(actId: string, threadId: string, participantKey: string): { name: string; content: string } {
     const name = `act_set_wake_condition_${sanitizeToolName(actId)}`
     const content = `import { tool } from "@opencode-ai/plugin"
 
@@ -152,7 +152,7 @@ export default tool({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                createdBy: ${JSON.stringify(performerKey)},
+                createdBy: ${JSON.stringify(participantKey)},
                 target: "self",
                 onSatisfiedMessage: args.onSatisfiedMessage,
                 condition,
@@ -168,17 +168,17 @@ export default tool({
 }
 
 /**
- * Get all Act runtime tools for a performer in a thread.
+ * Get all Act runtime tools for a participant in a thread.
  */
-export function getActToolsForPerformer(
+export function getActToolsForParticipant(
     actId: string,
     threadId: string,
-    performerKey: string,
+    participantKey: string,
 ): Array<{ name: string; content: string }> {
     return [
-        generateSendMessageTool(actId, threadId, performerKey),
-        generatePostToBoardTool(actId, threadId, performerKey),
+        generateSendMessageTool(actId, threadId, participantKey),
+        generatePostToBoardTool(actId, threadId, participantKey),
         generateReadBoardTool(actId, threadId),
-        generateSetWakeConditionTool(actId, threadId, performerKey),
+        generateSetWakeConditionTool(actId, threadId, participantKey),
     ]
 }

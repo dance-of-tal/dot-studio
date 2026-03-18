@@ -1,7 +1,7 @@
 /**
- * session-queue.ts — Same Performer Policy queue
+ * session-queue.ts — Same Participant Policy queue
  *
- * PRD §15.4: If the same performer is already executing, queue new wake-ups.
+ * PRD §15.4: If the same participant is already executing, queue new wake-ups.
  * Supports coalescing rules for board key updates and sender messages.
  */
 
@@ -17,35 +17,35 @@ export class SessionQueue {
     private running: Set<string> = new Set()
 
     /**
-     * Mark a performer as currently running.
+     * Mark a participant as currently running.
      */
-    markRunning(performerKey: string): void {
-        this.running.add(performerKey)
+    markRunning(participantKey: string): void {
+        this.running.add(participantKey)
     }
 
     /**
-     * Mark a performer as no longer running. Returns the next queued wake-up if any.
+     * Mark a participant as no longer running. Returns the next queued wake-up if any.
      */
-    markIdle(performerKey: string): WakeUpTarget | null {
-        this.running.delete(performerKey)
-        return this.dequeue(performerKey)
+    markIdle(participantKey: string): WakeUpTarget | null {
+        this.running.delete(participantKey)
+        return this.dequeue(participantKey)
     }
 
     /**
-     * Check if a performer is currently running.
+     * Check if a participant is currently running.
      */
-    isRunning(performerKey: string): boolean {
-        return this.running.has(performerKey)
+    isRunning(participantKey: string): boolean {
+        return this.running.has(participantKey)
     }
 
     /**
-     * Enqueue a wake-up for a performer. Applies coalescing rules.
+     * Enqueue a wake-up for a participant. Applies coalescing rules.
      */
-    enqueue(performerKey: string, wakeUp: WakeUpTarget): void {
-        let queue = this.queues.get(performerKey)
+    enqueue(participantKey: string, wakeUp: WakeUpTarget): void {
+        let queue = this.queues.get(participantKey)
         if (!queue) {
             queue = []
-            this.queues.set(performerKey, queue)
+            this.queues.set(participantKey, queue)
         }
 
         // ── Coalescing rules ────────────────────────
@@ -86,24 +86,24 @@ export class SessionQueue {
     }
 
     /**
-     * Dequeue the next wake-up for a performer.
+     * Dequeue the next wake-up for a participant.
      */
-    dequeue(performerKey: string): WakeUpTarget | null {
-        const queue = this.queues.get(performerKey)
+    dequeue(participantKey: string): WakeUpTarget | null {
+        const queue = this.queues.get(participantKey)
         if (!queue || queue.length === 0) return null
 
         const entry = queue.shift()!
         if (queue.length === 0) {
-            this.queues.delete(performerKey)
+            this.queues.delete(participantKey)
         }
         return entry.target
     }
 
     /**
-     * Get the queue depth for a performer.
+     * Get the queue depth for a participant.
      */
-    getQueueDepth(performerKey: string): number {
-        return this.queues.get(performerKey)?.length ?? 0
+    getQueueDepth(participantKey: string): number {
+        return this.queues.get(participantKey)?.length ?? 0
     }
 
     /**

@@ -885,7 +885,7 @@ export const createWorkspaceSlice: StateCreator<
         const centerX = get().canvasCenter?.x ?? 200
         const centerY = get().canvasCenter?.y ?? 200
 
-        // Build performer bindings from draft content (choreography model)
+        // Build participant bindings from draft content (choreography model)
         const performers: Record<string, any> = {}
         if (draftContent.performers && typeof draftContent.performers === 'object') {
             let idx = 0

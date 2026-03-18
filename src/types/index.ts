@@ -174,6 +174,7 @@ export interface PerformerNode {
 // Re-export choreography Act types from shared
 export type {
     ActRelation,
+    ActParticipantBinding,
     ActPerformerBinding,
     PerformerSubscriptions,
     MailboxMessage,
@@ -196,8 +197,8 @@ export type {
 // Local import for types used within this file
 import type { ActRelation, PerformerSubscriptions } from '../../shared/act-types'
 
-/** Canvas-specific performer binding (extends ActPerformerBinding with UI position) */
-export interface StageActPerformerBinding {
+/** Canvas-specific participant binding (extends ActParticipantBinding with UI position) */
+export interface StageActParticipantBinding {
     performerRef: AssetRef
     activeDanceIds?: string[]
     subscriptions?: PerformerSubscriptions
@@ -213,9 +214,9 @@ export interface StageAct {
     position: { x: number; y: number }
     width: number
     height: number
-    /** Performer bindings (key = internal performer key) */
-    performers: Record<string, StageActPerformerBinding>
-    /** Communication contract relations between performers */
+    /** Participant bindings (key = internal participant key) */
+    performers: Record<string, StageActParticipantBinding>
+    /** Communication contract relations between participants */
     relations: ActRelation[]
     hidden?: boolean
     createdAt: number

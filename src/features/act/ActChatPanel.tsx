@@ -1,8 +1,8 @@
 /**
- * ActChatPanel — Thread-based performer chat for Act canvas node.
+ * ActChatPanel — Thread-based participant chat for an Act surface.
  *
- * Choreography model: each Thread has independent performer sessions.
- * User interacts with individual performers via tabs.
+ * Choreography model: each Thread has independent participant sessions.
+ * User interacts with individual participants via tabs.
  * Wake-up prompts are visually distinguished from user input.
  */
 import { useState, useCallback, useMemo, useRef } from 'react'
@@ -203,7 +203,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                         {noParticipants ? (
                             <>
                                 <Users size={20} className="act-chat__empty-icon" />
-                                <strong>No performers bound</strong>
+                                <strong>No participants bound</strong>
                                 <span>Select this act and add performers from the Asset Library to start choreographing work.</span>
                                 <button
                                     className="act-chat__action-btn"

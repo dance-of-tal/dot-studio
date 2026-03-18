@@ -3,7 +3,7 @@
  *
  * Connects: event-router → wake-prompt-builder → session-queue → session injection
  * PRD §15: After a tool call produces an event, this module:
- * 1. Routes the event to matching performers
+ * 1. Routes the event to matching participants
  * 2. Builds wake-up prompts for each target
  * 3. Queues or immediately injects the prompt via OpenCode session.promptAsync
  */
@@ -27,8 +27,8 @@ function getSessionQueue(threadId: string): SessionQueue {
 
 export interface WakeCascadeResult {
     targets: WakeUpTarget[]
-    queued: string[]    // performer keys that were queued
-    injected: string[]  // performer keys that were immediately injected
+    queued: string[]    // participant keys that were queued
+    injected: string[]  // participant keys that were immediately injected
     errors: string[]    // any error messages
 }
 
@@ -50,7 +50,7 @@ export async function processWakeCascade(
         errors: [],
     }
 
-    // 1. Route event to matching performers
+    // 1. Route event to matching participants
     const recentEvents = await threadManager.getRecentEvents(threadId, 20)
     const targets = routeEvent(event, actDefinition, mailbox, recentEvents)
     result.targets = targets
@@ -61,12 +61,12 @@ export async function processWakeCascade(
     const queue = getSessionQueue(threadId)
 
     for (const target of targets) {
-        const performerKey = target.performerKey
+        const participantKey = target.participantKey
 
-        // Check if performer is already executing (Same Performer Policy)
-        if (queue.isRunning(performerKey)) {
-            queue.enqueue(performerKey, target)
-            result.queued.push(performerKey)
+        // Check if participant is already executing (Same Participant Policy)
+        if (queue.isRunning(participantKey)) {
+            queue.enqueue(participantKey, target)
+            result.queued.push(participantKey)
             continue
         }
 
@@ -74,17 +74,17 @@ export async function processWakeCascade(
         const prompt = buildWakePrompt(target, mailbox)
 
         // Mark messages as delivered
-        markMessagesDelivered(mailbox, performerKey)
+        markMessagesDelivered(mailbox, participantKey)
 
         // Mark as executing
-        queue.markRunning(performerKey)
+        queue.markRunning(participantKey)
 
-        // Inject prompt into performer's session
+        // Inject prompt into participant's session
         try {
-            const sessionId = threadManager.getPerformerSession(threadId, performerKey)
+            const sessionId = threadManager.getPerformerSession(threadId, participantKey)
             if (!sessionId) {
-                result.errors.push(`No session found for performer ${performerKey}`)
-                queue.markIdle(performerKey)
+                result.errors.push(`No session found for participant ${participantKey}`)
+                queue.markIdle(participantKey)
                 continue
             }
 
@@ -105,14 +105,14 @@ export async function processWakeCascade(
                 parts: [{ type: 'text', text: prompt }],
             })
 
-            result.injected.push(performerKey)
+            result.injected.push(participantKey)
 
             // After execution, process any queued events
-            queue.markIdle(performerKey)
+            queue.markIdle(participantKey)
             // Note: queued events are processed on next cascade
         } catch (err: any) {
-            result.errors.push(`Wake injection failed for ${performerKey}: ${err.message}`)
-            queue.markIdle(performerKey)
+            result.errors.push(`Wake injection failed for ${participantKey}: ${err.message}`)
+            queue.markIdle(participantKey)
         }
     }
 

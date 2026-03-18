@@ -151,7 +151,7 @@ export async function applyAssetToPerformerTarget(
  * Detect whether a drop target belongs to an Act participant.
  * Act participant droppable IDs use the format `act-perf-{type}-act-p-{key}`.
  */
-export function parseActPerformerDropId(dropId: string): { participantKey: string } | null {
+export function parseActParticipantDropId(dropId: string): { participantKey: string } | null {
     const match = dropId.match(/^act-perf-\w+-act-p-(.+)$/)
     return match ? { participantKey: match[1] } : null
 }
@@ -161,7 +161,7 @@ export function parseActPerformerDropId(dropId: string): { participantKey: strin
  * In the choreography model, Act participants are refs — we can only bind performer refs.
  * Direct config drops (tal, dance, model, mcp) are not supported on Act participant bindings.
  */
-export function applyAssetToActPerformer(
+export function applyAssetToActParticipant(
     store: StudioState,
     actId: string,
     _participantKey: string,

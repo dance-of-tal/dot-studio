@@ -45,7 +45,7 @@ export default function ActParticipantFrame({ id }: any) {
 
     const participantLabel = resolveActParticipantLabel(act, participantKey, useStudioStore.getState().performers)
 
-    // Display performer ref info
+    // Display participant ref info
     const refLabel = binding.performerRef.kind === 'registry'
         ? binding.performerRef.urn.split('/').pop() || binding.performerRef.urn
         : `Draft: ${binding.performerRef.draftId}`

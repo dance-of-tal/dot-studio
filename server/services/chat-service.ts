@@ -7,22 +7,7 @@ import { getSafeOwnerExecutionDir } from '../lib/safe-mode.js'
 import { registerSessionExecutionContext } from '../lib/session-execution.js'
 import { ensurePerformerProjection } from './opencode-projection/stage-projection-service.js'
 import { projectActTools, writeActToolFiles } from './act-runtime/act-tool-projection.js'
-
-// Shared ThreadManager for Act runtime tools
-let _getThreadManager: ((workingDir: string) => import('./act-runtime/thread-manager.js').ThreadManager) | null = null
-
-async function getThreadManager(workingDir: string) {
-    if (!_getThreadManager) {
-        const mod = await import('./act-runtime/thread-manager.js')
-        // Use lazy singleton matching act-runtime routes
-        let tm: InstanceType<typeof mod.ThreadManager> | null = null
-        _getThreadManager = (wd: string) => {
-            if (!tm) tm = new mod.ThreadManager(wd)
-            return tm
-        }
-    }
-    return _getThreadManager(workingDir)
-}
+import { getActDefinitionForThread } from './act-runtime/act-runtime-service.js'
 
 export async function createStudioChatSession(
     cwd: string,
@@ -82,8 +67,7 @@ export async function sendStudioChatMessage(
 
     if (request.actId && request.actThreadId) {
         try {
-            const tm = await getThreadManager(workingDir)
-            const actDef = tm.getActDefinition(request.actThreadId)
+            const actDef = getActDefinitionForThread(workingDir, request.actThreadId)
             if (actDef) {
                 const projection = projectActTools(
                     rawPerformerId,

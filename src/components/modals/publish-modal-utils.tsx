@@ -84,7 +84,7 @@ export function getActPublishBlockReasons(act: StageAct): string[] {
         reasons.push('Act has no performers.')
     }
     if (act.relations.length === 0) {
-        reasons.push('Act has no relations. Create relations between performers first.')
+        reasons.push('Act has no relations. Create relations between participants first.')
     }
 
     // Disconnected performers

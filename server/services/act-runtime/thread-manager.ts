@@ -2,7 +2,7 @@
  * thread-manager.ts — Act Thread lifecycle management
  *
  * PRD §5: Thread is an execution instance of an Act.
- * Manages: creation, status transitions, performer session mapping, shutdown.
+ * Manages: creation, status transitions, participant session mapping, shutdown.
  */
 
 import { nanoid } from 'nanoid'
@@ -41,7 +41,7 @@ export class ThreadManager {
                 board: {},
                 wakeConditions: [],
             },
-            performerSessions: {},
+            participantSessions: {},
             createdAt: Date.now(),
             status: 'active',
         }
@@ -106,28 +106,28 @@ export class ThreadManager {
         }
     }
 
-    // ── Performer session mapping ───────────────────
+    // ── Participant session mapping ─────────────────
 
     /**
-     * Get or create a session ID for a performer within a thread.
+     * Get or create a session ID for a participant within a thread.
      * Session creation is deferred to the caller — this just manages the mapping.
      */
-    getOrCreateSession(threadId: string, performerKey: string, createSessionId: () => string): string {
+    getOrCreateSession(threadId: string, participantKey: string, createSessionId: () => string): string {
         const runtime = this.threads.get(threadId)
         if (!runtime) throw new Error(`Thread ${threadId} not found`)
 
-        const existing = runtime.thread.performerSessions[performerKey]
+        const existing = runtime.thread.participantSessions[participantKey]
         if (existing) return existing
 
         const sessionId = createSessionId()
-        runtime.thread.performerSessions[performerKey] = sessionId
+        runtime.thread.participantSessions[participantKey] = sessionId
         return sessionId
     }
 
-    getPerformerSession(threadId: string, performerKey: string): string | null {
+    getPerformerSession(threadId: string, participantKey: string): string | null {
         const runtime = this.threads.get(threadId)
         if (!runtime) return null
-        return runtime.thread.performerSessions[performerKey] || null
+        return runtime.thread.participantSessions[participantKey] || null
     }
 
     // ── Event logging ───────────────────────────────

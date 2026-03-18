@@ -2,25 +2,42 @@
 // Models, Agents, Tools, Config, Provider Auth, File, Find, VCS, LSP, MCP
 
 import { Hono } from 'hono'
-import { getOpencode } from '../lib/opencode.js'
 import { cached, invalidate, TTL } from '../lib/cache.js'
 
 import type { ModelSelection } from '../../shared/model-types.js'
 import { resolveRuntimeTools } from '../lib/runtime-tools.js'
 import { requestDirectoryQuery, resolveRequestWorkingDir } from '../lib/request-context.js'
-import { restartOpencodeSidecar, isManagedOpencode } from '../lib/opencode-sidecar.js'
-import { OPENCODE_URL } from '../lib/config.js'
-import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
-import { jsonOpencodeError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
-import { listRuntimeModels, listProviderSummaries, invalidateProviderListCache } from '../lib/model-catalog.js'
-import { readProjectConfigFile, readProjectMcpCatalog, summarizeProjectMcpCatalog } from '../lib/project-config.js'
+import { jsonOpencodeError } from '../lib/opencode-errors.js'
+import { listRuntimeModels, listProviderSummaries } from '../lib/model-catalog.js'
 import {
-    opencodeModeMeta,
-    responseData,
+    authenticateMcp,
+    authorizeProviderOauth,
+    completeMcpAuth,
+    completeProviderOauth,
+    deleteProviderAuth,
+    findFilesInProject,
+    findSymbolsInProject,
+    findTextInProject,
+    getFileStatus,
+    getLspStatus,
+    getOpenCodeHealth,
+    getOpenCodeUnavailableHealth,
+    getOpenCodeConfig,
+    getProviderAuthStatus,
+    getVcsStatus,
+    listMcpServers,
+    listFiles,
+    listOpenCodeAgents,
+    listOpenCodeToolIds,
+    listOpenCodeToolsForModel,
+    removeMcpAuth,
+    restartManagedOpenCode,
+    readFile,
     readProjectConfigFromOpencode,
-    mergeProjectConfig,
     runMcpMutation,
-    validateMcpAuthRequest,
+    startMcpAuth,
+    updateOpenCodeConfig,
+    updateProviderAuth,
 } from '../services/opencode-service.js'
 
 const opencode = new Hono()
@@ -30,33 +47,15 @@ const opencode = new Hono()
 // ── OpenCode Health ─────────────────────────────────────
 opencode.get('/api/opencode/health', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.project.current(requestDirectoryQuery(c))
-        const data = responseData(res, null)
-        return c.json({
-            connected: true,
-            url: OPENCODE_URL,
-            project: data,
-            ...opencodeModeMeta(),
-        })
+        return c.json(await getOpenCodeHealth(resolveRequestWorkingDir(c)))
     } catch (err: any) {
-        return c.json({
-            connected: false,
-            error: err.message,
-            url: OPENCODE_URL,
-            ...opencodeModeMeta(),
-        }, 503)
+        return c.json(getOpenCodeUnavailableHealth(err), 503)
     }
 })
 
 opencode.post('/api/opencode/restart', async (c) => {
     try {
-        await restartOpencodeSidecar()
-        return c.json({
-            ok: true,
-            managed: isManagedOpencode(),
-            mode: isManagedOpencode() ? 'managed' : 'external',
-        })
+        return c.json(await restartManagedOpenCode())
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 400 })
     }
@@ -84,9 +83,7 @@ opencode.get('/api/providers', async (c) => {
 // ── Agents ──────────────────────────────────────────────
 opencode.get('/api/agents', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.app.agents(requestDirectoryQuery(c))
-        return c.json(responseData(res, []))
+        return c.json(await listOpenCodeAgents(resolveRequestWorkingDir(c)))
     } catch {
         return c.json([])
     }
@@ -95,9 +92,7 @@ opencode.get('/api/agents', async (c) => {
 // ── Tools ───────────────────────────────────────────────
 opencode.get('/api/tools', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.tool.ids(requestDirectoryQuery(c))
-        return c.json(responseData(res, []))
+        return c.json(await listOpenCodeToolIds(resolveRequestWorkingDir(c)))
     } catch {
         return c.json([])
     }
@@ -105,13 +100,7 @@ opencode.get('/api/tools', async (c) => {
 
 opencode.get('/api/tools/:provider/:model', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.tool.list({
-            ...requestDirectoryQuery(c),
-            provider: c.req.param('provider'),
-            model: c.req.param('model'),
-        })
-        return c.json(responseData(res, []))
+        return c.json(await listOpenCodeToolsForModel(resolveRequestWorkingDir(c), c.req.param('provider'), c.req.param('model')))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -137,9 +126,7 @@ opencode.post('/api/runtime/tools', async (c) => {
 // ── Config ──────────────────────────────────────────────
 opencode.get('/api/config', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.config.get(requestDirectoryQuery(c))
-        return c.json(responseData(res, {}))
+        return c.json(await getOpenCodeConfig(resolveRequestWorkingDir(c)))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -147,7 +134,7 @@ opencode.get('/api/config', async (c) => {
 
 opencode.get('/api/config/project', async (c) => {
     try {
-        const { cwd, config } = await readProjectConfigFromOpencode(c)
+        const { cwd, config } = await readProjectConfigFromOpencode(resolveRequestWorkingDir(c))
         return c.json({
             exists: true,
             path: `${cwd}/config.json`,
@@ -166,13 +153,7 @@ opencode.get('/api/config/project', async (c) => {
 opencode.put('/api/config', async (c) => {
     const body = await c.req.json()
     try {
-        const oc = await getOpencode()
-        const cwd = resolveRequestWorkingDir(c)
-        const current = await readProjectConfigFile(cwd)
-        const nextConfig = mergeProjectConfig(current, body && typeof body === 'object' ? body : {})
-        const res = await oc.config.update({ ...requestDirectoryQuery(c), config: nextConfig })
-        invalidate('mcp-servers')
-        return c.json(responseData(res, {}))
+        return c.json(await updateOpenCodeConfig(resolveRequestWorkingDir(c), body))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -181,9 +162,7 @@ opencode.put('/api/config', async (c) => {
 // ── Provider Auth ───────────────────────────────────────
 opencode.get('/api/provider/auth', async (c) => {
     try {
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.provider.auth(requestDirectoryQuery(c)))
-        return c.json(data || {})
+        return c.json(await getProviderAuthStatus(resolveRequestWorkingDir(c)))
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 503 })
     }
@@ -192,13 +171,7 @@ opencode.get('/api/provider/auth', async (c) => {
 opencode.post('/api/provider/:id/oauth/authorize', async (c) => {
     const { method } = await c.req.json<{ method: number }>()
     try {
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.provider.oauth.authorize({
-            providerID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
-            method,
-        }))
-        return c.json(data)
+        return c.json(await authorizeProviderOauth(resolveRequestWorkingDir(c), c.req.param('id'), method))
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
     }
@@ -207,16 +180,7 @@ opencode.post('/api/provider/:id/oauth/authorize', async (c) => {
 opencode.post('/api/provider/:id/oauth/callback', async (c) => {
     const { method, code } = await c.req.json<{ method: number; code?: string }>()
     try {
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.provider.oauth.callback({
-            providerID: c.req.param('id'),
-            ...requestDirectoryQuery(c),
-            method,
-            ...(code ? { code } : {}),
-        }))
-        await oc.global.dispose()
-        invalidateProviderListCache()
-        return c.json(data)
+        return c.json(await completeProviderOauth(resolveRequestWorkingDir(c), c.req.param('id'), method, code))
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
     }
@@ -225,14 +189,7 @@ opencode.post('/api/provider/:id/oauth/callback', async (c) => {
 opencode.put('/api/provider/:id/auth', async (c) => {
     const auth = await c.req.json()
     try {
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.auth.set({
-            providerID: c.req.param('id'),
-            auth,
-        }))
-        await oc.global.dispose()
-        invalidateProviderListCache()
-        return c.json(data)
+        return c.json(await updateProviderAuth(c.req.param('id'), auth))
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
     }
@@ -240,11 +197,7 @@ opencode.put('/api/provider/:id/auth', async (c) => {
 
 opencode.delete('/api/provider/:id/auth', async (c) => {
     try {
-        const oc = await getOpencode()
-        await clearStoredProviderAuth(c.req.param('id'))
-        await oc.global.dispose()
-        invalidateProviderListCache()
-        return c.json({ ok: true })
+        return c.json(await deleteProviderAuth(c.req.param('id')))
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
     }
@@ -253,9 +206,7 @@ opencode.delete('/api/provider/:id/auth', async (c) => {
 // ── LSP ─────────────────────────────────────────────────
 opencode.get('/api/lsp/status', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.lsp.status(requestDirectoryQuery(c))
-        return c.json(responseData(res, []))
+        return c.json(await getLspStatus(resolveRequestWorkingDir(c)))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -265,13 +216,7 @@ opencode.get('/api/lsp/status', async (c) => {
 opencode.get('/api/mcp/servers', async (c) => {
     try {
         const cwd = resolveRequestWorkingDir(c)
-        return c.json(await cached(`mcp-servers-${cwd}`, TTL.MCP_SERVERS, async () => {
-            const oc = await getOpencode()
-            const res = await oc.mcp.status({ directory: cwd })
-            const data = ((res as any).data || {}) as Record<string, any>
-            const catalog = await readProjectMcpCatalog(cwd)
-            return summarizeProjectMcpCatalog(catalog, data)
-        }))
+        return c.json(await cached(`mcp-servers-${cwd}`, TTL.MCP_SERVERS, async () => listMcpServers(cwd)))
     } catch {
         return c.json([])
     }
@@ -283,11 +228,11 @@ opencode.post('/api/mcp/add', async (c) => {
         config: { command: string; args?: string[]; env?: Record<string, string> } | { url: string }
     }>()
     try {
-        return await runMcpMutation(c, (oc) => oc.mcp.add({
+        return c.json(await runMcpMutation(resolveRequestWorkingDir(c), (oc) => oc.mcp.add({
             ...requestDirectoryQuery(c),
             name,
             config: config as any,
-        }))
+        })))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -295,10 +240,10 @@ opencode.post('/api/mcp/add', async (c) => {
 
 opencode.post('/api/mcp/:name/connect', async (c) => {
     try {
-        return await runMcpMutation(c, (oc) => oc.mcp.connect({
+        return c.json(await runMcpMutation(resolveRequestWorkingDir(c), (oc) => oc.mcp.connect({
             name: c.req.param('name'),
             ...requestDirectoryQuery(c),
-        }))
+        })))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -306,14 +251,7 @@ opencode.post('/api/mcp/:name/connect', async (c) => {
 
 opencode.post('/api/mcp/:name/auth/start', async (c) => {
     try {
-        await validateMcpAuthRequest(c, c.req.param('name'))
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.mcp.auth.start({
-            name: c.req.param('name'),
-            ...requestDirectoryQuery(c),
-        }))
-        invalidate('mcp-servers')
-        return c.json(data)
+        return c.json(await startMcpAuth(resolveRequestWorkingDir(c), c.req.param('name')))
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 500 })
     }
@@ -322,14 +260,7 @@ opencode.post('/api/mcp/:name/auth/start', async (c) => {
 opencode.post('/api/mcp/:name/auth/callback', async (c) => {
     const { code } = await c.req.json<{ code: string }>().catch(() => ({ code: '' }))
     try {
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.mcp.auth.callback({
-            name: c.req.param('name'),
-            ...requestDirectoryQuery(c),
-            code,
-        }))
-        invalidate('mcp-servers')
-        return c.json(data)
+        return c.json(await completeMcpAuth(resolveRequestWorkingDir(c), c.req.param('name'), code))
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 500 })
     }
@@ -337,14 +268,7 @@ opencode.post('/api/mcp/:name/auth/callback', async (c) => {
 
 opencode.post('/api/mcp/:name/auth/authenticate', async (c) => {
     try {
-        await validateMcpAuthRequest(c, c.req.param('name'))
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.mcp.auth.authenticate({
-            name: c.req.param('name'),
-            ...requestDirectoryQuery(c),
-        }))
-        invalidate('mcp-servers')
-        return c.json(data)
+        return c.json(await authenticateMcp(resolveRequestWorkingDir(c), c.req.param('name')))
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 500 })
     }
@@ -352,13 +276,7 @@ opencode.post('/api/mcp/:name/auth/authenticate', async (c) => {
 
 opencode.delete('/api/mcp/:name/auth', async (c) => {
     try {
-        const oc = await getOpencode()
-        const data = unwrapOpencodeResult<any>(await oc.mcp.auth.remove({
-            name: c.req.param('name'),
-            ...requestDirectoryQuery(c),
-        }))
-        invalidate('mcp-servers')
-        return c.json(data)
+        return c.json(await removeMcpAuth(resolveRequestWorkingDir(c), c.req.param('name')))
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 500 })
     }
@@ -366,10 +284,10 @@ opencode.delete('/api/mcp/:name/auth', async (c) => {
 
 opencode.post('/api/mcp/:name/disconnect', async (c) => {
     try {
-        return await runMcpMutation(c, (oc) => oc.mcp.disconnect({
+        return c.json(await runMcpMutation(resolveRequestWorkingDir(c), (oc) => oc.mcp.disconnect({
             name: c.req.param('name'),
             ...requestDirectoryQuery(c),
-        }))
+        })))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -379,9 +297,7 @@ opencode.post('/api/mcp/:name/disconnect', async (c) => {
 opencode.get('/api/file/list', async (c) => {
     const dirPath = c.req.query('path') || '.'
     try {
-        const oc = await getOpencode()
-        const res = await oc.file.list({ ...requestDirectoryQuery(c), path: dirPath })
-        return c.json(responseData(res, []))
+        return c.json(await listFiles(resolveRequestWorkingDir(c), dirPath))
     } catch {
         return c.json([])
     }
@@ -391,9 +307,7 @@ opencode.get('/api/file/read', async (c) => {
     const filePath = c.req.query('path')
     if (!filePath) return c.json({ error: 'path required' }, 400)
     try {
-        const oc = await getOpencode()
-        const res = await oc.file.read({ ...requestDirectoryQuery(c), path: filePath })
-        return c.json(responseData(res, {}))
+        return c.json(await readFile(resolveRequestWorkingDir(c), filePath))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -401,9 +315,7 @@ opencode.get('/api/file/read', async (c) => {
 
 opencode.get('/api/file/status', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.file.status(requestDirectoryQuery(c))
-        return c.json(responseData(res, []))
+        return c.json(await getFileStatus(resolveRequestWorkingDir(c)))
     } catch {
         return c.json([])
     }
@@ -414,9 +326,7 @@ opencode.get('/api/find/text', async (c) => {
     const pattern = c.req.query('pattern')
     if (!pattern) return c.json({ error: 'pattern required' }, 400)
     try {
-        const oc = await getOpencode()
-        const res = await oc.find.text({ ...requestDirectoryQuery(c), pattern })
-        return c.json(responseData(res, []))
+        return c.json(await findTextInProject(resolveRequestWorkingDir(c), pattern))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -426,9 +336,7 @@ opencode.get('/api/find/files', async (c) => {
     const pattern = c.req.query('pattern')
     if (!pattern) return c.json({ error: 'pattern required' }, 400)
     try {
-        const oc = await getOpencode()
-        const res = await oc.find.files({ ...requestDirectoryQuery(c), query: pattern })
-        return c.json(responseData(res, []))
+        return c.json(await findFilesInProject(resolveRequestWorkingDir(c), pattern))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -438,9 +346,7 @@ opencode.get('/api/find/symbols', async (c) => {
     const pattern = c.req.query('pattern')
     if (!pattern) return c.json({ error: 'pattern required' }, 400)
     try {
-        const oc = await getOpencode()
-        const res = await oc.find.symbols({ ...requestDirectoryQuery(c), query: pattern })
-        return c.json(responseData(res, []))
+        return c.json(await findSymbolsInProject(resolveRequestWorkingDir(c), pattern))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -449,9 +355,7 @@ opencode.get('/api/find/symbols', async (c) => {
 // ── VCS / Git ───────────────────────────────────────────
 opencode.get('/api/vcs', async (c) => {
     try {
-        const oc = await getOpencode()
-        const res = await oc.vcs.get(requestDirectoryQuery(c))
-        return c.json(responseData(res, {}))
+        return c.json(await getVcsStatus(resolveRequestWorkingDir(c)))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

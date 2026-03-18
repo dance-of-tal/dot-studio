@@ -1,34 +1,23 @@
 // DOT Integration Routes — .dance-of-tal management
 
 import { Hono } from 'hono'
-import { getPerformer, listLockedPerformerNames } from 'dance-of-tal/lib/registry'
-import { readAgentManifest, writeAgentManifest } from 'dance-of-tal/lib/agents'
-import { searchRegistry } from 'dance-of-tal/lib/installer'
-import type { Performer } from 'dance-of-tal/data/types'
 import type { StudioAssetKind } from '../lib/dot-authoring.js'
-import { getDotAuthUser, getDotStatus, initDotRegistry, installDotAsset, loginToDot, logoutFromDot, publishDotAsset, saveDotLocalAsset } from '../services/dot-service.js'
-
-/** Validates that performer URNs follow the 3-part format: kind/@author/name */
-function validatePerformer(performer: Performer): void {
-    const tal = performer.tal ?? null
-    const dances = performer.dance
-        ? (Array.isArray(performer.dance) ? performer.dance : [performer.dance])
-        : []
-
-    if (!tal && dances.length === 0) {
-        throw new Error("Invalid performer: at least one of 'tal' or 'dance' must be present.")
-    }
-
-    const validateUrn = (urn: string, prefix: string) => {
-        const parts = urn.split('/')
-        if (parts.length !== 3 || parts[0] !== prefix || !parts[1].startsWith('@') || !parts[2]) {
-            throw new Error(`Invalid URN: '${urn}'. Expected: ${prefix}/@<author>/<name>`)
-        }
-    }
-
-    if (tal) validateUrn(tal, 'tal')
-    for (const d of dances) validateUrn(d, 'dance')
-}
+import {
+    getDotAgentManifest,
+    getDotAuthUser,
+    getDotPerformer,
+    getDotStatus,
+    initDotRegistry,
+    installDotAsset,
+    listDotPerformers,
+    loginToDot,
+    logoutFromDot,
+    publishDotAsset,
+    saveDotAgentManifest,
+    saveDotLocalAsset,
+    searchDotRegistry,
+    validateDotPerformer,
+} from '../services/dot-service.js'
 import { invalidate } from '../lib/cache.js'
 import { resolveRequestWorkingDir } from '../lib/request-context.js'
 
@@ -97,8 +86,7 @@ dot.post('/api/dot/logout', async (c) => {
 dot.get('/api/dot/performers', async (c) => {
     const cwd = resolveRequestWorkingDir(c)
     try {
-        const result = await listLockedPerformerNames(cwd)
-        return c.json(result)
+        return c.json(await listDotPerformers(cwd))
     } catch (err: any) {
         return c.json({ names: [], skipped: [] })
     }
@@ -108,7 +96,7 @@ dot.get('/api/dot/performers/:name', async (c) => {
     const cwd = resolveRequestWorkingDir(c)
     const name = c.req.param('name')
     try {
-        const performer = await getPerformer(cwd, name)
+        const performer = await getDotPerformer(cwd, name)
         if (!performer) return c.json({ error: 'Performer not found' }, 404)
         return c.json({ name, ...performer })
     } catch (err: any) {
@@ -120,8 +108,7 @@ dot.get('/api/dot/performers/:name', async (c) => {
 dot.get('/api/dot/agents', async (c) => {
     const cwd = resolveRequestWorkingDir(c)
     try {
-        const manifest = await readAgentManifest(cwd)
-        return c.json(manifest)
+        return c.json(await getDotAgentManifest(cwd))
     } catch (err: any) {
         return c.json({})
     }
@@ -131,8 +118,7 @@ dot.put('/api/dot/agents', async (c) => {
     const cwd = resolveRequestWorkingDir(c)
     const manifest = await c.req.json<Record<string, string>>()
     try {
-        await writeAgentManifest(cwd, manifest)
-        return c.json({ ok: true })
+        return c.json(await saveDotAgentManifest(cwd, manifest))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -214,8 +200,7 @@ dot.get('/api/dot/search', async (c) => {
     const kind = c.req.query('kind')
     const limit = parseInt(c.req.query('limit') || '20', 10)
     try {
-        const results = await searchRegistry(query, { kind, limit })
-        return c.json(results)
+        return c.json(await searchDotRegistry(query, { kind, limit }))
     } catch (err: any) {
         return c.json({ error: err.message }, 500)
     }
@@ -225,7 +210,7 @@ dot.get('/api/dot/search', async (c) => {
 dot.post('/api/dot/validate', async (c) => {
     const performer = await c.req.json()
     try {
-        validatePerformer(performer)
+        validateDotPerformer(performer)
         return c.json({ valid: true })
     } catch (err: any) {
         return c.json({ valid: false, error: err.message })

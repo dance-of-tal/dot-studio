@@ -9,11 +9,11 @@ import type { ActDefinition } from '../../../shared/act-types.js'
 import type { Mailbox } from './mailbox.js'
 
 /**
- * Build markdown Act context for a performer's agent prompt.
+ * Build markdown Act context for a participant's agent prompt.
  */
 export function buildActContext(
     actDefinition: ActDefinition,
-    performerKey: string,
+    participantKey: string,
     _mailbox: Mailbox,
 ): string {
     const lines: string[] = []
@@ -28,7 +28,7 @@ export function buildActContext(
     // ── Participants ─────────────────────────────────
     lines.push('- 참여자:')
     for (const [key, binding] of Object.entries(actDefinition.performers)) {
-        const isSelf = key === performerKey
+        const isSelf = key === participantKey
         lines.push(`  - ${key}${isSelf ? ' (너)' : ''}: ref=${binding.performerRef.kind}`)
     }
     lines.push('')
@@ -36,29 +36,29 @@ export function buildActContext(
     // ── Collaboration Runtime ────────────────────────
     lines.push('# Collaboration Runtime')
     lines.push('- 이 Act에는 mailbox가 존재한다.')
-    lines.push('- messages는 performer 간 1:1 통신이다. send_message tool을 사용하라.')
+    lines.push('- messages는 participant 간 1:1 통신이다. send_message tool을 사용하라.')
     lines.push('- board는 공유 knowledge 공간이다. post_to_board, read_board tool을 사용하라.')
     lines.push('- set_wake_condition으로 여러 결과를 기다린 후 다시 깨어날 수 있다.')
     lines.push('')
 
     // ── Available Relations ─────────────────────────
     const myRelations = actDefinition.relations.filter(
-        (rel) => rel.between.includes(performerKey),
+        (rel) => rel.between.includes(participantKey),
     )
     if (myRelations.length > 0) {
         lines.push('# Available Relations')
         for (const rel of myRelations) {
-            const partner = rel.between[0] === performerKey ? rel.between[1] : rel.between[0]
+            const partner = rel.between[0] === participantKey ? rel.between[1] : rel.between[0]
             const dirLabel = rel.direction === 'one-way'
-                ? (rel.between[0] === performerKey ? '→' : '←')
+                ? (rel.between[0] === participantKey ? '→' : '←')
                 : '↔'
-            lines.push(`- ${performerKey} ${dirLabel} ${partner}: ${rel.name}${rel.description ? ` — ${rel.description}` : ''}`)
+            lines.push(`- ${participantKey} ${dirLabel} ${partner}: ${rel.name}${rel.description ? ` — ${rel.description}` : ''}`)
         }
         lines.push('')
     }
 
     // ── Subscriptions ───────────────────────────────
-    const binding = actDefinition.performers[performerKey]
+    const binding = actDefinition.performers[participantKey]
     if (binding?.subscriptions) {
         const subs = binding.subscriptions
         lines.push('# Your Subscriptions')

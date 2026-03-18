@@ -179,7 +179,7 @@ export const createIntegrationSlice: StateCreator<
         forceReconnectRealtimeEvents: () => {
             // Reset the chat SSE slot so that the next reconnect picks up
             // any new execution directories (e.g. newly created safe-mode
-            // performer sessions) that weren't subscribed to before.
+            // participant sessions) that weren't subscribed to before.
             resetManagedEventSource(chatSlot)
             reconnectEventSource()
             // Adapter stream also depends on directory scope.

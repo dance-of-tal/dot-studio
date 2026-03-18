@@ -1,10 +1,10 @@
 // DOT Studio — Act Slice (Choreography Model)
-// Act entity: performer ref binding + communication contract relations + canvas position
+// Act entity: participant ref binding + communication contract relations + canvas position
 
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { StudioState, ActSlice } from './types'
-import type { StageAct, StageActPerformerBinding, ActRelation } from '../types'
+import type { StageAct, StageActParticipantBinding, ActRelation } from '../types'
 import { api } from '../api'
 
 const ACT_DEFAULT_WIDTH = 340
@@ -28,14 +28,14 @@ function normalizeRelationPermissions(permissions: any) {
     }
 }
 
-function fallbackParticipantLabel(performerRef: StageActPerformerBinding['performerRef']) {
+function fallbackParticipantLabel(performerRef: StageActParticipantBinding['performerRef']) {
     if (performerRef.kind === 'draft') {
         return performerRef.draftId
     }
     return performerRef.urn.split('/').pop() || performerRef.urn
 }
 
-function autoLayoutBindings(bindings: Record<string, StageActPerformerBinding>) {
+function autoLayoutBindings(bindings: Record<string, StageActParticipantBinding>) {
     const entries = Object.entries(bindings)
     if (entries.length === 0) return bindings
 
@@ -167,7 +167,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             const act = s.acts.find((a) => a.id === actId)
             const existingKeys = act ? Object.keys(act.performers) : []
             const newPos = { x: existingKeys.length * 300, y: 100 }
-            const binding: StageActPerformerBinding = {
+            const binding: StageActParticipantBinding = {
                 performerRef,
                 position: newPos,
             }
@@ -247,7 +247,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }
 
         const bindingMatchesPerformer = (
-            binding: StageActPerformerBinding,
+            binding: StageActParticipantBinding,
             performerId: string,
             performerUrn?: string | null,
         ) => (
@@ -626,7 +626,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         const center = get().canvasCenter
 
         // Build participant bindings from asset
-        const performers: Record<string, StageActPerformerBinding> = {}
+        const performers: Record<string, StageActParticipantBinding> = {}
         const idMapping: Record<string, string> = {}
 
         const nodes: any[] = Array.isArray(asset.performers)

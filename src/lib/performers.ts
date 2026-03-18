@@ -378,7 +378,7 @@ export function buildPerformerAssetPayload(
 
 /**
  * Build Act asset payload for registry publish (schema: studio-v1).
- * Serializes Act's performer bindings and communication contract relations.
+ * Serializes Act's participant bindings and communication contract relations.
  */
 export function buildActAssetPayload(
     act: import('../types').StageAct,

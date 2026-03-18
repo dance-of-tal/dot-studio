@@ -1,7 +1,7 @@
 /**
  * event-router.ts — Subscription + relation-based event routing
  *
- * PRD §15.2: Routes events to performers based on:
+ * PRD §15.2: Routes events to participants based on:
  * 1. Subscription + relation permission match
  * 2. WakeCondition satisfaction
  */
@@ -20,7 +20,7 @@ import { evaluateWakeCondition } from './wake-evaluator.js'
 // ── Types ───────────────────────────────────────────────
 
 export interface WakeUpTarget {
-    performerKey: string
+    participantKey: string
     triggerEvent: MailboxEvent
     wakeCondition?: WakeCondition  // set if condition-triggered
     reason: 'subscription' | 'wake-condition'
@@ -66,22 +66,22 @@ function matchSubscription(
 // ── Relation permission check ───────────────────────────
 
 function hasRelationPermission(
-    performerKey: string,
+    participantKey: string,
     event: MailboxEvent,
     relations: ActRelation[],
 ): boolean {
     const source = event.source
-    if (!source || source === performerKey) return false
+    if (!source || source === participantKey) return false
 
-    // Check if there's a relation between source and this performer
+    // Check if there's a relation between source and this participant
     return relations.some((rel) => {
         const [a, b] = rel.between
-        const pairMatch = (a === source && b === performerKey) || (a === performerKey && b === source)
+        const pairMatch = (a === source && b === participantKey) || (a === participantKey && b === source)
         if (!pairMatch) return false
 
         // For one-way relations, only the second (target) can be woken by the first (source)
         if (rel.direction === 'one-way') {
-            return a === source && b === performerKey
+            return a === source && b === participantKey
         }
         return true
     })
@@ -107,7 +107,7 @@ export function routeEvent(
 
         if (subMatch && relMatch) {
             targets.push({
-                performerKey: key,
+                participantKey: key,
                 triggerEvent: event,
                 reason: 'subscription',
             })
@@ -126,7 +126,7 @@ export function routeEvent(
     for (const cond of triggeredConditions) {
         if (!seen.has(cond.createdBy)) {
             targets.push({
-                performerKey: cond.createdBy,
+                participantKey: cond.createdBy,
                 triggerEvent: event,
                 wakeCondition: cond,
                 reason: 'wake-condition',

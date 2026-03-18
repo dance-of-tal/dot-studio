@@ -1,8 +1,8 @@
 /**
  * wake-prompt-builder.ts — Wake-up prompt generation
  *
- * PRD §15.3: BFF tells performer WHAT HAPPENED, not WHAT TO DO.
- * Wake prompts are informational summaries injected into performer sessions.
+ * PRD §15.3: BFF tells a participant WHAT HAPPENED, not WHAT TO DO.
+ * Wake prompts are informational summaries injected into participant sessions.
  */
 
 import type { MailboxMessage } from '../../../shared/act-types.js'
@@ -10,7 +10,7 @@ import type { WakeUpTarget } from './event-router.js'
 import type { Mailbox } from './mailbox.js'
 
 /**
- * Build a wake-up prompt for a performer being woken by an event.
+ * Build a wake-up prompt for a participant being woken by an event.
  * The prompt describes what happened and includes pending messages.
  */
 export function buildWakePrompt(target: WakeUpTarget, mailbox: Mailbox): string {
@@ -49,7 +49,7 @@ export function buildWakePrompt(target: WakeUpTarget, mailbox: Mailbox): string 
     }
 
     // ── Pending messages ────────────────────────────
-    const pending = mailbox.getMessagesFor(target.performerKey)
+    const pending = mailbox.getMessagesFor(target.participantKey)
     if (pending.length > 0) {
         parts.push(`--- 대기 중인 메시지 (${pending.length}건) ---`)
         for (const msg of pending) {
@@ -66,14 +66,14 @@ export function buildWakePrompt(target: WakeUpTarget, mailbox: Mailbox): string 
 }
 
 /**
- * Mark all pending messages for the target performer as delivered.
+ * Mark all pending messages for the target participant as delivered.
  * Call this after the wake-up prompt has been injected into the session.
  */
 export function markMessagesDelivered(
     mailbox: Mailbox,
-    performerKey: string,
+    participantKey: string,
 ): MailboxMessage[] {
-    const pending = mailbox.getMessagesFor(performerKey)
+    const pending = mailbox.getMessagesFor(participantKey)
     for (const msg of pending) {
         mailbox.markDelivered(msg.id)
     }

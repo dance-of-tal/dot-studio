@@ -1,6 +1,8 @@
 import fs from 'fs/promises'
-import { ensureDotDir, getDotDir, getGlobalCwd, getGlobalDotDir, initRegistry } from 'dance-of-tal/lib/registry'
-import { installActWithDependencies, installAsset, installPerformerAndLock } from 'dance-of-tal/lib/installer'
+import { ensureDotDir, getDotDir, getGlobalCwd, getGlobalDotDir, getPerformer, initRegistry, listLockedPerformerNames } from 'dance-of-tal/lib/registry'
+import { readAgentManifest, writeAgentManifest } from 'dance-of-tal/lib/agents'
+import { installActWithDependencies, installAsset, installPerformerAndLock, searchRegistry } from 'dance-of-tal/lib/installer'
+import type { Performer } from 'dance-of-tal/data/types'
 import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
 import { startDotLogin } from '../lib/dot-login.js'
 
@@ -27,6 +29,52 @@ export async function getDotStatus(cwd: string) {
         globalDotDir,
         projectDir: cwd,
     }
+}
+
+export async function listDotPerformers(cwd: string) {
+    return listLockedPerformerNames(cwd)
+}
+
+export async function getDotPerformer(cwd: string, name: string) {
+    return getPerformer(cwd, name)
+}
+
+export async function getDotAgentManifest(cwd: string) {
+    return readAgentManifest(cwd)
+}
+
+export async function saveDotAgentManifest(cwd: string, manifest: Record<string, string>) {
+    await writeAgentManifest(cwd, manifest)
+    return { ok: true as const }
+}
+
+export async function searchDotRegistry(query: string, options: { kind?: string | null; limit: number }) {
+    return searchRegistry(query, {
+        kind: options.kind || undefined,
+        limit: options.limit,
+    })
+}
+
+/** Validates that performer URNs follow the 3-part format: kind/@author/name */
+export function validateDotPerformer(performer: Performer): void {
+    const tal = performer.tal ?? null
+    const dances = performer.dance
+        ? (Array.isArray(performer.dance) ? performer.dance : [performer.dance])
+        : []
+
+    if (!tal && dances.length === 0) {
+        throw new Error("Invalid performer: at least one of 'tal' or 'dance' must be present.")
+    }
+
+    const validateUrn = (urn: string, prefix: string) => {
+        const parts = urn.split('/')
+        if (parts.length !== 3 || parts[0] !== prefix || !parts[1].startsWith('@') || !parts[2]) {
+            throw new Error(`Invalid URN: '${urn}'. Expected: ${prefix}/@<author>/<name>`)
+        }
+    }
+
+    if (tal) validateUrn(tal, 'tal')
+    for (const dance of dances) validateUrn(dance, 'dance')
 }
 
 export async function initDotRegistry(cwd: string, scope?: string) {

@@ -7,8 +7,8 @@ import type { SharedAssetRef } from './chat-contracts.js'
 
 export interface MailboxMessage {
     id: string
-    from: string          // performerKey
-    to: string            // performerKey
+    from: string          // participantKey
+    to: string            // participantKey
     content: string
     threadId?: string
     correlationId?: string
@@ -96,7 +96,7 @@ export interface PerformerSubscriptions {
 
 export interface ActRelation {
     id: string
-    between: [string, string]           // performer pair
+    between: [string, string]           // participant pair
     direction: 'both' | 'one-way'
     name: string
     description?: string
@@ -109,13 +109,15 @@ export interface ActRelation {
     timeout: number
 }
 
-// ── Act Performer Binding ───────────────────────────────
+// ── Act Participant Binding ─────────────────────────────
 
-export interface ActPerformerBinding {
+export interface ActParticipantBinding {
     performerRef: SharedAssetRef
     activeDanceIds?: string[]
     subscriptions?: PerformerSubscriptions
 }
+
+export type ActPerformerBinding = ActParticipantBinding
 
 // ── Act Definition ──────────────────────────────────────
 
@@ -124,7 +126,7 @@ export interface ActDefinition {
     name: string
     description?: string
     actRules?: string[]
-    performers: Record<string, ActPerformerBinding>  // performerKey → binding
+    performers: Record<string, ActParticipantBinding>  // participantKey → binding
     relations: ActRelation[]
 }
 
@@ -146,7 +148,8 @@ export interface ActThread {
     id: string
     actId: string
     mailbox: MailboxState
-    performerSessions: Record<string, string>  // performerKey → sessionId
+    participantSessions: Record<string, string>
+    performerSessions?: Record<string, string>  // legacy alias
     createdAt: number
     status: ActThreadStatus
 }

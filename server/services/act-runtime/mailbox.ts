@@ -41,9 +41,9 @@ export class Mailbox {
         return message
     }
 
-    getMessagesFor(performerKey: string): MailboxMessage[] {
+    getMessagesFor(participantKey: string): MailboxMessage[] {
         return this.pendingMessages.filter(
-            (m) => m.to === performerKey && m.status === 'pending',
+            (m) => m.to === participantKey && m.status === 'pending',
         )
     }
 
