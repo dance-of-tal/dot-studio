@@ -168,19 +168,26 @@ export function usePublishModalController(open: boolean) {
 
     const syncMarkdownDraftPublishState = (
         resultUrn: string,
+        nextSlug: string,
         payload: ReturnType<typeof buildMarkdownAssetPayload>,
     ) => {
         if (!markdownEditor || !draft) return
 
         upsertDraft({
             ...draft,
-            slug: payload.slug,
+            slug: nextSlug,
             description: payload.description,
             tags: payload.tags,
             derivedFrom: resultUrn,
             updatedAt: Date.now(),
         })
-        updateMarkdownEditorBaseline(markdownEditor.id, payload)
+        updateMarkdownEditorBaseline(markdownEditor.id, {
+            name: draft.name,
+            slug: nextSlug,
+            description: payload.description,
+            tags: payload.tags,
+            content: payload.content,
+        })
 
         if (!markdownEditor.attachTarget?.performerId) return
 
@@ -231,8 +238,8 @@ export function usePublishModalController(open: boolean) {
 
             if ((target.kind === 'tal' || target.kind === 'dance') && markdownEditor && draft) {
                 const payload = buildMarkdownAssetPayload(markdownEditor, draft, slug, description, tags)
-                const result = await api.dot.saveLocalAsset(markdownEditor.kind, payload.slug, payload, authUser?.username || undefined)
-                syncMarkdownDraftPublishState(result.urn, payload)
+                const result = await api.dot.saveLocalAsset(markdownEditor.kind, slug, payload, authUser?.username || undefined)
+                syncMarkdownDraftPublishState(result.urn, slug, payload)
                 await invalidateKind(markdownEditor.kind)
                 setStatus({
                     tone: 'success',
@@ -288,8 +295,8 @@ export function usePublishModalController(open: boolean) {
 
             if ((target.kind === 'tal' || target.kind === 'dance') && markdownEditor && draft) {
                 const payload = buildMarkdownAssetPayload(markdownEditor, draft, slug, description, tags)
-                const result = await api.dot.publishAsset(markdownEditor.kind, payload.slug, payload, tags, true)
-                syncMarkdownDraftPublishState(result.urn, payload)
+                const result = await api.dot.publishAsset(markdownEditor.kind, slug, payload, tags, true)
+                syncMarkdownDraftPublishState(result.urn, slug, payload)
                 await invalidateKind(markdownEditor.kind)
                 setStatus({
                     tone: 'success',

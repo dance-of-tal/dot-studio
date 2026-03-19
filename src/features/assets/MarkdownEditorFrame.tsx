@@ -190,13 +190,11 @@ export default function MarkdownEditorFrame({ id, data, selected }: any) {
             setAction('local');
             setStatus(null);
             const payload = {
-                name: currentName.trim() || (data.kind === 'tal' ? 'Untitled Tal' : 'Untitled Dance'),
-                slug: currentSlug.trim(),
                 description: currentDescription.trim() || currentName.trim() || data.kind,
                 tags: currentTags,
                 content: currentContent,
             };
-            const result = await api.dot.saveLocalAsset(data.kind, payload.slug, payload, authUser?.username || undefined);
+            const result = await api.dot.saveLocalAsset(data.kind, currentSlug.trim(), payload, authUser?.username || undefined);
             applyAttachTarget({ kind: 'registry', urn: result.urn });
             persistBaseline(result.urn);
             await invalidateAssets();
@@ -218,13 +216,11 @@ export default function MarkdownEditorFrame({ id, data, selected }: any) {
             setAction('publish');
             setStatus(null);
             const payload = {
-                name: currentName.trim() || (data.kind === 'tal' ? 'Untitled Tal' : 'Untitled Dance'),
-                slug: currentSlug.trim(),
                 description: currentDescription.trim() || currentName.trim() || data.kind,
                 tags: currentTags,
                 content: currentContent,
             };
-            const result = await api.dot.publishAsset(data.kind, payload.slug, payload, payload.tags, true);
+            const result = await api.dot.publishAsset(data.kind, currentSlug.trim(), payload, payload.tags, true);
             applyAttachTarget({ kind: 'registry', urn: result.urn });
             persistBaseline(result.urn);
             await invalidateAssets();

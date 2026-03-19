@@ -12,11 +12,12 @@ export type AssetListItem = {
     talUrn?: string | null
     danceUrns?: string[]
     actUrn?: string | null
-    model?: string | null
+    model?: string | { provider: string; modelId: string } | null
     mcpConfig?: Record<string, unknown> | null
     schema?: string
     participantCount?: number
     relationCount?: number
+    actRules?: string[]
     participants?: Array<Record<string, unknown>>
     relations?: Array<Record<string, unknown>>
     content?: string

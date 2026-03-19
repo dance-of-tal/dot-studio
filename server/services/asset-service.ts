@@ -1,11 +1,16 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { assetFilePath, getDotDir, getGlobalCwd, getGlobalDotDir, readAsset } from 'dance-of-tal/lib/registry'
-import { getRegistryPackage } from 'dance-of-tal/lib/installer'
+import { assetFilePath, getDotDir, getGlobalCwd, getGlobalDotDir, getRegistryPackage, readAsset } from '../lib/dot-source.js'
 import type { AssetListItem } from '../../shared/asset-contracts.js'
 
 export function isStudioActPayload(content: Record<string, any>) {
-    return content.schema === 'studio-v1' || Array.isArray(content.participants)
+    return content.schema === 'studio-v1' || Array.isArray(content.participants) || Array.isArray(content.payload?.participants)
+}
+
+function resolvePayload(content: Record<string, any>) {
+    return content && typeof content.payload === 'object' && content.payload !== null
+        ? content.payload as Record<string, any>
+        : content
 }
 
 function normalizeAsset(
@@ -18,36 +23,42 @@ function normalizeAsset(
 ): AssetListItem {
     const slug = urn.split('/')[2]
     const normalizedAuthor = author.startsWith('@') ? author : `@${author}`
+    const payload = resolvePayload(content)
     const base = {
         kind,
         urn,
         slug,
-        name: typeof content.name === 'string' && content.name.trim() ? content.name.trim() : slug,
+        name: slug,
         author: normalizedAuthor,
         source,
         description: typeof content.description === 'string' ? content.description : '',
     }
 
     if (kind === 'performer') {
-        const danceRaw = content.dance
+        const danceRaw = payload.dances ?? payload.dance
         const danceUrns = Array.isArray(danceRaw)
             ? danceRaw.filter((value: unknown): value is string => typeof value === 'string')
             : typeof danceRaw === 'string'
                 ? [danceRaw]
                 : []
-        // Accept model as string or object {provider, modelId}
-        const modelValue = typeof content.model === 'string' ? content.model
-            : (content.model && typeof content.model === 'object' && 'provider' in content.model && typeof content.model.provider === 'string')
-                ? content.model
+        const modelValue = typeof payload.model === 'string' ? payload.model
+            : (payload.model && typeof payload.model === 'object' && 'provider' in payload.model && typeof payload.model.provider === 'string')
+                ? payload.model
                 : null
         return {
             ...base,
-            talUrn: typeof content.tal === 'string' ? content.tal : null,
+            talUrn: typeof payload.tal === 'string' ? payload.tal : null,
             danceUrns,
-            actUrn: typeof content.act === 'string' ? content.act : null,
+            actUrn: typeof payload.act === 'string' ? payload.act : null,
             model: modelValue,
-            mcpConfig: typeof content.mcp_config === 'object' && content.mcp_config !== null ? content.mcp_config : null,
+            mcpConfig:
+                typeof payload.mcp_config === 'object' && payload.mcp_config !== null
+                    ? payload.mcp_config
+                    : typeof payload.mcp === 'object' && payload.mcp !== null
+                        ? payload.mcp
+                        : null,
             tags: Array.isArray(content.tags) ? content.tags : [],
+            ...(typeof content.$schema === 'string' ? { schema: content.$schema } : {}),
         }
     }
 
@@ -55,12 +66,14 @@ function normalizeAsset(
         return {
             ...base,
             tags: Array.isArray(content.tags) ? content.tags : [],
-            schema: 'studio-v1',
-            participantCount: Array.isArray(content.participants) ? content.participants.length : 0,
-            relationCount: Array.isArray(content.relations) ? content.relations.length : 0,
+            schema: typeof content.$schema === 'string' ? content.$schema : 'studio-v1',
+            participantCount: Array.isArray(payload.participants) ? payload.participants.length : 0,
+            relationCount: Array.isArray(payload.relations) ? payload.relations.length : 0,
+            ...(Array.isArray(payload.actRules) ? { actRules: payload.actRules } : {}),
             ...(detail ? {
-                participants: Array.isArray(content.participants) ? content.participants : [],
-                relations: Array.isArray(content.relations) ? content.relations : [],
+                ...(Array.isArray(payload.actRules) ? { actRules: payload.actRules } : {}),
+                participants: Array.isArray(payload.participants) ? payload.participants : [],
+                relations: Array.isArray(payload.relations) ? payload.relations : [],
             } : {}),
         }
     }
@@ -68,12 +81,13 @@ function normalizeAsset(
     return {
         ...base,
         tags: Array.isArray(content.tags) ? content.tags : [],
-        ...(detail && typeof content.content === 'string' ? { content: content.content } : {}),
+        ...(typeof content.$schema === 'string' ? { schema: content.$schema } : {}),
+        ...(detail && typeof payload.content === 'string' ? { content: payload.content } : {}),
     }
 }
 
 async function scanAssetDir(baseDir: string, kind: string, source: 'global' | 'stage', resultsMap: Map<string, AssetListItem>) {
-    const kindDir = path.join(baseDir, kind)
+    const kindDir = path.join(baseDir, 'assets', kind)
     try {
         const authors = await fs.readdir(kindDir)
         for (const author of authors) {

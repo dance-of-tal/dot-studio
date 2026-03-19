@@ -1,5 +1,5 @@
 import path from 'path'
-import { getAssetPayload, readAsset } from 'dance-of-tal/lib/registry'
+import { getAssetPayload, readAsset } from '../../lib/dot-source.js'
 import { localSkillProjectionDir, toRelativePath } from './projection-manifest.js'
 import { readDraft } from '../draft-service.js'
 

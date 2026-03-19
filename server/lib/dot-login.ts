@@ -3,7 +3,7 @@ import path from 'path'
 import http from 'http'
 import crypto from 'crypto'
 import open from 'open'
-import { getGlobalDotDir } from 'dance-of-tal/lib/registry'
+import { getGlobalDotDir } from './dot-source.js'
 import { readDotAuthUser } from './dot-authoring.js'
 
 const SUPABASE_URL = process.env.DOT_SUPABASE_URL || 'https://qbildcrfjencoqkngyfw.supabase.co'

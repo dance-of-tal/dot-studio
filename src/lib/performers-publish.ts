@@ -186,14 +186,17 @@ export function buildPerformerAssetPayload(
     const tags = (options.tags || []).filter((tag) => tag.trim().length > 0)
 
     return {
-        schema: 'studio-v1' as const,
-        name: options.name.trim() || 'Untitled Performer',
+        $schema: 'https://schemas.danceoftal.com/assets/performer.v1.json' as const,
+        kind: 'performer' as const,
+        urn: `performer/@pending/${slugifyAssetName(options.name.trim() || 'untitled-performer')}`,
         description,
         tags,
-        ...(talUrn ? { tal: talUrn } : {}),
-        ...(danceUrns.length === 1 ? { dance: danceUrns[0] } : danceUrns.length > 1 ? { dance: danceUrns } : {}),
-        ...(performer.model ? { model: { provider: performer.model.provider, modelId: performer.model.modelId } } : {}),
-        ...(mcpConfig && Object.keys(mcpConfig).length > 0 ? { mcp_config: mcpConfig } : {}),
+        payload: {
+            ...(talUrn ? { tal: talUrn } : {}),
+            ...(danceUrns.length > 0 ? { dances: danceUrns } : {}),
+            ...(performer.model ? { model: { provider: performer.model.provider, modelId: performer.model.modelId } } : {}),
+            ...(mcpConfig && Object.keys(mcpConfig).length > 0 ? { mcp_config: mcpConfig } : {}),
+        },
     }
 }
 
@@ -208,6 +211,18 @@ export function buildActAssetPayload(
         subscriptions: binding.subscriptions,
     }))
 
+    const unresolvedParticipants = participants.filter((participant) => participant.performerRef.kind !== 'registry')
+    if (unresolvedParticipants.length > 0) {
+        throw new Error('Save participant performer drafts as local assets before authoring this act asset.')
+    }
+
+    const unresolvedDanceIds = participants.flatMap((participant) =>
+        (participant.activeDanceIds || []).filter((value) => !value.startsWith('dance/')),
+    )
+    if (unresolvedDanceIds.length > 0) {
+        throw new Error('Act participant active dances must reference saved Dance assets before authoring this act asset.')
+    }
+
     const relations = act.relations.map((relation) => ({
         between: relation.between,
         direction: relation.direction,
@@ -219,13 +234,26 @@ export function buildActAssetPayload(
     }))
 
     return {
-        schema: 'studio-v1' as const,
-        name: act.name,
+        $schema: 'https://schemas.danceoftal.com/assets/act.v1.json' as const,
+        kind: 'act' as const,
+        urn: `act/@pending/${slugifyAssetName(act.name || 'untitled-act')}`,
         description: options.description?.trim() || act.description || act.name,
         tags: (options.tags || []).filter((tag) => tag.trim().length > 0),
-        actRules: act.actRules,
-        participants,
-        relations,
+        payload: {
+            ...(act.actRules && act.actRules.length > 0 ? { actRules: act.actRules } : {}),
+            participants: participants.map((participant) => ({
+                id: participant.key,
+                performer: participant.performerRef.kind === 'registry' ? participant.performerRef.urn : '',
+                ...(Array.isArray(participant.activeDanceIds) && participant.activeDanceIds.length > 0
+                    ? { activeDances: participant.activeDanceIds }
+                    : {}),
+                ...(participant.subscriptions ? { subscriptions: participant.subscriptions } : {}),
+            })),
+            relations: relations.map((relation, index) => ({
+                id: `relation-${index + 1}`,
+                ...relation,
+            })),
+        },
     }
 }
 

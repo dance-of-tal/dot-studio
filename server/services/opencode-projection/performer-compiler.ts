@@ -1,6 +1,6 @@
 
 import { createHash } from 'crypto'
-import { getAssetPayload } from 'dance-of-tal/lib/registry'
+import { getAssetPayload } from '../../lib/dot-source.js'
 import { resolveRuntimeModel } from '../../lib/model-catalog.js'
 import { findRuntimeModelVariant } from '../../../shared/model-variants.js'
 import { toRelativePath, resolveAgentIdentity } from './projection-manifest.js'

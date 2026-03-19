@@ -8,7 +8,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
-import { getDotDir, ensureDotDir } from 'dance-of-tal/lib/registry'
+import { getDotDir, ensureDotDir } from '../lib/dot-source.js'
 import type { DraftFile, DraftAssetKind, CreateDraftRequest, UpdateDraftRequest } from '../../shared/draft-contracts.js'
 
 const DRAFT_KINDS: readonly DraftAssetKind[] = ['tal', 'dance', 'performer', 'act'] as const

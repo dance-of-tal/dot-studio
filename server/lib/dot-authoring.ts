@@ -1,13 +1,13 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { assetFilePath, ensureDotDir, getGlobalDotDir } from 'dance-of-tal/lib/registry'
+import { assetFilePath, ensureDotDir, getGlobalDotDir } from './dot-source.js'
 import {
     getPayloadTags,
     loadLocalAssetByUrn,
     parseUrn,
     publishSingleAsset,
     resolveDependencies,
-} from 'dance-of-tal/lib/publishing'
+} from './dot-source.js'
 
 const SLUG_RE = /^[a-z0-9][a-z0-9._-]{1,98}[a-z0-9]$/
 
@@ -48,12 +48,8 @@ function sanitizeAuthor(value: string) {
     return author
 }
 
-function todayIsoDate() {
-    return new Date().toISOString().split('T')[0]
-}
-
-function normalizeDescription(name: string, value: unknown) {
-    return typeof value === 'string' && value.trim() ? value.trim() : name
+function normalizeDescription(value: unknown) {
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 function ensureUrn(value: unknown, kind: StudioAssetKind) {
@@ -69,86 +65,75 @@ function ensureUrn(value: unknown, kind: StudioAssetKind) {
 }
 
 function normalizeTalPayload(author: string, slug: string, payload: Record<string, unknown>) {
-    const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : slug
     const content = typeof payload.content === 'string' ? payload.content : ''
     return {
-        type: `tal/@${author}/${slug}`,
-        slug,
-        name,
-        description: normalizeDescription(name, payload.description),
+        $schema: 'https://schemas.danceoftal.com/assets/tal.v1.json' as const,
+        kind: 'tal' as const,
+        urn: `tal/@${author}/${slug}`,
+        ...(normalizeDescription(payload.description) ? { description: normalizeDescription(payload.description) } : {}),
         tags: sanitizeTags(payload.tags),
-        featuredScore: typeof payload.featuredScore === 'number' ? payload.featuredScore : 0,
-        createdAt: typeof payload.createdAt === 'string' && payload.createdAt.trim() ? payload.createdAt : todayIsoDate(),
-        content,
+        payload: { content },
     }
 }
 
 function normalizeDancePayload(author: string, slug: string, payload: Record<string, unknown>) {
-    const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : slug
     const content = typeof payload.content === 'string' ? payload.content : ''
     return {
-        type: `dance/@${author}/${slug}`,
-        slug,
-        name,
-        description: normalizeDescription(name, payload.description),
+        $schema: 'https://schemas.danceoftal.com/assets/dance.v1.json' as const,
+        kind: 'dance' as const,
+        urn: `dance/@${author}/${slug}`,
+        ...(normalizeDescription(payload.description) ? { description: normalizeDescription(payload.description) } : {}),
         tags: sanitizeTags(payload.tags),
-        content,
-        ...(isRecord(payload.schema) ? { schema: payload.schema } : {}),
-        ...(isRecord(payload.exemplarSet) ? { exemplarSet: payload.exemplarSet } : {}),
+        payload: { content },
     }
 }
 
 function normalizePerformerPayload(author: string, slug: string, payload: Record<string, unknown>) {
-    const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : slug
-    const danceValue = payload.dance
-    const dance = typeof danceValue === 'string'
-        ? ensureUrn(danceValue, 'dance')
-        : Array.isArray(danceValue)
-            ? danceValue.map((value) => ensureUrn(value, 'dance'))
+    const dancesValue = payload.dances ?? payload.dance
+    const dances = typeof dancesValue === 'string'
+        ? [ensureUrn(dancesValue, 'dance')]
+        : Array.isArray(dancesValue)
+            ? dancesValue.map((value) => ensureUrn(value, 'dance'))
             : undefined
     const tal = payload.tal !== undefined && payload.tal !== null ? ensureUrn(payload.tal, 'tal') : undefined
-    const act = payload.act !== undefined && payload.act !== null ? ensureUrn(payload.act, 'act') : undefined
 
-    if (!tal && (!dance || dance.length === 0)) {
+    if (!tal && (!dances || dances.length === 0)) {
         throw new Error("Performer assets require at least one Tal or Dance reference.")
     }
 
-    // Accept model as string ("provider/modelId") or object ({provider, modelId})
     let modelValue: unknown = undefined
-    if (typeof payload.model === 'string' && payload.model.trim()) {
-        modelValue = payload.model.trim()
-    } else if (isRecord(payload.model) && typeof (payload.model as any).provider === 'string') {
+    if (isRecord(payload.model) && typeof (payload.model as any).provider === 'string') {
         modelValue = payload.model
     }
 
     return {
-        type: `performer/@${author}/${slug}`,
-        slug,
-        name,
-        description: normalizeDescription(name, payload.description),
+        $schema: 'https://schemas.danceoftal.com/assets/performer.v1.json' as const,
+        kind: 'performer' as const,
+        urn: `performer/@${author}/${slug}`,
+        ...(normalizeDescription(payload.description) ? { description: normalizeDescription(payload.description) } : {}),
         tags: sanitizeTags(payload.tags),
-        ...(tal ? { tal } : {}),
-        ...(dance
-            ? { dance: Array.isArray(dance) && dance.length === 1 ? dance[0] : dance }
-            : {}),
-        ...(act ? { act } : {}),
-        ...(modelValue !== undefined ? { model: modelValue } : {}),
-        ...(isRecord(payload.mcp_config) ? { mcp_config: payload.mcp_config } : {}),
+        payload: {
+            ...(tal ? { tal } : {}),
+            ...(dances ? { dances } : {}),
+            ...(modelValue !== undefined ? { model: modelValue } : {}),
+            ...(typeof payload.modelVariant === 'string' && payload.modelVariant.trim() ? { modelVariant: payload.modelVariant.trim() } : {}),
+            ...(isRecord(payload.mcp_config) ? { mcp_config: payload.mcp_config } : {}),
+        },
     }
 }
 
 function normalizeActPayload(author: string, slug: string, payload: Record<string, unknown>) {
-    const name = typeof payload.name === 'string' && payload.name.trim() ? payload.name.trim() : slug
-
     return {
-        type: `act/@${author}/${slug}`,
-        schema: 'studio-v1' as const,
-        slug,
-        name,
-        description: normalizeDescription(name, payload.description),
+        $schema: 'https://schemas.danceoftal.com/assets/act.v1.json' as const,
+        kind: 'act' as const,
+        urn: `act/@${author}/${slug}`,
+        ...(normalizeDescription(payload.description) ? { description: normalizeDescription(payload.description) } : {}),
         tags: sanitizeTags(payload.tags),
-        participants: Array.isArray(payload.participants) ? payload.participants : [],
-        relations: Array.isArray(payload.relations) ? payload.relations : [],
+        payload: {
+            ...(Array.isArray(payload.actRules) ? { actRules: payload.actRules } : {}),
+            participants: Array.isArray(payload.participants) ? payload.participants : [],
+            relations: Array.isArray(payload.relations) ? payload.relations : [],
+        },
     }
 }
 

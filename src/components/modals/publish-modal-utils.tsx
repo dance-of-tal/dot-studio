@@ -185,10 +185,8 @@ export function buildPerformerPreflight(performer: PerformerNode | null): Perfor
         })
 }
 
-export function buildMarkdownAssetPayload(markdownEditor: NonNullable<ReturnType<typeof useStudioStore.getState>['markdownEditors'][number]>, draft: NonNullable<ReturnType<typeof useStudioStore.getState>['drafts'][string]>, slug: string, description: string, tags: string[]) {
+export function buildMarkdownAssetPayload(markdownEditor: NonNullable<ReturnType<typeof useStudioStore.getState>['markdownEditors'][number]>, draft: NonNullable<ReturnType<typeof useStudioStore.getState>['drafts'][string]>, _slug: string, description: string, tags: string[]) {
     return {
-        name: draft.name.trim() || (markdownEditor.kind === 'tal' ? 'Untitled Tal' : 'Untitled Dance'),
-        slug: slug.trim(),
         description: description.trim() || draft.name.trim() || markdownEditor.kind,
         tags,
         content: typeof draft.content === 'string' ? draft.content : '',
