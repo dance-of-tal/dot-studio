@@ -1,4 +1,5 @@
 import { api, setApiWorkingDirContext } from '../api'
+import { resolveActExpandedHeight } from '../lib/act-layout'
 import { normalizePath, mapCanvasTerminals } from './workspace-helpers'
 import type { StudioState } from './types'
 
@@ -69,7 +70,7 @@ export function enterFocusModeImpl(
             ...focusSnapshotBase,
             type: 'act',
             actId: nodeId,
-            nodeSize: { width: act.width ?? 400, height: act.height ?? 420 },
+            nodeSize: { width: act.width ?? 400, height: resolveActExpandedHeight(act.height) },
         },
         selectedActId: nodeId,
         selectedPerformerId: null,
@@ -269,8 +270,7 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
         stageDirty: true,
         acts: [],
         selectedActId: null,
-        selectedActParticipantKey: null,
-        selectedRelationId: null,
+        actEditorState: null,
         actThreads: {},
         activeThreadId: null,
         activeThreadParticipantKey: null,

@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from 'react'
 import { MessageSquare, Workflow } from 'lucide-react'
 import type { ExplorerRenamingSession, ThreadRow } from './stage-explorer-utils'
 import StageExplorerActGroup from './StageExplorerActGroup'
@@ -16,7 +17,6 @@ type Props = {
     activeThreadId: string | null
     activeThreadParticipantKey: string | null
     actThreads: Record<string, any[]>
-    focusedPerformerId: string | null
     onToggleExpanded: (key: string) => void
     onSetPendingDelete: (key: string | null) => void
     onBeginRenamePerformerSession: (session: { id: string; title?: string }) => void
@@ -34,8 +34,7 @@ type Props = {
     onSetActiveChatPerformer: (id: string | null) => void
     onRemovePerformer: (id: string) => void
     onSavePerformerAsDraft: (id: string) => void
-    onSwitchFocusTarget: (id: string, type: 'performer' | 'act') => void
-    onSelectAct: (id: string) => void
+    onOpenAct: (id: string) => void
     onCreateThread: (id: string) => void | Promise<void>
 
     onSaveActAsDraft: (id: string) => void
@@ -58,7 +57,6 @@ export default function StageExplorerThreadsSection({
     activeThreadId,
     activeThreadParticipantKey,
     actThreads,
-    focusedPerformerId,
     onToggleExpanded,
     onSetPendingDelete,
     onBeginRenamePerformerSession,
@@ -76,8 +74,7 @@ export default function StageExplorerThreadsSection({
     onSetActiveChatPerformer,
     onRemovePerformer,
     onSavePerformerAsDraft,
-    onSwitchFocusTarget,
-    onSelectAct,
+    onOpenAct,
     onCreateThread,
 
     onSaveActAsDraft,
@@ -86,83 +83,148 @@ export default function StageExplorerThreadsSection({
     onSelectThread,
     onSelectThreadParticipant,
 }: Props) {
+    const hasPerformers = threadRows.length > 0
+    const hasActs = acts.length > 0
+
+    // ── Resizable divider between Performers and Acts ──
+    const [performersFlex, setPerformersFlex] = useState(1)
+    const containerRef = useRef<HTMLDivElement>(null)
+    const dividerDragging = useRef(false)
+
+    const onDividerMouseDown = useCallback((e: React.MouseEvent) => {
+        e.preventDefault()
+        dividerDragging.current = true
+        const container = containerRef.current
+        if (!container) return
+
+        const startY = e.clientY
+        const containerRect = container.getBoundingClientRect()
+        const totalHeight = containerRect.height
+        const startFlex = performersFlex
+
+        const onMove = (ev: MouseEvent) => {
+            if (!dividerDragging.current) return
+            const delta = ev.clientY - startY
+            const ratio = delta / totalHeight
+            // Flex range: 0.15 to 0.85 (each side gets at least 15% of the space)
+            setPerformersFlex(Math.min(5, Math.max(0.2, startFlex + ratio * 2)))
+        }
+        const onUp = () => {
+            dividerDragging.current = false
+            document.removeEventListener('mousemove', onMove)
+            document.removeEventListener('mouseup', onUp)
+            document.body.style.cursor = ''
+            document.body.style.userSelect = ''
+        }
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+        document.body.style.cursor = 'row-resize'
+        document.body.style.userSelect = 'none'
+    }, [performersFlex])
+
     return (
-        <section className="explorer-section explorer-section--threads">
-            <div className="explorer__subheader">
-                <span className="explorer__title">Threads</span>
-                <div className="explorer__actions">
-                    <button className="icon-btn" onClick={onAddPerformer} title="Add performer" disabled={!stageId}>
-                        <MessageSquare size={12} />
-                    </button>
-                    <button className="icon-btn" onClick={onAddAct} title="Add Act" disabled={!stageId}>
-                        <Workflow size={12} />
-                    </button>
+        <section className="explorer-section explorer-section--threads" ref={containerRef}>
+            {/* ── Performers Pane ── */}
+            <div className="explorer__pane" style={{ flex: performersFlex }}>
+                <div className="explorer__subheader explorer__subheader--inline">
+                    <span className="explorer__title">Performers</span>
+                    <div className="explorer__actions">
+                        <button className="icon-btn" onClick={onAddPerformer} title="Add performer" disabled={!stageId}>
+                            <MessageSquare size={12} />
+                        </button>
+                    </div>
+                </div>
+                <div className="explorer__pane-scroll scroll-area">
+                    {hasPerformers ? (
+                        <div className="explorer__section-list">
+                            {threadRows.map((row) => {
+                                const rowKey = `performer-${row.id}`
+                                const isExpanded = expandedRows[rowKey] ?? row.children.length > 0
+                                return (
+                                    <StageExplorerPerformerGroup
+                                        key={rowKey}
+                                        row={row}
+                                        expanded={isExpanded}
+                                        pendingDelete={pendingDelete}
+                                        renamingSession={renamingSession}
+                                        editingTarget={editingTarget}
+                                        onToggleExpanded={() => onToggleExpanded(rowKey)}
+                                        onSetPendingDelete={onSetPendingDelete}
+                                        onBeginRenamePerformerSession={onBeginRenamePerformerSession}
+                                        onCommitRenameSession={onCommitRenameSession}
+                                        onCancelRenameSession={onCancelRenameSession}
+                                        onSetRenamingValue={onSetRenamingValue}
+                                        performerSessionLabel={performerSessionLabel}
+                                        onOpenPerformer={onOpenPerformer}
+                                        onOpenPerformerSession={onOpenPerformerSession}
+                                        onDeleteSession={onDeleteSession}
+                                        onTogglePerformerVisibility={onTogglePerformerVisibility}
+                                        onOpenPerformerEditor={onOpenPerformerEditor}
+                                        onSetActiveChatPerformer={onSetActiveChatPerformer}
+                                        onRemovePerformer={onRemovePerformer}
+                                        onSavePerformerAsDraft={onSavePerformerAsDraft}
+                                    />
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="empty-state empty-state--tight empty-state--nested">
+                            No performers yet
+                        </div>
+                    )}
                 </div>
             </div>
-            <div className="explorer__tree scroll-area">
-                {(threadRows.length > 0 || acts.length > 0) ? (
-                    <>
-                        {threadRows.map((row) => {
-                            const rowKey = `performer-${row.id}`
-                            return (
-                                <StageExplorerPerformerGroup
-                                    key={rowKey}
-                                    row={row}
-                                    expanded={expandedRows[rowKey] ?? false}
-                                    pendingDelete={pendingDelete}
-                                    renamingSession={renamingSession}
-                                    editingTarget={editingTarget}
-                                    onToggleExpanded={() => onToggleExpanded(rowKey)}
-                                    onSetPendingDelete={onSetPendingDelete}
-                                    onBeginRenamePerformerSession={onBeginRenamePerformerSession}
-                                    onCommitRenameSession={onCommitRenameSession}
-                                    onCancelRenameSession={onCancelRenameSession}
-                                    onSetRenamingValue={onSetRenamingValue}
-                                    performerSessionLabel={performerSessionLabel}
-                                    onOpenPerformer={onOpenPerformer}
-                                    onOpenPerformerSession={onOpenPerformerSession}
-                                    onDeleteSession={onDeleteSession}
-                                    onTogglePerformerVisibility={onTogglePerformerVisibility}
-                                    onOpenPerformerEditor={onOpenPerformerEditor}
-                                    onSetActiveChatPerformer={onSetActiveChatPerformer}
-                                    onRemovePerformer={onRemovePerformer}
-                                    onSavePerformerAsDraft={onSavePerformerAsDraft}
-                                />
-                            )
-                        })}
-                        {acts.map((act) => {
-                            const actKey = `act-${act.id}`
-                            return (
-                                <StageExplorerActGroup
-                                    key={actKey}
-                                    act={act}
-                                    performers={performers}
-                                    selectedActId={selectedActId}
-                                    activeThreadId={activeThreadId}
-                                    activeThreadParticipantKey={activeThreadParticipantKey}
-                                    threads={actThreads[act.id] || []}
-                                    expanded={expandedRows[actKey] ?? false}
-                                    expandedRows={expandedRows}
-                                    focusedPerformerId={focusedPerformerId}
-                                    onToggleExpanded={onToggleExpanded}
-                                    onSwitchFocusTarget={onSwitchFocusTarget}
-                                    onSelectAct={onSelectAct}
-                                    onCreateThread={onCreateThread}
 
-                                    onSaveActAsDraft={onSaveActAsDraft}
-                                    onToggleActVisibility={onToggleActVisibility}
-                                    onRemoveAct={onRemoveAct}
-                                    onSelectThread={onSelectThread}
-                                    onSelectThreadParticipant={onSelectThreadParticipant}
-                                />
-                            )
-                        })}
-                    </>
-                ) : (
-                    <div className="empty-state">
-                        Add a performer to start building this stage.
+            {/* ── Divider ── */}
+            <div className="explorer__divider" onMouseDown={onDividerMouseDown} />
+
+            {/* ── Acts Pane ── */}
+            <div className="explorer__pane" style={{ flex: 1 }}>
+                <div className="explorer__subheader explorer__subheader--inline">
+                    <span className="explorer__title">Acts</span>
+                    <div className="explorer__actions">
+                        <button className="icon-btn" onClick={onAddAct} title="Add Act" disabled={!stageId}>
+                            <Workflow size={12} />
+                        </button>
                     </div>
-                )}
+                </div>
+                <div className="explorer__pane-scroll scroll-area">
+                    {hasActs ? (
+                        <div className="explorer__section-list">
+                            {acts.map((act) => {
+                                const actKey = `act-${act.id}`
+                                const threads = actThreads[act.id] || []
+                                const isExpanded = expandedRows[actKey] ?? threads.length > 0
+                                return (
+                                    <StageExplorerActGroup
+                                        key={actKey}
+                                        act={act}
+                                        performers={performers}
+                                        selectedActId={selectedActId}
+                                        activeThreadId={activeThreadId}
+                                                activeThreadParticipantKey={activeThreadParticipantKey}
+                                                threads={threads}
+                                                expanded={isExpanded}
+                                                expandedRows={expandedRows}
+                                                onToggleExpanded={onToggleExpanded}
+                                                onOpenAct={onOpenAct}
+                                                onCreateThread={onCreateThread}
+
+                                        onSaveActAsDraft={onSaveActAsDraft}
+                                        onToggleActVisibility={onToggleActVisibility}
+                                        onRemoveAct={onRemoveAct}
+                                        onSelectThread={onSelectThread}
+                                        onSelectThreadParticipant={onSelectThreadParticipant}
+                                    />
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <div className="empty-state empty-state--tight empty-state--nested">
+                            No acts yet — connect performers to create one
+                        </div>
+                    )}
+                </div>
             </div>
         </section>
     )

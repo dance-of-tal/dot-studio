@@ -12,12 +12,12 @@ export default function CanvasControls() {
     const {
         selectedPerformerId,
         selectedActId,
-        focusedPerformerId,
+        focusSnapshot,
         enterFocusMode,
         exitFocusMode,
-        focusSnapshot,
         exitActLayoutMode,
     } = useStudioStore()
+    const isFocusActive = !!focusSnapshot
 
     const toggleFitView = useCallback(() => {
         if (isFitted && prevViewport.current) {
@@ -31,7 +31,7 @@ export default function CanvasControls() {
     }, [isFitted, fitView, getViewport, setViewport])
 
     const toggleFocus = useCallback(() => {
-        if (focusedPerformerId) {
+        if (isFocusActive) {
             exitFocusMode()
             setTimeout(() => {
                 fitView({ duration: 400, padding: 0.2, maxZoom: 1 })
@@ -49,7 +49,7 @@ export default function CanvasControls() {
             width: rect?.width ?? 1200,
             height: rect?.height ?? 800,
         })
-    }, [focusedPerformerId, selectedPerformerId, selectedActId, enterFocusMode, exitFocusMode, fitView])
+    }, [isFocusActive, selectedPerformerId, selectedActId, enterFocusMode, exitFocusMode, fitView])
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -57,13 +57,14 @@ export default function CanvasControls() {
 
             if (focusSnapshot?.type === 'act') {
                 exitActLayoutMode()
+                exitFocusMode()
                 setTimeout(() => {
                     fitView({ duration: 400, padding: 0.2, maxZoom: 1 })
                 }, 50)
                 return
             }
 
-            if (focusedPerformerId) {
+            if (isFocusActive) {
                 exitFocusMode()
                 setTimeout(() => {
                     fitView({ duration: 400, padding: 0.2, maxZoom: 1 })
@@ -73,11 +74,11 @@ export default function CanvasControls() {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [focusedPerformerId, exitFocusMode, focusSnapshot, exitActLayoutMode, fitView])
+    }, [isFocusActive, exitFocusMode, focusSnapshot, exitActLayoutMode, fitView])
 
     return (
         <div className="canvas-controls">
-            {!focusedPerformerId && (
+            {!isFocusActive && (
                 <>
                     <button className="canvas-controls__btn" onClick={() => zoomIn({ duration: 200 })} title="Zoom In">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -88,11 +89,11 @@ export default function CanvasControls() {
                 </>
             )}
             {(selectedPerformerId || selectedActId) && (
-                <button className="canvas-controls__btn" onClick={toggleFocus} title={focusedPerformerId ? 'Exit Focus Mode' : 'Focus Selected'}>
-                    {focusedPerformerId ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                <button className="canvas-controls__btn" onClick={toggleFocus} title={isFocusActive ? 'Exit Focus Mode' : 'Focus Selected'}>
+                    {isFocusActive ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                 </button>
             )}
-            {!focusedPerformerId && (
+            {!isFocusActive && (
                 <button className="canvas-controls__btn" onClick={toggleFitView} title={isFitted ? 'Restore View' : 'Fit to Screen'}>
                     {isFitted ? <Minimize size={14} /> : <Maximize size={14} />}
                 </button>

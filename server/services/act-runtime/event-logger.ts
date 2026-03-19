@@ -2,12 +2,13 @@
  * event-logger.ts — Append-only event log for Act Thread
  *
  * PRD §6.3: Events are stored as append-only .jsonl files.
- * Path: .dance-of-tal/act-logs/<actId>/<threadId>.jsonl
+ * Path: ~/.dot-studio/act-runtime/<actId>/<threadId>/events.jsonl
  */
 
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'
 import type { MailboxEvent } from '../../../shared/act-types.js'
+import { STUDIO_DIR } from '../../lib/config.js'
 
 // ── EventLogger ─────────────────────────────────────────
 
@@ -22,11 +23,11 @@ export class EventLogger {
         this._actId = actId
         this._threadId = threadId
         this.logPath = join(
-            workingDir,
-            '.dance-of-tal',
-            'act-logs',
+            STUDIO_DIR,
+            'act-runtime',
             actId,
-            `${threadId}.jsonl`,
+            threadId,
+            'events.jsonl',
         )
     }
 

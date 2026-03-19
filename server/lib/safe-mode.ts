@@ -13,7 +13,7 @@ import type {
 
 const execFileAsync = promisify(execFile)
 const SAFE_MODE_ROOT = path.join(STUDIO_DIR, 'safe-mode')
-const IGNORED_ENTRY_NAMES = new Set(['.git', '.dot-studio', 'node_modules'])
+const IGNORED_ENTRY_NAMES = new Set(['.git', '.dot-studio', '.opencode', 'node_modules'])
 
 type ApplyTransactionFile = {
     path: string
@@ -48,6 +48,14 @@ function ownerStorageKey(workingDir: string, ownerKind: SafeOwnerKind, ownerId: 
 
 function ownerRoot(workingDir: string, ownerKind: SafeOwnerKind, ownerId: string) {
     return path.join(SAFE_MODE_ROOT, 'owners', ownerStorageKey(workingDir, ownerKind, ownerId))
+}
+
+export async function deleteSafeOwnerWorkspace(
+    workingDir: string,
+    ownerKind: SafeOwnerKind,
+    ownerId: string,
+) {
+    await fs.rm(ownerRoot(workingDir, ownerKind, ownerId), { recursive: true, force: true })
 }
 
 function ownerMetaPath(workingDir: string, ownerKind: SafeOwnerKind, ownerId: string) {
@@ -217,6 +225,7 @@ async function buildUnifiedDiff(
     shadowPath: string,
     baseBuffer: Buffer | null,
     shadowBuffer: Buffer | null,
+    ownerRootPath: string,
 ) {
     if (isBinaryBuffer(baseBuffer) || isBinaryBuffer(shadowBuffer)) {
         return `Binary file changed: ${relPath}`
@@ -224,7 +233,6 @@ async function buildUnifiedDiff(
 
     const leftPath = baseBuffer === null ? '/dev/null' : basePath
     const rightPath = shadowBuffer === null ? '/dev/null' : shadowPath
-    const ownerRootPath = path.dirname(path.dirname(basePath))
     const leftRelativePath = leftPath === '/dev/null'
         ? '/dev/null'
         : normalizeRelativePath(path.relative(ownerRootPath, leftPath))
@@ -255,6 +263,7 @@ async function collectPendingFiles(meta: SafeOwnerMeta): Promise<SafeOwnerFile[]
     const shadowFiles = await listRelativeFiles(meta.shadowDir)
     const filePaths = Array.from(new Set([...baseFiles, ...shadowFiles])).sort((left, right) => left.localeCompare(right))
     const files: SafeOwnerFile[] = []
+    const ownerRootPath = path.dirname(meta.baseDir)
 
     for (const relPath of filePaths) {
         const basePath = path.join(meta.baseDir, relPath)
@@ -272,7 +281,7 @@ async function collectPendingFiles(meta: SafeOwnerMeta): Promise<SafeOwnerFile[]
             path: relPath,
             status: baseBuffer === null ? 'added' : shadowBuffer === null ? 'deleted' : 'modified',
             conflict: !!meta.conflicts[relPath],
-            diff: await buildUnifiedDiff(relPath, basePath, shadowPath, baseBuffer, shadowBuffer),
+            diff: await buildUnifiedDiff(relPath, basePath, shadowPath, baseBuffer, shadowBuffer, ownerRootPath),
         })
     }
 

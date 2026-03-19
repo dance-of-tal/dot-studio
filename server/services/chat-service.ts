@@ -24,7 +24,7 @@ export async function createStudioChatSession(
     )
     const session = unwrapOpencodeResult<{ id: string; title: string }>(await oc.session.create({
         directory: executionDir,
-        title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash),
+        title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash, request.executionMode),
     }))
     await registerSessionExecutionContext({
         sessionId: session.id,

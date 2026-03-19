@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { StudioState, WorkspaceSlice } from './types'
-import { api } from '../api'
+import { api, setApiWorkingDirContext } from '../api'
 import {
     createPerformerNode,
     createPerformerNodeFromAsset,
@@ -76,6 +76,52 @@ function scheduleDraftPersist(draftId: string, fn: () => void, delay = 1500) {
     }, delay))
 }
 
+function buildClosedStageState(): Partial<StudioState> {
+    return {
+        stageId: null,
+        workingDir: '',
+        performers: [],
+        drafts: {},
+        markdownEditors: [],
+        canvasTerminals: [],
+        trackingWindow: null,
+        canvasCenter: null,
+        layoutActId: null,
+        editingTarget: null,
+        selectedPerformerId: null,
+        selectedPerformerSessionId: null,
+        selectedMarkdownEditorId: null,
+        focusedPerformerId: null,
+        focusedNodeType: null,
+        focusSnapshot: null,
+        canvasRevealTarget: null,
+        inspectorFocus: null,
+        activeChatPerformerId: null,
+        chats: {},
+        chatPrefixes: {},
+        sessionMap: {},
+        sessions: [],
+        pendingPermissions: {},
+        pendingQuestions: {},
+        todos: {},
+        safeSummaries: {},
+        lspServers: [],
+        lspDiagnostics: {},
+        adapterViewsByPerformer: {},
+        isTerminalOpen: false,
+        isTrackingOpen: false,
+        isAssetLibraryOpen: false,
+        isAssistantOpen: false,
+        acts: [],
+        selectedActId: null,
+        actEditorState: null,
+        actThreads: {},
+        activeThreadId: null,
+        activeThreadParticipantKey: null,
+        stageDirty: false,
+    }
+}
+
 export const createWorkspaceSlice: StateCreator<
     StudioState,
     [],
@@ -93,6 +139,7 @@ export const createWorkspaceSlice: StateCreator<
     focusedPerformerId: null,
     focusedNodeType: null,
     focusSnapshot: null,
+    canvasRevealTarget: null,
     inspectorFocus: null,
     stageList: [],
     stageDirty: false,
@@ -105,6 +152,7 @@ export const createWorkspaceSlice: StateCreator<
     trackingWindow: null,
     canvasCenter: null,
     layoutActId: null,
+    actEditorState: null,
 
     setTerminalOpen: (open) => set({ isTerminalOpen: open }),
     setTrackingOpen: (open) => set((state) => {
@@ -189,7 +237,7 @@ export const createWorkspaceSlice: StateCreator<
                     danceRefs: normalized.danceRefs,
                     model: normalized.model,
                     modelPlaceholder: normalized.modelPlaceholder,
-                    modelVariant: null,
+                    modelVariant: normalized.modelVariant,
                     mcpServerNames: normalized.mcpServerNames,
                     mcpBindingMap: normalized.mcpBindingMap,
                     declaredMcpConfig: normalized.declaredMcpConfig,
@@ -232,6 +280,7 @@ export const createWorkspaceSlice: StateCreator<
         selectedMarkdownEditorId: null,
         // Clear act selection only when selecting a real performer (not when deselecting)
         selectedActId: id ? null : s.selectedActId,
+        actEditorState: id ? null : s.actEditorState,
         // Preserve focus mode when switching performers in focus mode
         focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
         inspectorFocus: null,
@@ -239,14 +288,16 @@ export const createWorkspaceSlice: StateCreator<
 
     selectPerformerSession: (sessionId) => set({ selectedPerformerSessionId: sessionId, selectedMarkdownEditorId: null }),
 
-    selectMarkdownEditor: (id) => set({
+    selectMarkdownEditor: (id) => set((s) => ({
         selectedMarkdownEditorId: id,
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
+        selectedActId: id ? null : s.selectedActId,
+        actEditorState: null,
         focusedPerformerId: null,
         focusedNodeType: null,
         inspectorFocus: null,
-    }),
+    })),
 
     setFocusedPerformer: (id) => set({ focusedPerformerId: id }),
 
@@ -256,6 +307,14 @@ export const createWorkspaceSlice: StateCreator<
 
     switchFocusTarget: (nodeId, nodeType) => switchFocusTargetImpl(get, set, nodeId, nodeType),
 
+    revealCanvasNode: (nodeId, nodeType) => set((state) => ({
+        canvasRevealTarget: {
+            id: nodeId,
+            type: nodeType,
+            nonce: (state.canvasRevealTarget?.nonce || 0) + 1,
+        },
+    })),
+
     setInspectorFocus: (focus) => set({ inspectorFocus: focus }),
 
     openPerformerEditor: (id, focus = null) => set({
@@ -263,6 +322,8 @@ export const createWorkspaceSlice: StateCreator<
         selectedPerformerId: id,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
+        selectedActId: null,
+        actEditorState: null,
         focusedPerformerId: null,
         focusedNodeType: null,
         inspectorFocus: focus,
@@ -276,6 +337,21 @@ export const createWorkspaceSlice: StateCreator<
     setWorkingDir: (dir) => setWorkingDirImpl(get, set, dir),
 
     newStage: async () => newStageImpl(get, set),
+
+    closeStage: async () => {
+        const currentStageId = get().stageId
+        if (currentStageId) {
+            if (get().stageDirty) {
+                await saveStageImpl(get, set)
+            }
+            await api.stages.setHidden(currentStageId, true)
+        }
+        get().cleanupRealtimeEvents()
+        setApiWorkingDirContext(null)
+        set(buildClosedStageState())
+        await get().listStages()
+        api.studio.updateConfig({ lastStage: undefined }).catch(err => console.warn('[studio] clear lastStage failed', err))
+    },
 
     saveStage: async () => saveStageImpl(get, set),
 
@@ -294,22 +370,9 @@ export const createWorkspaceSlice: StateCreator<
         if (!stageId) return
         await api.stages.delete(stageId)
         if (get().stageId === stageId) {
-            set({
-                stageId: null,
-                selectedPerformerSessionId: null,
-                selectedMarkdownEditorId: null,
-                inspectorFocus: null,
-                editingTarget: null,
-                trackingWindow: null,
-                isTrackingOpen: false,
-                acts: [],
-                selectedActId: null,
-                selectedActParticipantKey: null,
-                selectedRelationId: null,
-                actThreads: {},
-                activeThreadId: null,
-                activeThreadParticipantKey: null,
-            })
+            get().cleanupRealtimeEvents()
+            setApiWorkingDirContext(null)
+            set(buildClosedStageState())
             api.studio.updateConfig({ lastStage: undefined }).catch(err => console.warn('[studio] clear lastStage failed', err))
         }
         get().listStages()
@@ -362,6 +425,10 @@ export const createWorkspaceSlice: StateCreator<
                 ? 'Switched to Safe mode. The next turn will start a new thread lineage in the safe workspace.'
                 : 'Switched to Direct mode. The next turn will start a new thread lineage in the project workspace.',
         )
+        // Refresh session list so threads sidebar reflects the new directory context
+        get().listSessions()
+        // Reconnect SSE to subscribe to events from the new execution directory
+        get().forceReconnectRealtimeEvents()
     },
 
 

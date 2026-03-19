@@ -3,8 +3,12 @@
 
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
-import type { StudioState, ActSlice } from './types'
+import type { StudioState, ActEditorState, ActSlice } from './types'
 import type { StageAct, StageActParticipantBinding } from '../types'
+import {
+    ACT_DEFAULT_EXPANDED_HEIGHT,
+    ACT_DEFAULT_WIDTH,
+} from '../lib/act-layout'
 import {
     autoLayoutBindings,
     createActThreadImpl,
@@ -16,14 +20,23 @@ import {
     createActFromPerformersImpl,
 } from './act-slice-actions'
 
-const ACT_DEFAULT_WIDTH = 340
-const ACT_DEFAULT_HEIGHT = 80
+function createActEditorState(
+    actId: string,
+    mode: ActEditorState['mode'],
+    options: { participantKey?: string | null; relationId?: string | null } = {},
+): ActEditorState {
+    return {
+        actId,
+        mode,
+        participantKey: options.participantKey ?? null,
+        relationId: options.relationId ?? null,
+    }
+}
 
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
     acts: [],
     selectedActId: null,
-    selectedActParticipantKey: null,
-    selectedRelationId: null,
+    actEditorState: null,
 
     // ── Thread state ────────────────────────────────────
     actThreads: {},
@@ -35,12 +48,16 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     addAct: (name) => {
         const id = nanoid(12)
         const center = get().canvasCenter
+        const existingCount = get().acts.length
+        const offset = existingCount * 40
         const act: StageAct = {
             id,
             name,
-            position: center ? { x: center.x, y: center.y + 200 } : { x: 200, y: 200 },
+            position: center
+                ? { x: center.x + offset, y: center.y + 200 + offset }
+                : { x: 200 + offset, y: 200 + offset },
             width: ACT_DEFAULT_WIDTH,
-            height: ACT_DEFAULT_HEIGHT,
+            height: ACT_DEFAULT_EXPANDED_HEIGHT,
             participants: {},
             relations: [],
             createdAt: Date.now(),
@@ -49,8 +66,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             acts: [...s.acts, act],
             selectedActId: id,
             selectedPerformerId: null,
-            selectedActParticipantKey: null,
-            selectedRelationId: null,
+            actEditorState: null,
             activeThreadId: null,
             activeThreadParticipantKey: null,
             stageDirty: true,
@@ -65,8 +81,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                 Object.entries(s.actThreads).filter(([actId]) => actId !== id),
             ),
             selectedActId: s.selectedActId === id ? null : s.selectedActId,
-            selectedActParticipantKey: s.selectedActId === id ? null : s.selectedActParticipantKey,
-            selectedRelationId: s.selectedActId === id ? null : s.selectedRelationId,
+            actEditorState: s.actEditorState?.actId === id ? null : s.actEditorState,
             activeThreadId: s.selectedActId === id ? null : s.activeThreadId,
             activeThreadParticipantKey: s.selectedActId === id ? null : s.activeThreadParticipantKey,
             stageDirty: true,
@@ -103,8 +118,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         set({
             selectedActId: id,
             selectedPerformerId: null,
-            selectedActParticipantKey: null,
-            selectedRelationId: null,
+            actEditorState: state.actEditorState?.actId === id ? state.actEditorState : null,
             activeThreadId: nextActiveThreadId,
             activeThreadParticipantKey: null,
         })
@@ -162,24 +176,21 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             set({
                 selectedActId: actId,
                 selectedPerformerId: null,
-                selectedActParticipantKey: existing[0],
-                selectedRelationId: null,
+                actEditorState: state.actEditorState?.actId === actId ? state.actEditorState : null,
             })
             return existing[0]
         }
 
         const existingParticipantKeys = Object.keys(act.participants)
         const newKey = get().bindPerformerToAct(actId, performerRef)
-        let relationId: string | null = null
         if (existingParticipantKeys.length === 1) {
-            relationId = get().addRelation(actId, [existingParticipantKeys[0], newKey], 'both')
+            get().addRelation(actId, [existingParticipantKeys[0], newKey], 'both')
         }
         get().autoLayoutActParticipants(actId)
         set({
             selectedActId: actId,
             selectedPerformerId: null,
-            selectedActParticipantKey: relationId ? null : newKey,
-            selectedRelationId: relationId,
+            actEditorState: state.actEditorState?.actId === actId ? state.actEditorState : null,
         })
         return newKey
     },
@@ -189,7 +200,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         set,
         performerIds,
         options,
-        { width: ACT_DEFAULT_WIDTH, height: 320 },
+        { width: ACT_DEFAULT_WIDTH, height: ACT_DEFAULT_EXPANDED_HEIGHT },
     ),
 
     attachPerformerToAct: (actId, performerId) => {
@@ -252,11 +263,31 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    selectActParticipant: (key) => {
+    openActEditor: (actId, mode = 'act', options = {}) => {
         set({
-            selectedActParticipantKey: key,
-            selectedRelationId: null,
-            activeThreadParticipantKey: key,
+            selectedActId: actId,
+            selectedPerformerId: null,
+            actEditorState: createActEditorState(actId, mode, options),
+        })
+    },
+
+    closeActEditor: () => {
+        set({ actEditorState: null })
+    },
+
+    openActParticipantEditor: (actId, participantKey) => {
+        set({
+            selectedActId: actId,
+            selectedPerformerId: null,
+            actEditorState: createActEditorState(actId, 'participant', { participantKey }),
+        })
+    },
+
+    openActRelationEditor: (actId, relationId) => {
+        set({
+            selectedActId: actId,
+            selectedPerformerId: null,
+            actEditorState: createActEditorState(actId, 'relation', { relationId }),
         })
     },
 
@@ -305,14 +336,6 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    selectRelation: (id) => {
-        set({
-            selectedRelationId: id,
-            selectedActParticipantKey: null,
-            activeThreadParticipantKey: null,
-        })
-    },
-
     // ── Canvas ──────────────────────────────────────────
 
     updateActPosition: (id, x, y) => {
@@ -343,7 +366,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     importActFromAsset: (asset) => {
         importActFromAssetImpl(get, set, asset, {
             width: ACT_DEFAULT_WIDTH,
-            height: ACT_DEFAULT_HEIGHT,
+            height: ACT_DEFAULT_EXPANDED_HEIGHT,
         })
     },
 

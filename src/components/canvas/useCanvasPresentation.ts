@@ -29,6 +29,7 @@ type UseCanvasPresentationArgs = {
     trackingWindow: CanvasTrackingWindow | null | undefined
     drafts: Record<string, DraftAsset>
     workingDir: string
+    editingActId: string | null
     selectedActId: string | null
     selectedPerformerId: string | null
     selectedMarkdownEditorId: string | null
@@ -54,6 +55,7 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
         trackingWindow,
         drafts,
         workingDir,
+        editingActId,
         selectedActId,
         selectedPerformerId,
         selectedMarkdownEditorId,
@@ -146,12 +148,14 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
 
     const buildActNodes = useCallback(() => buildActCanvasNodes({
         acts,
+        editingActId,
         selectedActId,
         transformTarget,
         onActivateTransform,
         onDeactivateTransform,
     }), [
         acts,
+        editingActId,
         selectedActId,
         transformTarget,
         onActivateTransform,

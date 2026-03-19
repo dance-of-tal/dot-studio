@@ -124,6 +124,7 @@ export function importActFromAssetImpl(
     set((state: StudioState) => ({
         acts: [...state.acts, nextAct],
         selectedActId: id,
+        actEditorState: null,
         stageDirty: true,
     }))
 }
@@ -168,6 +169,7 @@ export async function createActThreadImpl(get: GetState, set: SetState, actId: s
             ],
         },
         selectedActId: actId,
+        actEditorState: state.actEditorState?.actId === actId ? state.actEditorState : null,
         activeThreadId: thread.id,
         activeThreadParticipantKey: null,
     }))

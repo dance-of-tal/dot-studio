@@ -28,7 +28,7 @@ import PerformerChatPanel from './PerformerChatPanel'
 import PerformerFrameHeaderMeta from './PerformerFrameHeaderMeta'
 import { usePerformerSafeReview } from './usePerformerSafeReview'
 
-import { Pencil, EyeOff, Maximize2, Minimize2 } from 'lucide-react'
+import { Pencil, EyeOff, Maximize2, Minimize2, Shield } from 'lucide-react'
 import './AgentFrame.css'
 import './AgentChat.css'
 import './AgentChatComposer.css'
@@ -144,9 +144,13 @@ export default function AgentFrame({ data, id }: any) {
         showSafeReview,
         safeBusy,
         pendingModeSwitch,
+        pendingSafeModeConfirm,
         setShowSafeReview,
         setPendingModeSwitch,
         handleToggleExecutionMode,
+        confirmSafeModeSwitch,
+        cancelSafeModeSwitch,
+        switchNotice,
         applySafeReview,
         discardSafeReviewAll,
         discardSafeReviewFile,
@@ -343,7 +347,43 @@ export default function AgentFrame({ data, id }: any) {
                     onUndoLastApply={() => {
                         void undoSafeReviewApply()
                     }}
+                    switchNotice={switchNotice}
                 />
+            ) : null}
+            {pendingSafeModeConfirm ? (
+                <div className="publish-modal__backdrop" onClick={cancelSafeModeSwitch}>
+                    <div className="publish-modal safe-mode-confirm" onClick={(e) => e.stopPropagation()}>
+                        <div className="publish-modal__header">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Shield size={16} />
+                                <h3 style={{ margin: 0 }}>Switch to Safe Mode?</h3>
+                            </div>
+                        </div>
+                        <div className="publish-modal__body">
+                            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-base)', lineHeight: 1.5 }}>
+                                Switching to Safe mode will start a new session in an isolated workspace.
+                                Your current chat context will not carry over to the new session.
+                            </p>
+                        </div>
+                        <div className="publish-modal__footer">
+                            <button
+                                type="button"
+                                className="publish-modal__action publish-modal__action--primary"
+                                onClick={confirmSafeModeSwitch}
+                            >
+                                <Shield size={12} />
+                                <span>Switch to Safe</span>
+                            </button>
+                            <button
+                                type="button"
+                                className="publish-modal__action"
+                                onClick={cancelSafeModeSwitch}
+                            >
+                                <span>Cancel</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
             ) : null}
         </div>
     )

@@ -26,10 +26,7 @@ export function handleAssistantToolCall(_callId: string, name: string, args: Rec
                     const sourceKey = store.attachPerformerToAct(args.actId, args.sourcePerformerId)
                     const targetKey = store.attachPerformerToAct(args.actId, args.targetPerformerId)
                     if (sourceKey && targetKey && sourceKey !== targetKey) {
-                        const relationId = store.addRelation(args.actId, [sourceKey, targetKey], 'both')
-                        if (relationId) {
-                            store.selectRelation(relationId)
-                        }
+                        store.addRelation(args.actId, [sourceKey, targetKey], 'both')
                     }
                     return { success: true, action: 'connectPerformers' }
                 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
     Activity,
     Archive,
@@ -22,10 +23,8 @@ type Props = {
     threads: any[]
     expanded: boolean
     expandedRows: Record<string, boolean>
-    focusedPerformerId: string | null
     onToggleExpanded: (key: string) => void
-    onSwitchFocusTarget: (id: string, type: 'performer' | 'act') => void
-    onSelectAct: (id: string) => void
+    onOpenAct: (id: string) => void
     onCreateThread: (id: string) => void | Promise<void>
 
     onSaveActAsDraft: (id: string) => void
@@ -44,10 +43,8 @@ export default function StageExplorerActGroup({
     threads,
     expanded,
     expandedRows,
-    focusedPerformerId,
     onToggleExpanded,
-    onSwitchFocusTarget,
-    onSelectAct,
+    onOpenAct,
     onCreateThread,
 
     onSaveActAsDraft,
@@ -59,6 +56,10 @@ export default function StageExplorerActGroup({
     const actKey = `act-${act.id}`
     const isActSelected = selectedActId === act.id
     const participantCount = Object.keys(act.participants).length
+    const [showAllThreads, setShowAllThreads] = useState(false)
+    const THREAD_LIMIT = 5
+    const visibleThreads = showAllThreads ? threads : threads.slice(0, THREAD_LIMIT)
+    const hiddenThreadCount = threads.length - THREAD_LIMIT
 
     return (
         <div className="thread-group">
@@ -70,19 +71,11 @@ export default function StageExplorerActGroup({
                     isActSelected ? 'active' : '',
                     act.hidden ? 'thread-card--hidden' : '',
                 ].filter(Boolean).join(' ')}
-                onClick={() => {
-                    if (focusedPerformerId && focusedPerformerId !== act.id) {
-                        onSwitchFocusTarget(act.id, 'act')
-                    }
-                    onSelectAct(act.id)
-                }}
+                onClick={() => onOpenAct(act.id)}
                 onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
-                        if (focusedPerformerId && focusedPerformerId !== act.id) {
-                            onSwitchFocusTarget(act.id, 'act')
-                        }
-                        onSelectAct(act.id)
+                        onOpenAct(act.id)
                     }
                 }}
             >
@@ -136,82 +129,95 @@ export default function StageExplorerActGroup({
             </div>
             {expanded ? (
                 <div className="thread-children">
-                    {threads.length > 0 ? threads.map((thread) => {
-                        const isThreadActive = activeThreadId === thread.id
-                        const statusIcon = thread.status === 'active' ? '●' : thread.status === 'completed' ? '✓' : '⏸'
-                        const statusClass = `thread-status--${thread.status || 'idle'}`
-                        const threadKey = `thread-${thread.id}`
-                        const threadExpanded = expandedRows[threadKey] ?? false
-                        const boundParticipantKeys = Object.keys(act.participants)
-                        return (
-                            <div key={thread.id} className="thread-group">
-                                <div
-                                    role="button"
-                                    tabIndex={0}
-                                    className={`layer-row ${isThreadActive ? 'active' : ''}`}
-                                    onClick={() => {
-                                        onSelectThread(thread.id)
-                                        onSelectAct(act.id)
-                                    }}
-                                >
-                                    {boundParticipantKeys.length > 0 ? (
-                                        <span
-                                            className={`thread-card__chevron ${threadExpanded ? 'is-open' : ''}`}
-                                            onClick={(event) => {
-                                                event.stopPropagation()
-                                                onToggleExpanded(threadKey)
-                                            }}
-                                        >
-                                            <ChevronRight size={10} />
-                                        </span>
-                                    ) : (
-                                        <span className="thread-card__chevron-spacer" style={{ width: 10 }} />
-                                    )}
-                                    <span className="layer-row__icon">
-                                        <Workflow size={11} />
-                                    </span>
-                                    <span className="layer-row__body">
-                                        <span className="layer-row__label">
-                                            <span className="thread-label">
-                                                <span className={`thread-status-dot ${statusClass}`}>{statusIcon}</span>
-                                                Thread {thread.id.slice(0, 6)}
-                                            </span>
-                                        </span>
-                                        <span className="layer-row__meta">
-                                            {new Date(thread.createdAt).toLocaleTimeString()}
-                                        </span>
-                                    </span>
-                                </div>
-                                {threadExpanded ? (
-                                    <div className="thread-children">
-                                        <LayerRow
-                                            icon={<Activity size={10} />}
-                                            label="Callboard / Activity"
-                                            active={isThreadActive && !activeThreadParticipantKey}
+                    {threads.length > 0 ? (
+                        <>
+                            {visibleThreads.map((thread) => {
+                                const isThreadActive = activeThreadId === thread.id
+                                const statusIcon = thread.status === 'active' ? '●' : thread.status === 'completed' ? '✓' : '⏸'
+                                const statusClass = `thread-status--${thread.status || 'idle'}`
+                                const threadKey = `thread-${thread.id}`
+                                const threadExpanded = expandedRows[threadKey] ?? isThreadActive
+                                const boundParticipantKeys = Object.keys(act.participants)
+                                return (
+                                    <div key={thread.id} className="thread-group">
+                                        <div
+                                            role="button"
+                                            tabIndex={0}
+                                            className={`layer-row ${isThreadActive ? 'active' : ''}`}
                                             onClick={() => {
                                                 onSelectThread(thread.id)
-                                                onSelectThreadParticipant(null)
-                                                onSelectAct(act.id)
+                                                onOpenAct(act.id)
                                             }}
-                                        />
-                                        {boundParticipantKeys.map((participantKey) => (
-                                            <LayerRow
-                                                key={participantKey}
-                                                icon={<User size={10} />}
-                                                label={resolveActParticipantLabel(act, participantKey, performers)}
-                                                active={isThreadActive && activeThreadParticipantKey === participantKey}
-                                                onClick={() => {
-                                                    onSelectThread(thread.id)
-                                                    onSelectThreadParticipant(participantKey)
-                                                    onSelectAct(act.id)
-                                                }}
-                                            />
-                                        ))}
+                                        >
+                                            {boundParticipantKeys.length > 0 ? (
+                                                <span
+                                                    className={`thread-card__chevron ${threadExpanded ? 'is-open' : ''}`}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation()
+                                                        onToggleExpanded(threadKey)
+                                                    }}
+                                                >
+                                                    <ChevronRight size={10} />
+                                                </span>
+                                            ) : (
+                                                <span className="thread-card__chevron-spacer" style={{ width: 10 }} />
+                                            )}
+                                            <span className="layer-row__icon">
+                                                <Workflow size={11} />
+                                            </span>
+                                            <span className="layer-row__body">
+                                                <span className="layer-row__label">
+                                                    <span className="thread-label">
+                                                        <span className={`thread-status-dot ${statusClass}`}>{statusIcon}</span>
+                                                        Thread {thread.id.slice(0, 6)}
+                                                    </span>
+                                                </span>
+                                                <span className="layer-row__meta">
+                                                    {new Date(thread.createdAt).toLocaleTimeString()}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        {threadExpanded ? (
+                                            <div className="thread-children">
+                                                <LayerRow
+                                                    icon={<Activity size={10} />}
+                                                    label="Callboard / Activity"
+                                                    active={isThreadActive && !activeThreadParticipantKey}
+                                                    onClick={() => {
+                                                        onSelectThread(thread.id)
+                                                        onSelectThreadParticipant(null)
+                                                        onOpenAct(act.id)
+                                                    }}
+                                                />
+                                                {boundParticipantKeys.map((participantKey) => (
+                                                    <LayerRow
+                                                        key={participantKey}
+                                                        icon={<User size={10} />}
+                                                        label={resolveActParticipantLabel(act, participantKey, performers)}
+                                                        active={isThreadActive && activeThreadParticipantKey === participantKey}
+                                                        onClick={() => {
+                                                            onSelectThread(thread.id)
+                                                            onSelectThreadParticipant(participantKey)
+                                                            onOpenAct(act.id)
+                                                        }}
+                                                    />
+                                                ))}
+                                            </div>
+                                        ) : null}
                                     </div>
-                                ) : null}
-                            </div>
-                        )
-                    }) : (
+                                )
+                            })}
+                            {hiddenThreadCount > 0 ? (
+                                <button
+                                    className="show-more-btn"
+                                    onClick={(e) => { e.stopPropagation(); setShowAllThreads(!showAllThreads) }}
+                                    type="button"
+                                >
+                                    {showAllThreads ? 'Show less' : `Show ${hiddenThreadCount} more`}
+                                </button>
+                            ) : null}
+                        </>
+                    ) : (
                         <div className="empty-state empty-state--tight empty-state--nested">
                             No threads — click + to create one
                         </div>

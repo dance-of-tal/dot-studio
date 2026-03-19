@@ -1,5 +1,6 @@
 import { api } from '../api'
 import type { DraftAsset } from '../types'
+import { ACT_DEFAULT_EXPANDED_HEIGHT, ACT_DEFAULT_WIDTH } from '../lib/act-layout'
 import { createPerformerNode } from '../lib/performers'
 import { defaultMarkdownContent } from './workspace-helpers'
 import type { StudioState } from './types'
@@ -237,8 +238,8 @@ export function importActFromDraftImpl(
         description: draftContent.description,
         actRules: draftContent.actRules,
         position: { x: centerX, y: centerY },
-        width: 340,
-        height: 80,
+        width: ACT_DEFAULT_WIDTH,
+        height: ACT_DEFAULT_EXPANDED_HEIGHT,
         participants,
         relations: Array.isArray(draftContent.relations) ? draftContent.relations : [],
         createdAt: Date.now(),

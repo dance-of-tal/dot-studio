@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useStudioStore } from '../../store'
 import { api } from '../../api'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
-import { buildActAssetPayload, buildPerformerAssetPayload, slugifyAssetName, unresolvedDeclaredMcpServerNames } from '../../lib/performers'
+import { buildActAssetPayload, buildPerformerAssetPayload, slugifyAssetName } from '../../lib/performers'
 import { queryKeys } from '../../hooks/queries'
 import { useDotLogin } from '../../hooks/useDotLogin'
 import {
@@ -39,8 +39,6 @@ export function usePublishModalController(open: boolean) {
     const [tagsText, setTagsText] = useState('')
     const [status, setStatus] = useState<null | { tone: 'success' | 'error'; message: string }>(null)
     const [action, setAction] = useState<null | 'save-local' | 'publish'>(null)
-    const [projectMcpConfig, setProjectMcpConfig] = useState<Record<string, unknown>>({})
-
     const performer = pickerSelection?.kind === 'performer'
         ? performers.find((p) => p.id === pickerSelection.performerId) || null
         : null
@@ -103,17 +101,6 @@ export function usePublishModalController(open: boolean) {
         }
     }, [step, pickerSelection, performer, draft, isLocalAsset])
 
-    useEffect(() => {
-        if (!open) return
-        api.config.getProject()
-            .then((result) => {
-                const config = result?.config && typeof result.config === 'object' ? result.config : {}
-                const mcp = config && typeof config.mcp === 'object' && config.mcp ? config.mcp : {}
-                setProjectMcpConfig(mcp as Record<string, unknown>)
-            })
-            .catch(() => setProjectMcpConfig({}))
-    }, [open])
-
     const performerPreflight = useMemo(() => buildPerformerPreflight(performer), [performer])
 
     const markdownDirty = useMemo(() => {
@@ -131,17 +118,9 @@ export function usePublishModalController(open: boolean) {
         () => performerPreflight.some((entry: any) => entry.status !== 'ready'),
         [performerPreflight],
     )
-    const performerHasUnresolvedMcpPlaceholders = useMemo(
-        () => performer ? unresolvedDeclaredMcpServerNames(performer).length > 0 : false,
-        [performer],
-    )
-
     const publishBlockedReason = useMemo(() => {
         if (performer && performerHasBlockingDependencies) {
             return 'Save Tal and Dance dependencies as local or published assets before exporting this performer.'
-        }
-        if (performer && performerHasUnresolvedMcpPlaceholders) {
-            return 'Map imported MCP placeholders to project MCP servers before publishing.'
         }
         if (selectedAct) {
             const actBlockReasons = getActPublishBlockReasons(selectedAct)
@@ -150,7 +129,7 @@ export function usePublishModalController(open: boolean) {
             }
         }
         return null
-    }, [performer, performerHasBlockingDependencies, performerHasUnresolvedMcpPlaceholders, selectedAct])
+    }, [performer, performerHasBlockingDependencies, selectedAct])
 
     const canSaveOrPublish = !!target
         && !!slug.trim()
@@ -214,7 +193,6 @@ export function usePublishModalController(open: boolean) {
                     name: performer.name,
                     description,
                     tags,
-                    projectMcpConfig,
                 })
                 const result = await api.dot.saveLocalAsset('performer', slug, payload, authUser?.username || undefined)
                 await invalidateKind('performer')
@@ -271,7 +249,6 @@ export function usePublishModalController(open: boolean) {
                     name: performer.name,
                     description,
                     tags,
-                    projectMcpConfig,
                 })
                 const result = await api.dot.publishAsset('performer', slug, payload, tags, true)
                 await invalidateKind('performer')

@@ -4,18 +4,25 @@
     gap: 2px;
 }
 
+.act-frame__focus-btn,
 .act-frame__edit-btn,
 .act-frame__close-btn {
     opacity: 0.5;
     transition: opacity 0.15s;
 }
 
+.act-frame__focus-btn:hover,
 .act-frame__edit-btn:hover,
 .act-frame__close-btn:hover {
     opacity: 1;
 }
 
-.act-frame--editing .act-frame__edit-btn {
+.act-frame__edit-btn.active {
+    opacity: 1;
+    color: var(--act-accent);
+}
+
+.act-frame__focus-btn.active {
     opacity: 1;
     color: var(--act-accent);
 }

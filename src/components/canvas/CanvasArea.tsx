@@ -52,6 +52,7 @@ export default function CanvasArea() {
         drafts,
         workingDir,
         focusedPerformerId,
+        canvasRevealTarget,
         selectedMarkdownEditorId,
         editingTarget,
         updatePerformerPosition,
@@ -71,15 +72,15 @@ export default function CanvasArea() {
         setActiveChatPerformer,
 
         closeEditor,
+        closeActEditor,
         setCanvasCenter,
         acts,
+        actEditorState,
         selectedActId,
         selectAct,
         updateActPosition,
         createActFromPerformers,
         attachPerformerToAct,
-        selectActParticipant,
-        selectRelation,
     } = useStudioStore();
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<Node> | null>(null);
     const { active, isOver: isCanvasDropOver, setNodeRef: setCanvasDropRef } = useDroppable({
@@ -104,6 +105,7 @@ export default function CanvasArea() {
         activateTransformTarget,
         deactivateTransformTarget,
     } = useCanvasTransformTarget({
+        acts,
         performers,
         markdownEditors,
         canvasTerminals,
@@ -126,6 +128,7 @@ export default function CanvasArea() {
         trackingWindow,
         drafts,
         workingDir,
+        editingActId: actEditorState?.actId || null,
         selectedActId,
         selectedPerformerId,
         selectedMarkdownEditorId,
@@ -144,6 +147,7 @@ export default function CanvasArea() {
 
     useCanvasFocusFit({
         focusedPerformerId,
+        canvasRevealTarget,
         reactFlowInstance,
         nodeCount: nodes.length,
     })
@@ -157,19 +161,19 @@ export default function CanvasArea() {
         handleNodesChange,
         onMoveEnd,
     } = useCanvasFlowHandlers({
+        acts,
         nodes,
         editingTarget,
         reactFlowInstance,
         canvasAreaRef,
         clearTransformTarget,
         closeEditor,
+        closeActEditor,
         setCanvasCenter,
         selectMarkdownEditor,
         selectPerformer,
         setActiveChatPerformer,
         selectAct,
-        selectActParticipant,
-        selectRelation,
         createActFromPerformers,
         attachPerformerToAct,
         onNodesChange,
@@ -222,7 +226,7 @@ export default function CanvasArea() {
             >
                 <Background color={focusedPerformerId ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>
-            {selectedActId ? (
+            {actEditorState ? (
                 <Suspense fallback={null}>
                     <ActInspectorPanel />
                 </Suspense>

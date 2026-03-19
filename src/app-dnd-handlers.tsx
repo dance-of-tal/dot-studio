@@ -6,6 +6,7 @@ import { showToast } from './lib/toast'
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers'
 import { projectMcpServerNames } from '../shared/project-mcp'
 import { extractMcpServerNamesFromConfig } from '../shared/mcp-config'
+import { resolvePerformerMcpPortability } from '../shared/performer-mcp-portability'
 import {
     toDragPreview,
     isInstalledAsset,
@@ -90,8 +91,34 @@ export async function resolvePerformerAssetForStudio(
     if (!normalized.model && normalized.modelPlaceholder) {
         showDropWarning(`Model ${normalized.modelPlaceholder.provider}/${normalized.modelPlaceholder.modelId} is not available in this Studio runtime. A placeholder was kept so you can pick a replacement.`)
     }
-    const declaredMcpNames = extractMcpServerNamesFromConfig(asset.mcpConfig)
+    const portability = (
+        Array.isArray(asset.declaredMcpServerNames)
+        && Array.isArray(asset.projectMcpMatches)
+        && Array.isArray(asset.projectMcpMissing)
+    )
+        ? {
+            declaredMcpServerNames: asset.declaredMcpServerNames,
+            projectMcpMatches: asset.projectMcpMatches,
+            projectMcpMissing: asset.projectMcpMissing,
+        }
+        : resolvePerformerMcpPortability(asset.mcpConfig, projectMcpNames)
+
+    const declaredMcpNames = portability.declaredMcpServerNames.length > 0
+        ? portability.declaredMcpServerNames
+        : extractMcpServerNamesFromConfig(asset.mcpConfig)
     const unresolvedMcpNames = declaredMcpNames.filter((name) => !(normalized.mcpBindingMap?.[name] || '').trim())
+
+    if (portability.projectMcpMatches.length > 0) {
+        showToast(
+            `Imported performer found project MCP name matches: ${portability.projectMcpMatches.join(', ')}. Review the performer binding after import.`,
+            'info',
+            {
+                title: 'MCP matches found',
+                dedupeKey: `performer-import-mcp-match:${asset.urn || asset.name}:${portability.projectMcpMatches.join(',')}`,
+                durationMs: 5000,
+            },
+        )
+    }
     if (unresolvedMcpNames.length > 0) {
         showDropWarning(`Imported MCP placeholders need mapping in the performer editor or Asset Library: ${unresolvedMcpNames.join(', ')}`)
     }

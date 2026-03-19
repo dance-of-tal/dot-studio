@@ -36,6 +36,7 @@ export function usePerformerSafeReview(args: Args) {
     const [showSafeReview, setShowSafeReview] = useState(false)
     const [safeBusy, setSafeBusy] = useState(false)
     const [pendingModeSwitch, setPendingModeSwitch] = useState<'direct' | null>(null)
+    const [pendingSafeModeConfirm, setPendingSafeModeConfirm] = useState(false)
 
     useEffect(() => {
         if (performer?.executionMode !== 'safe') return
@@ -55,9 +56,18 @@ export function usePerformerSafeReview(args: Args) {
             setPerformerExecutionMode(performerId, 'direct')
             return
         }
+        setPendingSafeModeConfirm(true)
+    }, [performer, safeSummary, refreshSafeOwner, performerId, setPerformerExecutionMode])
+
+    const confirmSafeModeSwitch = useCallback(() => {
         setPerformerExecutionMode(performerId, 'safe')
         void refreshSafeOwner('performer', performerId)
-    }, [performer, safeSummary, refreshSafeOwner, performerId, setPerformerExecutionMode])
+        setPendingSafeModeConfirm(false)
+    }, [performerId, refreshSafeOwner, setPerformerExecutionMode])
+
+    const cancelSafeModeSwitch = useCallback(() => {
+        setPendingSafeModeConfirm(false)
+    }, [])
 
     const runSafeAction = useCallback(async (
         task: () => Promise<void>,
@@ -84,9 +94,15 @@ export function usePerformerSafeReview(args: Args) {
         showSafeReview,
         safeBusy,
         pendingModeSwitch,
+        pendingSafeModeConfirm,
         setShowSafeReview,
         setPendingModeSwitch,
         handleToggleExecutionMode,
+        confirmSafeModeSwitch,
+        cancelSafeModeSwitch,
+        switchNotice: pendingModeSwitch === 'direct'
+            ? 'Switching to Direct mode will start a new session in the project workspace. Your current safe mode chat context will not carry over.'
+            : null,
         applySafeReview: () => runSafeAction(() => applySafeOwner('performer', performerId), pendingModeSwitch || undefined),
         discardSafeReviewAll: () => runSafeAction(() => discardAllSafeOwner('performer', performerId), pendingModeSwitch || undefined),
         discardSafeReviewFile: (filePath: string) => runSafeAction(

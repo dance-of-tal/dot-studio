@@ -9,21 +9,20 @@ import { isPerformerAttachedToAct } from './act-inspector-helpers'
 export default function ActMetaView() {
     const {
         acts,
-        layoutActId,
-        selectedActId,
+        actEditorState,
         renameAct,
         updateActAuthoringMeta,
         updateActDescription,
         performers,
         autoLayoutActParticipants,
-        selectActParticipant,
-        selectRelation,
+        openActParticipantEditor,
+        openActRelationEditor,
         setAssetLibraryOpen,
         addRelation,
         attachPerformerToAct,
     } = useStudioStore()
     const updateActRules = useStudioStore((s) => s.updateActRules)
-    const activeActId = layoutActId || selectedActId
+    const activeActId = actEditorState?.actId || null
     const act = acts.find((a) => a.id === activeActId)
     if (!act || !activeActId) return null
 
@@ -138,7 +137,7 @@ export default function ActMetaView() {
                             <button
                                 key={key}
                                 className="act-panel__edge-link"
-                                onClick={() => selectActParticipant(key)}
+                                onClick={() => openActParticipantEditor(activeActId, key)}
                                 title="Open participant binding"
                             >
                                 <span className="act-panel__edge-dir">●</span>
@@ -208,7 +207,7 @@ export default function ActMetaView() {
                             <button
                                 key={rel.id}
                                 className="act-panel__edge-link"
-                                onClick={() => selectRelation(rel.id)}
+                                onClick={() => openActRelationEditor(activeActId, rel.id)}
                                 title="Open relation"
                             >
                                 <span className="act-panel__edge-dir">
@@ -281,7 +280,7 @@ export default function ActMetaView() {
                             }
                             const relationId = addRelation(activeActId, [relationDraft.source, relationDraft.target], relationDraft.direction)
                             if (relationId) {
-                                selectRelation(relationId)
+                                openActRelationEditor(activeActId, relationId)
                             }
                         }}
                     >

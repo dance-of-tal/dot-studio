@@ -2,6 +2,8 @@ import fs from 'fs/promises'
 import path from 'path'
 import { assetFilePath, getDotDir, getGlobalCwd, getGlobalDotDir, getRegistryPackage, readAsset } from '../lib/dot-source.js'
 import type { AssetListItem } from '../../shared/asset-contracts.js'
+import { readProjectMcpCatalog } from '../lib/project-config.js'
+import { resolvePerformerMcpPortability } from '../../shared/performer-mcp-portability.js'
 
 export function isStudioActPayload(content: Record<string, any>) {
     return content.schema === 'studio-v1' || Array.isArray(content.participants) || Array.isArray(content.payload?.participants)
@@ -19,6 +21,7 @@ function normalizeAsset(
     author: string,
     source: 'global' | 'stage' | 'registry',
     content: Record<string, any>,
+    projectMcpServerNames: string[],
     detail = false,
 ): AssetListItem {
     const slug = urn.split('/')[2]
@@ -45,18 +48,23 @@ function normalizeAsset(
             : (payload.model && typeof payload.model === 'object' && 'provider' in payload.model && typeof payload.model.provider === 'string')
                 ? payload.model
                 : null
+        const portability = resolvePerformerMcpPortability(payload.mcp_config ?? payload.mcp, projectMcpServerNames)
         return {
             ...base,
             talUrn: typeof payload.tal === 'string' ? payload.tal : null,
             danceUrns,
             actUrn: typeof payload.act === 'string' ? payload.act : null,
             model: modelValue,
+            modelVariant: typeof payload.modelVariant === 'string' ? payload.modelVariant : null,
             mcpConfig:
                 typeof payload.mcp_config === 'object' && payload.mcp_config !== null
                     ? payload.mcp_config
                     : typeof payload.mcp === 'object' && payload.mcp !== null
                         ? payload.mcp
                         : null,
+            declaredMcpServerNames: portability.declaredMcpServerNames,
+            projectMcpMatches: portability.projectMcpMatches,
+            projectMcpMissing: portability.projectMcpMissing,
             tags: Array.isArray(content.tags) ? content.tags : [],
             ...(typeof content.$schema === 'string' ? { schema: content.$schema } : {}),
         }
@@ -86,7 +94,13 @@ function normalizeAsset(
     }
 }
 
-async function scanAssetDir(baseDir: string, kind: string, source: 'global' | 'stage', resultsMap: Map<string, AssetListItem>) {
+async function scanAssetDir(
+    baseDir: string,
+    kind: string,
+    source: 'global' | 'stage',
+    resultsMap: Map<string, AssetListItem>,
+    projectMcpServerNames: string[],
+) {
     const kindDir = path.join(baseDir, 'assets', kind)
     try {
         const authors = await fs.readdir(kindDir)
@@ -103,7 +117,7 @@ async function scanAssetDir(baseDir: string, kind: string, source: 'global' | 's
                     const content = JSON.parse(await fs.readFile(path.join(authorDir, file), 'utf-8'))
                     const name = file.replace(/\.json$/, '')
                     const urn = `${kind}/${author}/${name}`
-                    resultsMap.set(urn, normalizeAsset(kind, urn, author, source, content, false))
+                    resultsMap.set(urn, normalizeAsset(kind, urn, author, source, content, projectMcpServerNames, false))
                 } catch {
                     // skip invalid files
                 }
@@ -116,8 +130,9 @@ async function scanAssetDir(baseDir: string, kind: string, source: 'global' | 's
 
 export async function listStudioAssets(cwd: string, kind: string): Promise<AssetListItem[]> {
     const resultsMap = new Map<string, AssetListItem>()
-    await scanAssetDir(getGlobalDotDir(), kind, 'global', resultsMap)
-    await scanAssetDir(getDotDir(cwd), kind, 'stage', resultsMap)
+    const projectMcpServerNames = Object.keys(await readProjectMcpCatalog(cwd))
+    await scanAssetDir(getGlobalDotDir(), kind, 'global', resultsMap, projectMcpServerNames)
+    await scanAssetDir(getDotDir(cwd), kind, 'stage', resultsMap, projectMcpServerNames)
     return Array.from(resultsMap.values())
 }
 
@@ -142,14 +157,16 @@ export async function getStudioAsset(cwd: string, kind: string, author: string, 
         throw new Error(`Asset not found: ${urn}`)
     }
     const source = await resolveStudioAssetSource(cwd, urn)
-    return normalizeAsset(kind, urn, `@${author}`, source, asset, true)
+    const projectMcpServerNames = Object.keys(await readProjectMcpCatalog(cwd))
+    return normalizeAsset(kind, urn, `@${author}`, source, asset, projectMcpServerNames, true)
 }
 
-export async function getRegistryAssetDetail(kind: string, author: string, name: string) {
+export async function getRegistryAssetDetail(cwd: string, kind: string, author: string, name: string) {
     const pkg = await getRegistryPackage(kind, author, name)
     const urn = typeof pkg.urn === 'string' && pkg.urn ? pkg.urn : `${kind}/@${author.replace(/^@/, '')}/${name}`
+    const projectMcpServerNames = Object.keys(await readProjectMcpCatalog(cwd))
     return {
-        ...normalizeAsset(kind, urn, `@${author.replace(/^@/, '')}`, 'registry', pkg.payload, true),
+        ...normalizeAsset(kind, urn, `@${author.replace(/^@/, '')}`, 'registry', pkg.payload, projectMcpServerNames, true),
         stars: typeof pkg.stars === 'number' ? pkg.stars : 0,
         tier: typeof pkg.tier === 'string' ? pkg.tier : undefined,
         updatedAt: typeof pkg.updatedAt === 'string' ? pkg.updatedAt : undefined,

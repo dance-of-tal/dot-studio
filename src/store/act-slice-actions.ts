@@ -116,19 +116,22 @@ export function createActFromPerformersImpl(
 
     if (sourceMatch && targetMatch) {
         if (sourceMatch.act.id !== targetMatch.act.id) {
-            set({ selectedActId: sourceMatch.act.id, selectedPerformerId: null })
+            set({
+                selectedActId: sourceMatch.act.id,
+                selectedPerformerId: null,
+                actEditorState: null,
+            })
             return sourceMatch.act.id
         }
 
         const sourceKey = sourceMatch.binding?.[0]
         const targetKey = targetMatch.binding?.[0]
         if (sourceKey && targetKey) {
-            const relationId = addActRelationImpl(get, set, sourceMatch.act.id, [sourceKey, targetKey], 'both')
+            addActRelationImpl(get, set, sourceMatch.act.id, [sourceKey, targetKey], 'both')
             set({
                 selectedActId: sourceMatch.act.id,
                 selectedPerformerId: null,
-                selectedActParticipantKey: null,
-                selectedRelationId: relationId,
+                actEditorState: null,
             })
             return sourceMatch.act.id
         }
@@ -137,15 +140,13 @@ export function createActFromPerformersImpl(
     if (sourceMatch && !targetMatch) {
         const targetKey = get().bindPerformerToAct(sourceMatch.act.id, performerToRef(targetPerformer))
         const sourceKey = sourceMatch.binding?.[0]
-        let relationId: string | null = null
         if (sourceKey && targetKey) {
-            relationId = addActRelationImpl(get, set, sourceMatch.act.id, [sourceKey, targetKey], 'both')
+            addActRelationImpl(get, set, sourceMatch.act.id, [sourceKey, targetKey], 'both')
         }
         set({
             selectedActId: sourceMatch.act.id,
             selectedPerformerId: null,
-            selectedActParticipantKey: relationId ? null : targetKey,
-            selectedRelationId: relationId,
+            actEditorState: null,
         })
         return sourceMatch.act.id
     }
@@ -153,15 +154,13 @@ export function createActFromPerformersImpl(
     if (!sourceMatch && targetMatch) {
         const sourceKey = get().bindPerformerToAct(targetMatch.act.id, performerToRef(sourcePerformer))
         const targetKey = targetMatch.binding?.[0]
-        let relationId: string | null = null
         if (sourceKey && targetKey) {
-            relationId = addActRelationImpl(get, set, targetMatch.act.id, [sourceKey, targetKey], 'both')
+            addActRelationImpl(get, set, targetMatch.act.id, [sourceKey, targetKey], 'both')
         }
         set({
             selectedActId: targetMatch.act.id,
             selectedPerformerId: null,
-            selectedActParticipantKey: relationId ? null : sourceKey,
-            selectedRelationId: relationId,
+            actEditorState: null,
         })
         return targetMatch.act.id
     }
@@ -208,8 +207,7 @@ export function createActFromPerformersImpl(
         acts: [...state.acts, act],
         selectedActId: id,
         selectedPerformerId: null,
-        selectedActParticipantKey: null,
-        selectedRelationId: initialRelationId,
+        actEditorState: null,
         stageDirty: true,
     }))
     return id

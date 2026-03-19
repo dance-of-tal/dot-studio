@@ -85,3 +85,22 @@
     background: var(--bg-panel);
     color: var(--text-primary);
 }
+
+.safe-review-modal__notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-main));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+    color: var(--text-secondary);
+    font-size: var(--font-base);
+    line-height: 1.45;
+}
+
+.safe-review-modal__notice svg {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: var(--accent);
+}

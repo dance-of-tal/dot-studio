@@ -6,22 +6,21 @@
  * - participant binding
  * - relation detail
  */
-import { Settings, User, ArrowRightLeft } from 'lucide-react'
+import { Settings, User, ArrowRightLeft, X } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import ActMetaView from './ActMetaView'
 import ActParticipantBindingView from './ActParticipantBindingView'
 import ActRelationView from './ActRelationView'
 import './ActInspectorPanel.css'
+import './ActInspectorDetails.css'
 
 export default function ActInspectorPanel() {
-    const { layoutActId, selectedActId, selectedActParticipantKey, selectedRelationId } = useStudioStore()
+    const { acts, actEditorState, closeActEditor } = useStudioStore()
 
-    const activeActId = layoutActId || selectedActId
-    if (!activeActId) return null
+    if (!actEditorState) return null
 
-    const mode = selectedRelationId ? 'relation'
-        : selectedActParticipantKey ? 'participant'
-        : 'act'
+    const act = acts.find((entry) => entry.id === actEditorState.actId) || null
+    const mode = actEditorState.mode
 
     const modeLabels = {
         act: { icon: <Settings size={12} />, label: 'Act Config' },
@@ -34,8 +33,18 @@ export default function ActInspectorPanel() {
     return (
         <div className="act-panel">
             <div className="act-panel__header">
-                {icon}
-                <span>{label}</span>
+                <div className="act-panel__header-copy">
+                    {icon}
+                    <span>{label}</span>
+                    {act ? <strong className="act-panel__header-name">{act.name}</strong> : null}
+                </div>
+                <button
+                    className="icon-btn act-panel__close-btn"
+                    title="Close Act Inspector"
+                    onClick={closeActEditor}
+                >
+                    <X size={12} />
+                </button>
             </div>
             {mode === 'act' && <ActMetaView />}
             {mode === 'participant' && <ActParticipantBindingView />}

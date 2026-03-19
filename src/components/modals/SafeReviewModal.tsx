@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Check, RotateCcw, Shield, X } from 'lucide-react'
+import { AlertTriangle, Check, Info, RotateCcw, Shield, X } from 'lucide-react'
 import type { SafeOwnerSummary } from '../../types'
 import './PublishModal.css'
 import './SafeReviewModal.css'
@@ -13,6 +13,7 @@ type SafeReviewModalProps = {
     onDiscardAll: () => void
     onDiscardFile: (filePath: string) => void
     onUndoLastApply: () => void
+    switchNotice?: string | null
 }
 
 export default function SafeReviewModal({
@@ -24,6 +25,7 @@ export default function SafeReviewModal({
     onDiscardAll,
     onDiscardFile,
     onUndoLastApply,
+    switchNotice,
 }: SafeReviewModalProps) {
     const files = summary?.files || []
 
@@ -49,6 +51,12 @@ export default function SafeReviewModal({
                 </div>
 
                 <div className="publish-modal__body safe-review-modal__body">
+                    {switchNotice ? (
+                        <div className="safe-review-modal__notice">
+                            <Info size={14} />
+                            <span>{switchNotice}</span>
+                        </div>
+                    ) : null}
                     <div className="safe-review-modal__summary">
                         {!summary ? 'Loading safe mode changes...' : `${summary.pendingCount} pending change${summary.pendingCount === 1 ? '' : 's'}`}
                         {summary && summary.conflictCount > 0 ? ` · ${summary.conflictCount} conflict${summary.conflictCount === 1 ? '' : 's'}` : ''}

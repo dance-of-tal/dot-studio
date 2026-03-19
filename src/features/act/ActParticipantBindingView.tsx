@@ -6,24 +6,25 @@ import { getCallboardKeys, nextSubscriptions } from './act-inspector-helpers'
 
 export default function ActParticipantBindingView() {
     const {
-        acts, performers, layoutActId, selectedActId, selectedActParticipantKey,
-        selectRelation, updatePerformerBinding, unbindPerformerFromAct, selectActParticipant,
+        acts, performers, actEditorState,
+        openActEditor, openActRelationEditor, updatePerformerBinding, unbindPerformerFromAct,
     } = useStudioStore()
 
-    const activeActId = layoutActId || selectedActId
+    const activeActId = actEditorState?.actId || null
+    const participantKey = actEditorState?.mode === 'participant' ? actEditorState.participantKey : null
     const act = useMemo(() => acts.find((a) => a.id === activeActId), [acts, activeActId])
-    const binding = act && selectedActParticipantKey ? act.participants[selectedActParticipantKey] : null
+    const binding = act && participantKey ? act.participants[participantKey] : null
 
     const relatedRelations = useMemo(() => {
-        if (!act || !selectedActParticipantKey) return []
+        if (!act || !participantKey) return []
         return act.relations.filter(
-            (relation) => relation.between.includes(selectedActParticipantKey),
+            (relation) => relation.between.includes(participantKey),
         )
-    }, [act, selectedActParticipantKey])
+    }, [act, participantKey])
 
     const [subInput, setSubInput] = useState({ messagesFrom: '', messageTags: '', callboardKeys: '' })
 
-    if (!act || !binding || !selectedActParticipantKey || !activeActId) return null
+    if (!act || !binding || !participantKey || !activeActId) return null
 
     const refLabel = binding.performerRef.kind === 'registry'
         ? binding.performerRef.urn.split('/').pop() || binding.performerRef.urn
@@ -38,7 +39,7 @@ export default function ActParticipantBindingView() {
             ? getCallboardKeys(subscriptions)
             : (subscriptions as any)[field] || []
         if (current.includes(value)) return
-        updatePerformerBinding(activeActId, selectedActParticipantKey, {
+        updatePerformerBinding(activeActId, participantKey, {
             subscriptions: nextSubscriptions(subscriptions, { [field]: [...current, value] }),
         })
         setSubInput((prev) => ({ ...prev, [field]: '' }))
@@ -48,7 +49,7 @@ export default function ActParticipantBindingView() {
         const current = field === 'callboardKeys'
             ? getCallboardKeys(subscriptions)
             : (subscriptions as any)[field] || []
-        updatePerformerBinding(activeActId, selectedActParticipantKey, {
+        updatePerformerBinding(activeActId, participantKey, {
             subscriptions: nextSubscriptions(subscriptions, { [field]: current.filter((entry: string) => entry !== value) }),
         })
     }
@@ -58,14 +59,14 @@ export default function ActParticipantBindingView() {
             <div className="act-panel__item-header">
                 <User size={14} className="act-panel__item-icon" />
                 <span className="act-panel__item-name act-panel__item-name--edge">
-                    {resolveActParticipantLabel(act, selectedActParticipantKey, performers)}
+                    {resolveActParticipantLabel(act, participantKey, performers)}
                 </span>
                 <button
                     className="icon-btn act-panel__danger-btn"
                     title="Remove participant"
                     onClick={() => {
-                        unbindPerformerFromAct(activeActId, selectedActParticipantKey)
-                        selectActParticipant(null)
+                        unbindPerformerFromAct(activeActId, participantKey)
+                        openActEditor(activeActId, 'act')
                     }}
                 >
                     <Trash2 size={12} />
@@ -102,7 +103,7 @@ export default function ActParticipantBindingView() {
                         const next = current.includes(danceUrn)
                             ? current.filter((id) => id !== danceUrn)
                             : [...current, danceUrn]
-                        updatePerformerBinding(activeActId, selectedActParticipantKey, {
+                        updatePerformerBinding(activeActId, participantKey, {
                             activeDanceIds: next,
                         })
                     }
@@ -144,12 +145,12 @@ export default function ActParticipantBindingView() {
                 {relatedRelations.length > 0 ? (
                     <div className="act-panel__list">
                         {relatedRelations.map((relation) => {
-                            const otherKey = relation.between[0] === selectedActParticipantKey ? relation.between[1] : relation.between[0]
+                            const otherKey = relation.between[0] === participantKey ? relation.between[1] : relation.between[0]
                             return (
                                 <div
                                     key={relation.id}
                                     className="act-panel__edge-link"
-                                    onClick={() => selectRelation(relation.id)}
+                                    onClick={() => openActRelationEditor(activeActId, relation.id)}
                                     title="Click to edit relation"
                                 >
                                     <span className="act-panel__edge-dir">

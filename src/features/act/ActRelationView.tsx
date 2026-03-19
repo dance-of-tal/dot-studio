@@ -6,13 +6,14 @@ import { resolveActParticipantLabel } from './participant-labels'
 
 export default function ActRelationView() {
     const {
-        acts, layoutActId, selectedActId, selectedRelationId,
-        updateRelation, removeRelation, selectRelation,
+        acts, actEditorState,
+        updateRelation, removeRelation, openActEditor,
     } = useStudioStore()
 
-    const activeActId = layoutActId || selectedActId
+    const activeActId = actEditorState?.actId || null
+    const relationId = actEditorState?.mode === 'relation' ? actEditorState.relationId : null
     const act = acts.find((a) => a.id === activeActId)
-    const relation = act?.relations.find((r) => r.id === selectedRelationId)
+    const relation = act?.relations.find((r) => r.id === relationId)
 
     const [form, setForm] = useState<Partial<ActRelation>>({})
     const [permissionInput, setPermissionInput] = useState({ callboardKeys: '', messageTags: '' })
@@ -30,11 +31,11 @@ export default function ActRelationView() {
         }
     }, [relation])
 
-    if (!relation || !act || !activeActId || !selectedRelationId) return null
+    if (!relation || !act || !activeActId || !relationId) return null
 
     const update = (field: string, value: any) => {
         setForm((prev) => ({ ...prev, [field]: value }))
-        updateRelation(activeActId, selectedRelationId, { [field]: value })
+        updateRelation(activeActId, relationId, { [field]: value })
     }
 
     const permissions = relation.permissions || {}
@@ -44,7 +45,7 @@ export default function ActRelationView() {
         if (!value) return
         const current = (permissions as any)[field] || []
         if (current.includes(value)) return
-        updateRelation(activeActId, selectedRelationId, {
+        updateRelation(activeActId, relationId, {
             permissions: {
                 ...permissions,
                 [field]: [...current, value],
@@ -55,7 +56,7 @@ export default function ActRelationView() {
 
     const removePermissionItem = (field: 'callboardKeys' | 'messageTags', value: string) => {
         const current = (permissions as any)[field] || []
-        updateRelation(activeActId, selectedRelationId, {
+        updateRelation(activeActId, relationId, {
             permissions: {
                 ...permissions,
                 [field]: current.filter((entry: string) => entry !== value),
@@ -74,8 +75,8 @@ export default function ActRelationView() {
                     className="icon-btn act-panel__danger-btn"
                     title="Delete relation"
                     onClick={() => {
-                        removeRelation(activeActId, selectedRelationId)
-                        selectRelation(null)
+                        removeRelation(activeActId, relationId)
+                        openActEditor(activeActId, 'act')
                     }}
                 >
                     <Trash2 size={12} />

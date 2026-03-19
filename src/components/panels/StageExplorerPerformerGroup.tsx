@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
     Archive,
     Check,
@@ -64,6 +65,10 @@ export default function StageExplorerPerformerGroup({
     onSavePerformerAsDraft,
 }: Props) {
     const rowKey = `performer-${row.id}`
+    const [showAll, setShowAll] = useState(false)
+    const THREAD_LIMIT = 5
+    const visibleChildren = showAll ? row.children : row.children.slice(0, THREAD_LIMIT)
+    const hiddenCount = row.children.length - THREAD_LIMIT
 
     return (
         <div className="thread-group">
@@ -165,36 +170,49 @@ export default function StageExplorerPerformerGroup({
             </div>
             {expanded ? (
                 <div className="thread-children">
-                    {row.children.length > 0 ? row.children.map((entry) => (
-                        <LayerRow
-                            key={entry.session.id}
-                            icon={<MessageSquare size={11} className={entry.active ? 'icon-active' : 'icon-muted'} />}
-                            label={(
-                                <SessionNameEditor
-                                    renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
-                                    display={performerSessionLabel(entry.session)}
-                                    onChange={onSetRenamingValue}
-                                    onCommit={() => void onCommitRenameSession()}
-                                    onCancel={onCancelRenameSession}
+                    {row.children.length > 0 ? (
+                        <>
+                            {visibleChildren.map((entry) => (
+                                <LayerRow
+                                    key={entry.session.id}
+                                    icon={<MessageSquare size={11} className={entry.active ? 'icon-active' : 'icon-muted'} />}
+                                    label={(
+                                        <SessionNameEditor
+                                            renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
+                                            display={performerSessionLabel(entry.session)}
+                                            onChange={onSetRenamingValue}
+                                            onCommit={() => void onCommitRenameSession()}
+                                            onCancel={onCancelRenameSession}
+                                        />
+                                    )}
+                                    meta={entry.active ? 'Current thread' : 'Saved thread'}
+                                    metaTone={entry.active ? 'success' : 'default'}
+                                    active={false}
+                                    onClick={renamingSession?.key === `performer:${entry.session.id}` ? undefined : () => void onOpenPerformerSession(row.id, entry.session)}
+                                    actions={(
+                                        <SessionRowActions
+                                            renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
+                                            onCommit={() => void onCommitRenameSession()}
+                                            onCancel={onCancelRenameSession}
+                                            onRename={() => onBeginRenamePerformerSession(entry.session)}
+                                            onDelete={() => onDeleteSession(entry.session.id)}
+                                            renameTitle="Rename session"
+                                            deleteTitle="Delete session"
+                                        />
+                                    )}
                                 />
-                            )}
-                            meta={entry.active ? 'Current thread' : 'Saved thread'}
-                            metaTone={entry.active ? 'success' : 'default'}
-                            active={false}
-                            onClick={renamingSession?.key === `performer:${entry.session.id}` ? undefined : () => void onOpenPerformerSession(row.id, entry.session)}
-                            actions={(
-                                <SessionRowActions
-                                    renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
-                                    onCommit={() => void onCommitRenameSession()}
-                                    onCancel={onCancelRenameSession}
-                                    onRename={() => onBeginRenamePerformerSession(entry.session)}
-                                    onDelete={() => onDeleteSession(entry.session.id)}
-                                    renameTitle="Rename session"
-                                    deleteTitle="Delete session"
-                                />
-                            )}
-                        />
-                    )) : (
+                            ))}
+                            {hiddenCount > 0 ? (
+                                <button
+                                    className="show-more-btn"
+                                    onClick={(e) => { e.stopPropagation(); setShowAll(!showAll) }}
+                                    type="button"
+                                >
+                                    {showAll ? 'Show less' : `Show ${hiddenCount} more`}
+                                </button>
+                            ) : null}
+                        </>
+                    ) : (
                         <div className="empty-state empty-state--tight empty-state--nested">
                             No threads yet
                         </div>

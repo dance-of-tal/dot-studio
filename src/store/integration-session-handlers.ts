@@ -6,9 +6,12 @@ import {
     extractEventErrorMessage,
     resolveEventSessionContext,
 } from './integration-streaming'
+import { api } from '../api'
 
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
+
+const summarizedSessions = new Set<string>()
 
 export function handleSessionStatus(data: any, get: GetFn, set: SetFn) {
     const context = resolveEventSessionContext(get(), data.properties?.sessionID)
@@ -60,6 +63,33 @@ export function handleSessionIdle(
         set({ loadingPerformerId: null })
     }
     void syncSessionMessages(target, sessionId)
+
+    // Auto-title on first idle: extract title from first user message
+    if (!summarizedSessions.has(sessionId)) {
+        summarizedSessions.add(sessionId)
+        const chatKey = target.kind === 'performer' ? target.performerId : target.chatKey
+        const messages = get().chats[chatKey] || []
+        const firstUserMsg = messages.find((m: any) => m.role === 'user')
+        if (firstUserMsg) {
+            const rawText = (firstUserMsg.content || '').replace(/\n/g, ' ').trim()
+            const shortTitle = rawText.length > 50 ? rawText.slice(0, 47) + '...' : rawText
+            if (shortTitle) {
+                const sessions = get().sessions || []
+                const session = sessions.find((s: any) => s.id === sessionId)
+                if (session?.title) {
+                    void (async () => {
+                        const { renameStudioSessionTitle } = await import('../../shared/session-metadata')
+                        const newTitle = renameStudioSessionTitle(session.title, shortTitle)
+                        if (newTitle) {
+                            api.chat.updateSession(sessionId, newTitle)
+                                .then(() => get().listSessions())
+                                .catch(() => { /* ignore rename failures */ })
+                        }
+                    })()
+                }
+            }
+        }
+    }
 }
 
 export function handleSessionCompacted(

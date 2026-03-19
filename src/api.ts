@@ -12,7 +12,7 @@ import type {
 import type { AssetListItem } from '../shared/asset-contracts'
 import type { CompilePromptRequest } from '../shared/chat-contracts'
 import type { SafeOwnerKind, SafeOwnerSummary } from '../shared/safe-mode'
-import { fetchJSON, postJSON, putJSON, deleteJSON } from './api-core'
+import { fetchJSON, postJSON, putJSON, patchJSON, deleteJSON } from './api-core'
 import { chatApi } from './api-clients/chat'
 import { dotApi } from './api-clients/dot'
 import { opencodeApi } from './api-clients/opencode'
@@ -33,9 +33,10 @@ export const api = {
     },
 
     stages: {
-        list: () => fetchJSON<SavedStageSummary[]>('/api/stages'),
+        list: (includeHidden = false) => fetchJSON<SavedStageSummary[]>(`/api/stages${includeHidden ? '?includeHidden=1' : ''}`),
         get: (id: string) => fetchJSON<any>(`/api/stages/${id}`),
         save: (data: any) => putJSON<{ ok: boolean; id: string; workingDir: string; updatedAt: number }>('/api/stages', data),
+        setHidden: (id: string, hiddenFromList: boolean) => patchJSON<{ ok: boolean; id: string; hiddenFromList: boolean }>(`/api/stages/${id}`, { hiddenFromList }),
         delete: (id: string) => deleteJSON<{ ok: boolean }>(`/api/stages/${id}`),
     },
 

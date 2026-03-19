@@ -38,6 +38,7 @@ type AuthorableAsset = {
     danceUrns?: string[]
     actUrn?: string | null
     model?: unknown
+    modelVariant?: string | null
     mcpConfig?: Record<string, unknown> | null
     schema?: string
     participants?: unknown[]
@@ -64,6 +65,7 @@ export function buildAuthoringPayloadFromAsset(asset: AuthorableAsset) {
                 ? { dances: asset.danceUrns }
                 : {}),
             ...(asset.model ? { model: asset.model } : {}),
+            ...(asset.modelVariant ? { modelVariant: asset.modelVariant } : {}),
             ...(asset.mcpConfig ? { mcp_config: asset.mcpConfig } : {}),
         }
     }

@@ -7,6 +7,10 @@ import type {
     PerformerNode,
     StageAct,
 } from '../../types'
+import {
+    ACT_DEFAULT_WIDTH,
+    resolveActExpandedHeight,
+} from '../../lib/act-layout'
 import { hasModelConfig } from '../../lib/performers'
 
 type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
@@ -246,6 +250,7 @@ export function buildTrackingWindowNodes(args: {
 
 export function buildActCanvasNodes(args: {
     acts: StageAct[]
+    editingActId: string | null
     selectedActId: string | null
     transformTarget: { id: string; type: CanvasNodeKind } | null
     onActivateTransform: (type: CanvasNodeKind, id: string) => void
@@ -253,6 +258,7 @@ export function buildActCanvasNodes(args: {
 }) {
     const {
         acts,
+        editingActId,
         selectedActId,
         transformTarget,
         onActivateTransform,
@@ -266,12 +272,14 @@ export function buildActCanvasNodes(args: {
         dragHandle: '.canvas-frame__header',
         hidden: act.hidden,
         zIndex: getCanvasWindowZIndex({
+            editing: editingActId === act.id,
             selected: selectedActId === act.id,
             transformActive: transformTarget?.type === 'act' && transformTarget.id === act.id,
         }),
         data: {
-            width: act.width,
-            height: act.height || 420,
+            width: act.width || ACT_DEFAULT_WIDTH,
+            height: resolveActExpandedHeight(act.height),
+            editMode: editingActId === act.id,
             transformActive: transformTarget?.type === 'act' && transformTarget.id === act.id,
             onActivateTransform: () => onActivateTransform('act', act.id),
             onDeactivateTransform: () => onDeactivateTransform('act', act.id),

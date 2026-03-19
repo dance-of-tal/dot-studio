@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import type { Connection, Node, NodeChange, ReactFlowInstance } from '@xyflow/react'
+import type { StageAct } from '../../types'
 import { routeActConnection } from './act-connect-router'
 import {
     resolveCanvasDragStop,
@@ -11,19 +12,19 @@ import { resolveCanvasResizeChange } from './canvas-resize-router'
 type EditingTargetLike = { type: string; id: string } | null
 
 type UseCanvasFlowHandlersArgs = {
+    acts: StageAct[]
     nodes: Node[]
     editingTarget: EditingTargetLike
     reactFlowInstance: ReactFlowInstance<Node> | null
     canvasAreaRef: React.RefObject<HTMLDivElement | null>
     clearTransformTarget: () => void
     closeEditor: () => void
+    closeActEditor: () => void
     setCanvasCenter: (x: number, y: number) => void
     selectMarkdownEditor: (id: string | null) => void
     selectPerformer: (id: string | null) => void
     setActiveChatPerformer: (id: string | null) => void
     selectAct: (id: string | null) => void
-    selectActParticipant: (participantKey: string | null) => void
-    selectRelation: (relationId: string | null) => void
     createActFromPerformers: (performerIds: [string, string], options?: { name?: string }) => string | null
     attachPerformerToAct: (actId: string, performerId: string) => string | null
     onNodesChange: (changes: NodeChange<Node>[]) => void
@@ -40,19 +41,19 @@ type UseCanvasFlowHandlersArgs = {
 
 export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     const {
+        acts,
         nodes,
         editingTarget,
         reactFlowInstance,
         canvasAreaRef,
         clearTransformTarget,
         closeEditor,
+        closeActEditor,
         setCanvasCenter,
         selectMarkdownEditor,
         selectPerformer,
         setActiveChatPerformer,
         selectAct,
-        selectActParticipant,
-        selectRelation,
         createActFromPerformers,
         attachPerformerToAct,
         onNodesChange,
@@ -70,8 +71,13 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     const onEdgeClick = useCallback((_event: React.MouseEvent, edge: import('@xyflow/react').Edge) => {
         const relationId = resolveCanvasEdgeClick(edge)
         if (!relationId) return
-        selectRelation(relationId)
-    }, [selectRelation])
+        const actId = acts.find((act) => act.relations.some((relation) => relation.id === relationId))?.id
+        if (!actId) return
+        closeEditor()
+        selectPerformer(null)
+        selectMarkdownEditor(null)
+        selectAct(actId)
+    }, [acts, closeEditor, selectPerformer, selectMarkdownEditor, selectAct])
 
     const onNodeDragStop = useCallback((_: unknown, node: Node) => {
         const result = resolveCanvasDragStop(node)
@@ -112,11 +118,13 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         switch (result.kind) {
             case 'markdownEditor':
                 closeEditor()
+                closeActEditor()
                 selectMarkdownEditor(result.id)
                 return
             case 'canvasTerminal':
             case 'stageTracking':
                 closeEditor()
+                closeActEditor()
                 selectPerformer(null)
                 selectMarkdownEditor(null)
                 return
@@ -130,6 +138,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
                 if (result.shouldCloseEditor) {
                     closeEditor()
                 }
+                closeActEditor()
                 selectPerformer(result.id)
                 setActiveChatPerformer(result.id)
                 return
@@ -138,6 +147,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         editingTarget,
         clearTransformTarget,
         closeEditor,
+        closeActEditor,
         selectMarkdownEditor,
         selectPerformer,
         selectAct,
@@ -147,19 +157,17 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     const onPaneClick = useCallback(() => {
         clearTransformTarget()
         closeEditor()
+        closeActEditor()
         selectPerformer(null)
         selectMarkdownEditor(null)
         selectAct(null)
-        selectActParticipant(null)
-        selectRelation(null)
     }, [
         clearTransformTarget,
         closeEditor,
+        closeActEditor,
         selectPerformer,
         selectMarkdownEditor,
         selectAct,
-        selectActParticipant,
-        selectRelation,
     ])
 
     const onConnect = useCallback((connection: Connection) => {

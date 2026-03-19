@@ -101,6 +101,32 @@ export default function AssetDetailBody({
                             <div className="asset-popover__section-item">
                                 {typeof asset.model === 'string' ? asset.model : asset.model.modelId}
                             </div>
+                            {asset.modelVariant && (
+                                <div className="asset-popover__section-item">
+                                    Variant: {asset.modelVariant}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {Array.isArray(asset.declaredMcpServerNames) && asset.declaredMcpServerNames.length > 0 && (
+                        <div className="asset-popover__section">
+                            <div className="section-title">MCP Portability</div>
+                            <div className="asset-popover__section-item">
+                                Declared: {asset.declaredMcpServerNames.join(', ')}
+                            </div>
+                            <div className="asset-popover__section-item">
+                                Project matches: {Array.isArray(asset.projectMcpMatches) && asset.projectMcpMatches.length > 0
+                                    ? asset.projectMcpMatches.join(', ')
+                                    : 'None'}
+                            </div>
+                            <div className="asset-popover__section-item">
+                                Needs mapping: {Array.isArray(asset.projectMcpMissing) && asset.projectMcpMissing.length > 0
+                                    ? asset.projectMcpMissing.join(', ')
+                                    : 'None'}
+                            </div>
+                            <div className="asset-detail-panel__note">
+                                Registry and local performer assets keep portable MCP requirements. Exact project-name matches can auto-connect on import, but final MCP binding still belongs to each performer on the stage.
+                            </div>
                         </div>
                     )}
                 </>

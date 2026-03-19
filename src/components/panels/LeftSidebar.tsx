@@ -1,5 +1,5 @@
 import { Suspense, lazy, useState, useCallback, useRef } from 'react';
-import { ChevronLeft, LayoutGrid } from 'lucide-react';
+import { ChevronRight, LayoutGrid } from 'lucide-react';
 import { useStudioStore } from '../../store';
 import StageExplorer from './StageExplorer';
 import './LeftSidebar.css';
@@ -67,7 +67,7 @@ export default function LeftSidebar() {
                         >
                             <LayoutGrid size={14} />
                             <span>Asset Library</span>
-                            <ChevronLeft size={12} className={`asset-library-arrow ${isAssetLibraryOpen ? 'rotated' : ''}`} />
+                            <ChevronRight size={12} className={`asset-library-arrow ${isAssetLibraryOpen ? 'rotated' : ''}`} />
                         </button>
                     </div>
                 )}

@@ -13,7 +13,11 @@ export type AssetListItem = {
     danceUrns?: string[]
     actUrn?: string | null
     model?: string | { provider: string; modelId: string } | null
+    modelVariant?: string | null
     mcpConfig?: Record<string, unknown> | null
+    declaredMcpServerNames?: string[]
+    projectMcpMatches?: string[]
+    projectMcpMissing?: string[]
     schema?: string
     participantCount?: number
     relationCount?: number

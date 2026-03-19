@@ -1,23 +1,45 @@
-import { Activity, EyeOff, Plus, Workflow } from 'lucide-react'
+import { Activity, EyeOff, Maximize2, Minimize2, Pencil, Plus, Workflow } from 'lucide-react'
 import './ActHeaderActions.css'
 
 type ActHeaderActionsProps = {
+    focused: boolean
+    editing: boolean
     showActivity: boolean
+    onToggleFocus: () => void
     onToggleActivity: () => void
+    onEdit: () => void
     onAddParticipant: () => void
     onCreateThread: () => void
     onHide: () => void
 }
 
 export default function ActHeaderActions({
+    focused,
+    editing,
     showActivity,
+    onToggleFocus,
     onToggleActivity,
+    onEdit,
     onAddParticipant,
     onCreateThread,
     onHide,
 }: ActHeaderActionsProps) {
     return (
         <div className="act-frame__header-actions">
+            <button
+                className={`icon-btn act-frame__focus-btn ${focused ? 'active' : ''}`}
+                title={focused ? 'Exit focus mode' : 'Focus mode'}
+                onClick={onToggleFocus}
+            >
+                {focused ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
+            </button>
+            <button
+                className={`icon-btn act-frame__edit-btn ${editing ? 'active' : ''}`}
+                title="Edit Act"
+                onClick={onEdit}
+            >
+                <Pencil size={11} />
+            </button>
             <button
                 className="icon-btn act-frame__edit-btn"
                 title="Add Participant"

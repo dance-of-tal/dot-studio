@@ -7,6 +7,7 @@
 
 import type { StudioState } from './types'
 import { api, setApiWorkingDirContext } from '../api'
+import { resolveActExpandedHeight, ACT_DEFAULT_WIDTH } from '../lib/act-layout'
 import { showToast } from '../lib/toast'
 import {
     createPerformerNode,
@@ -36,10 +37,9 @@ export async function newStage(get: GetFn, set: SetFn) {
         if (res.path) {
             const dir = normalizePath(res.path)
             if (!dir) return
-            const stageList = await api.stages.list().catch(err => { console.warn('[studio] stage list failed', err); return [] })
+            const stageList = await api.stages.list(true).catch(err => { console.warn('[studio] stage list failed', err); return [] })
             const existing = stageList.find((entry) => entry.workingDir === dir)
             if (existing) {
-                set({ stageList })
                 await get().loadStage(existing.id)
                 return
             }
@@ -74,8 +74,7 @@ export async function newStage(get: GetFn, set: SetFn) {
                 trackingWindow: null,
                 isTrackingOpen: false,
                 stageDirty: true,
-                selectedActParticipantKey: null,
-                selectedRelationId: null,
+                actEditorState: null,
                 actThreads: {},
                 activeThreadId: null,
                 activeThreadParticipantKey: null,
@@ -182,8 +181,8 @@ function parseActs(data: any): any[] {
                 }))
                 : [],
             position: act.position || { x: 200, y: 200 + index * 120 },
-            width: act.width || 340,
-            height: act.height || 80,
+            width: act.width || ACT_DEFAULT_WIDTH,
+            height: resolveActExpandedHeight(act.height),
         }
     })
 }
@@ -254,8 +253,7 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             drafts: {},
             acts: parseActs(data),
             selectedActId: null,
-            selectedActParticipantKey: null,
-            selectedRelationId: null,
+            actEditorState: null,
             markdownEditors: loadedMarkdownEditors,
             editingTarget: null,
             selectedPerformerId: null,
@@ -298,6 +296,9 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             activeThreadId: null,
             activeThreadParticipantKey: null,
         })
+        api.stages.setHidden(stageId, false)
+            .then(() => get().listStages())
+            .catch((err) => console.warn('[studio] stage unhide failed', err))
         get().initRealtimeEvents()
 
         // Activate working directory on server

@@ -1,0 +1,114 @@
+/* ═══════════════════════════════════════════
+   COMPOSER — OpenCode-style rounded card
+   Extracted from AgentChat.css
+   ═══════════════════════════════════════════ */
+
+.chat-input {
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.chat-input__main {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    background: var(--bg-main);
+    border: 1px solid var(--border-main);
+    border-radius: 10px;
+    padding: 6px 6px 6px 12px;
+    transition: border-color 0.15s;
+}
+
+.chat-input__main:focus-within {
+    border-color: var(--accent);
+}
+
+.chat-input__main .text-input {
+    flex: 1;
+    resize: none;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--font-base);
+    line-height: 1.5;
+    font-family: inherit;
+    min-height: 20px;
+    max-height: 120px;
+    overflow-y: auto;
+    outline: none;
+    padding: 0;
+}
+
+.chat-input__main .text-input::placeholder {
+    color: var(--text-muted);
+}
+
+.send-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: var(--text-on-accent, #fff);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+}
+
+.send-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.send-btn:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.send-btn.abort {
+    background: var(--status-danger, #ef4444);
+}
+
+.chat-input__runtime-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 2px;
+    flex-wrap: wrap;
+}
+
+.chat-input__mode-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.chat-input__safe-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.chat-input__variant {
+    font-size: var(--font-xs);
+}
+
+/* ── Mention / Slash popover shared ── */
+.mention-result__icon {
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+    flex-shrink: 0;
+    mask-image: var(--mention-icon);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    -webkit-mask-image: var(--mention-icon);
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+}

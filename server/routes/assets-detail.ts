@@ -16,9 +16,10 @@ assetsDetail.get('/api/assets/:kind/:author/:name', async (c) => {
 
 assetsDetail.get('/api/assets/registry/:kind/:author/:name', async (c) => {
     const { kind, author, name } = c.req.param()
+    const cwd = requestWorkingDir(c)
     try {
-        const detail = await cached(`registry-asset-${kind}-${author}-${name}`, TTL.PROVIDERS, () =>
-            getRegistryAssetDetail(kind, author, name),
+        const detail = await cached(`registry-asset-${cwd}-${kind}-${author}-${name}`, TTL.PROVIDERS, () =>
+            getRegistryAssetDetail(cwd, kind, author, name),
         )
         return c.json(detail)
     } catch (err: any) {

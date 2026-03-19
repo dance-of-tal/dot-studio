@@ -117,20 +117,6 @@ export function performerMcpConfigForAsset(
     return { servers: serverNames }
 }
 
-function selectProjectMcpConfig(
-    performer: Pick<PerformerNode, 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig'>,
-    projectMcpConfig: Record<string, unknown> | undefined,
-) {
-    if (!projectMcpConfig) {
-        return performerMcpConfigForAsset(performer)
-    }
-    return Object.fromEntries(
-        performer.mcpServerNames
-            .filter((name) => name in projectMcpConfig)
-            .map((name) => [name, projectMcpConfig[name]]),
-    )
-}
-
 function modelConfigFromAssetValue(value: unknown): ModelConfig | null {
     if (typeof value !== 'string') return null
     const normalized = value.trim()
@@ -150,12 +136,11 @@ function normalizeModelValue(model: ModelConfig | string | null | undefined) {
 }
 
 export function buildPerformerAssetPayload(
-    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'model' | 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig'>,
+    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'model' | 'modelVariant' | 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig'>,
     options: {
         name: string
         description?: string
         tags?: string[]
-        projectMcpConfig?: Record<string, unknown>
     },
 ) {
     const talUrn = registryUrnFromRef(performer.talRef)
@@ -172,15 +157,7 @@ export function buildPerformerAssetPayload(
         throw new Error('A performer asset requires at least one Tal or Dance reference.')
     }
 
-    const unresolvedMcpNames = unresolvedDeclaredMcpServerNames(performer)
-    if (unresolvedMcpNames.length > 0) {
-        throw new Error('Map imported MCP placeholders to project MCP servers before publishing.')
-    }
-
-    const mcpConfig = selectProjectMcpConfig(performer, options.projectMcpConfig)
-    if (resolveMappedMcpServerNames(performer).length > 0 && !mcpConfig) {
-        throw new Error('Map imported MCP placeholders to project MCP servers before publishing.')
-    }
+    const mcpConfig = performerMcpConfigForAsset(performer)
 
     const description = options.description?.trim() || options.name.trim()
     const tags = (options.tags || []).filter((tag) => tag.trim().length > 0)
@@ -195,6 +172,7 @@ export function buildPerformerAssetPayload(
             ...(talUrn ? { tal: talUrn } : {}),
             ...(danceUrns.length > 0 ? { dances: danceUrns } : {}),
             ...(performer.model ? { model: { provider: performer.model.provider, modelId: performer.model.modelId } } : {}),
+            ...(performer.modelVariant ? { modelVariant: performer.modelVariant } : {}),
             ...(mcpConfig && Object.keys(mcpConfig).length > 0 ? { mcp_config: mcpConfig } : {}),
         },
     }
@@ -296,6 +274,7 @@ export function normalizePerformerAssetInput(asset: {
     talUrn?: string | null
     danceUrns?: string[]
     model?: ModelConfig | string | null
+    modelVariant?: string | null
     modelPlaceholder?: ModelConfig | null
     mcpServerNames?: string[]
     mcpBindingMap?: Record<string, string>
@@ -313,6 +292,7 @@ export function normalizePerformerAssetInput(asset: {
         talRef: registryAssetRef(asset.talUrn),
         danceRefs: registryAssetRefs(asset.danceUrns),
         model: normalizeModelValue(asset.model),
+        modelVariant: asset.modelVariant || null,
         modelPlaceholder: asset.modelPlaceholder || null,
         mcpServerNames: directMcpServerNames,
         mcpBindingMap: {

@@ -31,7 +31,11 @@ export interface AssetCard {
     danceUrns?: string[]
     actUrn?: string | null
     model?: ModelConfig | string | null
+    modelVariant?: string | null
     mcpConfig?: Record<string, any> | null
+    declaredMcpServerNames?: string[]
+    projectMcpMatches?: string[]
+    projectMcpMissing?: string[]
     participantCount?: number
     participants?: Array<Record<string, unknown>>
     relations?: Array<Record<string, unknown>>

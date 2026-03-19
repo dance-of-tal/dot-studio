@@ -81,6 +81,13 @@ export function putJSON<T>(url: string, body?: unknown) {
     })
 }
 
+export function patchJSON<T>(url: string, body?: unknown) {
+    return fetchJSON<T>(url, {
+        method: 'PATCH',
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
+}
+
 export function deleteJSON<T>(url: string) {
     return fetchJSON<T>(url, { method: 'DELETE' })
 }

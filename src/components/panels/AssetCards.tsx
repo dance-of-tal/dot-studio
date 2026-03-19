@@ -23,6 +23,16 @@ import {
 export { HoverableCard, PinnedDetailPanel, useResolvedAssetDetail } from './AssetPopover';
 import { HoverableCard } from './AssetPopover';
 
+function performerMcpSummary(asset: any) {
+    if (asset.kind !== 'performer' || !Array.isArray(asset.declaredMcpServerNames) || asset.declaredMcpServerNames.length === 0) {
+        return null
+    }
+
+    const matchCount = Array.isArray(asset.projectMcpMatches) ? asset.projectMcpMatches.length : 0
+    const missingCount = Array.isArray(asset.projectMcpMissing) ? asset.projectMcpMissing.length : 0
+    return `MCP ${asset.declaredMcpServerNames.length} declared · ${matchCount} match · ${missingCount} need mapping`
+}
+
 function assetKindIcon(kind: string, className = 'asset-icon combo') {
     if (kind === 'tal') return <Hexagon size={12} className="asset-icon tal" />
     if (kind === 'dance') return <Zap size={12} className="asset-icon dance" />
@@ -88,6 +98,9 @@ export function DraggableAsset({
                 />
                 <div className="asset-card__author">{asset.author}</div>
                 <div className="asset-card__desc">{asset.description || 'No description provided.'}</div>
+                {performerMcpSummary(asset) ? (
+                    <div className="asset-card__desc">{performerMcpSummary(asset)}</div>
+                ) : null}
             </div>
         </HoverableCard>
     )
@@ -266,6 +279,9 @@ export function RegistryResult({
                 />
                 <div className="asset-card__author">{normalizeAuthor(item.author)}</div>
                 <div className="asset-card__desc">{item.description || 'No description.'}</div>
+                {performerMcpSummary(item) ? (
+                    <div className="asset-card__desc">{performerMcpSummary(item)}</div>
+                ) : null}
                 {Array.isArray(item.tags) && item.tags.length > 0 && (
                     <div className="badges">
                         {item.tags.slice(0, 3).map((tag: string) => (

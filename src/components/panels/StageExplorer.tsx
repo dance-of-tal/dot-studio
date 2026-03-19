@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { showToast } from '../../lib/toast';
 import { useStudioStore } from '../../store';
+import { DropdownMenu } from '../shared/DropdownMenu';
 import { mapSessionMessagesToChatMessages } from '../../lib/chat-messages';
 import { parseStudioSessionTitle, renameStudioSessionTitle } from '../../../shared/session-metadata';
 import {
     Folder,
-    Trash2,
+    MoreHorizontal,
 } from 'lucide-react';
 import './StageExplorer.css';
 import './StageExplorerItems.css';
@@ -60,6 +61,7 @@ export default function StageExplorer() {
         selectedPerformerId,
         selectedPerformerSessionId,
         newStage,
+        closeStage,
         loadStage,
         listStages,
         listSessions,
@@ -134,13 +136,27 @@ export default function StageExplorer() {
                 active={entry.id === stageId}
                 onClick={() => loadStage(entry.id)}
                 actions={
-                    <button
-                        className="icon-btn remove-btn"
-                        onClick={() => deleteStage(entry.id)}
-                        title="Delete saved workspace"
-                    >
-                        <Trash2 size={10} />
-                    </button>
+                    <DropdownMenu
+                        align="right"
+                        trigger={(
+                            <button className="icon-btn" title="Stage actions">
+                                <MoreHorizontal size={10} />
+                            </button>
+                        )}
+                        items={[
+                            {
+                                label: 'Close stage',
+                                onClick: () => closeStage(),
+                                disabled: entry.id !== stageId,
+                            },
+                            'separator',
+                            {
+                                label: 'Delete stage',
+                                onClick: () => deleteStage(entry.id),
+                                variant: 'danger',
+                            },
+                        ]}
+                    />
                 }
             />
         );
@@ -200,10 +216,15 @@ export default function StageExplorer() {
         }
     }, [cancelRenameSession, listSessions, renamingSession]);
 
-    const focusedPerformerId = useStudioStore((s) => s.focusedPerformerId);
     const switchFocusTarget = useStudioStore((s) => s.switchFocusTarget);
+    const revealCanvasNode = useStudioStore((s) => s.revealCanvasNode);
 
     const openPerformer = (performerId: string) => {
+        const {
+            focusSnapshot: currentFocusSnapshot,
+            focusedPerformerId: currentFocusedId,
+            focusedNodeType: currentFocusedNodeType,
+        } = useStudioStore.getState();
         closeEditor();
         selectPerformerSession(null);
         // Clear existing session binding so canvas shows an empty chat
@@ -211,11 +232,17 @@ export default function StageExplorer() {
             sessionMap: { ...state.sessionMap, [performerId]: '' },
             chats: { ...state.chats, [performerId]: [] },
         }));
-        if (focusedPerformerId && focusedPerformerId !== performerId) {
+        const shouldSwitchFocus = currentFocusSnapshot && (
+            currentFocusedId !== performerId
+            || currentFocusedNodeType !== 'performer'
+        )
+        if (shouldSwitchFocus) {
             switchFocusTarget(performerId, 'performer');
+        } else {
+            selectPerformer(performerId);
         }
-        selectPerformer(performerId);
         setActiveChatPerformer(performerId);
+        revealCanvasNode(performerId, 'performer');
     };
 
     const openPerformerSession = async (performerId: string, session: { id: string; title?: string }) => {
@@ -241,14 +268,44 @@ export default function StageExplorer() {
                 },
             });
         }
+        const {
+            focusSnapshot: currentFocusSnapshot,
+            focusedPerformerId: currentFocusedId,
+            focusedNodeType: currentFocusedNodeType,
+        } = useStudioStore.getState();
         closeEditor();
-        if (focusedPerformerId && focusedPerformerId !== performerId) {
+        const shouldSwitchFocus = currentFocusSnapshot && (
+            currentFocusedId !== performerId
+            || currentFocusedNodeType !== 'performer'
+        )
+        if (shouldSwitchFocus) {
             switchFocusTarget(performerId, 'performer');
+        } else {
+            selectPerformer(performerId);
         }
-        selectPerformer(performerId);
         selectPerformerSession(session.id);
         setActiveChatPerformer(performerId);
+        revealCanvasNode(performerId, 'performer');
     };
+
+    const openAct = useCallback((actId: string) => {
+        const {
+            focusSnapshot: currentFocusSnapshot,
+            focusedPerformerId: currentFocusedId,
+            focusedNodeType: currentFocusedNodeType,
+        } = useStudioStore.getState();
+        closeEditor();
+        const shouldSwitchFocus = currentFocusSnapshot && (
+            currentFocusedId !== actId
+            || currentFocusedNodeType !== 'act'
+        )
+        if (shouldSwitchFocus) {
+            switchFocusTarget(actId, 'act');
+        } else {
+            selectAct(actId);
+        }
+        revealCanvasNode(actId, 'act');
+    }, [closeEditor, revealCanvasNode, selectAct, switchFocusTarget]);
 
     return (
         <div className="explorer explorer--stacked">
@@ -274,8 +331,6 @@ export default function StageExplorer() {
                 activeThreadId={activeThreadId}
                 activeThreadParticipantKey={activeThreadParticipantKey}
                 actThreads={actThreads}
-                sharedPerformersLength={sharedPerformers.length}
-                focusedPerformerId={focusedPerformerId}
                 onToggleExpanded={toggleExpanded}
                 onSetPendingDelete={setPendingDelete}
                 onBeginRenamePerformerSession={beginRenamePerformerSession}
@@ -293,8 +348,7 @@ export default function StageExplorer() {
                 onSetActiveChatPerformer={setActiveChatPerformer}
                 onRemovePerformer={removePerformer}
                 onSavePerformerAsDraft={savePerformerAsDraft}
-                onSwitchFocusTarget={switchFocusTarget}
-                onSelectAct={selectAct}
+                onOpenAct={openAct}
                 onCreateThread={async (actId) => {
                     await createThread(actId)
                 }}

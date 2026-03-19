@@ -38,6 +38,12 @@ export interface FocusSnapshot {
     terminalOpen: boolean
 }
 
+export interface CanvasRevealTarget {
+    id: string
+    type: 'performer' | 'act'
+    nonce: number
+}
+
 export interface WorkspaceSlice {
     stageId: string | null
     performers: PerformerNode[]
@@ -50,6 +56,7 @@ export interface WorkspaceSlice {
     focusedPerformerId: string | null
     focusedNodeType: 'performer' | 'act' | null
     focusSnapshot: FocusSnapshot | null
+    canvasRevealTarget: CanvasRevealTarget | null
     inspectorFocus: string | null
     stageList: SavedStageSummary[]
     stageDirty: boolean
@@ -74,6 +81,7 @@ export interface WorkspaceSlice {
         talUrn?: string | null
         danceUrns?: string[]
         model?: ModelConfig | string | null
+        modelVariant?: string | null
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
         mcpBindingMap?: Record<string, string>
@@ -84,6 +92,7 @@ export interface WorkspaceSlice {
         talUrn?: string | null
         danceUrns?: string[]
         model?: ModelConfig | string | null
+        modelVariant?: string | null
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
         mcpBindingMap?: Record<string, string>
@@ -100,12 +109,14 @@ export interface WorkspaceSlice {
     enterFocusMode: (nodeId: string, nodeType: 'performer' | 'act', viewportSize: { width: number; height: number }) => void
     exitFocusMode: () => void
     switchFocusTarget: (nodeId: string, nodeType: 'performer' | 'act') => void
+    revealCanvasNode: (nodeId: string, nodeType: 'performer' | 'act') => void
     exitActLayoutMode: () => void
     setInspectorFocus: (focus: string | null) => void
     openPerformerEditor: (id: string, focus?: string | null) => void
     closeEditor: () => void
     setWorkingDir: (dir: string) => void
     newStage: () => Promise<void>
+    closeStage: () => Promise<void>
     saveStage: () => Promise<void>
     loadStage: (stageId: string) => Promise<void>
     listStages: () => Promise<void>
@@ -243,12 +254,17 @@ export interface ActThreadState {
     createdAt: number
 }
 
+export interface ActEditorState {
+    actId: string
+    mode: 'act' | 'participant' | 'relation'
+    participantKey: string | null
+    relationId: string | null
+}
+
 export interface ActSlice {
     acts: StageAct[]
     selectedActId: string | null
-
-    selectedActParticipantKey: string | null
-    selectedRelationId: string | null
+    actEditorState: ActEditorState | null
 
     // ── Act Thread state ────────────────────────
     actThreads: Record<string, ActThreadState[]>  // actId → threads
@@ -272,14 +288,20 @@ export interface ActSlice {
     autoLayoutActParticipants: (actId: string) => void
     unbindPerformerFromAct: (actId: string, participantKey: string) => void
     updatePerformerBinding: (actId: string, participantKey: string, update: Partial<StageActParticipantBinding>) => void
-    selectActParticipant: (key: string | null) => void
+    openActEditor: (
+        actId: string,
+        mode?: ActEditorState['mode'],
+        options?: { participantKey?: string | null; relationId?: string | null }
+    ) => void
+    closeActEditor: () => void
+    openActParticipantEditor: (actId: string, participantKey: string) => void
+    openActRelationEditor: (actId: string, relationId: string) => void
     updateActParticipantPosition: (actId: string, participantKey: string, x: number, y: number) => void
 
     // ── Relation (communication contract) ───────
     addRelation: (actId: string, between: [string, string], direction: 'both' | 'one-way') => string | null
     removeRelation: (actId: string, relationId: string) => void
     updateRelation: (actId: string, relationId: string, update: Partial<ActRelation>) => void
-    selectRelation: (id: string | null) => void
 
     // ── Canvas ──────────────────────────────────
     updateActPosition: (id: string, x: number, y: number) => void

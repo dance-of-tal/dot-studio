@@ -5,19 +5,17 @@ export {
     getDotDir,
     getGlobalCwd,
     getGlobalDotDir,
-    getPerformer,
     initRegistry,
-    listLockedPerformerNames,
     readAsset,
-} from '../../../dot/src/lib/registry.js'
+} from 'dance-of-tal/lib/registry'
 
 export {
     getRegistryPackage,
     installActWithDependencies,
     installAsset,
-    installPerformerAndLock,
+    installPerformerWithDeps,
     searchRegistry,
-} from '../../../dot/src/lib/installer.js'
+} from 'dance-of-tal/lib/installer'
 
 export {
     getPayloadTags,
@@ -25,14 +23,13 @@ export {
     parseUrn,
     publishSingleAsset,
     resolveDependencies,
-} from '../../../dot/src/lib/publishing.js'
+} from 'dance-of-tal/lib/publishing'
 
 export {
-    readAgentManifest,
-    writeAgentManifest,
-} from '../../../dot/src/lib/agents.js'
+    parsePerformerAsset,
+    slugFromUrn,
+} from 'dance-of-tal/contracts'
 
 export type {
-    LockedPerformer,
-    Performer,
-} from '../../../dot/src/data/types.js'
+    PerformerAssetV1,
+} from 'dance-of-tal/contracts'

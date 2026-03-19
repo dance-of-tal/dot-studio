@@ -1,9 +1,6 @@
 import { Hono } from 'hono'
 import {
-    getDotAgentManifest,
     getDotPerformer,
-    listDotPerformers,
-    saveDotAgentManifest,
     searchDotRegistry,
     validateDotPerformer,
 } from '../services/dot-service.js'
@@ -11,38 +8,13 @@ import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const dotPerformer = new Hono()
 
-dotPerformer.get('/api/dot/performers', async (c) => {
-    try {
-        return c.json(await listDotPerformers(requestWorkingDir(c)))
-    } catch {
-        return c.json({ names: [], skipped: [] })
-    }
-})
-
-dotPerformer.get('/api/dot/performers/:name', async (c) => {
+dotPerformer.get('/api/dot/performers/:urn{.+}', async (c) => {
     const cwd = requestWorkingDir(c)
-    const name = c.req.param('name')
+    const urn = c.req.param('urn')
     try {
-        const performer = await getDotPerformer(cwd, name)
+        const performer = await getDotPerformer(cwd, `performer/${urn}`)
         if (!performer) return jsonError(c, 'Performer not found', 404)
-        return c.json({ ...performer, name: performer.name || name })
-    } catch (err: any) {
-        return jsonError(c, err.message, 500)
-    }
-})
-
-dotPerformer.get('/api/dot/agents', async (c) => {
-    try {
-        return c.json(await getDotAgentManifest(requestWorkingDir(c)))
-    } catch {
-        return c.json({})
-    }
-})
-
-dotPerformer.put('/api/dot/agents', async (c) => {
-    const manifest = await c.req.json<Record<string, string>>()
-    try {
-        return c.json(await saveDotAgentManifest(requestWorkingDir(c), manifest))
+        return c.json(performer)
     } catch (err: any) {
         return jsonError(c, err.message, 500)
     }

@@ -1,6 +1,6 @@
 import fs from 'fs/promises'
-import { ensureDotDir, getDotDir, getGlobalCwd, getGlobalDotDir, getPerformer, initRegistry, installActWithDependencies, installAsset, installPerformerAndLock, listLockedPerformerNames, readAgentManifest, searchRegistry, writeAgentManifest } from '../lib/dot-source.js'
-import type { Performer } from '../lib/dot-source.js'
+import { ensureDotDir, getDotDir, getGlobalCwd, getGlobalDotDir, initRegistry, installActWithDependencies, installAsset, installPerformerWithDeps, readAsset, searchRegistry, parsePerformerAsset } from '../lib/dot-source.js'
+import type { PerformerAssetV1 } from '../lib/dot-source.js'
 import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
 import { startDotLogin } from '../lib/dot-login.js'
 import { invalidate } from '../lib/cache.js'
@@ -45,21 +45,14 @@ export async function getDotStatusSnapshot(cwd: string) {
     }
 }
 
-export async function listDotPerformers(cwd: string) {
-    return listLockedPerformerNames(cwd)
-}
-
-export async function getDotPerformer(cwd: string, name: string) {
-    return getPerformer(cwd, name)
-}
-
-export async function getDotAgentManifest(cwd: string) {
-    return readAgentManifest(cwd)
-}
-
-export async function saveDotAgentManifest(cwd: string, manifest: Record<string, string>) {
-    await writeAgentManifest(cwd, manifest)
-    return { ok: true as const }
+export async function getDotPerformer(cwd: string, urn: string): Promise<PerformerAssetV1 | null> {
+    const raw = await readAsset(cwd, urn)
+    if (!raw) return null
+    try {
+        return parsePerformerAsset(raw)
+    } catch {
+        return null
+    }
 }
 
 export async function searchDotRegistry(query: string, options: { kind?: string | null; limit: number }) {
@@ -70,25 +63,12 @@ export async function searchDotRegistry(query: string, options: { kind?: string 
 }
 
 /** Validates that performer URNs follow the 3-part format: kind/@author/name */
-export function validateDotPerformer(performer: Performer): void {
-    const tal = performer.tal ?? null
-    const dances = performer.dance
-        ? (Array.isArray(performer.dance) ? performer.dance : [performer.dance])
-        : []
-
-    if (!tal && dances.length === 0) {
-        throw new Error("Invalid performer: at least one of 'tal' or 'dance' must be present.")
+export function validateDotPerformer(performer: PerformerAssetV1): void {
+    // Canonical assets are already validated by parsePerformerAsset,
+    // but we can add extra runtime checks if needed.
+    if (!performer.payload.tal && (!performer.payload.dances || performer.payload.dances.length === 0)) {
+        throw new Error("Invalid performer: at least one of 'tal' or 'dances' must be present.")
     }
-
-    const validateUrn = (urn: string, prefix: string) => {
-        const parts = urn.split('/')
-        if (parts.length !== 3 || parts[0] !== prefix || !parts[1].startsWith('@') || !parts[2]) {
-            throw new Error(`Invalid URN: '${urn}'. Expected: ${prefix}/@<author>/<name>`)
-        }
-    }
-
-    if (tal) validateUrn(tal, 'tal')
-    for (const dance of dances) validateUrn(dance, 'dance')
 }
 
 export async function initDotRegistry(cwd: string, scope?: string) {
@@ -103,7 +83,6 @@ export async function initDotRegistry(cwd: string, scope?: string) {
 
 export async function installDotAsset(cwd: string, input: {
     urn: string
-    localName?: string
     force?: boolean
     scope?: 'global' | 'stage'
 }) {
@@ -111,7 +90,7 @@ export async function installDotAsset(cwd: string, input: {
     await ensureDotDir(targetCwd)
 
     if (input.urn.startsWith('performer/')) {
-        const result = await installPerformerAndLock(targetCwd, input.urn, input.localName, input.force)
+        const result = await installPerformerWithDeps(targetCwd, input.urn, input.force)
         invalidate('assets')
         return { ...result, scope: input.scope || 'stage' }
     }

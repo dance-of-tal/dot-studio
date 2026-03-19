@@ -4,17 +4,19 @@ import type {
     CanvasTrackingWindow,
     MarkdownEditorNode,
     PerformerNode,
+    StageAct,
 } from '../../types'
 
 type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
 
 export function useCanvasTransformTarget(args: {
+    acts: StageAct[]
     performers: PerformerNode[]
     markdownEditors: MarkdownEditorNode[]
     canvasTerminals: CanvasTerminalNode[]
     trackingWindow: CanvasTrackingWindow | null | undefined
 }) {
-    const { performers, markdownEditors, canvasTerminals, trackingWindow } = args
+    const { acts, performers, markdownEditors, canvasTerminals, trackingWindow } = args
     const [transformTarget, setTransformTarget] = useState<{ id: string; type: CanvasNodeKind } | null>(null)
 
     const clearTransformTarget = useCallback(() => {
@@ -39,7 +41,8 @@ export function useCanvasTransformTarget(args: {
         }
 
         const exists = (
-            (transformTarget.type === 'performer' && performers.some((item) => item.id === transformTarget.id))
+            (transformTarget.type === 'act' && acts.some((item) => item.id === transformTarget.id))
+            || (transformTarget.type === 'performer' && performers.some((item) => item.id === transformTarget.id))
             || (transformTarget.type === 'markdownEditor' && markdownEditors.some((item) => item.id === transformTarget.id))
             || (transformTarget.type === 'canvasTerminal' && canvasTerminals.some((item) => item.id === transformTarget.id))
             || (transformTarget.type === 'stageTracking' && trackingWindow?.id === transformTarget.id)
@@ -48,7 +51,7 @@ export function useCanvasTransformTarget(args: {
         if (!exists) {
             setTransformTarget(null)
         }
-    }, [performers, markdownEditors, canvasTerminals, trackingWindow, transformTarget])
+    }, [acts, performers, markdownEditors, canvasTerminals, trackingWindow, transformTarget])
 
     return {
         transformTarget,

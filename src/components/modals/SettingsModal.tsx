@@ -4,6 +4,7 @@ import { RefreshCw, Settings, X, Sliders, Server, Cpu, FolderCog, LayoutGrid } f
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import './SettingsModal.css'
+import './SettingsControls.css'
 import { useProviderAuth } from './useProviderAuth'
 import type {
     ProviderCard,

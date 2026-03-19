@@ -15,6 +15,7 @@ import {
     placeholderForLocalSection,
     buildDraftAssetCards,
     labelForInstalledKind,
+    buildInstalledAssetDragPayload,
 } from './asset-library-utils'
 
 describe('normalizeAuthor', () => {
@@ -255,5 +256,29 @@ describe('buildDraftAssetCards', () => {
 
     it('returns empty for no matching drafts', () => {
         expect(buildDraftAssetCards({}, 'performer')).toHaveLength(0)
+    })
+})
+
+describe('buildInstalledAssetDragPayload', () => {
+    it('preserves performer modelVariant in drag payloads', () => {
+        expect(buildInstalledAssetDragPayload({
+            kind: 'performer',
+            urn: 'performer/@user/researcher',
+            name: 'researcher',
+            author: '@user',
+            talUrn: 'tal/@user/reasoning',
+            danceUrns: ['dance/@user/write'],
+            model: { provider: 'openai', modelId: 'gpt-5' },
+            modelVariant: 'reasoning-high',
+            mcpConfig: { github: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'] } },
+            declaredMcpServerNames: ['github'],
+            projectMcpMatches: ['github'],
+            projectMcpMissing: [],
+        })).toMatchObject({
+            kind: 'performer',
+            modelVariant: 'reasoning-high',
+            declaredMcpServerNames: ['github'],
+            projectMcpMatches: ['github'],
+        })
     })
 })

@@ -2,27 +2,28 @@
  * board-persistence.ts — Board file persistence
  *
  * PRD §6.2: Board is durable — persisted to file and survives shutdown.
- * Path: .dance-of-tal/act-data/<actId>/<threadId>/board.json
+ * Path: ~/.dot-studio/act-runtime/<actId>/<threadId>/board.json
  */
 
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'
 import type { BoardEntry } from '../../../shared/act-types.js'
+import { STUDIO_DIR } from '../../lib/config.js'
 
-function boardFilePath(workingDir: string, actId: string, threadId: string): string {
-    return join(workingDir, '.dance-of-tal', 'act-data', actId, threadId, 'board.json')
+function boardFilePath(actId: string, threadId: string): string {
+    return join(STUDIO_DIR, 'act-runtime', actId, threadId, 'board.json')
 }
 
 /**
  * Save board entries to file.
  */
 export async function saveBoardToFile(
-    workingDir: string,
+    _workingDir: string,
     actId: string,
     threadId: string,
     entries: BoardEntry[],
 ): Promise<void> {
-    const filePath = boardFilePath(workingDir, actId, threadId)
+    const filePath = boardFilePath(actId, threadId)
     await fs.mkdir(dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, JSON.stringify(entries, null, 2), 'utf-8')
 }
@@ -31,11 +32,11 @@ export async function saveBoardToFile(
  * Load board entries from file.
  */
 export async function loadBoardFromFile(
-    workingDir: string,
+    _workingDir: string,
     actId: string,
     threadId: string,
 ): Promise<BoardEntry[]> {
-    const filePath = boardFilePath(workingDir, actId, threadId)
+    const filePath = boardFilePath(actId, threadId)
     try {
         const content = await fs.readFile(filePath, 'utf-8')
         return JSON.parse(content) as BoardEntry[]

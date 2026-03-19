@@ -99,7 +99,7 @@ type AssetRef =
   - `derivedFrom` metadata is provenance only; it is not a runtime execution link.
   - Standalone performer sessions and Act thread participant sessions are separate.
   - Workspace (safe/direct) is Act-scoped inside an Act thread.
-  - Act authoring is selection-based on the main canvas; advanced layout is optional.
+  - Act authoring is selection + explicit edit on the main canvas; advanced layout is optional.
 - Safe mode ownership is owner-first:
   - performer safe mode is performer-scoped
   - act safe mode is act-scoped
@@ -298,6 +298,7 @@ This repository should remain compatible with a future `Performer Adapter View` 
   - `Undo Last Turn` belongs on the last message turn affordance
   - safe review uses modal patterns already used elsewhere in Studio
 - Act UI:
+  - Inspector appears only in explicit edit mode; selecting an Act does not open it
   - safe/direct toggle and review affordances may live in existing act header/runtime controls
   - do not add act undo controls in v1
 
@@ -543,7 +544,7 @@ Act publish supports one payload schema:
 - [src/components/modals/publish-modal-utils.tsx](./src/components/modals/publish-modal-utils.tsx)
 - [src/features/performer/AgentFrame.tsx](./src/features/performer/AgentFrame.tsx)
 - [src/features/act/ActFrame.tsx](./src/features/act/ActFrame.tsx)
-- [src/features/act/ActEditPanel.tsx](./src/features/act/ActEditPanel.tsx)
+- [src/features/act/ActInspectorPanel.tsx](./src/features/act/ActInspectorPanel.tsx)
 - [src/features/act/ActChatPanel.tsx](./src/features/act/ActChatPanel.tsx)
 - [src/components/modals/SafeReviewModal.tsx](./src/components/modals/SafeReviewModal.tsx)
 - [server/routes/chat.ts](./server/routes/chat.ts)
