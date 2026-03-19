@@ -3,7 +3,7 @@ import type { StageAct } from '../../types'
 
 export function buildActLayoutNodes(act: StageAct | null | undefined, layoutActId: string) {
     if (!act) return []
-    return Object.entries(act.performers).map(([key, binding]) => ({
+    return Object.entries(act.participants).map(([key, binding]) => ({
         id: `act-p-${key}`,
         type: 'act-participant' as const,
         position: binding.position,

@@ -801,8 +801,8 @@ export const createWorkspaceSlice: StateCreator<
         const draftContent = {
             description: act.description,
             actRules: act.actRules,
-            performers: Object.fromEntries(
-                Object.entries(act.performers).map(([key, p]) => [key, {
+            participants: Object.fromEntries(
+                Object.entries(act.participants).map(([key, p]) => [key, {
                     performerRef: p.performerRef,
                     activeDanceIds: p.activeDanceIds,
                     subscriptions: p.subscriptions,
@@ -886,11 +886,11 @@ export const createWorkspaceSlice: StateCreator<
         const centerY = get().canvasCenter?.y ?? 200
 
         // Build participant bindings from draft content (choreography model)
-        const performers: Record<string, any> = {}
-        if (draftContent.performers && typeof draftContent.performers === 'object') {
+        const participants: Record<string, any> = {}
+        if (draftContent.participants && typeof draftContent.participants === 'object') {
             let idx = 0
-            for (const [key, p] of Object.entries(draftContent.performers) as [string, any][]) {
-                performers[key] = {
+            for (const [key, p] of Object.entries(draftContent.participants) as [string, any][]) {
+                participants[key] = {
                     performerRef: p.performerRef || { kind: 'draft', draftId: '' },
                     activeDanceIds: p.activeDanceIds,
                     subscriptions: p.subscriptions,
@@ -908,7 +908,7 @@ export const createWorkspaceSlice: StateCreator<
             position: { x: centerX, y: centerY },
             width: 340,
             height: 80,
-            performers,
+            participants,
             relations: Array.isArray(draftContent.relations) ? draftContent.relations : [],
             createdAt: Date.now(),
         }

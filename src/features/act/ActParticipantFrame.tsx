@@ -28,7 +28,7 @@ export default function ActParticipantFrame({ id }: any) {
 
     const participantKey = id.replace(/^act-p-/, '')
     const act = useMemo(() => acts.find((a) => a.id === layoutActId), [acts, layoutActId])
-    const binding = act ? act.performers[participantKey] : null
+    const binding = act ? act.participants[participantKey] : null
 
     const isSelected = selectedActParticipantKey === participantKey
 
@@ -52,7 +52,7 @@ export default function ActParticipantFrame({ id }: any) {
 
     // Subscriptions summary
     const subs = binding.subscriptions || {}
-    const callboardKeys = subs.callboardKeys || subs.boardKeys || []
+    const callboardKeys = subs.callboardKeys || []
     const subCount = (subs.messagesFrom?.length || 0) + (subs.messageTags?.length || 0) + callboardKeys.length
 
     return (

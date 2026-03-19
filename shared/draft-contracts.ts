@@ -71,7 +71,7 @@ export interface ActDraftPerformerBinding {
     subscriptions?: {
         messagesFrom?: string[]
         messageTags?: string[]
-        boardKeys?: string[]
+        callboardKeys?: string[]
         eventTypes?: string[]
     }
 }
@@ -84,7 +84,7 @@ export interface ActDraftRelation {
     name: string
     description?: string
     permissions?: {
-        boardKeys?: string[]
+        callboardKeys?: string[]
         messageTags?: string[]
     }
     maxCalls: number

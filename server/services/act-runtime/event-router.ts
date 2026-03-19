@@ -10,7 +10,7 @@ import type {
     MailboxEvent,
     ActDefinition,
     ActRelation,
-    PerformerSubscriptions,
+    ParticipantSubscriptions,
     WakeCondition,
     BoardEntry,
 } from '../../../shared/act-types.js'
@@ -29,7 +29,7 @@ export interface WakeUpTarget {
 // ── Subscription matching ───────────────────────────────
 
 function matchSubscription(
-    subscriptions: PerformerSubscriptions | undefined,
+    subscriptions: ParticipantSubscriptions | undefined,
     event: MailboxEvent,
 ): boolean {
     if (!subscriptions) return false
@@ -49,7 +49,7 @@ function matchSubscription(
         case 'board.updated': {
             const key = payload.key as string | undefined
             if (!key) return false
-            return subscriptions.boardKeys?.some((pattern) => {
+            return subscriptions.callboardKeys?.some((pattern) => {
                 if (pattern.endsWith('*')) {
                     return key.startsWith(pattern.slice(0, -1))
                 }
@@ -99,7 +99,7 @@ export function routeEvent(
     const seen = new Set<string>()
 
     // 1. Subscription + relation based wake-up
-    for (const [key, binding] of Object.entries(actDefinition.performers)) {
+    for (const [key, binding] of Object.entries(actDefinition.participants)) {
         if (key === event.source) continue  // Don't wake the source
 
         const subMatch = matchSubscription(binding.subscriptions, event)

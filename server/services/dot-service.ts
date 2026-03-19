@@ -5,6 +5,7 @@ import { installActWithDependencies, installAsset, installPerformerAndLock, sear
 import type { Performer } from 'dance-of-tal/data/types'
 import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
 import { startDotLogin } from '../lib/dot-login.js'
+import { invalidate } from '../lib/cache.js'
 
 export function resolveDotCwd(cwd: string, scope?: string) {
     if (scope === 'global') {
@@ -28,6 +29,21 @@ export async function getDotStatus(cwd: string) {
         dotDir,
         globalDotDir,
         projectDir: cwd,
+    }
+}
+
+export async function getDotStatusSnapshot(cwd: string) {
+    try {
+        return await getDotStatus(cwd)
+    } catch {
+        return {
+            initialized: false,
+            stageInitialized: false,
+            globalInitialized: false,
+            dotDir: '',
+            globalDotDir: '',
+            projectDir: cwd,
+        }
     }
 }
 
@@ -98,15 +114,18 @@ export async function installDotAsset(cwd: string, input: {
 
     if (input.urn.startsWith('performer/')) {
         const result = await installPerformerAndLock(targetCwd, input.urn, input.localName, input.force)
+        invalidate('assets')
         return { ...result, scope: input.scope || 'stage' }
     }
 
     if (input.urn.startsWith('act/')) {
         const result = await installActWithDependencies(targetCwd, input.urn, input.force)
+        invalidate('assets')
         return { ...result, scope: input.scope || 'stage' }
     }
 
     const result = await installAsset(targetCwd, input.urn, input.force)
+    invalidate('assets')
     return { ...result, scope: input.scope || 'stage' }
 }
 
@@ -147,6 +166,7 @@ export async function saveDotLocalAsset(cwd: string, input: {
         slug: input.slug,
         payload: input.payload,
     })
+    invalidate('assets')
     return { ok: true, ...saved }
 }
 
@@ -171,5 +191,6 @@ export async function publishDotAsset(cwd: string, input: {
         tags: input.tags,
         auth,
     })
+    invalidate('assets')
     return { ok: true, ...result }
 }

@@ -53,18 +53,18 @@ Connect **Tal** (identity layer) and **Dance** (skill context) assets, choose mo
   </td>
     <td width="50%">
 
-### 🔀 Act Editor (Experimental)
+### 🔀 Act Choreography
 
-Build multi-node AI workflows with **worker**, **orchestrator**, and **parallel** nodes. Set entry points, wire flow and branch edges, and inspect everything directly on the graph.
+Build shared AI work scenes by grouping performers into **participants**, connecting them with **relations**, and configuring subscriptions around a shared callboard.
 
   </td>
   </tr>
   <tr>
     <td width="50%">
 
-### 🧵 Act Thread Runner (Experimental)
+### 🧵 Act Thread Runner
 
-Execute acts and watch output unfold **node-by-node** in real time. Keep node sessions alive across a thread for iterative workflows.
+Execute acts and watch participant activity unfold in real time. Keep participant sessions alive across a thread for iterative collaboration.
 
   </td>
     <td width="50%">
@@ -86,7 +86,7 @@ Create Tal and Dance drafts on the canvas, save them locally, and publish throug
 | **Tal** | The always-on instruction layer — identity, rules, and baseline behavior |
 | **Dance** | Optional skill or capability context, loaded on demand |
 | **Performer** | A runnable composition of Tal + Dance + model + agent mode + MCP bindings |
-| **Act** | An experimental directed workflow graph of worker, orchestrator, and parallel nodes |
+| **Act** | A participant choreography that defines relations, subscriptions, and shared runtime context |
 | **Stage** | The saved Studio workspace state for a project |
 
 ---

@@ -147,26 +147,24 @@ function parseActs(data: any): any[] {
 
     const normalizeSubscriptions = (subscriptions: any) => {
         if (!subscriptions) return subscriptions
-        const callboardKeys = subscriptions.callboardKeys || subscriptions.boardKeys
         return {
             ...subscriptions,
-            ...(callboardKeys ? { callboardKeys, boardKeys: callboardKeys } : {}),
+            ...(subscriptions.callboardKeys ? { callboardKeys: subscriptions.callboardKeys } : {}),
         }
     }
 
     const normalizePermissions = (permissions: any) => {
         if (!permissions) return permissions
-        const callboardKeys = permissions.callboardKeys || permissions.boardKeys
         return {
             ...permissions,
-            ...(callboardKeys ? { callboardKeys, boardKeys: callboardKeys } : {}),
+            ...(permissions.callboardKeys ? { callboardKeys: permissions.callboardKeys } : {}),
         }
     }
 
     return data.acts.map((act: any, index: number) => {
-        const performers = typeof act.performers === 'object' && act.performers
+        const participants = typeof act.participants === 'object' && act.participants
             ? Object.fromEntries(
-                Object.entries(act.performers).map(([key, binding]: [string, any], performerIndex) => [key, {
+                Object.entries(act.participants).map(([key, binding]: [string, any], performerIndex) => [key, {
                     ...binding,
                     subscriptions: normalizeSubscriptions(binding?.subscriptions),
                     position: binding?.position || { x: performerIndex * 300, y: 100 },
@@ -176,7 +174,7 @@ function parseActs(data: any): any[] {
 
         return {
             ...act,
-            performers,
+            participants,
             relations: Array.isArray(act.relations)
                 ? act.relations.map((relation: any) => ({
                     ...relation,

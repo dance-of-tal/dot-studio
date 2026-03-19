@@ -307,14 +307,8 @@ type AuthorableAsset = {
     actUrn?: string | null
     model?: unknown
     mcpConfig?: Record<string, unknown> | null
-    // Registry compat: pre-studio-v1 Act schema
-    entryNode?: string | null
-    nodes?: Record<string, unknown>
-    edges?: unknown[]
-    maxIterations?: number
-    // studio-v1 Act fields
     schema?: string
-    performers?: unknown[]
+    participants?: unknown[]
     relations?: unknown[]
     slug?: string
 }
@@ -352,7 +346,7 @@ export function buildAuthoringPayloadFromAsset(asset: AuthorableAsset) {
             name: asset.name,
             description: asset.description || asset.name,
             tags: Array.isArray(asset.tags) ? asset.tags : [],
-            performers: Array.isArray(asset.performers) ? asset.performers : [],
+            participants: Array.isArray(asset.participants) ? asset.participants : [],
             relations: Array.isArray(asset.relations) ? asset.relations : [],
         }
     }

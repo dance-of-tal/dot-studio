@@ -124,15 +124,14 @@ export function AssetDetailBody({
     const urn = getAssetUrn(asset)
     const tags = Array.isArray(asset.tags) ? asset.tags : []
     const inlineContent = asset.body || asset.instructions || asset.content
-    const nodeCount = asset.nodeCount || Object.keys(asset.nodes || {}).length || 0
-    const edgeCount = Array.isArray(asset.edges) ? asset.edges.length : 0
+    const participantCount = asset.participantCount || (Array.isArray(asset.participants) ? asset.participants.length : 0)
+    const relationCount = Array.isArray(asset.relations) ? asset.relations.length : 0
     const hasStructuredDetail = !!inlineContent
         || !!asset.talUrn
         || (Array.isArray(asset.danceUrns) && asset.danceUrns.length > 0)
         || !!asset.model
-        || nodeCount > 0
-        || edgeCount > 0
-        || typeof asset.maxIterations === 'number'
+        || participantCount > 0
+        || relationCount > 0
     const summaryOnly = asset.source === 'registry' && !loading && !hasStructuredDetail
 
     return (
@@ -219,12 +218,8 @@ export function AssetDetailBody({
             {asset.kind === 'act' && (
                 <div className="asset-popover__section">
                     <div className="section-title">Act Summary</div>
-                    <div className="asset-popover__section-item">Entry: {asset.entryNode || 'n/a'}</div>
-                    <div className="asset-popover__section-item">Nodes: {nodeCount}</div>
-                    <div className="asset-popover__section-item">Edges: {edgeCount}</div>
-                    {typeof asset.maxIterations === 'number' && (
-                        <div className="asset-popover__section-item">Max iterations: {asset.maxIterations}</div>
-                    )}
+                    <div className="asset-popover__section-item">Participants: {participantCount}</div>
+                    <div className="asset-popover__section-item">Relations: {relationCount}</div>
                 </div>
             )}
 

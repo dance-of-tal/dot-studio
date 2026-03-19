@@ -12,19 +12,17 @@ const ACT_DEFAULT_HEIGHT = 80
 
 function normalizeSubscriptions(subscriptions: any) {
     if (!subscriptions) return subscriptions
-    const callboardKeys = subscriptions.callboardKeys || subscriptions.boardKeys
     return {
         ...subscriptions,
-        ...(callboardKeys ? { callboardKeys, boardKeys: callboardKeys } : {}),
+        ...(subscriptions.callboardKeys ? { callboardKeys: subscriptions.callboardKeys } : {}),
     }
 }
 
 function normalizeRelationPermissions(permissions: any) {
     if (!permissions) return permissions
-    const callboardKeys = permissions.callboardKeys || permissions.boardKeys
     return {
         ...permissions,
-        ...(callboardKeys ? { callboardKeys, boardKeys: callboardKeys } : {}),
+        ...(permissions.callboardKeys ? { callboardKeys: permissions.callboardKeys } : {}),
     }
 }
 
@@ -79,7 +77,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             position: center ? { x: center.x, y: center.y + 200 } : { x: 200, y: 200 },
             width: ACT_DEFAULT_WIDTH,
             height: ACT_DEFAULT_HEIGHT,
-            performers: {},
+            participants: {},
             relations: [],
             createdAt: Date.now(),
         }
@@ -165,7 +163,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         const newKey = nanoid(12)
         set((s) => {
             const act = s.acts.find((a) => a.id === actId)
-            const existingKeys = act ? Object.keys(act.performers) : []
+            const existingKeys = act ? Object.keys(act.participants) : []
             const newPos = { x: existingKeys.length * 300, y: 100 }
             const binding: StageActParticipantBinding = {
                 performerRef,
@@ -176,7 +174,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     if (a.id !== actId) return a
                     return {
                         ...a,
-                        performers: { ...a.performers, [newKey]: binding },
+                        participants: { ...a.participants, [newKey]: binding },
                     }
                 }),
                 stageDirty: true,
@@ -192,7 +190,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             return null
         }
 
-        const existing = Object.entries(act.performers).find(([, binding]) => (
+        const existing = Object.entries(act.participants).find(([, binding]) => (
             (binding.performerRef.kind === 'draft' && performerRef.kind === 'draft' && binding.performerRef.draftId === performerRef.draftId)
             || (binding.performerRef.kind === 'registry' && performerRef.kind === 'registry' && binding.performerRef.urn === performerRef.urn)
         ))
@@ -207,7 +205,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             return existing[0]
         }
 
-        const existingParticipantKeys = Object.keys(act.performers)
+        const existingParticipantKeys = Object.keys(act.participants)
         const newKey = get().bindPerformerToAct(actId, performerRef)
         let relationId: string | null = null
         if (existingParticipantKeys.length === 1) {
@@ -256,7 +254,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         )
 
         const findBindingInAct = (act: StageAct, performerId: string) => (
-            Object.entries(act.performers).find(([, binding]) => (
+            Object.entries(act.participants).find(([, binding]) => (
                 bindingMatchesPerformer(
                     binding,
                     performerId,
@@ -340,7 +338,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             },
             width: ACT_DEFAULT_WIDTH,
             height: 320,
-            performers: autoLayoutBindings({
+            participants: autoLayoutBindings({
                 [sourceKey]: {
                     performerRef: performerToRef(sourcePerformer),
                     position: { x: 40, y: 120 },
@@ -394,7 +392,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                 if (act.id !== actId) return act
                 return {
                     ...act,
-                    performers: autoLayoutBindings(act.performers),
+                    participants: autoLayoutBindings(act.participants),
                 }
             }),
             stageDirty: true,
@@ -405,12 +403,12 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
-                const { [participantKey]: _removed, ...rest } = a.performers
+                const { [participantKey]: _removed, ...rest } = a.participants
                 // Remove relations involving this participant
                 const relations = a.relations.filter(
                     (r) => !r.between.includes(participantKey),
                 )
-                return { ...a, performers: rest, relations }
+                return { ...a, participants: rest, relations }
             }),
             stageDirty: true,
         }))
@@ -419,12 +417,12 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     updatePerformerBinding: (actId, participantKey, update) => {
         set((s) => ({
             acts: s.acts.map((a) => {
-                if (a.id !== actId || !a.performers[participantKey]) return a
+                if (a.id !== actId || !a.participants[participantKey]) return a
                 return {
                     ...a,
-                    performers: {
-                        ...a.performers,
-                        [participantKey]: { ...a.performers[participantKey], ...update },
+                    participants: {
+                        ...a.participants,
+                        [participantKey]: { ...a.participants[participantKey], ...update },
                     },
                 }
             }),
@@ -443,12 +441,12 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     updateActParticipantPosition: (actId, participantKey, x, y) => {
         set((s) => ({
             acts: s.acts.map((a) => {
-                if (a.id !== actId || !a.performers[participantKey]) return a
+                if (a.id !== actId || !a.participants[participantKey]) return a
                 return {
                     ...a,
-                    performers: {
-                        ...a.performers,
-                        [participantKey]: { ...a.performers[participantKey], position: { x, y } },
+                    participants: {
+                        ...a.participants,
+                        [participantKey]: { ...a.participants[participantKey], position: { x, y } },
                     },
                 }
             }),
@@ -461,8 +459,8 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     addRelation: (actId, between, direction) => {
         const act = get().acts.find((entry) => entry.id === actId)
         const performers = get().performers
-        const leftBinding = act?.performers[between[0]]
-        const rightBinding = act?.performers[between[1]]
+        const leftBinding = act?.participants[between[0]]
+        const rightBinding = act?.participants[between[1]]
         const leftLabel = leftBinding
             ? (leftBinding.performerRef.kind === 'draft'
                 ? performers.find((performer) => performer.id === leftBinding.performerRef.draftId)?.name || fallbackParticipantLabel(leftBinding.performerRef)
@@ -626,13 +624,13 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         const center = get().canvasCenter
 
         // Build participant bindings from asset
-        const performers: Record<string, StageActParticipantBinding> = {}
+        const participants: Record<string, StageActParticipantBinding> = {}
         const idMapping: Record<string, string> = {}
 
-        const nodes: any[] = Array.isArray(asset.performers)
-            ? asset.performers
-            : typeof asset.performers === 'object' && asset.performers
-                ? Object.values(asset.performers)
+        const nodes: any[] = Array.isArray(asset.participants)
+            ? asset.participants
+            : typeof asset.participants === 'object' && asset.participants
+                ? Object.values(asset.participants)
                 : []
 
         for (const node of nodes) {
@@ -647,11 +645,11 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     ? { kind: 'draft' as const, draftId: node.draftId }
                     : { kind: 'draft' as const, draftId: '' })
 
-            performers[newKey] = {
+            participants[newKey] = {
                 performerRef,
                 activeDanceIds: node.activeDanceIds,
                 subscriptions: normalizeSubscriptions(node.subscriptions),
-                position: { x: Object.keys(performers).length * 300, y: 100 },
+                position: { x: Object.keys(participants).length * 300, y: 100 },
             }
         }
 
@@ -676,7 +674,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             name: asset.name || `Act ${get().acts.length + 1}`,
             description: asset.description,
             actRules: asset.actRules,
-            performers,
+            participants,
             relations,
             position: { x: (center?.x ?? 400) - ACT_DEFAULT_WIDTH / 2, y: center?.y ?? 300 },
             width: ACT_DEFAULT_WIDTH,
@@ -707,8 +705,8 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             name: act.name,
             description: act.description,
             actRules: act.actRules,
-            performers: Object.fromEntries(
-                Object.entries(act.performers).map(([key, binding]) => [key, {
+            participants: Object.fromEntries(
+                Object.entries(act.participants).map(([key, binding]) => [key, {
                     performerRef: binding.performerRef,
                     activeDanceIds: binding.activeDanceIds,
                     subscriptions: normalizeSubscriptions(binding.subscriptions),
@@ -760,7 +758,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     id: t.id,
                     actId: t.actId,
                     status: t.status as any,
-                    participantSessions: t.participantSessions || t.performerSessions || {},
+                    participantSessions: t.participantSessions || {},
                     createdAt: t.createdAt,
                 })),
             },

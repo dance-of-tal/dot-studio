@@ -17,20 +17,16 @@ import { resolveActParticipantLabel } from './participant-labels'
 import './ActInspectorPanel.css'
 
 function getCallboardKeys(subs: any) {
-    return subs.callboardKeys || subs.boardKeys || []
+    return subs.callboardKeys || []
 }
 
 function nextSubscriptions(subs: any, patch: Record<string, unknown>) {
-    const next = { ...subs, ...patch }
-    if ('callboardKeys' in patch) {
-        next.boardKeys = patch.callboardKeys
-    }
-    return next
+    return { ...subs, ...patch }
 }
 
 function isPerformerAttachedToAct(act: any, performer: PerformerNode) {
     const derivedFrom = performer.meta?.derivedFrom?.trim()
-    return Object.values(act.performers).some((binding: any) => (
+    return Object.values(act.participants).some((binding: any) => (
         (binding.performerRef.kind === 'draft' && binding.performerRef.draftId === performer.id)
         || (binding.performerRef.kind === 'registry' && !!derivedFrom && binding.performerRef.urn === derivedFrom)
     ))
@@ -105,7 +101,7 @@ function ActMetaView() {
     }
 
     // ── Validation ──────────────────────────────────────
-    const participantKeys = Object.keys(act.performers)
+    const participantKeys = Object.keys(act.participants)
     const connectedKeys = new Set<string>()
     for (const rel of act.relations) {
         connectedKeys.add(rel.between[0])
@@ -389,7 +385,7 @@ function ParticipantView() {
 
     const activeActId = layoutActId || selectedActId
     const act = useMemo(() => acts.find((a) => a.id === activeActId), [acts, activeActId])
-    const binding = act && selectedActParticipantKey ? act.performers[selectedActParticipantKey] : null
+    const binding = act && selectedActParticipantKey ? act.participants[selectedActParticipantKey] : null
 
     const relatedRelations = useMemo(() => {
         if (!act || !selectedActParticipantKey) return []
@@ -665,9 +661,6 @@ function RelationView() {
             permissions: {
                 ...permissions,
                 [field]: [...current, value],
-                ...(field === 'callboardKeys'
-                    ? { boardKeys: [...current, value] }
-                    : {}),
             },
         })
         setPermissionInput((prev) => ({ ...prev, [field]: '' }))
@@ -679,9 +672,6 @@ function RelationView() {
             permissions: {
                 ...permissions,
                 [field]: current.filter((entry: string) => entry !== value),
-                ...(field === 'callboardKeys'
-                    ? { boardKeys: current.filter((entry: string) => entry !== value) }
-                    : {}),
             },
         })
     }
@@ -754,7 +744,7 @@ function RelationView() {
                 <div className="act-panel__sub-field">
                     <span className="act-panel__sub-label">Callboard Keys</span>
                     <div className="act-panel__tags">
-                        {((permissions as any).callboardKeys || (permissions as any).boardKeys || []).map((v: string) => (
+                        {((permissions as any).callboardKeys || []).map((v: string) => (
                             <span key={v} className="act-panel__tag" onClick={() => removePermissionItem('callboardKeys', v)}>
                                 {v} ×
                             </span>

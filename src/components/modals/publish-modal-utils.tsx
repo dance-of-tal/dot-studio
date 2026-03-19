@@ -59,8 +59,8 @@ export function getPerformerModelIssue(p: PerformerNode): string | undefined {
 // ── Act Validation ──────────────────────────────────────
 
 export function getActIssue(act: StageAct): string | undefined {
-    const performerIds = Object.keys(act.performers)
-    if (performerIds.length === 0) return 'No performers'
+    const participantIds = Object.keys(act.participants)
+    if (participantIds.length === 0) return 'No participants'
     if (act.relations.length === 0) return 'No relations'
 
     const connectedIds = new Set<string>()
@@ -68,7 +68,7 @@ export function getActIssue(act: StageAct): string | undefined {
         connectedIds.add(rel.between[0])
         connectedIds.add(rel.between[1])
     }
-    const disconnected = performerIds.filter((id) => !connectedIds.has(id))
+    const disconnected = participantIds.filter((id) => !connectedIds.has(id))
     if (disconnected.length > 0) {
         return `Disconnected: ${disconnected.join(', ')}`
     }
@@ -78,31 +78,31 @@ export function getActIssue(act: StageAct): string | undefined {
 
 export function getActPublishBlockReasons(act: StageAct): string[] {
     const reasons: string[] = []
-    const performerIds = Object.keys(act.performers)
+    const participantIds = Object.keys(act.participants)
 
-    if (performerIds.length === 0) {
-        reasons.push('Act has no performers.')
+    if (participantIds.length === 0) {
+        reasons.push('Act has no participants.')
     }
     if (act.relations.length === 0) {
         reasons.push('Act has no relations. Create relations between participants first.')
     }
 
     // Disconnected performers
-    if (performerIds.length > 0 && act.relations.length > 0) {
+    if (participantIds.length > 0 && act.relations.length > 0) {
         const connectedIds = new Set<string>()
         for (const rel of act.relations) {
             connectedIds.add(rel.between[0])
             connectedIds.add(rel.between[1])
         }
-        const disconnected = performerIds.filter((id) => !connectedIds.has(id))
+        const disconnected = participantIds.filter((id) => !connectedIds.has(id))
         if (disconnected.length > 0) {
-            reasons.push(`Disconnected performer${disconnected.length > 1 ? 's' : ''}: ${disconnected.join(', ')}. All performers must be connected by relations.`)
+            reasons.push(`Disconnected participant${disconnected.length > 1 ? 's' : ''}: ${disconnected.join(', ')}. All participants must be connected by relations.`)
         }
 
         // Dangling relations
-        const dangling = act.relations.filter((r) => !act.performers[r.between[0]] || !act.performers[r.between[1]])
+        const dangling = act.relations.filter((r) => !act.participants[r.between[0]] || !act.participants[r.between[1]])
         if (dangling.length > 0) {
-            reasons.push(`${dangling.length} relation(s) reference performers not in this Act.`)
+            reasons.push(`${dangling.length} relation(s) reference participants not in this Act.`)
         }
     }
 

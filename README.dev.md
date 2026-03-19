@@ -387,7 +387,7 @@ Act publish/save is blocked when any of these conditions are met:
 
 | Rule | Condition |
 |------|-----------|
-| No performers | `Object.keys(act.performers).length === 0` |
+| No participants | `Object.keys(act.participants).length === 0` |
 | No relations | `act.relations.length === 0` |
 | Disconnected performer | Performer exists in Act but has no relations (in or out) |
 | Dangling relation | Relation references a performer not in Act |
@@ -403,7 +403,7 @@ Validation is implemented in `src/components/modals/publish-modal-utils.tsx` (`g
 
 ## Act Architecture
 
-An Act defines a performer relation graph. Relations (edges) are projected as Custom Tool → Hono BFF → OpenCode SDK for subagent execution. Act performers generate only `build` posture agents (no `plan`). See PRD-001 §7 for full details.
+An Act defines a participant choreography. Relations are projected as Custom Tool → Hono BFF → OpenCode SDK for subagent execution. Act participants generate only `build` posture agents (no `plan`). See PRD-001 §7 for full details.
 
 ### Act Entity
 
@@ -412,21 +412,21 @@ Act is a first-class canvas node:
 - DOT asset / publish target
 - Safe-mode owner (`ownerKind='act'`)
 - Thread owner
-- Canvas node with ⚡ icon, three states: collapsed (badges), chat mode, edit mode
-- Edit mode shows performer edit cards + relation arrows on React Flow canvas
-- Relations live exclusively inside Act — no standalone performer-to-performer edges exist
+- Canvas node with ⚡ icon, three states: compact boundary, surface mode, advanced layout mode
+- Advanced layout mode shows participant cards + relation arrows on the React Flow canvas
+- Relations live exclusively inside Act — no standalone performer-to-performer relations exist
 - Schema v5: `performerLinks` removed from Stage, Act stores `relations` inline + `position/width/height`
 
-### Performer Reference
+### Participant Binding
 
-Act copies performer config at addition (not reference):
+Act binds performer references at addition:
 
 | Item | Owner | Notes |
 |------|-------|-------|
-| Agent config | Act (copied) | Standalone changes don't affect Act |
-| Session | Act | Act-scoped; independent from performer's standalone chat |
-| Workspace | Act | Act-scoped safe/direct; performer's own mode is ignored |
-| Provenance | metadata | `derivedFrom` records original performer id/urn (no runtime link) |
+| Performer ref | Act participant | References a performer asset or draft |
+| Session | Thread participant | Thread-scoped; independent from standalone performer chat |
+| Workspace | Act | Act-scoped safe/direct; standalone performer mode is ignored |
+| Provenance | metadata | `derivedFrom` records original performer id/urn |
 
 ### Tal / Edge Role Separation
 
@@ -518,14 +518,11 @@ Act sessions are simplified from the previous 2D model (policy × lifetime):
 
 ### Payload Schema
 
-Act publish supports two payload schemas:
+Act publish supports one payload schema:
 
 | Schema | Fields | Used By |
 |--------|--------|---------|
-| Legacy | `entryNode`, `nodes`, `edges` | Older assets |
-| `studio-v1` | `schema: 'studio-v1'`, `performers`, `relations` | Current Studio canvas |
-
-Both `dot-authoring.ts` normalizer and `asset-service.ts` reader handle both formats.
+| `studio-v1` | `schema: 'studio-v1'`, `participants`, `relations` | Current Studio canvas |
 
 ## Read First
 

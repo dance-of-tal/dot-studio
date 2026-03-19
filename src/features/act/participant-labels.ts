@@ -11,7 +11,7 @@ export function resolveActParticipantLabel(
     performers: PerformerNode[],
 ) {
     if (!act) return participantKey
-    const binding = act.performers[participantKey]
+    const binding = act.participants[participantKey]
     if (!binding) return participantKey
 
     if (binding.performerRef.kind === 'draft') {

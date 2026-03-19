@@ -4,6 +4,10 @@ import { assetFilePath, getDotDir, getGlobalCwd, getGlobalDotDir, readAsset } fr
 import { getRegistryPackage } from 'dance-of-tal/lib/installer'
 import type { AssetListItem } from '../../shared/asset-contracts.js'
 
+export function isStudioActPayload(content: Record<string, any>) {
+    return content.schema === 'studio-v1' || Array.isArray(content.participants)
+}
+
 function normalizeAsset(
     kind: string,
     urn: string,
@@ -48,27 +52,16 @@ function normalizeAsset(
     }
 
     if (kind === 'act') {
-        const isStudioV1 = content.schema === 'studio-v1' || Array.isArray(content.performers)
         return {
             ...base,
             tags: Array.isArray(content.tags) ? content.tags : [],
-            ...(isStudioV1 ? {
-                schema: 'studio-v1',
-                performerCount: Array.isArray(content.performers) ? content.performers.length : 0,
-                relationCount: Array.isArray(content.relations) ? content.relations.length : 0,
-                ...(detail ? {
-                    performers: Array.isArray(content.performers) ? content.performers : [],
-                    relations: Array.isArray(content.relations) ? content.relations : [],
-                } : {}),
-            } : {
-                entryNode: typeof content.entryNode === 'string' ? content.entryNode : null,
-                nodeCount: typeof content.nodes === 'object' && content.nodes ? Object.keys(content.nodes).length : 0,
-                ...(detail ? {
-                    nodes: typeof content.nodes === 'object' && content.nodes ? content.nodes : {},
-                    edges: Array.isArray(content.edges) ? content.edges : [],
-                    maxIterations: typeof content.maxIterations === 'number' ? content.maxIterations : undefined,
-                } : {}),
-            }),
+            schema: 'studio-v1',
+            participantCount: Array.isArray(content.participants) ? content.participants.length : 0,
+            relationCount: Array.isArray(content.relations) ? content.relations.length : 0,
+            ...(detail ? {
+                participants: Array.isArray(content.participants) ? content.participants : [],
+                relations: Array.isArray(content.relations) ? content.relations : [],
+            } : {}),
         }
     }
 

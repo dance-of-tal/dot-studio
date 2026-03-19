@@ -384,7 +384,7 @@ export function buildActAssetPayload(
     act: import('../types').StageAct,
     options: { description?: string; tags?: string[] } = {},
 ) {
-    const performers = Object.entries(act.performers).map(([key, binding]) => ({
+    const participants = Object.entries(act.participants).map(([key, binding]) => ({
         key,
         performerRef: binding.performerRef,
         activeDanceIds: binding.activeDanceIds,
@@ -407,7 +407,7 @@ export function buildActAssetPayload(
         description: options.description?.trim() || act.description || act.name,
         tags: (options.tags || []).filter((t) => t.trim().length > 0),
         actRules: act.actRules,
-        performers,
+        participants,
         relations,
     }
 }

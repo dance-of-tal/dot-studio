@@ -32,8 +32,9 @@ export interface AssetCard {
     actUrn?: string | null
     model?: ModelConfig | string | null
     mcpConfig?: Record<string, any> | null
-    entryNode?: string | null
-    nodeCount?: number
+    participantCount?: number
+    participants?: Array<Record<string, unknown>>
+    relations?: Array<Record<string, unknown>>
     connected?: boolean
     context?: number
     output?: number
@@ -175,8 +176,7 @@ export interface PerformerNode {
 export type {
     ActRelation,
     ActParticipantBinding,
-    ActPerformerBinding,
-    PerformerSubscriptions,
+    ParticipantSubscriptions,
     MailboxMessage,
     CallboardMessage,
     BoardEntry,
@@ -195,13 +195,13 @@ export type {
 } from '../../shared/act-types'
 
 // Local import for types used within this file
-import type { ActRelation, PerformerSubscriptions } from '../../shared/act-types'
+import type { ActRelation, ParticipantSubscriptions } from '../../shared/act-types'
 
 /** Canvas-specific participant binding (extends ActParticipantBinding with UI position) */
 export interface StageActParticipantBinding {
     performerRef: AssetRef
     activeDanceIds?: string[]
-    subscriptions?: PerformerSubscriptions
+    subscriptions?: ParticipantSubscriptions
     position: { x: number; y: number }
 }
 
@@ -215,7 +215,7 @@ export interface StageAct {
     width: number
     height: number
     /** Participant bindings (key = internal participant key) */
-    performers: Record<string, StageActParticipantBinding>
+    participants: Record<string, StageActParticipantBinding>
     /** Communication contract relations between participants */
     relations: ActRelation[]
     hidden?: boolean

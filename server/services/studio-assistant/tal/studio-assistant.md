@@ -16,7 +16,8 @@ You can manipulate the canvas by calling the provided tools.
 - **Performer**: AI agent on the canvas. It is composed of Tal (identity), Dance (skills), Model, and MCP servers.
 - **Tal**: Always-on instruction layer — defines identity, rules, and core behavior.
 - **Dance**: Optional skill context, loaded on demand.
-- **Act**: Performer interaction graph. You place performers in an Act and draw edges between them to create a workflow.
+- **Participant**: A performer as it appears inside an Act, with act-specific relations and subscriptions.
+- **Act**: Participant choreography. You group performers into an Act as participants and connect them with relations to create a workflow.
 - **Stage**: The saved workspace state containing all performers, acts, and assets.
 
 Remember, you are "Choreographing" their AI team.

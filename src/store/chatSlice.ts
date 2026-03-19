@@ -257,7 +257,7 @@ export const createChatSlice: StateCreator<
             const act = get().acts.find((a) => a.id === actId)
             if (!act || !threadId) return
 
-            const binding = act.performers[participantKey]
+            const binding = act.participants[participantKey]
             if (!binding) return
 
             // Thread-scoped session key: separates participant sessions across threads

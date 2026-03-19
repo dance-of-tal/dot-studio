@@ -84,10 +84,9 @@ export interface WakeCondition {
 
 // ── Subscriptions ───────────────────────────────────────
 
-export interface PerformerSubscriptions {
+export interface ParticipantSubscriptions {
     messagesFrom?: string[]
     messageTags?: string[]
-    boardKeys?: string[]
     callboardKeys?: string[]
     eventTypes?: MailboxEventType[]
 }
@@ -101,7 +100,6 @@ export interface ActRelation {
     name: string
     description?: string
     permissions?: {
-        boardKeys?: string[]
         callboardKeys?: string[]
         messageTags?: string[]
     }
@@ -114,10 +112,8 @@ export interface ActRelation {
 export interface ActParticipantBinding {
     performerRef: SharedAssetRef
     activeDanceIds?: string[]
-    subscriptions?: PerformerSubscriptions
+    subscriptions?: ParticipantSubscriptions
 }
-
-export type ActPerformerBinding = ActParticipantBinding
 
 // ── Act Definition ──────────────────────────────────────
 
@@ -126,7 +122,7 @@ export interface ActDefinition {
     name: string
     description?: string
     actRules?: string[]
-    performers: Record<string, ActParticipantBinding>  // participantKey → binding
+    participants: Record<string, ActParticipantBinding>  // participantKey → binding
     relations: ActRelation[]
 }
 
@@ -149,7 +145,6 @@ export interface ActThread {
     actId: string
     mailbox: MailboxState
     participantSessions: Record<string, string>
-    performerSessions?: Record<string, string>  // legacy alias
     createdAt: number
     status: ActThreadStatus
 }

@@ -27,7 +27,7 @@ export default function ActBoundarySummary({
     onAddParticipant,
     onAutoLayout,
 }: ActBoundarySummaryProps) {
-    const participantKeys = Object.keys(act.performers)
+    const participantKeys = Object.keys(act.participants)
     const participantItems = participantKeys.map((key) => ({
         key,
         label: resolveActParticipantLabel(act, key, performers),

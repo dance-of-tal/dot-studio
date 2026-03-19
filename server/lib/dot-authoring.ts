@@ -147,7 +147,7 @@ function normalizeActPayload(author: string, slug: string, payload: Record<strin
         name,
         description: normalizeDescription(name, payload.description),
         tags: sanitizeTags(payload.tags),
-        performers: Array.isArray(payload.performers) ? payload.performers : [],
+        participants: Array.isArray(payload.participants) ? payload.participants : [],
         relations: Array.isArray(payload.relations) ? payload.relations : [],
     }
 }

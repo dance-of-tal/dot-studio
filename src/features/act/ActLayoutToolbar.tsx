@@ -12,7 +12,7 @@ export default function ActLayoutToolbar() {
 
     if (!layoutActId || !act) return null
 
-    const performerCount = Object.keys(act.performers).length
+    const participantCount = Object.keys(act.participants).length
     const relationCount = act.relations?.length || 0
 
     return (
@@ -20,18 +20,18 @@ export default function ActLayoutToolbar() {
             <div className="act-layout-toolbar__left">
                 <span className="act-layout-toolbar__icon">⚡</span>
                 <span className="act-layout-toolbar__name">{act.name || 'Act Layout'}</span>
-                <span className="act-layout-toolbar__badge">{performerCount}p · {relationCount}r</span>
-                {performerCount === 0 && (
+                <span className="act-layout-toolbar__badge">{participantCount}p · {relationCount}r</span>
+                {participantCount === 0 && (
                     <span className="act-layout-toolbar__hint">
                         ← Drag performers from the Asset Library to add them to this act
                     </span>
                 )}
-                {performerCount > 0 && performerCount < 2 && (
+                {participantCount > 0 && participantCount < 2 && (
                     <span className="act-layout-toolbar__hint">
                         Drag another performer to grow this act
                     </span>
                 )}
-                {performerCount >= 2 && relationCount === 0 && (
+                {participantCount >= 2 && relationCount === 0 && (
                     <span className="act-layout-toolbar__hint">
                         Connect participants by dragging from one handle to another
                     </span>

@@ -40,8 +40,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const threads = actThreads[actId] || []
     const currentThread = threads.find((t) => t.id === activeThreadId) || threads[0] || null
 
-    // Active performer in thread
-    const participantKeys = act ? Object.keys(act.performers) : []
+    // Active participant in thread
+    const participantKeys = act ? Object.keys(act.participants) : []
     const isCallboardView = !!currentThread && activeThreadParticipantKey === null
     const activeParticipantKey = isCallboardView ? null : activeThreadParticipantKey || participantKeys[0] || null
 
@@ -60,8 +60,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
 
     // Resolve performer model from ref binding
     const resolvedPerformer = (() => {
-        if (!act || !activePerformerKey) return null
-        const binding = act.performers[activePerformerKey]
+        if (!act || !activeParticipantKey) return null
+        const binding = act.participants[activeParticipantKey]
         if (!binding) return null
         const ref = binding.performerRef
         if (ref.kind === 'draft') {
@@ -219,7 +219,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                             <>
                                 <User size={20} className="act-chat__empty-icon" />
                                 <strong>Model not configured</strong>
-                                <span>Set up a model for &ldquo;{activeParticipantLabel || activePerformerKey}&rdquo; in the performer editor.</span>
+                                <span>Set up a model for &ldquo;{activeParticipantLabel || activeParticipantKey}&rdquo; in the performer editor.</span>
                             </>
                         ) : threads.length === 0 ? (
                             <>
@@ -233,7 +233,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                         ) : (
                             <>
                                 <User size={20} className="act-chat__empty-icon" />
-                                <strong>Chat with {activeParticipantLabel || activePerformerKey}</strong>
+                                <strong>Chat with {activeParticipantLabel || activeParticipantKey}</strong>
                                 <span>Send a message below to start the conversation.</span>
                             </>
                         )}
@@ -267,7 +267,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                         ? 'Add performers first…'
                                         : !modelConfigured
                                             ? 'Configure a model for this performer…'
-                                            : `Message ${activeParticipantLabel ?? activePerformerKey ?? 'performer'}…`
+                                            : `Message ${activeParticipantLabel ?? activeParticipantKey ?? 'participant'}…`
                                 }
                                 rows={1}
                                 disabled={noPerformers || !modelConfigured || isLoading}

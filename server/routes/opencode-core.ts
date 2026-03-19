@@ -1,0 +1,145 @@
+import { Hono } from 'hono'
+import type { ModelSelection } from '../../shared/model-types.js'
+import { resolveRuntimeTools } from '../lib/runtime-tools.js'
+import { resolveRequestWorkingDir } from '../lib/request-context.js'
+import { jsonOpencodeError } from '../lib/opencode-errors.js'
+import { listRuntimeModels, listProviderSummaries } from '../lib/model-catalog.js'
+import {
+    getLspStatus,
+    getOpenCodeConfig,
+    getOpenCodeHealth,
+    getOpenCodeUnavailableHealth,
+    getProviderAuthStatus,
+    getVcsStatus,
+    listOpenCodeAgents,
+    listOpenCodeToolIds,
+    listOpenCodeToolsForModel,
+    readProjectConfigSnapshot,
+    restartManagedOpenCode,
+    updateOpenCodeConfig,
+} from '../services/opencode-service.js'
+
+const opencodeCore = new Hono()
+
+opencodeCore.get('/api/opencode/health', async (c) => {
+    try {
+        return c.json(await getOpenCodeHealth(resolveRequestWorkingDir(c)))
+    } catch (err: any) {
+        return c.json(getOpenCodeUnavailableHealth(err), 503)
+    }
+})
+
+opencodeCore.post('/api/opencode/restart', async (c) => {
+    try {
+        return c.json(await restartManagedOpenCode())
+    } catch (err) {
+        return jsonOpencodeError(c, err, { defaultStatus: 400 })
+    }
+})
+
+opencodeCore.get('/api/models', async (c) => {
+    try {
+        return c.json(await listRuntimeModels(resolveRequestWorkingDir(c)))
+    } catch {
+        return c.json([])
+    }
+})
+
+opencodeCore.get('/api/providers', async (c) => {
+    try {
+        return c.json(await listProviderSummaries(resolveRequestWorkingDir(c)))
+    } catch (err) {
+        return jsonOpencodeError(c, err, { defaultStatus: 503 })
+    }
+})
+
+opencodeCore.get('/api/agents', async (c) => {
+    try {
+        return c.json(await listOpenCodeAgents(resolveRequestWorkingDir(c)))
+    } catch {
+        return c.json([])
+    }
+})
+
+opencodeCore.get('/api/tools', async (c) => {
+    try {
+        return c.json(await listOpenCodeToolIds(resolveRequestWorkingDir(c)))
+    } catch {
+        return c.json([])
+    }
+})
+
+opencodeCore.get('/api/tools/:provider/:model', async (c) => {
+    try {
+        return c.json(await listOpenCodeToolsForModel(
+            resolveRequestWorkingDir(c),
+            c.req.param('provider'),
+            c.req.param('model'),
+        ))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+opencodeCore.post('/api/runtime/tools', async (c) => {
+    const { model = null, mcpServerNames = [] } = await c.req.json<{
+        model?: ModelSelection
+        mcpServerNames?: string[]
+    }>()
+    try {
+        return c.json(await resolveRuntimeTools(
+            resolveRequestWorkingDir(c),
+            model,
+            mcpServerNames,
+        ))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+opencodeCore.get('/api/config', async (c) => {
+    try {
+        return c.json(await getOpenCodeConfig(resolveRequestWorkingDir(c)))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+opencodeCore.get('/api/config/project', async (c) => {
+    return c.json(await readProjectConfigSnapshot(resolveRequestWorkingDir(c)))
+})
+
+opencodeCore.put('/api/config', async (c) => {
+    const body = await c.req.json()
+    try {
+        return c.json(await updateOpenCodeConfig(resolveRequestWorkingDir(c), body))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+opencodeCore.get('/api/provider/auth', async (c) => {
+    try {
+        return c.json(await getProviderAuthStatus(resolveRequestWorkingDir(c)))
+    } catch (err) {
+        return jsonOpencodeError(c, err, { defaultStatus: 503 })
+    }
+})
+
+opencodeCore.get('/api/lsp/status', async (c) => {
+    try {
+        return c.json(await getLspStatus(resolveRequestWorkingDir(c)))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+opencodeCore.get('/api/vcs', async (c) => {
+    try {
+        return c.json(await getVcsStatus(resolveRequestWorkingDir(c)))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+export default opencodeCore

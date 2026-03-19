@@ -468,7 +468,7 @@ export default function StageExplorer() {
                     })}{acts.map((act) => {
                         const actKey = `act-${act.id}`;
                         const isActSelected = selectedActId === act.id;
-                        const performerCount = Object.keys(act.performers).length;
+                        const participantCount = Object.keys(act.participants).length;
                         const actExpanded = expandedRows[actKey] ?? false;
                         const threads = actThreads[act.id] || [];
 
@@ -515,7 +515,7 @@ export default function StageExplorer() {
                                     <span className="thread-card__body">
                                         <span className="thread-card__name">{act.name}</span>
                                         <span className="thread-card__meta">
-                                            {performerCount}p · {act.relations.length}r · {threads.length}t
+                                            {participantCount}p · {act.relations.length}r · {threads.length}t
                                         </span>
                                     </span>
                                     <span
@@ -573,7 +573,7 @@ export default function StageExplorer() {
                                             const statusClass = `thread-status--${thread.status || 'idle'}`;
                                             const threadKey = `thread-${thread.id}`;
                                             const threadExpanded = expandedRows[threadKey] ?? false;
-                                            const boundPerformerKeys = Object.keys(act.performers);
+                                            const boundParticipantKeys = Object.keys(act.participants);
                                             return (
                                                 <div key={thread.id} className="thread-group">
                                                     <div
@@ -585,7 +585,7 @@ export default function StageExplorer() {
                                                             selectAct(act.id);
                                                         }}
                                                     >
-                                                        {boundPerformerKeys.length > 0 ? (
+                                                        {boundParticipantKeys.length > 0 ? (
                                                             <span
                                                                 className={`thread-card__chevron ${threadExpanded ? 'is-open' : ''}`}
                                                                 onClick={(ev) => {
@@ -625,7 +625,7 @@ export default function StageExplorer() {
                                                                     selectAct(act.id);
                                                                 }}
                                                             />
-                                                            {boundPerformerKeys.length > 0 && boundPerformerKeys.map((pKey) => (
+                                                            {boundParticipantKeys.length > 0 && boundParticipantKeys.map((pKey) => (
                                                                 <LayerRow
                                                                     key={pKey}
                                                                     icon={<User size={10} />}

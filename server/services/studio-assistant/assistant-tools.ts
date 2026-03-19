@@ -26,11 +26,11 @@ export default tool({
 
 export const createActTool: AssistantToolTemplate = {
     name: 'assistant_create_act',
-    description: 'Create a new Act (interaction graph) on the canvas',
+    description: 'Create a new Act choreography on the canvas',
     content: `import { tool } from '@opencode-ai/plugin'
 
 export default tool({
-  description: 'Create a new Act on the Studio canvas. Acts are where Performers interact. Use this when the user needs a new workflow or a place to connect performers.',
+  description: 'Create a new Act on the Studio canvas. Acts are where performers enter as participants and collaborate through relations. Use this when the user needs a new workflow or a place to connect performers.',
   args: {
     name: tool.schema.string().describe('The name of the Act to create'),
   },
@@ -46,11 +46,11 @@ export default tool({
 
 export const addPerformerToActTool: AssistantToolTemplate = {
     name: 'assistant_add_performer_to_act',
-    description: 'Add an existing Performer to an Act',
+    description: 'Add an existing Performer to an Act as a participant',
     content: `import { tool } from '@opencode-ai/plugin'
 
 export default tool({
-  description: 'Add a Performer into an Act to allow them to participate in the workflow. Note: both Performer and Act must already exist.',
+  description: 'Add a Performer into an Act as a participant. Note: both Performer and Act must already exist.',
   args: {
     performerId: tool.schema.string().describe('The ID of the Performer to add'),
     actId: tool.schema.string().describe('The ID of the Act to add the performer into'),
@@ -67,11 +67,11 @@ export default tool({
 
 export const connectPerformersTool: AssistantToolTemplate = {
     name: 'assistant_connect_performers',
-    description: 'Create a relation edge between two Performers inside an Act',
+    description: 'Create a relation between two participants inside an Act',
     content: `import { tool } from '@opencode-ai/plugin'
 
 export default tool({
-  description: 'Create an interaction connection (relation/edge) from one Performer to another inside an Act. This allows the source to call the target.',
+  description: 'Create a relation from one participant to another inside an Act. This allows the source to call the target.',
   args: {
     actId: tool.schema.string().describe('The ID of the Act containing both performers'),
     sourcePerformerId: tool.schema.string().describe('The ID of the source Performer initiating the call (caller)'),

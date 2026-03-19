@@ -269,6 +269,23 @@ export async function readProjectConfigFromOpencode(directory: string) {
     }
 }
 
+export async function readProjectConfigSnapshot(directory: string) {
+    try {
+        const { cwd, config } = await readProjectConfigFromOpencode(directory)
+        return {
+            exists: true as const,
+            path: `${cwd}/config.json`,
+            config,
+        }
+    } catch {
+        return {
+            exists: false as const,
+            path: `${directory}/config.json`,
+            config: {},
+        }
+    }
+}
+
 export function mergeProjectConfig(
     current: Record<string, unknown>,
     patch: Record<string, unknown>,
@@ -290,6 +307,31 @@ export async function runMcpMutation(
     const result = await action(oc)
     invalidate('mcp-servers')
     return responseData(result, {})
+}
+
+export async function addMcpServer(
+    directory: string,
+    input: { name: string; config: { command: string; args?: string[]; env?: Record<string, string> } | { url: string } },
+) {
+    return runMcpMutation(directory, (oc) => oc.mcp.add({
+        directory,
+        name: input.name,
+        config: input.config as any,
+    }))
+}
+
+export async function connectMcpServer(directory: string, name: string) {
+    return runMcpMutation(directory, (oc) => oc.mcp.connect({
+        name,
+        directory,
+    }))
+}
+
+export async function disconnectMcpServer(directory: string, name: string) {
+    return runMcpMutation(directory, (oc) => oc.mcp.disconnect({
+        name,
+        directory,
+    }))
 }
 
 export async function validateMcpAuthRequest(directory: string, name: string) {

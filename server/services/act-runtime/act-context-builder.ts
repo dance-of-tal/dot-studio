@@ -27,7 +27,7 @@ export function buildActContext(
 
     // ── Participants ─────────────────────────────────
     lines.push('- 참여자:')
-    for (const [key, binding] of Object.entries(actDefinition.performers)) {
+    for (const [key, binding] of Object.entries(actDefinition.participants)) {
         const isSelf = key === participantKey
         lines.push(`  - ${key}${isSelf ? ' (너)' : ''}: ref=${binding.performerRef.kind}`)
     }
@@ -58,7 +58,7 @@ export function buildActContext(
     }
 
     // ── Subscriptions ───────────────────────────────
-    const binding = actDefinition.performers[participantKey]
+    const binding = actDefinition.participants[participantKey]
     if (binding?.subscriptions) {
         const subs = binding.subscriptions
         lines.push('# Your Subscriptions')
@@ -68,8 +68,8 @@ export function buildActContext(
         if (subs.messageTags?.length) {
             lines.push(`- message tags: ${subs.messageTags.join(', ')}`)
         }
-        if (subs.boardKeys?.length) {
-            lines.push(`- board keys: ${subs.boardKeys.join(', ')}`)
+        if (subs.callboardKeys?.length) {
+            lines.push(`- callboard keys: ${subs.callboardKeys.join(', ')}`)
         }
         if (subs.eventTypes?.length) {
             lines.push(`- event types: ${subs.eventTypes.join(', ')}`)

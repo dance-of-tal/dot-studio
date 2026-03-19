@@ -14,11 +14,11 @@ export type AssetListItem = {
     actUrn?: string | null
     model?: string | null
     mcpConfig?: Record<string, unknown> | null
-    entryNode?: string | null
-    nodeCount?: number
-    nodes?: Record<string, unknown>
-    edges?: Array<Record<string, unknown>>
-    maxIterations?: number
+    schema?: string
+    participantCount?: number
+    relationCount?: number
+    participants?: Array<Record<string, unknown>>
+    relations?: Array<Record<string, unknown>>
     content?: string
     stars?: number
     tier?: string
