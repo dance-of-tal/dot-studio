@@ -1,15 +1,14 @@
 import { Hono } from 'hono'
 import { cached, TTL } from '../lib/cache.js'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import { getRegistryAssetDetail, getStudioAsset } from '../services/asset-service.js'
-import { jsonError } from './route-errors.js'
+import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const assetsDetail = new Hono()
 
 assetsDetail.get('/api/assets/:kind/:author/:name', async (c) => {
     const { kind, author, name } = c.req.param()
     try {
-        return c.json(await getStudioAsset(resolveRequestWorkingDir(c), kind, author, name))
+        return c.json(await getStudioAsset(requestWorkingDir(c), kind, author, name))
     } catch (err: any) {
         return jsonError(c, err.message, 404)
     }

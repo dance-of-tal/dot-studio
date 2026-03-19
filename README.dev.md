@@ -92,14 +92,14 @@ type AssetRef =
 ```
 
 - Performer and Act both support `executionMode: 'direct' | 'safe'`.
-- Act copies performer config at add time (complete copy, not reference).
-  - Performers can be added by dragging standalone performers into Act edit mode, or creating new ones inside Act.
-  - Performer/Act **drafts** can also be dragged onto the canvas to create performers/acts from saved draft content.
-  - Agent config (Tal, Dance, model, MCP) is owned by Act after copy. Standalone changes don't affect Act.
-  - `derivedFrom` metadata records original performer id/urn (provenance only, no runtime link).
-  - Sessions are Act-scoped (separate from the performer's standalone chat).
-  - Workspace (safe/direct) is Act-scoped (individual performer's mode is ignored in Act).
-  - To change Act performer config, edit directly inside Act.
+- Act is participant-first and ref-first.
+  - Standalone performers enter an Act as participants through a binding.
+  - Performer/Act **drafts** can be dragged onto the canvas to create performers/acts from saved draft content.
+  - Participant bindings carry Act-local choreography state such as subscriptions and active dances.
+  - `derivedFrom` metadata is provenance only; it is not a runtime execution link.
+  - Standalone performer sessions and Act thread participant sessions are separate.
+  - Workspace (safe/direct) is Act-scoped inside an Act thread.
+  - Act authoring is selection-based on the main canvas; advanced layout is optional.
 - Safe mode ownership is owner-first:
   - performer safe mode is performer-scoped
   - act safe mode is act-scoped
@@ -136,7 +136,7 @@ All Studio-generated files live under `.opencode/` namespaced by `dot-studio/`.
     studio-assistant.md                              # Studio Assistant agent
     stage/<hash>/<performerId>--build.md              # Stage performer (build posture)
     stage/<hash>/<performerId>--plan.md               # Stage performer (plan posture)
-    act/<hash>/<actId>/<performerId>--build.md        # Act performer (build only)
+    act/<hash>/<actId>/<participantId>--build.md      # Act participant (build only)
   skills/dot-studio/
     studio-assistant-<name>/SKILL.md                  # Studio Assistant dance-skills
     stage/<hash>/<performerId>/<danceName>/SKILL.md   # Performer dance-skills
@@ -149,7 +149,7 @@ All Studio-generated files live under `.opencode/` namespaced by `dot-studio/`.
 | Scope | Postures | Rationale |
 |-------|----------|-----------|
 | Stage performer | `build` + `plan` | OpenCode `/plan` mode support |
-| Act performer | `build` only | Multi-performer Acts make plan mode impractical |
+| Act participant | `build` only | Multi-participant Acts make plan mode impractical |
 | Studio Assistant | single agent | No posture distinction |
 
 ### Agent Body Content
@@ -284,9 +284,9 @@ This repository should remain compatible with a future `Performer Adapter View` 
 
 ## UI Rules
 
-- Performer and act-performer composition is drag-and-drop first.
+- Performer and Act participant composition is drag-and-drop first.
 - Draft performers and acts can be dragged from AssetLibrary onto the canvas to create new performers/acts from draft content.
-- In Act edit mode, performer assets (including drafts) can be dropped onto the canvas to add new Act performers, or onto existing Act performers to apply config.
+- On the main canvas, performer assets (including drafts) can be dropped onto a selected Act or Act boundary to add new participants.
 - Asset Library is the supply surface for Tal, Dance, Performer, Act, model, and MCP.
 - MCP CRUD lives in Asset Library, not Settings.
 - Threads sidebar child rows are renameable inline.
@@ -324,7 +324,7 @@ Drafts are project-local authoring assets stored on disk at `.dance-of-tal/draft
 | `tal` | `string` | Markdown text |
 | `dance` | `string` | Markdown text |
 | `performer` | `PerformerDraftContent` | `{ talRef, danceRefs, model, mcpServerNames, ... }` |
-| `act` | `ActDraftContent` | `{ executionMode, entryPerformerKey, performers, relations }` |
+| `act` | `ActDraftContent` | `{ description, actRules, participants, relations }` |
 
 ### Server API (`server/routes/drafts.ts` → `server/services/draft-service.ts`)
 
@@ -389,9 +389,9 @@ Act publish/save is blocked when any of these conditions are met:
 |------|-----------|
 | No participants | `Object.keys(act.participants).length === 0` |
 | No relations | `act.relations.length === 0` |
-| Disconnected performer | Performer exists in Act but has no relations (in or out) |
-| Dangling relation | Relation references a performer not in Act |
-| Missing model | Any Act performer has `model === null` |
+| Disconnected participant | Participant exists in Act but has no relations (in or out) |
+| Dangling relation | Relation references a participant not in Act |
+| Missing model | Any Act participant resolves to `model === null` |
 
 Validation is implemented in `src/components/modals/publish-modal-utils.tsx` (`getActPublishBlockReasons`).
 

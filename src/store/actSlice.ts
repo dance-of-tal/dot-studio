@@ -5,54 +5,18 @@ import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { StudioState, ActSlice } from './types'
 import type { StageAct, StageActParticipantBinding, ActRelation } from '../types'
-import { api } from '../api'
+import {
+    autoLayoutBindings,
+    createActThreadImpl,
+    fallbackParticipantLabel,
+    importActFromAssetImpl,
+    loadActThreadsImpl,
+    normalizeRelationPermissions,
+    normalizeSubscriptions,
+} from './act-slice-helpers'
 
 const ACT_DEFAULT_WIDTH = 340
 const ACT_DEFAULT_HEIGHT = 80
-
-function normalizeSubscriptions(subscriptions: any) {
-    if (!subscriptions) return subscriptions
-    return {
-        ...subscriptions,
-        ...(subscriptions.callboardKeys ? { callboardKeys: subscriptions.callboardKeys } : {}),
-    }
-}
-
-function normalizeRelationPermissions(permissions: any) {
-    if (!permissions) return permissions
-    return {
-        ...permissions,
-        ...(permissions.callboardKeys ? { callboardKeys: permissions.callboardKeys } : {}),
-    }
-}
-
-function fallbackParticipantLabel(performerRef: StageActParticipantBinding['performerRef']) {
-    if (performerRef.kind === 'draft') {
-        return performerRef.draftId
-    }
-    return performerRef.urn.split('/').pop() || performerRef.urn
-}
-
-function autoLayoutBindings(bindings: Record<string, StageActParticipantBinding>) {
-    const entries = Object.entries(bindings)
-    if (entries.length === 0) return bindings
-
-    const columns = entries.length <= 3 ? entries.length : Math.min(3, Math.ceil(Math.sqrt(entries.length)))
-    const gapX = 260
-    const gapY = 180
-
-    return Object.fromEntries(entries.map(([key, binding], index) => {
-        const col = index % columns
-        const row = Math.floor(index / columns)
-        return [key, {
-            ...binding,
-            position: {
-                x: 40 + col * gapX,
-                y: 120 + row * gapY,
-            },
-        }]
-    }))
-}
 
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
     acts: [],
@@ -620,126 +584,15 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     },
 
     importActFromAsset: (asset) => {
-        const id = nanoid(12)
-        const center = get().canvasCenter
-
-        // Build participant bindings from asset
-        const participants: Record<string, StageActParticipantBinding> = {}
-        const idMapping: Record<string, string> = {}
-
-        const nodes: any[] = Array.isArray(asset.participants)
-            ? asset.participants
-            : typeof asset.participants === 'object' && asset.participants
-                ? Object.values(asset.participants)
-                : []
-
-        for (const node of nodes) {
-            const newKey = nanoid(8)
-            const oldId = node.id || node.name || newKey
-            idMapping[oldId] = newKey
-
-            // Build performer ref
-            const performerRef = node.performerRef || (node.urn
-                ? { kind: 'registry' as const, urn: node.urn }
-                : node.draftId
-                    ? { kind: 'draft' as const, draftId: node.draftId }
-                    : { kind: 'draft' as const, draftId: '' })
-
-            participants[newKey] = {
-                performerRef,
-                activeDanceIds: node.activeDanceIds,
-                subscriptions: normalizeSubscriptions(node.subscriptions),
-                position: { x: Object.keys(participants).length * 300, y: 100 },
-            }
-        }
-
-        // Build relations from asset
-        const rawRelations: any[] = Array.isArray(asset.relations) ? asset.relations : []
-        const relations: ActRelation[] = rawRelations.map((r: any) => ({
-            id: nanoid(8),
-            between: [
-                idMapping[r.between?.[0]] || r.between?.[0] || '',
-                idMapping[r.between?.[1]] || r.between?.[1] || '',
-            ] as [string, string],
-            direction: r.direction || 'both' as const,
-            name: r.name || `rel_${nanoid(6)}`,
-            description: r.description,
-            permissions: normalizeRelationPermissions(r.permissions),
-            maxCalls: r.maxCalls ?? 10,
-            timeout: r.timeout ?? 300,
-        }))
-
-        const newAct: StageAct = {
-            id,
-            name: asset.name || `Act ${get().acts.length + 1}`,
-            description: asset.description,
-            actRules: asset.actRules,
-            participants,
-            relations,
-            position: { x: (center?.x ?? 400) - ACT_DEFAULT_WIDTH / 2, y: center?.y ?? 300 },
+        importActFromAssetImpl(get, set, asset, {
             width: ACT_DEFAULT_WIDTH,
             height: ACT_DEFAULT_HEIGHT,
-            createdAt: Date.now(),
-            meta: {
-                derivedFrom: asset.urn || null,
-                authoring: {
-                    description: asset.description || '',
-                },
-            },
-        }
-
-        set((s) => ({
-            acts: [...s.acts, newAct],
-            selectedActId: id,
-            stageDirty: true,
-        }))
+        })
     },
 
     // ── Thread management ────────────────────────────────
 
-    createThread: async (actId) => {
-        const act = get().acts.find((a) => a.id === actId)
-        // Build ActDefinition to send to server for tool projection
-        const actDefinition = act ? {
-            id: act.id,
-            name: act.name,
-            description: act.description,
-            actRules: act.actRules,
-            participants: Object.fromEntries(
-                Object.entries(act.participants).map(([key, binding]) => [key, {
-                    performerRef: binding.performerRef,
-                    activeDanceIds: binding.activeDanceIds,
-                    subscriptions: normalizeSubscriptions(binding.subscriptions),
-                }]),
-            ),
-            relations: act.relations.map((relation) => ({
-                ...relation,
-                permissions: normalizeRelationPermissions(relation.permissions),
-            })),
-        } : undefined
-
-        const result = await api.actRuntime.createThread(actId, actDefinition)
-        const thread = result.thread
-        set((s) => ({
-            actThreads: {
-                ...s.actThreads,
-                [actId]: [
-                    ...(s.actThreads[actId] || []),
-                    {
-                        id: thread.id,
-                        actId: thread.actId,
-                        status: thread.status as any,
-                        participantSessions: {},
-                        createdAt: thread.createdAt,
-                    },
-                ],
-            },
-            selectedActId: actId,
-            activeThreadId: thread.id,
-            activeThreadParticipantKey: null,
-        }))
-        return thread.id
-    },
+    createThread: async (actId) => createActThreadImpl(get, set, actId),
 
     selectThread: (threadId) => {
         set({ activeThreadId: threadId, activeThreadParticipantKey: null })
@@ -749,24 +602,5 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         set({ activeThreadParticipantKey: participantKey })
     },
 
-    loadThreads: async (actId) => {
-        const result = await api.actRuntime.listThreads(actId)
-        set((s) => ({
-            actThreads: {
-                ...s.actThreads,
-                [actId]: result.threads.map((t) => ({
-                    id: t.id,
-                    actId: t.actId,
-                    status: t.status as any,
-                    participantSessions: t.participantSessions || {},
-                    createdAt: t.createdAt,
-                })),
-            },
-            activeThreadId: s.selectedActId === actId
-                ? ((s.actThreads[actId] || []).some((thread) => thread.id === s.activeThreadId)
-                    ? s.activeThreadId
-                    : (result.threads[0]?.id || null))
-                : s.activeThreadId,
-        }))
-    },
+    loadThreads: async (actId) => loadActThreadsImpl(get, set, actId),
 })

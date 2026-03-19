@@ -56,16 +56,16 @@ export interface PerformerDraftContent {
 
 /**
  * Act draft content shape (when DraftFile.kind === 'act').
- * Choreography-based: no executionMode, no entryPerformerKey.
+ * Participant choreography: no executionMode, no entry participant.
  */
 export interface ActDraftContent {
     description?: string
     actRules?: string[]
-    performers: Record<string, ActDraftPerformerBinding>
+    participants: Record<string, ActDraftParticipantBinding>
     relations: ActDraftRelation[]
 }
 
-export interface ActDraftPerformerBinding {
+export interface ActDraftParticipantBinding {
     performerRef: SharedAssetRef
     activeDanceIds?: string[]
     subscriptions?: {

@@ -1,12 +1,11 @@
 import { Hono } from 'hono'
 import type { StudioAssetKind } from '../lib/dot-authoring.js'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import {
     installDotAsset,
     publishDotAsset,
     saveDotLocalAsset,
 } from '../services/dot-service.js'
-import { jsonError } from './route-errors.js'
+import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const dotAssets = new Hono()
 
@@ -19,14 +18,14 @@ dotAssets.post('/api/dot/install', async (c) => {
     }>()
 
     try {
-        return c.json(await installDotAsset(resolveRequestWorkingDir(c), body))
+        return c.json(await installDotAsset(requestWorkingDir(c), body))
     } catch (err: any) {
         return jsonError(c, err.message, 500)
     }
 })
 
 dotAssets.put('/api/dot/assets/local', async (c) => {
-    const cwd = resolveRequestWorkingDir(c)
+    const cwd = requestWorkingDir(c)
     const body = await c.req.json<{
         kind: StudioAssetKind
         slug: string
@@ -46,7 +45,7 @@ dotAssets.put('/api/dot/assets/local', async (c) => {
 })
 
 dotAssets.post('/api/dot/assets/publish', async (c) => {
-    const cwd = resolveRequestWorkingDir(c)
+    const cwd = requestWorkingDir(c)
     const body = await c.req.json<{
         kind: StudioAssetKind
         slug: string

@@ -2,31 +2,31 @@
 
 import { Hono } from 'hono'
 import type { StudioConfig } from '../lib/config.js'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import {
     activateStudioProject,
     getStudioConfig,
     pickWorkingDirectory,
     updateStudioConfig,
 } from '../services/studio-service.js'
+import { jsonError, jsonServiceFailure, requestWorkingDir } from './route-errors.js'
 
 const health = new Hono()
 
 // ── Health ───────────────────────────────────────────────
-health.get('/api/health', (c) => c.json({ ok: true, project: resolveRequestWorkingDir(c) }))
+health.get('/api/health', (c) => c.json({ ok: true, project: requestWorkingDir(c) }))
 
 // ── Pick Directory (macOS) ──────────────────────────────
 health.get('/api/studio/pick-directory', async (c) => {
     try {
         return c.json(await pickWorkingDirectory())
     } catch {
-        return c.json({ error: 'Selection cancelled or failed' }, 400)
+        return jsonError(c, 'Selection cancelled or failed', 400)
     }
 })
 
 // ── Studio Config ───────────────────────────────────────
 health.get('/api/studio/config', async (c) => {
-    return c.json(await getStudioConfig(resolveRequestWorkingDir(c)))
+    return c.json(await getStudioConfig(requestWorkingDir(c)))
 })
 
 health.put('/api/studio/config', async (c) => {
@@ -38,7 +38,7 @@ health.post('/api/studio/activate', async (c) => {
     const { workingDir } = await c.req.json<{ workingDir: string }>()
     const result = await activateStudioProject(workingDir)
     if (!result.ok) {
-        return c.json({ error: result.error }, result.status as 400)
+        return jsonServiceFailure(c, result)
     }
     return c.json(result)
 })

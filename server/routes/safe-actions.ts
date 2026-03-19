@@ -1,5 +1,4 @@
-import { Hono, type Context } from 'hono'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
+import { Hono } from 'hono'
 import {
     applySafeOwnerSummary,
     discardAllSafeOwnerSummaryChanges,
@@ -7,12 +6,9 @@ import {
     parseSafeOwnerKind,
     undoLastSafeOwnerSummaryApply,
 } from '../services/safe-service.js'
+import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const safeActions = new Hono()
-
-function jsonError(c: Context, message: string, status = 400) {
-    return c.json({ error: message }, { status: status as 400 | 500 })
-}
 
 safeActions.post('/api/safe/:ownerKind/:ownerId/apply', async (c) => {
     const ownerKind = parseSafeOwnerKind(c.req.param('ownerKind'))
@@ -22,7 +18,7 @@ safeActions.post('/api/safe/:ownerKind/:ownerId/apply', async (c) => {
 
     try {
         return c.json(await applySafeOwnerSummary(
-            resolveRequestWorkingDir(c),
+            requestWorkingDir(c),
             ownerKind,
             c.req.param('ownerId'),
         ))
@@ -44,7 +40,7 @@ safeActions.post('/api/safe/:ownerKind/:ownerId/discard', async (c) => {
 
     try {
         return c.json(await discardSafeOwnerSummaryFile(
-            resolveRequestWorkingDir(c),
+            requestWorkingDir(c),
             ownerKind,
             c.req.param('ownerId'),
             body.filePath.trim(),
@@ -62,7 +58,7 @@ safeActions.post('/api/safe/:ownerKind/:ownerId/discard-all', async (c) => {
 
     try {
         return c.json(await discardAllSafeOwnerSummaryChanges(
-            resolveRequestWorkingDir(c),
+            requestWorkingDir(c),
             ownerKind,
             c.req.param('ownerId'),
         ))
@@ -79,7 +75,7 @@ safeActions.post('/api/safe/:ownerKind/:ownerId/undo-last-apply', async (c) => {
 
     try {
         return c.json(await undoLastSafeOwnerSummaryApply(
-            resolveRequestWorkingDir(c),
+            requestWorkingDir(c),
             ownerKind,
             c.req.param('ownerId'),
         ))

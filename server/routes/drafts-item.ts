@@ -1,12 +1,11 @@
 import { Hono } from 'hono'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import {
     readDraft,
     updateDraft,
     deleteDraft,
 } from '../services/draft-service.js'
 import type { DraftAssetKind, UpdateDraftRequest } from '../../shared/draft-contracts.js'
-import { jsonError } from './route-errors.js'
+import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const VALID_KINDS = new Set<DraftAssetKind>(['tal', 'dance', 'performer', 'act'])
 
@@ -17,7 +16,7 @@ function isValidKind(kind: string): kind is DraftAssetKind {
 const draftsItem = new Hono()
 
 draftsItem.get('/api/drafts/:kind/:id', async (c) => {
-    const cwd = resolveRequestWorkingDir(c)
+    const cwd = requestWorkingDir(c)
     const kind = c.req.param('kind')
     const id = c.req.param('id')
 
@@ -37,7 +36,7 @@ draftsItem.get('/api/drafts/:kind/:id', async (c) => {
 })
 
 draftsItem.put('/api/drafts/:kind/:id', async (c) => {
-    const cwd = resolveRequestWorkingDir(c)
+    const cwd = requestWorkingDir(c)
     const kind = c.req.param('kind')
     const id = c.req.param('id')
 
@@ -62,7 +61,7 @@ draftsItem.put('/api/drafts/:kind/:id', async (c) => {
 })
 
 draftsItem.delete('/api/drafts/:kind/:id', async (c) => {
-    const cwd = resolveRequestWorkingDir(c)
+    const cwd = requestWorkingDir(c)
     const kind = c.req.param('kind')
     const id = c.req.param('id')
 

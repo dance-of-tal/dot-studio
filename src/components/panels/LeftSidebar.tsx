@@ -1,9 +1,12 @@
-import { useState, useCallback, useRef } from 'react';
+import { Suspense, lazy, useState, useCallback, useRef } from 'react';
 import { ChevronLeft, LayoutGrid } from 'lucide-react';
 import { useStudioStore } from '../../store';
 import StageExplorer from './StageExplorer';
-import { AssetLibrary } from '../../features/assets';
 import './LeftSidebar.css';
+
+const AssetLibrary = lazy(() =>
+    import('../../features/assets').then((module) => ({ default: module.AssetLibrary })),
+);
 
 export default function LeftSidebar() {
     const isAssetLibraryOpen = useStudioStore((s) => s.isAssetLibraryOpen);
@@ -78,7 +81,11 @@ export default function LeftSidebar() {
                 style={isAssetLibraryOpen ? { width: drawerWidth } : undefined}
             >
                 <div className="sidebar-resize-handle sidebar-resize-handle--drawer" onMouseDown={onDrawerResize} />
-                <AssetLibrary onClose={() => setAssetLibraryOpen(false)} />
+                {isAssetLibraryOpen ? (
+                    <Suspense fallback={null}>
+                        <AssetLibrary onClose={() => setAssetLibraryOpen(false)} />
+                    </Suspense>
+                ) : null}
             </div>
         </div>
     );

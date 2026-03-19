@@ -1,6 +1,6 @@
 /**
  * PerformerEditPanel — Unified edit panel for performer configuration.
- * Shared between standalone AgentFrame and Act's ActParticipantFrame.
+ * Shared between standalone AgentFrame and an Act's participant editor.
  *
  * Drill-down pattern:
  *   Main view: Compose cards (DnD + "Drag & drop or click to configure")
@@ -42,7 +42,7 @@ type PerformerEditPanelProps = {
         model: { isOver: boolean; setNodeRef: (node: HTMLElement | null) => void }
         mcp: { isOver: boolean; setNodeRef: (node: HTMLElement | null) => void }
     }
-    /** Hide the back/close button (used in Act performer editing) */
+    /** Hide the back/close button (used in Act participant editing) */
     hideBackButton?: boolean
     onClose: () => void
     onNameChange: (value: string) => void

@@ -1,7 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { StudioState, WorkspaceSlice } from './types'
-import type { DraftAsset } from '../types'
-import { api, setApiWorkingDirContext } from '../api'
+import { api } from '../api'
 import {
     createPerformerNode,
     createPerformerNodeFromAsset,
@@ -9,10 +8,7 @@ import {
 } from '../lib/performers'
 import {
     applyPerformerPatch,
-    defaultMarkdownContent,
-    mapCanvasTerminals,
     mapMarkdownEditors,
-    normalizePath,
 } from './workspace-helpers'
 import {
     newStage as newStageImpl,
@@ -36,6 +32,29 @@ import {
     updatePerformerAuthoringMeta as updatePerformerAuthoringMetaImpl,
     togglePerformerVisibility as togglePerformerVisibilityImpl,
 } from './workspace-performer-config'
+import {
+    addPerformerFromDraftImpl,
+    createMarkdownEditorImpl,
+    importActFromDraftImpl,
+    loadDraftsFromDiskImpl,
+    saveActAsDraftImpl,
+    savePerformerAsDraftImpl,
+    upsertDraftImpl,
+} from './workspace-draft-actions'
+import {
+    addCanvasTerminalImpl,
+    closeTrackingWindowImpl,
+    enterFocusModeImpl,
+    exitFocusModeImpl,
+    removeCanvasTerminalImpl,
+    setWorkingDirImpl,
+    switchFocusTargetImpl,
+    updateCanvasTerminalPositionImpl,
+    updateCanvasTerminalSessionImpl,
+    updateCanvasTerminalSizeImpl,
+    updateTrackingWindowPositionImpl,
+    updateTrackingWindowSizeImpl,
+} from './workspace-focus-actions'
 
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
@@ -225,247 +244,11 @@ export const createWorkspaceSlice: StateCreator<
 
     setFocusedPerformer: (id) => set({ focusedPerformerId: id }),
 
-    enterFocusMode: (nodeId, nodeType, viewportSize) => {
-        const state = get()
-        const FOCUS_PADDING = 48
-        const focusWidth = viewportSize.width - FOCUS_PADDING
-        const focusHeight = viewportSize.height - FOCUS_PADDING
+    enterFocusMode: (nodeId, nodeType, viewportSize) => enterFocusModeImpl(get, set, nodeId, nodeType, viewportSize),
 
-        const focusSnapshotBase = {
-            hiddenPerformerIds: state.performers.filter(p => p.hidden).map(p => p.id),
-            hiddenActIds: state.acts.filter(a => (a as any).hidden).map(a => a.id),
-            hiddenEditorIds: state.markdownEditors.filter(e => e.hidden).map(e => e.id),
-            hiddenTerminalIds: [] as string[],
-            assetLibraryOpen: state.isAssetLibraryOpen,
-            assistantOpen: state.isAssistantOpen,
-            terminalOpen: state.isTerminalOpen,
-        }
+    exitFocusMode: () => exitFocusModeImpl(get, set),
 
-        if (nodeType === 'performer') {
-            const performer = state.performers.find(p => p.id === nodeId)
-            if (!performer) return
-
-            set({
-                focusedPerformerId: nodeId,
-                focusedNodeType: 'performer',
-                focusSnapshot: {
-                    ...focusSnapshotBase,
-                    type: 'performer',
-                    nodeSize: { width: performer.width ?? 400, height: performer.height ?? 500 },
-                },
-                selectedPerformerId: nodeId,
-                selectedPerformerSessionId: state.selectedPerformerSessionId,
-                activeChatPerformerId: nodeId,
-                selectedActId: null,
-                performers: state.performers.map(p => {
-                    if (p.id === nodeId) {
-                        return { ...p, hidden: false, width: focusWidth, height: focusHeight }
-                    }
-                    return { ...p, hidden: true }
-                }),
-                acts: state.acts.map(a => ({ ...a, hidden: true })),
-                markdownEditors: state.markdownEditors.map(e => ({ ...e, hidden: true })),
-                isAssetLibraryOpen: false,
-                isAssistantOpen: false,
-                isTerminalOpen: false,
-                editingTarget: null,
-                inspectorFocus: null,
-            })
-        } else {
-            // Act focus
-            const act = state.acts.find(a => a.id === nodeId)
-            if (!act) return
-
-            set({
-                focusedPerformerId: nodeId, // reuse field for any focused node id
-                focusedNodeType: 'act',
-                focusSnapshot: {
-                    ...focusSnapshotBase,
-                    type: 'act',
-                    actId: nodeId,
-                    nodeSize: { width: act.width ?? 400, height: act.height ?? 420 },
-                },
-                selectedActId: nodeId,
-                selectedPerformerId: null,
-                performers: state.performers.map(p => ({ ...p, hidden: true })),
-                acts: state.acts.map(a => {
-                    if (a.id === nodeId) {
-                        return { ...a, hidden: false, width: focusWidth, height: focusHeight }
-                    }
-                    return { ...a, hidden: true }
-                }),
-                markdownEditors: state.markdownEditors.map(e => ({ ...e, hidden: true })),
-                isAssetLibraryOpen: false,
-                isAssistantOpen: false,
-                isTerminalOpen: false,
-                editingTarget: null,
-                inspectorFocus: null,
-            })
-        }
-    },
-
-    exitFocusMode: () => {
-        const state = get()
-        const snapshot = state.focusSnapshot
-        if (!snapshot || !state.focusedPerformerId) return
-
-        const focusedId = state.focusedPerformerId
-        const focusedType = state.focusedNodeType || snapshot.type
-
-        if (focusedType === 'performer') {
-            set({
-                focusedPerformerId: null,
-                focusedNodeType: null,
-                focusSnapshot: null,
-                performers: state.performers.map(p => {
-                    if (p.id === focusedId) {
-                        return {
-                            ...p,
-                            width: snapshot.nodeSize.width,
-                            height: snapshot.nodeSize.height,
-                            hidden: snapshot.hiddenPerformerIds.includes(p.id),
-                        }
-                    }
-                    return {
-                        ...p,
-                        hidden: snapshot.hiddenPerformerIds.includes(p.id),
-                    }
-                }),
-                acts: state.acts.map(a => ({
-                    ...a,
-                    hidden: snapshot.hiddenActIds.includes(a.id),
-                })),
-                markdownEditors: state.markdownEditors.map(e => ({
-                    ...e,
-                    hidden: snapshot.hiddenEditorIds.includes(e.id),
-                })),
-                isAssetLibraryOpen: snapshot.assetLibraryOpen,
-                isAssistantOpen: snapshot.assistantOpen,
-                isTerminalOpen: snapshot.terminalOpen,
-            })
-        } else {
-            // Act was focused
-            set({
-                focusedPerformerId: null,
-                focusedNodeType: null,
-                focusSnapshot: null,
-                performers: state.performers.map(p => ({
-                    ...p,
-                    hidden: snapshot.hiddenPerformerIds.includes(p.id),
-                })),
-                acts: state.acts.map(a => {
-                    if (a.id === focusedId) {
-                        return {
-                            ...a,
-                            width: snapshot.nodeSize.width,
-                            height: snapshot.nodeSize.height,
-                            hidden: snapshot.hiddenActIds.includes(a.id),
-                        }
-                    }
-                    return {
-                        ...a,
-                        hidden: snapshot.hiddenActIds.includes(a.id),
-                    }
-                }),
-                markdownEditors: state.markdownEditors.map(e => ({
-                    ...e,
-                    hidden: snapshot.hiddenEditorIds.includes(e.id),
-                })),
-                isAssetLibraryOpen: snapshot.assetLibraryOpen,
-                isAssistantOpen: snapshot.assistantOpen,
-                isTerminalOpen: snapshot.terminalOpen,
-            })
-        }
-    },
-
-    switchFocusTarget: (nodeId, nodeType) => {
-        const state = get()
-        const snapshot = state.focusSnapshot
-        if (!snapshot || !state.focusedPerformerId) return
-
-        const prevId = state.focusedPerformerId
-        const prevType = state.focusedNodeType || snapshot.type
-
-        if (nodeId === prevId && nodeType === prevType) return
-
-        // Get current focused node's expanded size for the new node
-        let focusWidth = 800
-        let focusHeight = 600
-        if (prevType === 'performer') {
-            const prev = state.performers.find(p => p.id === prevId)
-            focusWidth = prev?.width || 800
-            focusHeight = prev?.height || 600
-        } else {
-            const prev = state.acts.find(a => a.id === prevId)
-            focusWidth = prev?.width || 800
-            focusHeight = prev?.height || 600
-        }
-
-        if (nodeType === 'performer') {
-            const nextNode = state.performers.find(p => p.id === nodeId)
-            if (!nextNode) return
-
-            set({
-                focusedPerformerId: nodeId,
-                focusedNodeType: 'performer',
-                selectedPerformerId: nodeId,
-                selectedActId: null,
-                activeChatPerformerId: nodeId,
-                focusSnapshot: {
-                    ...snapshot,
-                    type: 'performer',
-                    nodeSize: { width: nextNode.width ?? 400, height: nextNode.height ?? 500 },
-                },
-                performers: state.performers.map(p => {
-                    if (p.id === prevId && prevType === 'performer') {
-                        return { ...p, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
-                    }
-                    if (p.id === nodeId) {
-                        return { ...p, hidden: false, width: focusWidth, height: focusHeight }
-                    }
-                    return { ...p, hidden: true }
-                }),
-                acts: state.acts.map(a => {
-                    if (a.id === prevId && prevType === 'act') {
-                        return { ...a, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
-                    }
-                    return { ...a, hidden: true }
-                }),
-            })
-        } else {
-            // Switching to act
-            const nextAct = state.acts.find(a => a.id === nodeId)
-            if (!nextAct) return
-
-            set({
-                focusedPerformerId: nodeId,
-                focusedNodeType: 'act',
-                selectedActId: nodeId,
-                selectedPerformerId: null,
-                focusSnapshot: {
-                    ...snapshot,
-                    type: 'act',
-                    actId: nodeId,
-                    nodeSize: { width: nextAct.width ?? 400, height: nextAct.height ?? 420 },
-                },
-                performers: state.performers.map(p => {
-                    if (p.id === prevId && prevType === 'performer') {
-                        return { ...p, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
-                    }
-                    return { ...p, hidden: true }
-                }),
-                acts: state.acts.map(a => {
-                    if (a.id === prevId && prevType === 'act') {
-                        return { ...a, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
-                    }
-                    if (a.id === nodeId) {
-                        return { ...a, hidden: false, width: focusWidth, height: focusHeight }
-                    }
-                    return { ...a, hidden: true }
-                }),
-            })
-        }
-    },
+    switchFocusTarget: (nodeId, nodeType) => switchFocusTargetImpl(get, set, nodeId, nodeType),
 
     setInspectorFocus: (focus) => set({ inspectorFocus: focus }),
 
@@ -484,50 +267,7 @@ export const createWorkspaceSlice: StateCreator<
         inspectorFocus: null,
     }),
 
-    setWorkingDir: (dir) => {
-        const normalized = normalizePath(dir)
-        if (!normalized) return
-        setApiWorkingDirContext(normalized)
-        set((s) => ({
-            stageId: s.stageList.find((entry) => entry.workingDir === normalized)?.id || null,
-            workingDir: normalized,
-            performers: s.performers.map((performer) => ({
-                ...performer,
-                activeSessionId: undefined,
-            })),
-            drafts: {},
-            markdownEditors: [],
-            editingTarget: null,
-            selectedPerformerId: null,
-            selectedPerformerSessionId: null,
-            selectedMarkdownEditorId: null,
-            focusedPerformerId: null,
-            focusedNodeType: null,
-            focusSnapshot: null,
-            chats: {},
-            chatPrefixes: {},
-            activeChatPerformerId: null,
-            sessionMap: {},
-            sessions: [],
-            inspectorFocus: null,
-            lspServers: [],
-            lspDiagnostics: {},
-            safeSummaries: {},
-            trackingWindow: null,
-            isTrackingOpen: false,
-            stageDirty: true,
-            acts: [],
-            selectedActId: null,
-            layoutActId: null,
-            selectedActParticipantKey: null,
-            selectedRelationId: null,
-            actThreads: {},
-            activeThreadId: null,
-            activeThreadParticipantKey: null,
-        }))
-        get().initRealtimeEvents()
-        api.studio.activate(normalized).catch(err => console.warn('[studio] activate failed', err))
-    },
+    setWorkingDir: (dir) => setWorkingDirImpl(get, set, dir),
 
     newStage: async () => newStageImpl(get, set),
 
@@ -620,381 +360,37 @@ export const createWorkspaceSlice: StateCreator<
     },
 
 
-    addCanvasTerminal: () => {
-        canvasTerminalIdCounter.value++
-        const id = `canvas-term-${canvasTerminalIdCounter.value}`
-        const title = `Terminal ${canvasTerminalIdCounter.value}`
-        set((s) => ({
-            canvasTerminals: [
-                ...s.canvasTerminals,
-                {
-                    id,
-                    title,
-                    position: {
-                        x: 200 + (s.canvasTerminals.length * 30),
-                        y: 200 + (s.canvasTerminals.length * 20),
-                    },
-                    width: 600,
-                    height: 400,
-                    sessionId: null,
-                    connected: false,
-                },
-            ],
-            stageDirty: true,
-        }))
-    },
+    addCanvasTerminal: () => addCanvasTerminalImpl(set, canvasTerminalIdCounter),
 
-    removeCanvasTerminal: (id) => set((s) => ({
-        canvasTerminals: s.canvasTerminals.filter(t => t.id !== id),
-        stageDirty: true,
-    })),
+    removeCanvasTerminal: (id) => removeCanvasTerminalImpl(set, id),
 
-    updateCanvasTerminalPosition: (id, x, y) => set((s) => ({
-        canvasTerminals: mapCanvasTerminals(s.canvasTerminals, id, (terminal) => ({ ...terminal, position: { x, y } })),
-        stageDirty: true,
-    })),
+    updateCanvasTerminalPosition: (id, x, y) => updateCanvasTerminalPositionImpl(set, id, x, y),
 
-    updateCanvasTerminalSize: (id, width, height) => set((s) => ({
-        canvasTerminals: mapCanvasTerminals(s.canvasTerminals, id, (terminal) => ({ ...terminal, width, height })),
-        stageDirty: true,
-    })),
+    updateCanvasTerminalSize: (id, width, height) => updateCanvasTerminalSizeImpl(set, id, width, height),
 
-    updateCanvasTerminalSession: (id, sessionId, connected) => set((s) => ({
-        canvasTerminals: mapCanvasTerminals(s.canvasTerminals, id, (terminal) => ({ ...terminal, sessionId, connected })),
-    })),
+    updateCanvasTerminalSession: (id, sessionId, connected) => updateCanvasTerminalSessionImpl(set, id, sessionId, connected),
 
-    closeTrackingWindow: () => set({
-        isTrackingOpen: false,
-        trackingWindow: null,
-        stageDirty: true,
-    }),
+    closeTrackingWindow: () => closeTrackingWindowImpl(set),
 
-    updateTrackingWindowPosition: (x, y) => set((s) => ({
-        trackingWindow: s.trackingWindow
-            ? {
-                ...s.trackingWindow,
-                position: { x, y },
-            }
-            : s.trackingWindow,
-        stageDirty: true,
-    })),
+    updateTrackingWindowPosition: (x, y) => updateTrackingWindowPositionImpl(set, x, y),
 
-    updateTrackingWindowSize: (width, height) => set((s) => ({
-        trackingWindow: s.trackingWindow
-            ? {
-                ...s.trackingWindow,
-                width,
-                height,
-            }
-            : s.trackingWindow,
-        stageDirty: true,
-    })),
+    updateTrackingWindowSize: (width, height) => updateTrackingWindowSizeImpl(set, width, height),
 
     upsertDraft: (draft) => {
-        set((s) => ({
-            drafts: {
-                ...s.drafts,
-                [draft.id]: draft,
-            },
-            stageDirty: true,
-        }))
-
-        // Debounced persist to disk
-        scheduleDraftPersist(draft.id, () => {
-            const current = get().drafts[draft.id]
-            if (!current) return
-            const kind = current.kind as 'tal' | 'dance' | 'performer' | 'act'
-            api.drafts.update(kind, draft.id, {
-                name: current.name,
-                content: current.content,
-                slug: current.slug,
-                description: current.description,
-                tags: current.tags,
-                derivedFrom: current.derivedFrom,
-            }).catch((err) => {
-                // Draft may not exist on disk yet — create it
-                api.drafts.create({
-                    kind,
-                    name: current.name,
-                    content: current.content,
-                    slug: current.slug,
-                    description: current.description,
-                    tags: current.tags,
-                    derivedFrom: current.derivedFrom,
-                }).catch(() => {
-                    console.warn('Failed to persist draft to disk', err)
-                })
-            })
-        })
+        upsertDraftImpl(get, set, scheduleDraftPersist, draft)
     },
 
-    savePerformerAsDraft: async (performerId) => {
-        const performer = get().performers.find((p) => p.id === performerId)
-        if (!performer) return
+    savePerformerAsDraft: async (performerId) => savePerformerAsDraftImpl(get, set, performerId),
 
-        const draftContent = {
-            talRef: performer.talRef || null,
-            danceRefs: performer.danceRefs || [],
-            model: performer.model || null,
-            modelVariant: performer.modelVariant || null,
-            mcpServerNames: performer.mcpServerNames || [],
-            mcpBindingMap: performer.mcpBindingMap || {},
-            danceDeliveryMode: performer.danceDeliveryMode || 'auto',
-            planMode: performer.planMode || false,
-            agentId: performer.agentId || null,
-        }
+    loadDraftsFromDisk: async () => loadDraftsFromDiskImpl(set),
 
-        try {
-            const draft = await api.drafts.create({
-                kind: 'performer',
-                name: performer.name,
-                content: draftContent,
-                description: performer.name,
-            })
+    saveActAsDraft: async (actId) => saveActAsDraftImpl(get, set, actId),
 
-            set((s) => ({
-                drafts: {
-                    ...s.drafts,
-                    [draft.id]: {
-                        id: draft.id,
-                        kind: 'performer' as const,
-                        name: draft.name,
-                        content: draft.content,
-                        description: draft.description,
-                        updatedAt: draft.updatedAt,
-                    },
-                },
-                stageDirty: true,
-            }))
-        } catch (err) {
-            console.error('Failed to save performer as draft', err)
-        }
-    },
+    addPerformerFromDraft: (name, draftContent) => addPerformerFromDraftImpl(get, set, performerIdCounter, name, draftContent),
 
-    loadDraftsFromDisk: async () => {
-        try {
-            const drafts = await api.drafts.list()
-            const draftsMap: Record<string, DraftAsset> = {}
-            for (const draft of drafts) {
-                draftsMap[draft.id] = {
-                    id: draft.id,
-                    kind: draft.kind,
-                    name: draft.name,
-                    content: draft.content,
-                    slug: draft.slug,
-                    description: draft.description,
-                    tags: draft.tags,
-                    derivedFrom: draft.derivedFrom,
-                    updatedAt: draft.updatedAt || Date.now(),
-                }
-            }
-            set({ drafts: draftsMap })
-        } catch (err) {
-            console.warn('Failed to load drafts from disk', err)
-        }
-    },
+    importActFromDraft: (name, draftContent) => importActFromDraftImpl(get, set, makeId, name, draftContent),
 
-    saveActAsDraft: async (actId) => {
-        const act = get().acts.find((a) => a.id === actId)
-        if (!act) return
-
-        const draftContent = {
-            description: act.description,
-            actRules: act.actRules,
-            participants: Object.fromEntries(
-                Object.entries(act.participants).map(([key, p]) => [key, {
-                    performerRef: p.performerRef,
-                    activeDanceIds: p.activeDanceIds,
-                    subscriptions: p.subscriptions,
-                }]),
-            ),
-            relations: act.relations.map((r) => ({
-                id: r.id,
-                between: r.between,
-                direction: r.direction,
-                name: r.name,
-                description: r.description,
-                permissions: r.permissions,
-                maxCalls: r.maxCalls,
-                timeout: r.timeout,
-            })),
-        }
-
-        try {
-            const draft = await api.drafts.create({
-                kind: 'act',
-                name: act.name,
-                content: draftContent,
-                description: act.meta?.authoring?.description || act.name,
-            })
-
-            set((s) => ({
-                drafts: {
-                    ...s.drafts,
-                    [draft.id]: {
-                        id: draft.id,
-                        kind: 'act' as const,
-                        name: draft.name,
-                        content: draft.content,
-                        description: draft.description,
-                        updatedAt: draft.updatedAt,
-                    },
-                },
-                stageDirty: true,
-            }))
-        } catch (err) {
-            console.error('Failed to save act as draft', err)
-        }
-    },
-
-    addPerformerFromDraft: (name, draftContent) => {
-        performerIdCounter.value++
-        const id = `performer-${performerIdCounter.value}`
-        const finalX = get().canvasCenter?.x ?? (60 + (get().performers.length * 28))
-        const finalY = get().canvasCenter?.y ?? (60 + (get().performers.length * 20))
-
-        const node = createPerformerNode({
-            id,
-            name,
-            x: finalX,
-            y: finalY,
-            talRef: draftContent.talRef || null,
-            danceRefs: draftContent.danceRefs || [],
-            model: draftContent.model || null,
-            modelVariant: draftContent.modelVariant || null,
-            mcpServerNames: draftContent.mcpServerNames || [],
-            mcpBindingMap: draftContent.mcpBindingMap || {},
-            danceDeliveryMode: draftContent.danceDeliveryMode || 'auto',
-            planMode: draftContent.planMode || false,
-        })
-
-        set((s) => ({
-            performers: [...s.performers, node],
-            editingTarget: null,
-            selectedPerformerId: id,
-            selectedPerformerSessionId: null,
-            selectedMarkdownEditorId: null,
-            activeChatPerformerId: id,
-            inspectorFocus: null,
-            stageDirty: true,
-        }))
-    },
-
-    importActFromDraft: (name, draftContent) => {
-        const actId = makeId('act')
-        const centerX = get().canvasCenter?.x ?? 200
-        const centerY = get().canvasCenter?.y ?? 200
-
-        // Build participant bindings from draft content (choreography model)
-        const participants: Record<string, any> = {}
-        if (draftContent.participants && typeof draftContent.participants === 'object') {
-            let idx = 0
-            for (const [key, p] of Object.entries(draftContent.participants) as [string, any][]) {
-                participants[key] = {
-                    performerRef: p.performerRef || { kind: 'draft', draftId: '' },
-                    activeDanceIds: p.activeDanceIds,
-                    subscriptions: p.subscriptions,
-                    position: p.position || { x: centerX + idx * 300, y: centerY },
-                }
-                idx++
-            }
-        }
-
-        const newAct = {
-            id: actId,
-            name,
-            description: draftContent.description,
-            actRules: draftContent.actRules,
-            position: { x: centerX, y: centerY },
-            width: 340,
-            height: 80,
-            participants,
-            relations: Array.isArray(draftContent.relations) ? draftContent.relations : [],
-            createdAt: Date.now(),
-        }
-
-        set((s) => ({
-            acts: [...s.acts, newAct],
-            selectedActId: actId,
-            stageDirty: true,
-        }))
-    },
-
-    createMarkdownEditor: (kind, options) => {
-        markdownEditorIdCounter.value++
-        const editorId = `markdown-editor-${markdownEditorIdCounter.value}`
-        const draftId = makeId(`${kind}-draft`)
-        const source = options?.source
-        const name = source?.name || (kind === 'tal' ? 'New Tal' : 'New Dance')
-        const slug = source?.slug || name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-        const description = source?.description || name
-        const tags = source?.tags || []
-        const content = source?.content || defaultMarkdownContent(kind)
-        const position = options?.position || {
-            x: 160 + (get().markdownEditors.length * 28),
-            y: 140 + (get().markdownEditors.length * 24),
-        }
-
-        set((s) => ({
-            drafts: {
-                ...s.drafts,
-                [draftId]: {
-                    id: draftId,
-                    kind,
-                    name,
-                    slug,
-                    description,
-                    tags,
-                    content,
-                    derivedFrom: source?.derivedFrom || undefined,
-                    updatedAt: Date.now(),
-                },
-            },
-            markdownEditors: [
-                ...s.markdownEditors,
-                {
-                    id: editorId,
-                    kind,
-                    position,
-                    width: 560,
-                    height: 380,
-                    draftId,
-                    baseline: source ? {
-                        name,
-                        slug,
-                        description,
-                        tags,
-                        content,
-                    } : null,
-                    attachTarget: options?.attachTarget || null,
-                    hidden: false,
-                },
-            ],
-            selectedMarkdownEditorId: editorId,
-            selectedPerformerId: null,
-            selectedPerformerSessionId: null,
-            focusedPerformerId: null,
-            focusedNodeType: null,
-            inspectorFocus: null,
-            stageDirty: true,
-        }))
-
-        // Persist draft to disk (fire-and-forget, pass draftId for ID consistency)
-        api.drafts.create({
-            kind,
-            id: draftId,
-            name,
-            content,
-            slug,
-            description,
-            tags,
-            derivedFrom: source?.derivedFrom || null,
-        }).catch((err) => {
-            console.warn('Failed to persist new editor draft to disk', err)
-        })
-
-        return editorId
-    },
+    createMarkdownEditor: (kind, options) => createMarkdownEditorImpl(get, set, markdownEditorIdCounter, makeId, kind, options),
 
     updateMarkdownEditorPosition: (id, x, y) => set((s) => ({
         markdownEditors: mapMarkdownEditors(s.markdownEditors, id, (editor) => ({ ...editor, position: { x, y } })),

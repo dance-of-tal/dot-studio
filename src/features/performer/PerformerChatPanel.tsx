@@ -4,7 +4,7 @@
  * composer with slash/dance/mention/file menus, runtime controls.
  */
 import { useState, useCallback, useMemo, useRef, useEffect, type RefObject } from 'react'
-import { Send, Square, File as FileIcon, X, Sparkles, Hammer, Lightbulb, Shield, Zap } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { api } from '../../api'
 
 import { useStudioStore } from '../../store'
@@ -13,16 +13,13 @@ import { useFileMentions, type FileMention } from '../../hooks/useFileMentions'
 import { usePerformerMention, type PerformerMention } from '../../hooks/usePerformerMention'
 import { assetRefKey } from '../../lib/performers'
 import { showToast } from '../../lib/toast'
-import { loadMaterialFileIconForPath } from '../../lib/material-file-icons'
 import type { ChatMessage, AssetCard, DraftAsset, PerformerNode } from '../../types'
 
 import ThreadBody from '../chat/ThreadBody'
 import ChatMessageContent from '../chat/ChatMessageContent'
 import MessageActionBar from '../chat/MessageActionBar'
 import RevertConfirmModal from '../../components/chat/RevertConfirmModal'
-import ModelVariantSelect from './ModelVariantSelect'
-import PermissionDock from './PermissionDock'
-import QuestionWizard from './QuestionWizard'
+import PerformerChatComposer from './PerformerChatComposer'
 
 import {
     buildDanceSearchSections,
@@ -30,31 +27,6 @@ import {
     shouldShowChatLoading,
 } from './agent-frame-utils'
 import type { TurnDanceSelection, DanceSearchItem } from './agent-frame-utils'
-
-/* ── Helpers ── */
-
-function MentionFileIcon({ path }: { path: string }) {
-    const [iconUrl, setIconUrl] = useState('')
-
-    useEffect(() => {
-        let active = true
-        void loadMaterialFileIconForPath(path).then((url) => {
-            if (active) setIconUrl(url)
-        })
-        return () => { active = false }
-    }, [path])
-
-    return (
-        <span
-            className="mention-result__icon"
-            style={{
-                ['--mention-icon' as string]: iconUrl ? `url(${iconUrl})` : 'none',
-                background: iconUrl ? 'var(--text-secondary)' : 'transparent',
-            }}
-            aria-hidden="true"
-        />
-    )
-}
 
 /* ── Props ── */
 
@@ -401,259 +373,66 @@ export default function PerformerChatPanel({
                 )}
                 endRef={chatEndRef}
                 composer={(
-                    <div
-                        className="chat-input"
-                        style={{ position: 'relative' }}
-                        onDrop={handleDrop}
-                        onDragOver={e => e.preventDefault()}
-                    >
-                        {mentionedPerformers.length > 0 ? (
-                            <div className="chat-input__warning">
-                                <strong>Performer request</strong>
-                                <span>Mentioned performers use their own identity, but run in your current workspace.</span>
-                            </div>
-                        ) : null}
-                        {(attachments.length > 0 || turnDanceSelections.length > 0 || mentionedPerformers.length > 0) && (
-                            <div style={{ display: 'flex', gap: '4px', padding: '4px 8px', flexWrap: 'wrap', borderBottom: '1px solid var(--border-main)' }}>
-                                {mentionedPerformers.map((mention, idx) => (
-                                    <div key={`${mention.performerId}:${idx}`} className="turn-option-pill">
-                                        <Sparkles size={10} style={{ marginRight: '4px' }} />
-                                        <span>{mention.name}</span>
-                                        <span className="turn-option-pill__scope turn-option-pill__scope--local">performer</span>
-                                        <X size={10} style={{ marginLeft: '4px', cursor: 'pointer' }} onClick={() => setMentionedPerformers((current) => current.filter((item) => item.performerId !== mention.performerId))} />
-                                    </div>
-                                ))}
-                                {turnDanceSelections.map((selection, idx) => (
-                                    <div key={`${selection.scope}:${assetRefKey(selection.ref) || idx}`} className="turn-option-pill">
-                                        <Zap size={10} style={{ marginRight: '4px' }} />
-                                        <span>{selection.label}</span>
-                                        <span className={`turn-option-pill__scope turn-option-pill__scope--${selection.scope}`}>{selection.scope}</span>
-                                        <X size={10} style={{ marginLeft: '4px', cursor: 'pointer' }} onClick={() => setTurnDanceSelections((current) => current.filter((_, currentIndex) => currentIndex !== idx))} />
-                                    </div>
-                                ))}
-                                {attachments.map((att, idx) => (
-                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px' }}>
-                                        <FileIcon size={10} style={{ marginRight: '4px' }} />
-                                        {att.name}
-                                        <X size={10} style={{ marginLeft: '4px', cursor: 'pointer' }} onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} />
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {isPerformerMentioning && performerMentionResults.length > 0 ? (
-                            <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                {performerMentionResults.map((performerMention, i) => (
-                                    <div
-                                        key={performerMention.performerId}
-                                        className={`slash-menu-item mention-menu-item ${i === performerMentionIndex ? 'active' : ''}`}
-                                        onClick={() => {
-                                            const newText = extractPerformerMentionText()
-                                            if (newText !== null) {
-                                                setInput(newText)
-                                                setMentionedPerformers((current) => (
-                                                    current.some((item) => item.performerId === performerMention.performerId) ? current : [...current, performerMention]
-                                                ))
-                                            }
-                                            inputRef.current?.focus()
-                                        }}
-                                    >
-                                        <span className="mention-result__content">
-                                            <span className="mention-result__name">{performerMention.name}</span>
-                                            <span className="mention-result__path">Runs in this workspace</span>
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
-
-                        {isFileMentioning && fileMentionResults.length > 0 ? (
-                            <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                {fileMentionResults.map((file, i) => (
-                                    <div
-                                        key={file.absolute}
-                                        className={`slash-menu-item mention-menu-item ${i === fileMentionIndex ? 'active' : ''}`}
-                                        onClick={() => {
-                                            const newText = extractFileMentionText()
-                                            if (newText !== null) { setInput(newText); setAttachments(prev => [...prev, file]) }
-                                            inputRef.current?.focus()
-                                        }}
-                                    >
-                                        <MentionFileIcon path={file.path} />
-                                        <span className="mention-result__content">
-                                            <span className="mention-result__name">{file.name}</span>
-                                            <span className="mention-result__path">{file.path}</span>
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
-
-                        {danceSlashMatch !== null ? (
-                            <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                {danceSearchSections.length > 0 ? danceSearchSections.map((section) => (
-                                    <div key={section.key} className="slash-menu__section">
-                                        <div className="slash-menu__section-title">{section.title}</div>
-                                        {section.items.map((item) => {
-                                            const resultIndex = danceSearchResults.findIndex((candidate) => candidate.key === item.key)
-                                            return (
-                                                <div
-                                                    key={item.key}
-                                                    className={`slash-menu-item dance-menu-item ${resultIndex === danceSearchIndex ? 'active' : ''}`}
-                                                    onClick={() => addTurnDanceSelection(item)}
-                                                >
-                                                    <span className={`dance-result__scope dance-result__scope--${item.scope}`}>{item.scope}</span>
-                                                    <span className="mention-result__content">
-                                                        <span className="mention-result__name">{item.label}</span>
-                                                        <span className="mention-result__path">{item.subtitle}</span>
-                                                    </span>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )) : (
-                                    <div className="slash-menu__section">
-                                        <div className="slash-menu__section-title">Dance</div>
-                                        <div className="slash-menu-item">
-                                            <span className="slash-desc">No matching dances found.</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : null}
-
-                        {danceSlashMatch === null && showSlashMenu && filteredCommands.length > 0 ? (
-                            <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                                {filteredCommands.map((c, i) => (
-                                    <div
-                                        key={c.cmd}
-                                        className={`slash-menu-item ${i === slashIndex ? 'active' : ''}`}
-                                        onClick={() => {
-                                            if (c.mode === 'compose') { setInput(`${c.cmd} `) } else { executeSlashCommand(performerId, c.cmd); setInput('') }
-                                            setShowSlashMenu(false)
-                                        }}
-                                    >
-                                        <span className="slash-cmd">{c.cmd}</span>
-                                        <span className="slash-desc">{c.desc}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
-
-                        {sessionId && pendingPermissions[sessionId] ? (
-                            <PermissionDock
-                                request={pendingPermissions[sessionId]}
-                                responding={isRespondingToPermission}
-                                onDecide={async (response) => {
-                                    setIsRespondingToPermission(true)
-                                    await respondToPermission(sessionId, pendingPermissions[sessionId].id, response)
-                                    setIsRespondingToPermission(false)
-                                }}
-                            />
-                        ) : null}
-
-                        {sessionId && pendingQuestions[sessionId] ? (
-                            <QuestionWizard
-                                request={pendingQuestions[sessionId]}
-                                responding={isRespondingToPermission}
-                                onRespond={async (answers: Record<string, string[]>) => {
-                                    setIsRespondingToPermission(true)
-                                    await respondToQuestion(sessionId, pendingQuestions[sessionId].id, answers)
-                                    setIsRespondingToPermission(false)
-                                }}
-                                onReject={async () => {
-                                    setIsRespondingToPermission(true)
-                                    await rejectQuestion(sessionId, pendingQuestions[sessionId].id)
-                                    setIsRespondingToPermission(false)
-                                }}
-                            />
-                        ) : null}
-
-                        <div className="chat-input__main">
-                            <textarea
-                                ref={inputRef}
-                                value={input}
-                                onChange={(e) => {
-                                    handleInputChange(e.target.value)
-                                    e.target.style.height = '0'
-                                    e.target.style.height = `${e.target.scrollHeight}px`
-                                    e.target.style.overflowY = e.target.scrollHeight > 102 ? 'auto' : 'hidden'
-                                }}
-                                onKeyUp={() => { checkPerformerMention(); checkFileMention() }}
-                                onMouseUp={() => { checkPerformerMention(); checkFileMention() }}
-                                onKeyDown={handleKeyDownWrapper}
-                                placeholder={!modelConfigured
-                                    ? 'Select a model before chatting'
-                                    : isPlanAgent
-                                        ? 'Plan mode — ask for a plan...'
-                                        : 'Message... (@ performers, # files, / to use dance for this turn)'}
-                                disabled={isLoading}
-                                rows={1}
-                                className="text-input"
-                            />
-                            {isLoading ? (
-                                <button className="send-btn abort" onClick={() => abortChat(performerId)} title="Abort generation">
-                                    <Square size={12} fill="currentColor" />
-                                </button>
-                            ) : (
-                                <button className="send-btn" onClick={handleSend} disabled={!input.trim() || !modelConfigured || danceSlashMatch !== null}>
-                                    <Send size={12} />
-                                </button>
-                            )}
-                        </div>
-                        <div className="chat-input__runtime-row">
-                            <div className="chat-input__mode-group">
-                                <button
-                                    className={`mode-toggle ${selectedAgentId !== 'plan' ? 'is-active' : ''}`}
-                                    onClick={(e) => { e.stopPropagation(); if (selectedAgentId !== 'build') onSetAgentId(performerId, 'build') }}
-                                    title={buildAgent?.description || 'Build mode'}
-                                    type="button"
-                                >
-                                    <Hammer size={12} />
-                                    <span>Build</span>
-                                </button>
-                                <button
-                                    className={`mode-toggle mode-plan ${isPlanAgent ? 'is-active' : ''}`}
-                                    onClick={(e) => { e.stopPropagation(); if (selectedAgentId !== 'plan') onSetAgentId(performerId, 'plan') }}
-                                    title={planAgent?.description || 'Plan mode'}
-                                    type="button"
-                                >
-                                    <Lightbulb size={12} />
-                                    <span>Plan</span>
-                                </button>
-                            </div>
-                            <ModelVariantSelect
-                                model={performer?.model || null}
-                                value={performer?.modelVariant || null}
-                                onChange={(value) => onSetModelVariant(performerId, value)}
-                                className="chat-input__variant"
-                                compact
-                                titlePrefix="Performer variant"
-                            />
-
-                            <div className="chat-input__safe-group">
-                                <button
-                                    className={`mode-toggle mode-safe ${performer?.executionMode === 'safe' ? 'is-active' : ''}`}
-                                    onClick={(event) => { event.stopPropagation(); void onSetExecutionMode() }}
-                                    title={performer?.executionMode === 'safe' ? 'Switch default standalone run mode to Direct' : 'Switch default standalone run mode to Safe'}
-                                    type="button"
-                                >
-                                    <Shield size={12} />
-                                    <span>Safe</span>
-                                </button>
-                                {performer?.executionMode === 'safe' ? (
-                                    <button
-                                        className={`mode-toggle ${safeSummary?.pendingCount || safeSummary?.conflictCount ? 'is-active' : ''}`}
-                                        onClick={(event) => { event.stopPropagation(); /* safe review handled by parent */ }}
-                                        title="Review safe mode changes"
-                                        type="button"
-                                    >
-                                        <span>Review</span>
-                                    </button>
-                                ) : null}
-                            </div>
-                        </div>
-                    </div>
+                    <PerformerChatComposer
+                        performerId={performerId}
+                        performer={performer}
+                        input={input}
+                        setInput={setInput}
+                        isLoading={isLoading}
+                        modelConfigured={modelConfigured}
+                        sessionId={sessionId}
+                        selectedAgentId={selectedAgentId}
+                        buildAgent={buildAgent}
+                        planAgent={planAgent}
+                        safeSummary={safeSummary}
+                        attachments={attachments}
+                        setAttachments={setAttachments}
+                        mentionedPerformers={mentionedPerformers}
+                        setMentionedPerformers={setMentionedPerformers}
+                        turnDanceSelections={turnDanceSelections}
+                        setTurnDanceSelections={setTurnDanceSelections}
+                        composerInputRef={composerInputRef}
+                        inputRef={inputRef}
+                        handleDrop={handleDrop}
+                        handleInputChange={handleInputChange}
+                        handleKeyDownWrapper={handleKeyDownWrapper}
+                        handleSend={handleSend}
+                        abortChat={abortChat}
+                        executeSlashCommand={executeSlashCommand}
+                        danceSlashMatch={danceSlashMatch}
+                        danceSearchSections={danceSearchSections}
+                        danceSearchResults={danceSearchResults}
+                        danceSearchIndex={danceSearchIndex}
+                        addTurnDanceSelection={addTurnDanceSelection}
+                        showSlashMenu={showSlashMenu}
+                        setShowSlashMenu={setShowSlashMenu}
+                        slashIndex={slashIndex}
+                        filteredCommands={filteredCommands}
+                        isPerformerMentioning={isPerformerMentioning}
+                        performerMentionResults={performerMentionResults}
+                        performerMentionIndex={performerMentionIndex}
+                        extractPerformerMentionText={extractPerformerMentionText}
+                        setMentionedPerformerIndex={setPerformerMentionIndex}
+                        setIsPerformerMentioning={setIsPerformerMentioning}
+                        isFileMentioning={isFileMentioning}
+                        fileMentionResults={fileMentionResults}
+                        fileMentionIndex={fileMentionIndex}
+                        extractFileMentionText={extractFileMentionText}
+                        setFileMentionIndex={setFileMentionIndex}
+                        setIsFileMentioning={setIsFileMentioning}
+                        checkPerformerMention={checkPerformerMention}
+                        checkFileMention={checkFileMention}
+                        pendingPermissions={pendingPermissions}
+                        pendingQuestions={pendingQuestions}
+                        isRespondingToPermission={isRespondingToPermission}
+                        setIsRespondingToPermission={setIsRespondingToPermission}
+                        respondToPermission={respondToPermission}
+                        respondToQuestion={respondToQuestion}
+                        rejectQuestion={rejectQuestion}
+                        onSetAgentId={onSetAgentId}
+                        onSetModelVariant={onSetModelVariant}
+                        onSetExecutionMode={onSetExecutionMode}
+                    />
                 )}
             />
             {revertTarget ? (

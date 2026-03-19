@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import { jsonOpencodeError } from '../lib/opencode-errors.js'
 import {
     findFilesInProject,
@@ -9,13 +8,14 @@ import {
     listFiles,
     readFile,
 } from '../services/opencode-service.js'
+import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const opencodeFile = new Hono()
 
 opencodeFile.get('/api/file/list', async (c) => {
     const dirPath = c.req.query('path') || '.'
     try {
-        return c.json(await listFiles(resolveRequestWorkingDir(c), dirPath))
+        return c.json(await listFiles(requestWorkingDir(c), dirPath))
     } catch {
         return c.json([])
     }
@@ -23,9 +23,9 @@ opencodeFile.get('/api/file/list', async (c) => {
 
 opencodeFile.get('/api/file/read', async (c) => {
     const filePath = c.req.query('path')
-    if (!filePath) return c.json({ error: 'path required' }, 400)
+    if (!filePath) return jsonError(c, 'path required', 400)
     try {
-        return c.json(await readFile(resolveRequestWorkingDir(c), filePath))
+        return c.json(await readFile(requestWorkingDir(c), filePath))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -33,7 +33,7 @@ opencodeFile.get('/api/file/read', async (c) => {
 
 opencodeFile.get('/api/file/status', async (c) => {
     try {
-        return c.json(await getFileStatus(resolveRequestWorkingDir(c)))
+        return c.json(await getFileStatus(requestWorkingDir(c)))
     } catch {
         return c.json([])
     }
@@ -41,9 +41,9 @@ opencodeFile.get('/api/file/status', async (c) => {
 
 opencodeFile.get('/api/find/text', async (c) => {
     const pattern = c.req.query('pattern')
-    if (!pattern) return c.json({ error: 'pattern required' }, 400)
+    if (!pattern) return jsonError(c, 'pattern required', 400)
     try {
-        return c.json(await findTextInProject(resolveRequestWorkingDir(c), pattern))
+        return c.json(await findTextInProject(requestWorkingDir(c), pattern))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -51,9 +51,9 @@ opencodeFile.get('/api/find/text', async (c) => {
 
 opencodeFile.get('/api/find/files', async (c) => {
     const pattern = c.req.query('pattern')
-    if (!pattern) return c.json({ error: 'pattern required' }, 400)
+    if (!pattern) return jsonError(c, 'pattern required', 400)
     try {
-        return c.json(await findFilesInProject(resolveRequestWorkingDir(c), pattern))
+        return c.json(await findFilesInProject(requestWorkingDir(c), pattern))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -61,9 +61,9 @@ opencodeFile.get('/api/find/files', async (c) => {
 
 opencodeFile.get('/api/find/symbols', async (c) => {
     const pattern = c.req.query('pattern')
-    if (!pattern) return c.json({ error: 'pattern required' }, 400)
+    if (!pattern) return jsonError(c, 'pattern required', 400)
     try {
-        return c.json(await findSymbolsInProject(resolveRequestWorkingDir(c), pattern))
+        return c.json(await findSymbolsInProject(requestWorkingDir(c), pattern))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

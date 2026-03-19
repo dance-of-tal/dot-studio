@@ -1,21 +1,13 @@
-import { useCallback, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useRef, useState } from 'react';
+import type { ComponentType } from 'react';
 import { ReactFlow, Background } from '@xyflow/react';
 import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { useDroppable } from '@dnd-kit/core';
 import '@xyflow/react/dist/style.css';
 import { useStudioStore } from '../../store';
-import { AgentFrame } from '../../features/performer';
-import MarkdownEditorFrame from '../../features/assets/MarkdownEditorFrame';
-import CanvasTerminalFrame from '../../features/workspace/CanvasTerminalFrame';
-import CanvasTrackingFrame from '../../features/workspace/CanvasTrackingFrame';
-import ActFrame from '../../features/act/ActFrame';
-import ActParticipantFrame from '../../features/act/ActParticipantFrame';
-import ActInspectorPanel from '../../features/act/ActInspectorPanel';
-import ActLayoutToolbar from '../../features/act/ActLayoutToolbar';
 // PerformerRelationEdge removed — edges now live inside Act layout mode only
 import { resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
-import StageToolbar from '../toolbar/StageToolbar';
 import CanvasControls from './CanvasControls';
 import CanvasDropOverlay from './CanvasDropOverlay';
 import { resolveActLayoutRelation, shouldHandleActLayoutConnection } from './act-layout-helpers';
@@ -25,13 +17,31 @@ import { useCanvasTransformTarget } from './useCanvasTransformTarget';
 import { useCanvasFocusFit } from './useCanvasFocusFit';
 import { useCanvasPresentation } from './useCanvasPresentation';
 
+const ActInspectorPanel = lazy(() => import('../../features/act/ActInspectorPanel'));
+const ActLayoutToolbar = lazy(() => import('../../features/act/ActLayoutToolbar'));
+const StageToolbar = lazy(() => import('../toolbar/StageToolbar'));
+const AgentFrame = lazy(() =>
+    import('../../features/performer').then((module) => ({ default: module.AgentFrame })),
+);
+const MarkdownEditorFrame = lazy(() => import('../../features/assets/MarkdownEditorFrame'));
+const CanvasTerminalFrame = lazy(() => import('../../features/workspace/CanvasTerminalFrame'));
+const CanvasTrackingFrame = lazy(() => import('../../features/workspace/CanvasTrackingFrame'));
+const ActFrame = lazy(() => import('../../features/act/ActFrame'));
+const ActParticipantFrame = lazy(() => import('../../features/act/ActParticipantFrame'));
+
+const withCanvasNodeSuspense = (Component: ComponentType<any>) => (props: any) => (
+    <Suspense fallback={null}>
+        <Component {...props} />
+    </Suspense>
+);
+
 const nodeTypes = {
-    performer: AgentFrame,
-    markdownEditor: MarkdownEditorFrame,
-    canvasTerminal: CanvasTerminalFrame,
-    stageTracking: CanvasTrackingFrame,
-    act: ActFrame,
-    'act-participant': ActParticipantFrame,
+    performer: withCanvasNodeSuspense(AgentFrame),
+    markdownEditor: withCanvasNodeSuspense(MarkdownEditorFrame),
+    canvasTerminal: withCanvasNodeSuspense(CanvasTerminalFrame),
+    stageTracking: withCanvasNodeSuspense(CanvasTrackingFrame),
+    act: withCanvasNodeSuspense(ActFrame),
+    'act-participant': withCanvasNodeSuspense(ActParticipantFrame),
 };
 
 const edgeTypes = {};
@@ -197,9 +207,15 @@ export default function CanvasArea() {
         <div className={`canvas-area ${(focusedPerformerId || isActLayoutMode) ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
             <div className="canvas-top-right-bar">
                 <CanvasControls />
-                <StageToolbar />
+                <Suspense fallback={null}>
+                    <StageToolbar />
+                </Suspense>
             </div>
-            {isActLayoutMode && <ActLayoutToolbar />}
+            {isActLayoutMode ? (
+                <Suspense fallback={null}>
+                    <ActLayoutToolbar />
+                </Suspense>
+            ) : null}
             <CanvasDropOverlay active={isCanvasDropOver} label={canvasDropLabel} />
             <ReactFlow
                 nodes={nodes}
@@ -227,7 +243,11 @@ export default function CanvasArea() {
             >
                 <Background color={focusedPerformerId ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>
-            {(isActLayoutMode || selectedActId) && <ActInspectorPanel />}
+            {isActLayoutMode || selectedActId ? (
+                <Suspense fallback={null}>
+                    <ActInspectorPanel />
+                </Suspense>
+            ) : null}
         </div>
     );
 }

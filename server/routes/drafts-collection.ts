@@ -1,11 +1,10 @@
 import { Hono } from 'hono'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import {
     createDraft,
     listDrafts,
 } from '../services/draft-service.js'
 import type { DraftAssetKind, CreateDraftRequest } from '../../shared/draft-contracts.js'
-import { jsonError } from './route-errors.js'
+import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const VALID_KINDS = new Set<DraftAssetKind>(['tal', 'dance', 'performer', 'act'])
 
@@ -16,7 +15,7 @@ function isValidKind(kind: string): kind is DraftAssetKind {
 const draftsCollection = new Hono()
 
 draftsCollection.get('/api/drafts', async (c) => {
-    const cwd = resolveRequestWorkingDir(c)
+    const cwd = requestWorkingDir(c)
     const kind = c.req.query('kind')
 
     try {
@@ -31,7 +30,7 @@ draftsCollection.get('/api/drafts', async (c) => {
 })
 
 draftsCollection.post('/api/drafts', async (c) => {
-    const cwd = resolveRequestWorkingDir(c)
+    const cwd = requestWorkingDir(c)
     const body = await c.req.json<CreateDraftRequest>().catch(() => null)
 
     if (!body?.kind || !body?.name) {

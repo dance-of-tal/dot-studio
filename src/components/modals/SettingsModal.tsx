@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, CheckCircle, RefreshCw, Settings, X, Sliders, Server, Cpu, FolderCog, LayoutGrid } from 'lucide-react'
+import { RefreshCw, Settings, X, Sliders, Server, Cpu, FolderCog, LayoutGrid } from 'lucide-react'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import './SettingsModal.css'
@@ -20,6 +20,8 @@ import {
 import SettingsGeneral from './SettingsGeneral'
 import SettingsProviders from './SettingsProviders'
 import SettingsModels from './SettingsModels'
+import SettingsOpenCode from './SettingsOpenCode'
+import SettingsProject from './SettingsProject'
 
 type SettingsTab = 'general' | 'providers' | 'models' | 'opencode' | 'project'
 
@@ -234,168 +236,30 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
             case 'opencode':
                 return (
-                    <div className="stg-panel">
-                        <div className="stg-panel__header">
-                            <h2 className="stg-panel__title">OpenCode</h2>
-                        </div>
-
-                        <section className="settings-section">
-                            <div className="settings-section-head">
-                                <h4>Connection</h4>
-                                {opencodeInfo?.mode === 'managed' && opencodeInfo.restartAvailable && (
-                                    <button
-                                        className="btn"
-                                        onClick={async () => {
-                                            setError(null)
-                                            try {
-                                                await api.opencodeRestart()
-                                                refreshSettings()
-                                            } catch (err) {
-                                                setError(err instanceof Error ? err.message : String(err))
-                                            }
-                                        }}
-                                    >
-                                        Restart OpenCode
-                                    </button>
-                                )}
-                            </div>
-                            <div className="settings-row">
-                                <span className="settings-label">Status</span>
-                                <span className="settings-value">
-                                    {opencodeInfo?.connected
-                                        ? <><CheckCircle size={12} color="#14AE5C" /> Connected</>
-                                        : <><AlertCircle size={12} color="#F24822" /> Disconnected</>}
-                                </span>
-                            </div>
-                            <div className="settings-row">
-                                <span className="settings-label">Mode</span>
-                                <span className="settings-value">
-                                    {opencodeInfo?.mode === 'external' ? 'External OpenCode' : 'Managed by Studio'}
-                                </span>
-                            </div>
-                            {opencodeInfo?.url && (
-                                <div className="settings-row settings-row--stacked">
-                                    <span className="settings-label">URL</span>
-                                    <span className="settings-value mono">{opencodeInfo.url}</span>
-                                </div>
-                            )}
-                            {opencodeInfo?.project?.worktree && (
-                                <div className="settings-row settings-row--stacked">
-                                    <span className="settings-label">Project</span>
-                                    <span className="settings-value mono">{opencodeInfo.project.worktree}</span>
-                                </div>
-                            )}
-                            {opencodeInfo?.error && (
-                                <div className="settings-note settings-note--error">{opencodeInfo.error}</div>
-                            )}
-                        </section>
-
-                        <section className="settings-section">
-                            <h4>About</h4>
-                            <div className="settings-row">
-                                <span className="settings-label">Studio API</span>
-                                <span className="settings-value mono">
-                                    {typeof window === 'undefined' ? '/api' : `${window.location.origin}/api`}
-                                </span>
-                            </div>
-                            <div className="settings-row">
-                                <span className="settings-label">Frontend</span>
-                                <span className="settings-value mono">
-                                    {typeof window === 'undefined' ? 'Unavailable' : window.location.origin}
-                                </span>
-                            </div>
-                        </section>
-                    </div>
+                    <SettingsOpenCode
+                        opencodeInfo={opencodeInfo}
+                        setError={setError}
+                        onRestart={async () => {
+                            await api.opencodeRestart()
+                            refreshSettings()
+                        }}
+                    />
                 )
 
             case 'project':
                 return (
-                    <div className="stg-panel">
-                        <div className="stg-panel__header">
-                            <h2 className="stg-panel__title">Project</h2>
-                        </div>
-
-                        <section className="settings-section">
-                            <div className="settings-section-head">
-                                <h4>OpenCode Project Config</h4>
-                                <span className="settings-caption">
-                                    Saved through OpenCode into the current working directory.
-                                </span>
-                            </div>
-
-                            {projectMeta && (
-                                <div className="settings-row settings-row--stacked">
-                                    <span className="settings-label">Config File</span>
-                                    <span className="settings-value mono">{projectMeta.path}</span>
-                                </div>
-                            )}
-
-                            <div className="settings-form-grid">
-                                <label className="settings-field">
-                                    <span className="settings-field__label">Share mode</span>
-                                    <select
-                                        className="select"
-                                        value={projectDraft?.share || 'manual'}
-                                        onChange={(e) => setProjectDraft((cur) => cur ? {
-                                            ...cur, share: e.target.value as 'manual' | 'auto' | 'disabled',
-                                        } : cur)}
-                                    >
-                                        <option value="manual">Manual</option>
-                                        <option value="auto">Auto</option>
-                                        <option value="disabled">Disabled</option>
-                                    </select>
-                                </label>
-
-                                <label className="settings-field">
-                                    <span className="settings-field__label">Username</span>
-                                    <input
-                                        className="input"
-                                        value={projectDraft?.username || ''}
-                                        onChange={(e) => setProjectDraft((cur) => cur ? {
-                                            ...cur, username: e.target.value,
-                                        } : cur)}
-                                        placeholder="Display name for OpenCode sessions"
-                                    />
-                                </label>
-                            </div>
-
-                            <div className="settings-note">
-                                <div className="settings-note__title">Provider visibility</div>
-                                Hide providers you do not want surfaced in this project.
-                            </div>
-
-                            <div className="settings-checkbox-list">
-                                {providers.map((provider) => (
-                                    <label key={provider.id} className="settings-checkbox">
-                                        <input
-                                            type="checkbox"
-                                            checked={projectDraft?.visibleProviders[provider.id] ?? true}
-                                            onChange={() => toggleProviderVisibility(provider.id)}
-                                        />
-                                        <span className="settings-checkbox__body">
-                                            <span className="settings-checkbox__title">{provider.name}</span>
-                                            <span className="settings-checkbox__meta">
-                                                {provider.id} · {provider.modelCount} models · {provider.connected ? 'connected' : 'not connected'}
-                                            </span>
-                                        </span>
-                                    </label>
-                                ))}
-                            </div>
-
-                            <div className="settings-save-row">
-                                <button className="btn" onClick={resetProjectDraft} disabled={!projectDirty || savingProject}>
-                                    Reset
-                                </button>
-                                <button className="btn btn--primary" onClick={saveProjectSettings} disabled={!projectDirty || savingProject}>
-                                    {savingProject ? 'Saving...' : projectMeta?.exists ? 'Update config' : 'Create config'}
-                                </button>
-                            </div>
-
-                            {projectMessage && (
-                                <div className="settings-note settings-note--success">{projectMessage}</div>
-                            )}
-                        </section>
-                    </div>
+                    <SettingsProject
+                        projectMeta={projectMeta}
+                        projectDraft={projectDraft}
+                        providers={providers}
+                        projectDirty={projectDirty}
+                        savingProject={savingProject}
+                        projectMessage={projectMessage}
+                        toggleProviderVisibility={toggleProviderVisibility}
+                        setProjectDraft={setProjectDraft}
+                        resetProjectDraft={resetProjectDraft}
+                        saveProjectSettings={saveProjectSettings}
+                    />
                 )
         }
     }

@@ -1,15 +1,11 @@
-import { Hono, type Context } from 'hono'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
+import { Hono } from 'hono'
 import {
     parseSafeOwnerKind,
     readSafeOwnerSummary,
 } from '../services/safe-service.js'
+import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const safeSummary = new Hono()
-
-function jsonError(c: Context, message: string, status = 400) {
-    return c.json({ error: message }, { status: status as 400 | 500 })
-}
 
 safeSummary.get('/api/safe/:ownerKind/:ownerId', async (c) => {
     const ownerKind = parseSafeOwnerKind(c.req.param('ownerKind'))
@@ -19,7 +15,7 @@ safeSummary.get('/api/safe/:ownerKind/:ownerId', async (c) => {
 
     try {
         return c.json(await readSafeOwnerSummary(
-            resolveRequestWorkingDir(c),
+            requestWorkingDir(c),
             ownerKind,
             c.req.param('ownerId'),
         ))

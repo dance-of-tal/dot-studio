@@ -1,17 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-    Hexagon,
-    Zap,
-    Search,
-    Cpu,
-    Server,
-    Globe,
     X,
-    Users,
-    HardDrive,
-    FolderOpen,
-    Plus,
 } from 'lucide-react';
 import { api } from '../../api';
 import {
@@ -31,7 +21,6 @@ import { showToast } from '../../lib/toast';
 import { slugifyAssetName } from '../../lib/performers';
 import type { AssetCard } from '../../types';
 import { useMcpCatalog } from './useMcpCatalog';
-import { serializeProjectMcpEntries } from '../modals/settings-utils';
 
 import type {
     InstalledKind,
@@ -42,12 +31,9 @@ import type {
     RegistryKind,
     ModelProviderFilter,
 } from './asset-library-utils';
-import { isRemoteServer } from '../modals/settings-utils';
 import {
-    MAX_MODELS_PER_PROVIDER,
     isInstalledAssetKind,
     getAssetUrn,
-    getAssetSelectionKey,
     buildMcpHaystack,
     buildDraftAssetCards,
     filterInstalledAssets,
@@ -55,16 +41,9 @@ import {
     buildRegistryGroups,
     buildAuthoringPayloadFromAsset,
     placeholderForLocalSection,
-    authoringNoteForInstalledKind,
-    labelForInstalledKind,
 } from './asset-library-utils';
-import {
-    DraggableAsset,
-    DraggableModel,
-    DraggableMcp,
-    RegistryResult,
-    PinnedDetailPanel,
-} from './AssetCards';
+import AssetLibraryLocalView from './AssetLibraryLocalView';
+import AssetLibraryRegistryView from './AssetLibraryRegistryView';
 
 export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const workingDir = useStudioStore((state) => state.workingDir)
@@ -302,18 +281,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         return urn ? installedUrns.has(urn) : false
     }, [installedUrns, selectedAsset])
 
-    const installedTabs: Array<{ key: InstalledKind; label: string; icon: React.ReactNode }> = [
-        { key: 'performer', label: 'Performer', icon: <Users size={10} /> },
-        { key: 'tal', label: 'Tal', icon: <Hexagon size={10} /> },
-        { key: 'dance', label: 'Dance', icon: <Zap size={10} /> },
-        { key: 'act', label: 'Act', icon: <Zap size={10} /> },
-    ]
-
-    const runtimeTabs: Array<{ key: RuntimeKind; label: string; icon: React.ReactNode }> = [
-        { key: 'models', label: 'Models', icon: <Cpu size={10} /> },
-        { key: 'mcps', label: 'MCPs', icon: <Server size={10} /> },
-    ]
-
     const modelProviderTabs: Array<{ key: ModelProviderFilter; label: string }> = [
         { key: 'all', label: 'All' },
         { key: 'anthropic', label: 'Anthropic' },
@@ -324,8 +291,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     ]
 
     const localPlaceholder = placeholderForLocalSection(localSection, runtimeKind)
-
-    const installedEmptyMessage = `No ${labelForInstalledKind(installedKind).toLowerCase()} assets found.`
 
     return (
         <div className="assets-panel">
@@ -356,528 +321,94 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
             </div>
 
             {scope === 'local' ? (
-                <>
-                    <div className="scope-selector asset-scope-selector">
-                        <button
-                            className={`scope-btn ${localSection === 'installed' ? 'active' : ''}`}
-                            onClick={() => setLocalSection('installed')}
-                        >
-                            Installed Assets
-                        </button>
-                        <button
-                            className={`scope-btn ${localSection === 'runtime' ? 'active' : ''}`}
-                            onClick={() => setLocalSection('runtime')}
-                        >
-                            Runtime
-                        </button>
-                    </div>
-
-                    <div className="assets-tabs">
-                        {(localSection === 'installed' ? installedTabs : runtimeTabs).map((tab) => {
-                            const active = localSection === 'installed'
-                                ? installedKind === tab.key
-                                : runtimeKind === tab.key
-                            return (
-                                <button
-                                    key={tab.key}
-                                    className={`asset-tab ${active ? 'active' : ''}`}
-                                    onClick={() => {
-                                        if (localSection === 'installed') {
-                                            setInstalledKind(tab.key as InstalledKind)
-                                        } else {
-                                            setRuntimeKind(tab.key as RuntimeKind)
-                                        }
-                                    }}
-                                >
-                                    {tab.icon}
-                                    <span>{tab.label}</span>
-                                </button>
-                            )
-                        })}
-                    </div>
-
-                    {localSection === 'installed' && (
-                        <div className="sub-scope-row">
-                            {(['all', 'global', 'stage', 'draft'] as SourceFilter[]).map((value) => (
-                                <button
-                                    key={value}
-                                    className={`sub-scope-tag ${sourceFilter === value ? 'active' : ''}`}
-                                    onClick={() => setSourceFilter(value)}
-                                >
-                                    {value === 'all' ? 'All' : value === 'global' ? (
-                                        <><HardDrive size={8} style={{ verticalAlign: -1, marginRight: 2 }} />Global</>
-                                    ) : value === 'draft' ? (
-                                        <><Plus size={8} style={{ verticalAlign: -1, marginRight: 2 }} />Draft</>
-                                    ) : (
-                                        <><FolderOpen size={8} style={{ verticalAlign: -1, marginRight: 2 }} />Stage</>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {localSection === 'installed' && (
-                        <div className="asset-authoring-row">
-                            {installedKind === 'performer' && (
-                                <button className="btn" onClick={createNewPerformer}>
-                                    <Plus size={10} /> New Performer
-                                </button>
-                            )}
-                            {installedKind === 'tal' && (
-                                <button className="btn" onClick={() => createNewPerformerDraftEntry('tal')}>
-                                    <Plus size={10} /> New Tal Draft
-                                </button>
-                            )}
-                            {installedKind === 'dance' && (
-                                <button className="btn" onClick={() => createNewPerformerDraftEntry('dance')}>
-                                    <Plus size={10} /> New Dance Draft
-                                </button>
-                            )}
-                            {installedKind === 'act' && (
-                                <div className="asset-authoring-row__note" style={{ fontStyle: 'italic', opacity: 0.7 }}>
-                                    Acts are created from the Threads sidebar or by dragging from the registry.
-                                </div>
-                            )}
-                            <div className="asset-authoring-row__note">
-                                {authoringNoteForInstalledKind(installedKind)}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="explorer__header">
-                        <div className="search-wrapper">
-                            <Search size={12} className="icon-muted" />
-                            <input
-                                className="text-input"
-                                value={filter}
-                                onChange={(e) => setFilter(e.target.value)}
-                                placeholder={localPlaceholder}
-                            />
-                        </div>
-                    </div>
-
-                    {authoringHint && (
-                        <div className="asset-authoring-hint">
-                            {authoringHint}
-                        </div>
-                    )}
-
-                    {showMcps && (
-                        <div className="asset-mcp-manager">
-                            <div className="asset-authoring-row">
-                                <button className="btn" onClick={() => addMcpEntry()}>
-                                    <Plus size={10} /> Add Server
-                                </button>
-                                <div className="asset-authoring-row__note">
-                                    Drag connected servers onto performers.
-                                </div>
-                            </div>
-
-                            {mcpDraftEntries.length > 0 ? (
-                                <div className="asset-mcp-editor-list">
-                                    {mcpDraftEntries.map((entry) => {
-                                        const live = mcpServers.find((server) => server.name === entry.name.trim())
-                                        const liveStatus = live?.status || (entry.enabled ? 'disconnected' : 'disabled')
-                                        const isRemote = isRemoteServer(entry.serverText)
-                                        const canAuthenticate = isRemote && (liveStatus === 'needs_auth' || liveStatus === 'failed')
-                                        const canClearAuth = isRemote && !!live && (live.authStatus === 'needs_auth' || live.status === 'connected' || live.status === 'failed')
-                                        const isExpanded = !!expandedMcpEntries[entry.key]
-                                        return (
-                                            <div key={entry.key} className="asset-mcp-editor">
-                                                <div
-                                                    className="asset-mcp-editor__header"
-                                                    onClick={() => setExpandedMcpEntries((prev) => ({ ...prev, [entry.key]: !prev[entry.key] }))}
-                                                >
-                                                    <div className="asset-mcp-editor__header-left">
-                                                        <span className={`asset-mcp-editor__status-dot asset-mcp-editor__status-dot--${liveStatus}`} />
-                                                        <div>
-                                                            <div className="asset-mcp-editor__title">{entry.name.trim() || 'New MCP Server'}</div>
-                                                            <div className="asset-mcp-editor__meta">
-                                                                <span>{isRemote ? 'remote' : 'local'}</span>
-                                                                <span>{live?.tools?.length || 0} tools</span>
-                                                                <span>{live?.resources?.length || 0} resources</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <span className={`asset-mcp-editor__status asset-mcp-editor__status--${liveStatus}`}>
-                                                        {liveStatus}
-                                                    </span>
-                                                </div>
-
-                                                {isExpanded && (
-                                                    <div className="asset-mcp-editor__body">
-                                                        {live?.error ? (
-                                                            <div className="asset-authoring-hint">{live.error}</div>
-                                                        ) : null}
-                                                        {live?.clientRegistrationRequired ? (
-                                                            <div className="asset-authoring-hint">
-                                                                OAuth client registration required. Fill client ID and secret, save, then retry.
-                                                            </div>
-                                                        ) : null}
-
-                                                        <div className="asset-mcp-editor__grid">
-                                                            <label className="asset-mcp-editor__field">
-                                                                <span>Name</span>
-                                                                <input
-                                                                    className="text-input"
-                                                                    value={entry.name}
-                                                                    onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, name: e.target.value }))}
-                                                                    placeholder="github"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                />
-                                                            </label>
-                                                            <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                                <span>Server</span>
-                                                                <input
-                                                                    className="text-input"
-                                                                    value={entry.serverText}
-                                                                    onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, serverText: e.target.value }))}
-                                                                    placeholder="npx -y @mcp/server or https://example.com/mcp"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                />
-                                                            </label>
-                                                            <label className="asset-mcp-editor__field">
-                                                                <span>Enabled</span>
-                                                                <select
-                                                                    className="select"
-                                                                    value={entry.enabled ? 'enabled' : 'disabled'}
-                                                                    onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, enabled: e.target.value === 'enabled' }))}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                >
-                                                                    <option value="enabled">Enabled</option>
-                                                                    <option value="disabled">Disabled</option>
-                                                                </select>
-                                                            </label>
-                                                            <label className="asset-mcp-editor__field">
-                                                                <span>Timeout (ms)</span>
-                                                                <input
-                                                                    className="text-input"
-                                                                    value={entry.timeoutText}
-                                                                    onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, timeoutText: e.target.value }))}
-                                                                    placeholder="5000"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                />
-                                                            </label>
-                                                        </div>
-
-                                                        {!isRemote ? (
-                                                            <div className="asset-mcp-editor__grid">
-                                                                <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                                    <span>Environment</span>
-                                                                    <textarea
-                                                                        className="text-input asset-mcp-editor__textarea"
-                                                                        value={entry.environmentText}
-                                                                        onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, environmentText: e.target.value }))}
-                                                                        placeholder="GITHUB_TOKEN=..."
-                                                                    />
-                                                                </label>
-                                                            </div>
-                                                        ) : (
-                                                            <>
-                                                                <div className="asset-mcp-editor__grid">
-                                                                    <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                                        <span>Static Headers</span>
-                                                                        <textarea
-                                                                            className="text-input asset-mcp-editor__textarea"
-                                                                            value={entry.headersText}
-                                                                            onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, headersText: e.target.value }))}
-                                                                            placeholder="X-Workspace=demo"
-                                                                        />
-                                                                    </label>
-                                                                </div>
-                                                                <div className="asset-mcp-editor__grid">
-                                                                    <label className="asset-mcp-editor__field">
-                                                                        <span>OAuth</span>
-                                                                        <select
-                                                                            className="select"
-                                                                            value={entry.oauthEnabled ? 'enabled' : 'disabled'}
-                                                                            onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, oauthEnabled: e.target.value === 'enabled' }))}
-                                                                        >
-                                                                            <option value="enabled">Auto / Configured</option>
-                                                                            <option value="disabled">Disabled</option>
-                                                                        </select>
-                                                                    </label>
-                                                                    <label className="asset-mcp-editor__field">
-                                                                        <span>Client ID</span>
-                                                                        <input
-                                                                            className="text-input"
-                                                                            value={entry.oauthClientId}
-                                                                            onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, oauthClientId: e.target.value }))}
-                                                                            placeholder="client id"
-                                                                        />
-                                                                    </label>
-                                                                    <label className="asset-mcp-editor__field">
-                                                                        <span>Client Secret</span>
-                                                                        <input
-                                                                            className="text-input"
-                                                                            value={entry.oauthClientSecret}
-                                                                            onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, oauthClientSecret: e.target.value }))}
-                                                                            placeholder="client secret"
-                                                                        />
-                                                                    </label>
-                                                                    <label className="asset-mcp-editor__field">
-                                                                        <span>OAuth Scope</span>
-                                                                        <input
-                                                                            className="text-input"
-                                                                            value={entry.oauthScope}
-                                                                            onChange={(e) => updateMcpEntry(entry.key, (current) => ({ ...current, oauthScope: e.target.value }))}
-                                                                            placeholder="repo read:org"
-                                                                        />
-                                                                    </label>
-                                                                </div>
-                                                            </>
-                                                        )}
-
-                                                        <div className="asset-mcp-editor__actions">
-                                                            <button className="btn btn--primary" onClick={() => entry.name.trim() && void connectMcpServer(entry.name.trim())} disabled={!entry.name.trim() || !entry.enabled}>
-                                                                Connect
-                                                            </button>
-                                                            <button className="btn" onClick={() => entry.name.trim() && void disconnectMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>
-                                                                Disconnect
-                                                            </button>
-                                                            {canAuthenticate ? (
-                                                                <button className="btn" onClick={() => entry.name.trim() && void authenticateMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>
-                                                                    {pendingMcpAuthName === entry.name.trim() ? 'Waiting…' : liveStatus === 'failed' ? 'Retry Auth' : 'Authenticate'}
-                                                                </button>
-                                                            ) : null}
-                                                            {canClearAuth ? (
-                                                                <button className="btn" onClick={() => entry.name.trim() && void clearMcpAuth(entry.name.trim())} disabled={!entry.name.trim()}>
-                                                                    Clear Auth
-                                                                </button>
-                                                            ) : null}
-                                                            <button className="btn btn--danger" onClick={() => removeMcpEntry(entry.key)}>
-                                                                Remove
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            ) : (
-                                <div className="asset-authoring-hint">No MCP servers defined for this project.</div>
-                            )}
-
-                            <div className="asset-mcp-manager__footer">
-                                <button
-                                    className={`btn${showMcpRawConfig ? ' btn--active' : ''}`}
-                                    onClick={() => setShowMcpRawConfig((v) => !v)}
-                                    title="Show the raw config.json MCP payload sent to OpenCode"
-                                >
-                                    {showMcpRawConfig ? 'Hide Raw' : 'View Raw'}
-                                </button>
-                                <button className="btn" onClick={resetMcpCatalog} disabled={!mcpCatalogDirty || mcpCatalogSaving}>
-                                    Reset
-                                </button>
-                                <button className="btn" onClick={() => void saveMcpCatalog()} disabled={!mcpCatalogDirty || mcpCatalogSaving}>
-                                    {mcpCatalogSaving ? 'Saving…' : 'Save'}
-                                </button>
-                            </div>
-
-                            {showMcpRawConfig && (
-                                <pre className="asset-mcp-editor__raw-config">
-                                    {JSON.stringify({ mcp: serializeProjectMcpEntries(mcpDraftEntries) }, null, 2)}
-                                </pre>
-                            )}
-
-                            {mcpCatalogStatus ? (
-                                <div className="asset-authoring-hint">{mcpCatalogStatus}</div>
-                            ) : null}
-                        </div>
-                    )}
-
-                    {showModels && (
-                        <div className="sub-scope-row">
-                            <select
-                                className="select"
-                                value={modelProviderFilter}
-                                onChange={(e) => setModelProviderFilter(e.target.value as ModelProviderFilter)}
-                            >
-                                {modelProviderTabs.map((tab) => (
-                                    <option key={tab.key} value={tab.key}>{tab.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-
-                    <div className="asset-library-body">
-                        <div className="assets-list">
-                            {showInstalledAssets && (
-                                assetsLoading ? <div className="empty-state">Loading...</div> :
-                                    filteredInstalledAssets.length === 0 ? <div className="empty-state">{installedEmptyMessage}</div> :
-                                        filteredInstalledAssets.map((asset) => (
-                                            <DraggableAsset
-                                                key={asset.urn}
-                                                asset={asset}
-                                                selected={selectedAssetKey === getAssetSelectionKey(asset)}
-                                                onSelect={setSelectedAsset}
-                                            />
-                                        ))
-                            )}
-                            {showModels && (
-                                groupedModels.length === 0 ? <div className="empty-state">No models available for this filter.</div> :
-                                    groupedModels.map((group) => {
-                                        const expanded = !!expandedModelProviders[group.key]
-                                        const visibleItems = queryText || expanded
-                                            ? group.items
-                                            : group.items.slice(0, MAX_MODELS_PER_PROVIDER)
-                                        const hiddenCount = group.items.length - visibleItems.length
-
-                                        return (
-                                            <div key={group.key} className="asset-group">
-                                                <div className="asset-group__header">
-                                                    <div className="asset-group__meta">
-                                                        <span>{group.label}</span>
-                                                        <span className="asset-group__count">{group.items.length}</span>
-                                                        {!group.connected && <span className="asset-group__status">Not connected</span>}
-                                                    </div>
-                                                    {hiddenCount > 0 && (
-                                                        <button
-                                                            className="asset-group__toggle"
-                                                            onClick={() => setExpandedModelProviders((current) => ({
-                                                                ...current,
-                                                                [group.key]: true,
-                                                            }))}
-                                                        >
-                                                            +{hiddenCount} more
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                {visibleItems.map((model) => (
-                                                    <DraggableModel
-                                                        key={`${model.provider}-${model.id}`}
-                                                        model={model}
-                                                        selected={selectedAssetKey === getAssetSelectionKey({ kind: 'model', ...model })}
-                                                        onSelect={setSelectedAsset}
-                                                    />
-                                                ))}
-                                            </div>
-                                        )
-                                    })
-                            )}
-                            {showMcps && (
-                                filteredMcps.length === 0 ? <div className="empty-state">No MCP servers connected.</div> :
-                                    filteredMcps.map((mcp) => (
-                                        <DraggableMcp
-                                            key={mcp.name}
-                                            mcp={mcp}
-                                            selected={selectedAssetKey === getAssetSelectionKey({ kind: 'mcp', ...mcp })}
-                                            onSelect={setSelectedAsset}
-                                        />
-                                    ))
-                            )}
-                        </div>
-
-                        <PinnedDetailPanel
-                            asset={selectedAsset}
-                            installed={selectedInstalled}
-                            onClose={() => setSelectedAsset(null)}
-                            authUser={authUser}
-                            actionStatus={detailActionStatus}
-                            actionLoading={detailActionLoading}
-                            onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
-                            onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
-                            onImportToStage={undefined}
-                            onDeleteDraft={handleDeleteDraft}
-                        />
-                    </div>
-                </>
+                <AssetLibraryLocalView
+                    scope={scope}
+                    localSection={localSection}
+                    setLocalSection={setLocalSection}
+                    installedKind={installedKind}
+                    setInstalledKind={setInstalledKind}
+                    runtimeKind={runtimeKind}
+                    setRuntimeKind={setRuntimeKind}
+                    sourceFilter={sourceFilter}
+                    setSourceFilter={setSourceFilter}
+                    modelProviderFilter={modelProviderFilter}
+                    setModelProviderFilter={setModelProviderFilter}
+                    filter={filter}
+                    setFilter={setFilter}
+                    localPlaceholder={localPlaceholder}
+                    authoringHint={authoringHint}
+                    assetsLoading={assetsLoading}
+                    filteredInstalledAssets={filteredInstalledAssets}
+                    groupedModels={groupedModels}
+                    filteredMcps={filteredMcps}
+                    selectedAsset={selectedAsset}
+                    selectedAssetKey={selectedAssetKey}
+                    selectedInstalled={selectedInstalled}
+                    authUser={authUser}
+                    detailActionStatus={detailActionStatus}
+                    detailActionLoading={detailActionLoading}
+                    onSelectAsset={setSelectedAsset}
+                    onCloseAsset={() => setSelectedAsset(null)}
+                    onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
+                    onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
+                    onDeleteDraft={handleDeleteDraft}
+                    createNewPerformer={createNewPerformer}
+                    createNewPerformerDraftEntry={createNewPerformerDraftEntry}
+                    showInstalledAssets={showInstalledAssets}
+                    showModels={showModels}
+                    showMcps={showMcps}
+                    mcpDraftEntries={mcpDraftEntries}
+                    mcpCatalogDirty={mcpCatalogDirty}
+                    mcpCatalogStatus={mcpCatalogStatus}
+                    mcpCatalogSaving={mcpCatalogSaving}
+                    pendingMcpAuthName={pendingMcpAuthName}
+                    updateMcpEntry={updateMcpEntry}
+                    addMcpEntry={addMcpEntry}
+                    removeMcpEntry={removeMcpEntry}
+                    saveMcpCatalog={saveMcpCatalog}
+                    resetMcpCatalog={resetMcpCatalog}
+                    connectMcpServer={connectMcpServer}
+                    disconnectMcpServer={disconnectMcpServer}
+                    authenticateMcpServer={authenticateMcpServer}
+                    clearMcpAuth={clearMcpAuth}
+                    showMcpRawConfig={showMcpRawConfig}
+                    setShowMcpRawConfig={setShowMcpRawConfig}
+                    expandedMcpEntries={expandedMcpEntries}
+                    setExpandedMcpEntries={setExpandedMcpEntries}
+                    expandedModelProviders={expandedModelProviders}
+                    setExpandedModelProviders={setExpandedModelProviders}
+                    modelProviderTabs={modelProviderTabs}
+                />
             ) : (
-                <>
-                    <div className="explorer__header">
-                        <div className="search-wrapper">
-                            <Globe size={12} className="icon-muted" />
-                            <input
-                                className="text-input"
-                                value={registryQuery}
-                                onChange={(e) => handleQueryChange(e.target.value)}
-                                placeholder="name, author, slug, tag..."
-                                onKeyDown={(e) => e.key === 'Enter' && triggerSearch()}
-                            />
-                            <button className="registry-search-btn" onClick={triggerSearch} disabled={registryLoading}>
-                                {registryLoading ? '...' : <Search size={12} />}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="registry-filters">
-                        <select
-                            className="select"
-                            value={registryKind}
-                            onChange={(e) => {
-                                setRegistryKind(e.target.value as RegistryKind)
-                                setSearchEnabled(false)
-                            }}
-                        >
-                            <option value="all">All Kinds</option>
-                            <option value="tal">Tal</option>
-                            <option value="dance">Dance</option>
-                            <option value="performer">Performer</option>
-                            <option value="act">Act</option>
-                        </select>
-                    </div>
-
-                    {registryKind === 'all' && registryGroups.length > 0 && (
-                        <div className="registry-counts">
-                            {registryGroups.map((group) => (
-                                <span key={group.kind} className="registry-count-chip">
-                                    {group.label} {group.items.length}
-                                </span>
-                            ))}
-                        </div>
-                    )}
-
-                    <div className="asset-library-body">
-                        <div className="assets-list">
-                            {registryLoading ? (
-                                <div className="empty-state">Searching registry...</div>
-                            ) : registryResults.length === 0 ? (
-                                <div className="empty-state">
-                                    {registryError ? (
-                                        <span style={{ color: 'var(--tal-color)' }}>{(registryError as Error)?.message || 'Search failed.'}</span>
-                                    ) : registryQuery ? 'No results found.' : 'Search the DOT registry to discover and install assets.'}
-                                </div>
-                            ) : (
-                                registryGroups.map((group) => (
-                                    <div key={group.kind} className="registry-group">
-                                        {registryKind === 'all' && (
-                                            <div className="registry-group__header">
-                                                {group.label} <span>{group.items.length}</span>
-                                            </div>
-                                        )}
-                                        {group.items.map((item, index) => {
-                                            const urn = getAssetUrn(item) || `${item.kind}:${item.author}:${item.name}:${index}`
-                                            return (
-                                                <RegistryResult
-                                                    key={urn}
-                                                    item={item}
-                                                    installed={installedUrns.has(getAssetUrn(item) || '')}
-                                                    selected={selectedAssetKey === getAssetSelectionKey(item)}
-                                                    onInstall={handleRegistryInstall}
-                                                    onSelect={setSelectedAsset}
-                                                />
-                                            )
-                                        })}
-                                    </div>
-                                ))
-                            )}
-                        </div>
-
-                        <PinnedDetailPanel
-                            asset={selectedAsset}
-                            installed={selectedInstalled}
-                            onClose={() => setSelectedAsset(null)}
-                            authUser={authUser}
-                            actionStatus={detailActionStatus}
-                            actionLoading={detailActionLoading}
-                            onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
-                            onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
-                            onImportToStage={undefined}
-                            onDeleteDraft={handleDeleteDraft}
-                        />
-                    </div>
-                </>
+                <AssetLibraryRegistryView
+                    registryQuery={registryQuery}
+                    setRegistryQuery={(value) => {
+                        handleQueryChange(value)
+                    }}
+                    triggerSearch={triggerSearch}
+                    registryLoading={registryLoading}
+                    registryResults={registryResults}
+                    registryError={registryError}
+                    registryKind={registryKind}
+                    setRegistryKind={(value) => {
+                        setRegistryKind(value)
+                        setSearchEnabled(false)
+                    }}
+                    registryGroups={registryGroups}
+                    installedUrns={installedUrns}
+                    selectedAsset={selectedAsset}
+                    selectedAssetKey={selectedAssetKey}
+                    selectedInstalled={selectedInstalled}
+                    authUser={authUser}
+                    detailActionStatus={detailActionStatus}
+                    detailActionLoading={detailActionLoading}
+                    onSelectAsset={setSelectedAsset}
+                    onInstall={handleRegistryInstall}
+                    onCloseAsset={() => setSelectedAsset(null)}
+                    onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
+                    onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
+                    onDeleteDraft={handleDeleteDraft}
+                />
             )}
         </div>
     )

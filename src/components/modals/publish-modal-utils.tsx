@@ -87,7 +87,7 @@ export function getActPublishBlockReasons(act: StageAct): string[] {
         reasons.push('Act has no relations. Create relations between participants first.')
     }
 
-    // Disconnected performers
+    // Disconnected participants
     if (participantIds.length > 0 && act.relations.length > 0) {
         const connectedIds = new Set<string>()
         for (const rel of act.relations) {

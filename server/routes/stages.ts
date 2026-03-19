@@ -7,6 +7,7 @@ import {
     listSavedStages,
     saveStageSnapshot,
 } from '../services/stage-service.js'
+import { jsonServiceFailure } from './route-errors.js'
 
 const stages = new Hono()
 
@@ -23,7 +24,7 @@ stages.get('/api/stages', async (c) => {
 stages.get('/api/stages/:id', async (c) => {
     const result = await getSavedStage(c.req.param('id'))
     if (!result.ok) {
-        return c.json({ error: result.error }, result.status as 400 | 404)
+        return jsonServiceFailure(c, result)
     }
     return c.json(result.stage)
 })
@@ -33,7 +34,7 @@ stages.put('/api/stages', async (c) => {
     const body = await c.req.json()
     const result = await saveStageSnapshot(body)
     if (!result.ok) {
-        return c.json({ error: result.error }, result.status as 400)
+        return jsonServiceFailure(c, result)
     }
     return c.json(result)
 })
@@ -42,7 +43,7 @@ stages.put('/api/stages', async (c) => {
 stages.delete('/api/stages/:id', async (c) => {
     const result = await deleteSavedStage(c.req.param('id'))
     if (!result.ok) {
-        return c.json({ error: result.error }, result.status as 400 | 404)
+        return jsonServiceFailure(c, result)
     }
     return c.json(result)
 })

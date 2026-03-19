@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import type { ChatSendRequest } from '../../shared/chat-contracts.js'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import { uniqueAssetRefs } from '../lib/chat-session.js'
 import { resolveSessionExecutionContext } from '../lib/session-execution.js'
 import {
@@ -15,6 +14,7 @@ import {
     rejectQuestion,
     respondQuestion,
 } from '../services/chat-session-service.js'
+import { requestWorkingDir } from './route-errors.js'
 
 const chatMessages = new Hono()
 
@@ -32,7 +32,7 @@ chatMessages.post('/api/chat/sessions/:id/send', async (c) => {
     }
 
     try {
-        const workingDir = resolveRequestWorkingDir(c)
+        const workingDir = requestWorkingDir(c)
         const executionDir = (await resolveSessionExecutionContext(c.req.param('id')))?.executionDir || workingDir
         const normalizedBody: ChatSendRequest = {
             ...body,
@@ -68,7 +68,7 @@ chatMessages.post('/api/chat/questions/:qid/reject', async (c) => {
 
 chatMessages.get('/api/chat/sessions/:id/messages', async (c) => {
     try {
-        return c.json(await listStudioSessionMessages(resolveRequestWorkingDir(c), c.req.param('id')))
+        return c.json(await listStudioSessionMessages(requestWorkingDir(c), c.req.param('id')))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -76,7 +76,7 @@ chatMessages.get('/api/chat/sessions/:id/messages', async (c) => {
 
 chatMessages.get('/api/chat/sessions/:id/diff', async (c) => {
     try {
-        return c.json(await listStudioSessionDiff(resolveRequestWorkingDir(c), c.req.param('id')))
+        return c.json(await listStudioSessionDiff(requestWorkingDir(c), c.req.param('id')))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -84,7 +84,7 @@ chatMessages.get('/api/chat/sessions/:id/diff', async (c) => {
 
 chatMessages.get('/api/chat/sessions/:id/todo', async (c) => {
     try {
-        return c.json(await listStudioSessionTodos(resolveRequestWorkingDir(c), c.req.param('id')))
+        return c.json(await listStudioSessionTodos(requestWorkingDir(c), c.req.param('id')))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { DndContext, DragOverlay } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { AlertCircle, Hexagon, Zap, Cpu, Server, Package, X } from 'lucide-react';
 import { useStudioStore } from './store';
-import { LeftSidebar, CanvasArea, ToastViewport, TerminalPanel } from './features/workspace';
-import { AssistantChat } from './features/assistant/AssistantChat';
+import { CanvasArea } from './features/workspace';
 import { api, setApiWorkingDirContext } from './api';
 import { showToast } from './lib/toast';
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers';
@@ -22,6 +21,19 @@ import {
   applyAssetToActParticipant,
 } from './lib/dnd-handlers';
 import type { DragAsset, DropTargetData, PerformerAssetPayload } from './lib/dnd-handlers';
+
+const LeftSidebar = lazy(() =>
+  import('./features/workspace').then((module) => ({ default: module.LeftSidebar })),
+);
+const ToastViewport = lazy(() =>
+  import('./features/workspace').then((module) => ({ default: module.ToastViewport })),
+);
+const TerminalPanel = lazy(() =>
+  import('./features/workspace').then((module) => ({ default: module.TerminalPanel })),
+);
+const AssistantChat = lazy(() =>
+  import('./features/assistant/AssistantChat').then((module) => ({ default: module.AssistantChat })),
+);
 
 export default function App() {
   const theme = useStudioStore(s => s.theme);
@@ -356,19 +368,27 @@ export default function App() {
           </div>
         ) : null}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          <LeftSidebar />
+          <Suspense fallback={null}>
+            <LeftSidebar />
+          </Suspense>
           <ReactFlowProvider>
             <CanvasArea />
           </ReactFlowProvider>
-          {!isAnyFocusActive && <AssistantChat />}
+          {!isAnyFocusActive && (
+            <Suspense fallback={null}>
+              <AssistantChat />
+            </Suspense>
+          )}
         </div>
         {!isAnyFocusActive && (
-          <TerminalPanel
-            isOpen={isTerminalOpen}
-            onToggle={() => setTerminalOpen(!isTerminalOpen)}
-            height={termHeight}
-            onHeightChange={setTermHeight}
-          />
+          <Suspense fallback={null}>
+            <TerminalPanel
+              isOpen={isTerminalOpen}
+              onToggle={() => setTerminalOpen(!isTerminalOpen)}
+              height={termHeight}
+              onHeightChange={setTermHeight}
+            />
+          </Suspense>
         )}
       </div>
       <DragOverlay dropAnimation={null}>
@@ -379,7 +399,9 @@ export default function App() {
           </div>
         ) : null}
       </DragOverlay>
-      <ToastViewport />
+      <Suspense fallback={null}>
+        <ToastViewport />
+      </Suspense>
     </DndContext>
   );
 }

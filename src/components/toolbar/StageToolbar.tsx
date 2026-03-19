@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
+import { Suspense, lazy, useState, useEffect } from 'react';
 import { api } from '../../api';
 import { showToast } from '../../lib/toast';
-import { SettingsModal } from '../../features/providers';
-import PublishModal from '../modals/PublishModal';
 import { GitBranch, CheckCircle, AlertCircle, Settings, Moon, Sun, Hexagon, Terminal as TerminalIcon, Github, FileText, ChevronDown, Upload, LogIn, UserRound, Sparkles } from 'lucide-react';
 import { useStudioStore } from '../../store';
 import { useServerHealth, useDotStatus, usePerformers } from '../../hooks/queries';
@@ -12,6 +10,13 @@ import { queryKeys } from '../../hooks/queries';
 import { DropdownMenu } from '../shared/DropdownMenu';
 
 import './StageToolbar.css';
+
+const SettingsModal = lazy(() =>
+    import('../../features/providers').then((module) => ({ default: module.SettingsModal })),
+);
+const PublishModal = lazy(() =>
+    import('../modals/PublishModal').then((module) => ({ default: module.default })),
+);
 
 export default function StageToolbar() {
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -188,8 +193,16 @@ export default function StageToolbar() {
                     <Settings size={12} />
                 </button>
             </div>
-            <PublishModal open={publishOpen} onClose={() => setPublishOpen(false)} />
-            <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+            {publishOpen ? (
+                <Suspense fallback={null}>
+                    <PublishModal open={publishOpen} onClose={() => setPublishOpen(false)} />
+                </Suspense>
+            ) : null}
+            {settingsOpen ? (
+                <Suspense fallback={null}>
+                    <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+                </Suspense>
+            ) : null}
         </>
     );
 }

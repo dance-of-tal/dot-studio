@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
 import type { CompilePromptRequest } from '../../shared/chat-contracts.js'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import {
     StudioValidationError,
     jsonOpencodeError,
 } from '../lib/opencode-errors.js'
 import { compileStudioPromptPreview } from '../services/compile-service.js'
+import { requestWorkingDir } from './route-errors.js'
 
 const compile = new Hono()
 
@@ -24,7 +24,7 @@ compile.post('/api/compile', async (c) => {
     }
 
     try {
-        return c.json(await compileStudioPromptPreview(resolveRequestWorkingDir(c), body))
+        return c.json(await compileStudioPromptPreview(requestWorkingDir(c), body))
     } catch (err) {
         return jsonOpencodeError(c, err, { model })
     }

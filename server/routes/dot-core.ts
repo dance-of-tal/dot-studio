@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { resolveRequestWorkingDir } from '../lib/request-context.js'
 import {
     getDotAuthUser,
     getDotStatusSnapshot,
@@ -7,18 +6,18 @@ import {
     loginToDot,
     logoutFromDot,
 } from '../services/dot-service.js'
-import { jsonError } from './route-errors.js'
+import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const dotCore = new Hono()
 
 dotCore.get('/api/dot/status', async (c) => {
-    return c.json(await getDotStatusSnapshot(resolveRequestWorkingDir(c)))
+    return c.json(await getDotStatusSnapshot(requestWorkingDir(c)))
 })
 
 dotCore.post('/api/dot/init', async (c) => {
     const { scope } = await c.req.json<{ scope?: string }>().catch(() => ({ scope: undefined }))
     try {
-        return c.json(await initDotRegistry(resolveRequestWorkingDir(c), scope))
+        return c.json(await initDotRegistry(requestWorkingDir(c), scope))
     } catch (err: any) {
         return jsonError(c, err.message, 500)
     }

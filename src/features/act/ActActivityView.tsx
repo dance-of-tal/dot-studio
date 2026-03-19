@@ -2,7 +2,7 @@
  * ActActivityView — Real-time event timeline for Act threads.
  * Shows callboard/runtime activity for the selected thread.
  *
- * PRD §17.2: Shows performer collaboration flow, board artifacts, active performers.
+ * PRD §17.2: Shows participant collaboration flow, callboard artifacts, and active participants.
  */
 import { useState, useEffect, useCallback } from 'react'
 import {

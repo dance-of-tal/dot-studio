@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { X, Upload, Save, ChevronLeft, FileText, Wand2, Zap } from 'lucide-react';
+import { X, Upload, Save, ChevronLeft } from 'lucide-react';
 import { useStudioStore } from '../../store';
 import { api } from '../../api';
 import { formatStudioApiErrorMessage } from '../../lib/api-errors';
 import { buildPerformerAssetPayload, buildActAssetPayload, slugifyAssetName, unresolvedDeclaredMcpServerNames } from '../../lib/performers';
 import { queryKeys } from '../../hooks/queries';
 import { useDotLogin } from '../../hooks/useDotLogin';
-import { DOT_TOS_URL } from '../../lib/dot-terms';
 import './PublishModal.css';
+import PublishPickerStep from './PublishPickerStep';
+import PublishFormStep from './PublishFormStep';
 import {
     parseTags,
     buildPickerItems,
     buildPerformerPreflight,
     buildMarkdownAssetPayload,
     getActPublishBlockReasons,
-    PickerSection,
 } from './publish-modal-utils';
 import type { PickerItem } from './publish-modal-utils';
 
@@ -361,12 +361,6 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
         return null;
     }
 
-    // ── Group picker items by kind ──────────────────────
-    const talItems = pickerItems.filter((item) => item.kind === 'tal');
-    const danceItems = pickerItems.filter((item) => item.kind === 'dance');
-    const performerItems = pickerItems.filter((item) => item.kind === 'performer');
-    const actItems = pickerItems.filter((item) => item.kind === 'act');
-
     return (
         <div className="publish-modal__backdrop" onClick={onClose}>
             <div className="publish-modal" onClick={(event) => event.stopPropagation()}>
@@ -392,133 +386,35 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
                 </div>
 
                 {step === 'picker' ? (
-                    <div className="publish-modal__body">
-                        {pickerItems.length === 0 ? (
-                            <div className="publish-modal__empty">
-                                No publishable assets. Create or customize a Tal, Dance, Performer, or Act on the canvas to get started.
-                            </div>
-                        ) : (
-                            <>
-                                {talItems.length > 0 && (
-                                    <PickerSection title="Tal" items={talItems} onPick={handlePickItem} icon={<FileText size={12} />} />
-                                )}
-                                {danceItems.length > 0 && (
-                                    <PickerSection title="Dance" items={danceItems} onPick={handlePickItem} icon={<FileText size={12} />} />
-                                )}
-                                {performerItems.length > 0 && (
-                                    <PickerSection title="Performers" items={performerItems} onPick={handlePickItem} icon={<Wand2 size={12} />} />
-                                )}
-                                {actItems.length > 0 && (
-                                    <PickerSection title="Acts" items={actItems} onPick={handlePickItem} icon={<Zap size={12} />} />
-                                )}
-                            </>
-                        )}
-
-                        {!authUser?.authenticated && (
-                            <div className="publish-modal__auth-callout">
-                                <div>
-                                    <strong>DOT sign-in required</strong>
-                                    <p>
-                                        Save Local and Publish use your DOT namespace.
-                                        By signing in, you agree to the Dance of Tal Terms of Service:
-                                        {' '}
-                                        <a href={DOT_TOS_URL} target="_blank" rel="noreferrer">{DOT_TOS_URL}</a>
-                                    </p>
-                                </div>
-                                <button
-                                    className="publish-modal__action publish-modal__action--auth"
-                                    onClick={() => {
-                                        void startLogin(true);
-                                    }}
-                                    disabled={isAuthenticating}
-                                >
-                                    {isAuthenticating ? 'Signing in…' : 'Sign in'}
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                    <PublishPickerStep
+                        pickerItems={pickerItems}
+                        authUser={authUser}
+                        isAuthenticating={isAuthenticating}
+                        onPick={handlePickItem}
+                        onStartLogin={() => {
+                            void startLogin(true);
+                        }}
+                    />
                 ) : (
-                    /* ── Form Step ──────────────────────── */
-                    <div className="publish-modal__body">
-                        <div className="publish-modal__grid">
-                            <label className="publish-modal__field">
-                                <span>Slug</span>
-                                <input className="text-input" value={slug} onChange={(event) => setSlug(event.target.value)} />
-                            </label>
-                            <label className="publish-modal__field">
-                                <span>Description</span>
-                                <input className="text-input" value={description} onChange={(event) => setDescription(event.target.value)} />
-                            </label>
-                        </div>
-
-                        <label className="publish-modal__field">
-                            <span>Tags</span>
-                            <input className="text-input" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="tag, tag" />
-                        </label>
-
-                        {performerPreflight.length > 0 ? (
-                            <div className="publish-modal__preflight">
-                                <strong>Performer dependencies</strong>
-                                {performerPreflight.map((entry: any) => (
-                                    <div key={`${entry.label}-${entry.detail}`} className={`publish-modal__preflight-row is-${entry.status}`}>
-                                        <span>{entry.label}</span>
-                                        <span>{entry.detail}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : null}
-
-                        {markdownEditor ? (
-                            <div className="publish-modal__preflight">
-                                <strong>Markdown editor</strong>
-                                <div className={`publish-modal__preflight-row ${markdownDirty ? 'is-ready' : 'is-missing'}`}>
-                                    <span>Change state</span>
-                                    <span>{markdownDirty ? 'Modified' : 'No changes since baseline'}</span>
-                                </div>
-                                {draft?.derivedFrom ? (
-                                    <div className="publish-modal__preflight-row is-ready">
-                                        <span>Derived from</span>
-                                        <span>{draft.derivedFrom}</span>
-                                    </div>
-                                ) : null}
-                            </div>
-                        ) : null}
-
-                        {!authUser?.authenticated ? (
-                            <div className="publish-modal__auth-callout">
-                                <div>
-                                    <strong>DOT sign-in required</strong>
-                                    <p>
-                                        Save Local and Publish use your DOT namespace.
-                                        By signing in, you agree to the Dance of Tal Terms of Service:
-                                        {' '}
-                                        <a href={DOT_TOS_URL} target="_blank" rel="noreferrer">{DOT_TOS_URL}</a>
-                                    </p>
-                                </div>
-                                <button
-                                    className="publish-modal__action publish-modal__action--auth"
-                                    onClick={() => {
-                                        void startLogin(true);
-                                    }}
-                                    disabled={isAuthenticating}
-                                >
-                                    {isAuthenticating ? 'Signing in…' : 'Sign in'}
-                                </button>
-                            </div>
-                        ) : null}
-
-                        {status ? (
-                            <div className={`publish-modal__status publish-modal__status--${status.tone}`}>
-                                {status.message}
-                            </div>
-                        ) : null}
-
-                        {publishBlockedReason ? (
-                            <div className="publish-modal__status publish-modal__status--error">
-                                {publishBlockedReason}
-                            </div>
-                        ) : null}
-                    </div>
+                    <PublishFormStep
+                        slug={slug}
+                        description={description}
+                        tagsText={tagsText}
+                        setSlug={setSlug}
+                        setDescription={setDescription}
+                        setTagsText={setTagsText}
+                        performerPreflight={performerPreflight}
+                        markdownEditor={markdownEditor}
+                        markdownDirty={markdownDirty}
+                        draft={draft}
+                        authUser={authUser}
+                        isAuthenticating={isAuthenticating}
+                        onStartLogin={() => {
+                            void startLogin(true);
+                        }}
+                        status={status}
+                        publishBlockedReason={publishBlockedReason}
+                    />
                 )}
 
                 {step === 'form' && (
@@ -535,4 +431,3 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
         </div>
     );
 }
-
