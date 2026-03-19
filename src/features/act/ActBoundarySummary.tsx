@@ -74,7 +74,7 @@ export default function ActBoundarySummary({
                     ) : null}
                 </div>
             ) : (
-                <div className="act-frame__summary-empty">Connect or add performers to define this act.</div>
+                <div className="act-frame__summary-empty">Connect performers on the canvas or drag from the Asset Library.</div>
             )}
             {relationItems.length > 0 ? (
                 <div className="act-frame__summary-relations">

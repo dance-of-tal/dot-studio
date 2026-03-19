@@ -204,7 +204,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                             <>
                                 <Users size={20} className="act-chat__empty-icon" />
                                 <strong>No participants bound</strong>
-                                <span>Select this act and add performers from the Asset Library to start choreographing work.</span>
+                                <span>Connect performers on the canvas or drag from the Asset Library to bind them to this act.</span>
                                 <button
                                     className="act-chat__action-btn"
                                     onClick={() => {
@@ -263,14 +263,14 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                 }}
                                 onKeyDown={handleKeyDown}
                                 placeholder={
-                                    noPerformers
+                                    noParticipants
                                         ? 'Add performers first…'
                                         : !modelConfigured
                                             ? 'Configure a model for this performer…'
                                             : `Message ${activeParticipantLabel ?? activeParticipantKey ?? 'participant'}…`
                                 }
                                 rows={1}
-                                disabled={noPerformers || !modelConfigured || isLoading}
+                                disabled={noParticipants || !modelConfigured || isLoading}
                                 className="text-input"
                             />
                             {isLoading ? (
@@ -278,7 +278,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                     <Square size={12} fill="currentColor" />
                                 </button>
                             ) : (
-                                <button className="send-btn" onClick={() => void handleSend()} disabled={!input.trim() || noPerformers || !modelConfigured}>
+                                <button className="send-btn" onClick={() => void handleSend()} disabled={!input.trim() || noParticipants || !modelConfigured}>
                                     <Send size={12} />
                                 </button>
                             )}

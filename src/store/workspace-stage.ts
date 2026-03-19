@@ -254,7 +254,6 @@ export async function loadStage(stageId: string, get: GetFn, set: SetFn) {
             drafts: {},
             acts: parseActs(data),
             selectedActId: null,
-            layoutActId: null,
             selectedActParticipantKey: null,
             selectedRelationId: null,
             markdownEditors: loadedMarkdownEditors,

@@ -1,10 +1,4 @@
 import type { Edge, Node } from '@xyflow/react'
-import {
-    actLayoutDragPosition,
-    actLayoutEdgeSelection,
-    actLayoutSelection,
-    shouldResetActLayoutSelection,
-} from './act-layout-helpers'
 
 type EditingTargetLike = { type: string; id: string } | null | undefined
 
@@ -13,7 +7,6 @@ export type CanvasDragStopResult =
     | { kind: 'canvasTerminal'; id: string; x: number; y: number }
     | { kind: 'stageTracking'; x: number; y: number }
     | { kind: 'act'; id: string; x: number; y: number }
-    | { kind: 'act-participant'; actId: string; participantKey: string; x: number; y: number }
     | { kind: 'performer'; id: string; x: number; y: number }
 
 export type CanvasNodeClickResult =
@@ -22,7 +15,6 @@ export type CanvasNodeClickResult =
     | { kind: 'canvasTerminal' }
     | { kind: 'stageTracking' }
     | { kind: 'act'; id: string }
-    | { kind: 'act-participant'; participantKey: string }
     | { kind: 'performer'; id: string; shouldCloseEditor: boolean }
 
 function roundedPosition(node: Pick<Node, 'position'>) {
@@ -36,7 +28,7 @@ export function shouldIgnoreCanvasInteractiveClick(target: EventTarget | null) {
     return target instanceof HTMLElement && !!target.closest('.canvas-drag-handle--interactive')
 }
 
-export function resolveCanvasDragStop(node: Pick<Node, 'id' | 'position' | 'type'>, layoutActId: string | null): CanvasDragStopResult {
+export function resolveCanvasDragStop(node: Pick<Node, 'id' | 'position' | 'type'>): CanvasDragStopResult {
     const position = roundedPosition(node)
 
     if (node.type === 'markdownEditor') {
@@ -53,17 +45,6 @@ export function resolveCanvasDragStop(node: Pick<Node, 'id' | 'position' | 'type
 
     if (node.type === 'act') {
         return { kind: 'act', id: node.id, ...position }
-    }
-
-    const actLayoutMove = actLayoutDragPosition(node, layoutActId)
-    if (actLayoutMove) {
-        return {
-            kind: 'act-participant',
-            actId: actLayoutMove.actId,
-            participantKey: actLayoutMove.participantKey,
-            x: actLayoutMove.x,
-            y: actLayoutMove.y,
-        }
     }
 
     return { kind: 'performer', id: node.id, ...position }
@@ -94,11 +75,6 @@ export function resolveCanvasNodeClick(
         return { kind: 'act', id: node.id }
     }
 
-    const actLayoutParticipant = actLayoutSelection(node)
-    if (actLayoutParticipant) {
-        return { kind: 'act-participant', participantKey: actLayoutParticipant }
-    }
-
     return {
         kind: 'performer',
         id: node.id,
@@ -106,11 +82,9 @@ export function resolveCanvasNodeClick(
     }
 }
 
-export function resolveCanvasEdgeClick(isActLayoutMode: boolean, edge: Pick<Edge, 'id'>) {
-    if (!isActLayoutMode) return null
-    return actLayoutEdgeSelection(edge)
-}
-
-export function shouldResetCanvasPaneSelection(isActLayoutMode: boolean) {
-    return shouldResetActLayoutSelection(isActLayoutMode)
+export function resolveCanvasEdgeClick(edge: Pick<Edge, 'id'>) {
+    // Edges on main canvas represent Act relations — edge.id format: rel-{actId}-{relationId}
+    const parts = edge.id.split('-')
+    // Return the relation id portion
+    return parts.length >= 3 ? parts.slice(2).join('-') : edge.id
 }

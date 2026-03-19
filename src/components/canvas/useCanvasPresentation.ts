@@ -9,7 +9,6 @@ import type {
     PerformerNode,
     StageAct,
 } from '../../types'
-import { buildActLayoutNodes, isActLayoutActive } from './act-layout-helpers'
 import { composeCanvasEdges } from './canvas-edge-composer'
 import { composeCanvasNodes } from './canvas-node-composer'
 import {
@@ -20,7 +19,7 @@ import {
     buildTrackingWindowNodes,
 } from './canvas-window-node-builders'
 
-type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act' | 'act-participant'
+type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
 
 type UseCanvasPresentationArgs = {
     acts: StageAct[]
@@ -33,10 +32,8 @@ type UseCanvasPresentationArgs = {
     selectedActId: string | null
     selectedPerformerId: string | null
     selectedMarkdownEditorId: string | null
-    layoutActId: string | null
     focusedPerformerId: string | null
     editingTarget: { type: string; id: string } | null
-    focusSnapshotType: string | undefined
     transformTarget: { id: string; type: CanvasNodeKind } | null
     performerMcpSummary: (performer: PerformerNode) => string | null
     onActivateTransform: (type: CanvasNodeKind, id: string) => void
@@ -60,10 +57,8 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
         selectedActId,
         selectedPerformerId,
         selectedMarkdownEditorId,
-        layoutActId,
         focusedPerformerId,
         editingTarget,
-        focusSnapshotType,
         transformTarget,
         performerMcpSummary,
         onActivateTransform,
@@ -76,12 +71,6 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
     } = args
 
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
-
-    const isActLayoutMode = isActLayoutActive(focusSnapshotType, layoutActId)
-    const layoutAct = useMemo(
-        () => (isActLayoutMode && layoutActId ? acts.find((act) => act.id === layoutActId) || null : null),
-        [isActLayoutMode, layoutActId, acts],
-    )
 
     const buildPerformerNodes = useCallback(() => buildPerformerCanvasNodes({
         performers,
@@ -158,28 +147,19 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
     const buildActNodes = useCallback(() => buildActCanvasNodes({
         acts,
         selectedActId,
-        layoutActId,
         transformTarget,
         onActivateTransform,
         onDeactivateTransform,
     }), [
         acts,
         selectedActId,
-        layoutActId,
         transformTarget,
         onActivateTransform,
         onDeactivateTransform,
     ])
 
-    const buildActParticipantNodes = useCallback(() => {
-        if (!isActLayoutMode || !layoutActId) return []
-        return buildActLayoutNodes(layoutAct, layoutActId)
-    }, [isActLayoutMode, layoutActId, layoutAct])
-
     useEffect(() => {
         setNodes(composeCanvasNodes({
-            isActLayoutMode,
-            actLayoutNodes: buildActParticipantNodes(),
             performerNodes: buildPerformerNodes(),
             markdownEditorNodes: buildMarkdownEditorNodes(),
             canvasTerminalNodes: buildCanvasTerminalNodes(),
@@ -187,8 +167,6 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
             actNodes: buildActNodes(),
         }))
     }, [
-        isActLayoutMode,
-        buildActParticipantNodes,
         buildPerformerNodes,
         buildMarkdownEditorNodes,
         buildCanvasTerminalNodes,
@@ -198,8 +176,8 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
     ])
 
     const edges = useMemo(
-        () => composeCanvasEdges(isActLayoutMode, layoutAct),
-        [isActLayoutMode, layoutAct],
+        () => composeCanvasEdges(acts),
+        [acts],
     )
 
     return {
@@ -207,7 +185,5 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
         setNodes,
         onNodesChange,
         edges,
-        isActLayoutMode,
-        layoutAct,
     }
 }

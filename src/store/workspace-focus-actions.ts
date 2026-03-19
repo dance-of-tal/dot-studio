@@ -269,7 +269,6 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
         stageDirty: true,
         acts: [],
         selectedActId: null,
-        layoutActId: null,
         selectedActParticipantKey: null,
         selectedRelationId: null,
         actThreads: {},

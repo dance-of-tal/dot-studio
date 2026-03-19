@@ -6,7 +6,7 @@ import type {
     PerformerNode,
 } from '../../types'
 
-type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act' | 'act-participant'
+type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
 
 export function useCanvasTransformTarget(args: {
     performers: PerformerNode[]

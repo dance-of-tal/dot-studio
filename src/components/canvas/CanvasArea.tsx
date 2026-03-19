@@ -5,12 +5,10 @@ import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { useDroppable } from '@dnd-kit/core';
 import '@xyflow/react/dist/style.css';
 import { useStudioStore } from '../../store';
-// PerformerRelationEdge removed — edges now live inside Act layout mode only
 import { resolvePerformerRuntimeConfig } from '../../lib/performers';
 import { usePreventBrowserZoom } from '../../hooks/usePreventBrowserZoom';
 import CanvasControls from './CanvasControls';
 import CanvasDropOverlay from './CanvasDropOverlay';
-import { resolveActLayoutRelation, shouldHandleActLayoutConnection } from './act-layout-helpers';
 import { getCanvasDropLabel } from './canvas-drop-label';
 import { useCanvasFlowHandlers } from './useCanvasFlowHandlers';
 import { useCanvasTransformTarget } from './useCanvasTransformTarget';
@@ -18,7 +16,7 @@ import { useCanvasFocusFit } from './useCanvasFocusFit';
 import { useCanvasPresentation } from './useCanvasPresentation';
 
 const ActInspectorPanel = lazy(() => import('../../features/act/ActInspectorPanel'));
-const ActLayoutToolbar = lazy(() => import('../../features/act/ActLayoutToolbar'));
+
 const StageToolbar = lazy(() => import('../toolbar/StageToolbar'));
 const AgentFrame = lazy(() =>
     import('../../features/performer').then((module) => ({ default: module.AgentFrame })),
@@ -27,7 +25,6 @@ const MarkdownEditorFrame = lazy(() => import('../../features/assets/MarkdownEdi
 const CanvasTerminalFrame = lazy(() => import('../../features/workspace/CanvasTerminalFrame'));
 const CanvasTrackingFrame = lazy(() => import('../../features/workspace/CanvasTrackingFrame'));
 const ActFrame = lazy(() => import('../../features/act/ActFrame'));
-const ActParticipantFrame = lazy(() => import('../../features/act/ActParticipantFrame'));
 
 const withCanvasNodeSuspense = (Component: ComponentType<any>) => (props: any) => (
     <Suspense fallback={null}>
@@ -41,7 +38,6 @@ const nodeTypes = {
     canvasTerminal: withCanvasNodeSuspense(CanvasTerminalFrame),
     stageTracking: withCanvasNodeSuspense(CanvasTrackingFrame),
     act: withCanvasNodeSuspense(ActFrame),
-    'act-participant': withCanvasNodeSuspense(ActParticipantFrame),
 };
 
 const edgeTypes = {};
@@ -78,16 +74,12 @@ export default function CanvasArea() {
         setCanvasCenter,
         acts,
         selectedActId,
-        layoutActId,
         selectAct,
         updateActPosition,
-        addRelation,
         createActFromPerformers,
         attachPerformerToAct,
-        updateActParticipantPosition,
         selectActParticipant,
         selectRelation,
-        focusSnapshot,
     } = useStudioStore();
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<Node> | null>(null);
     const { active, isOver: isCanvasDropOver, setNodeRef: setCanvasDropRef } = useDroppable({
@@ -126,7 +118,6 @@ export default function CanvasArea() {
         nodes,
         onNodesChange,
         edges: relationEdges,
-        isActLayoutMode,
     } = useCanvasPresentation({
         acts,
         performers,
@@ -138,10 +129,8 @@ export default function CanvasArea() {
         selectedActId,
         selectedPerformerId,
         selectedMarkdownEditorId,
-        layoutActId,
         focusedPerformerId,
         editingTarget,
-        focusSnapshotType: focusSnapshot?.type,
         transformTarget,
         performerMcpSummary,
         onActivateTransform: activateTransformTarget,
@@ -168,8 +157,6 @@ export default function CanvasArea() {
         handleNodesChange,
         onMoveEnd,
     } = useCanvasFlowHandlers({
-        isActLayoutMode,
-        layoutActId,
         nodes,
         editingTarget,
         reactFlowInstance,
@@ -183,7 +170,6 @@ export default function CanvasArea() {
         selectAct,
         selectActParticipant,
         selectRelation,
-        addRelation,
         createActFromPerformers,
         attachPerformerToAct,
         onNodesChange,
@@ -191,31 +177,24 @@ export default function CanvasArea() {
         updateCanvasTerminalPosition,
         updateTrackingWindowPosition,
         updateActPosition,
-        updateActParticipantPosition,
         updatePerformerPosition,
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
         updateTrackingWindowSize,
         updatePerformerSize,
-        resolveActLayoutRelation,
-        shouldHandleActLayoutConnection,
     })
 
-    const canvasDropLabel = getCanvasDropLabel(active?.data?.current?.kind, layoutActId)
+    const canvasDropLabel = getCanvasDropLabel(active?.data?.current?.kind)
 
     return (
-        <div className={`canvas-area ${(focusedPerformerId || isActLayoutMode) ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
+        <div className={`canvas-area ${focusedPerformerId ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
             <div className="canvas-top-right-bar">
                 <CanvasControls />
                 <Suspense fallback={null}>
                     <StageToolbar />
                 </Suspense>
             </div>
-            {isActLayoutMode ? (
-                <Suspense fallback={null}>
-                    <ActLayoutToolbar />
-                </Suspense>
-            ) : null}
+
             <CanvasDropOverlay active={isCanvasDropOver} label={canvasDropLabel} />
             <ReactFlow
                 nodes={nodes}
@@ -239,11 +218,11 @@ export default function CanvasArea() {
                 zoomOnScroll={!focusedPerformerId}
                 zoomOnPinch={!focusedPerformerId}
                 zoomOnDoubleClick={!focusedPerformerId}
-                nodesDraggable={!focusedPerformerId || isActLayoutMode}
+                nodesDraggable={!focusedPerformerId}
             >
                 <Background color={focusedPerformerId ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>
-            {isActLayoutMode || selectedActId ? (
+            {selectedActId ? (
                 <Suspense fallback={null}>
                     <ActInspectorPanel />
                 </Suspense>

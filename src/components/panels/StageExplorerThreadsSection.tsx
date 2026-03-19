@@ -37,7 +37,7 @@ type Props = {
     onSwitchFocusTarget: (id: string, type: 'performer' | 'act') => void
     onSelectAct: (id: string) => void
     onCreateThread: (id: string) => void | Promise<void>
-    onEnterActLayoutMode: (id: string) => void
+
     onSaveActAsDraft: (id: string) => void
     onToggleActVisibility: (id: string) => void
     onRemoveAct: (id: string) => void
@@ -79,7 +79,7 @@ export default function StageExplorerThreadsSection({
     onSwitchFocusTarget,
     onSelectAct,
     onCreateThread,
-    onEnterActLayoutMode,
+
     onSaveActAsDraft,
     onToggleActVisibility,
     onRemoveAct,
@@ -148,7 +148,7 @@ export default function StageExplorerThreadsSection({
                                     onSwitchFocusTarget={onSwitchFocusTarget}
                                     onSelectAct={onSelectAct}
                                     onCreateThread={onCreateThread}
-                                    onEnterActLayoutMode={onEnterActLayoutMode}
+
                                     onSaveActAsDraft={onSaveActAsDraft}
                                     onToggleActVisibility={onToggleActVisibility}
                                     onRemoveAct={onRemoveAct}

@@ -9,7 +9,7 @@ import type {
 } from '../../types'
 import { hasModelConfig } from '../../lib/performers'
 
-type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act' | 'act-participant'
+type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
 
 function getCanvasWindowZIndex({
     selected = false,
@@ -247,7 +247,6 @@ export function buildTrackingWindowNodes(args: {
 export function buildActCanvasNodes(args: {
     acts: StageAct[]
     selectedActId: string | null
-    layoutActId: string | null
     transformTarget: { id: string; type: CanvasNodeKind } | null
     onActivateTransform: (type: CanvasNodeKind, id: string) => void
     onDeactivateTransform: (type: CanvasNodeKind, id: string) => void
@@ -255,7 +254,6 @@ export function buildActCanvasNodes(args: {
     const {
         acts,
         selectedActId,
-        layoutActId,
         transformTarget,
         onActivateTransform,
         onDeactivateTransform,
@@ -269,7 +267,6 @@ export function buildActCanvasNodes(args: {
         hidden: act.hidden,
         zIndex: getCanvasWindowZIndex({
             selected: selectedActId === act.id,
-            editing: layoutActId === act.id,
             transformActive: transformTarget?.type === 'act' && transformTarget.id === act.id,
         }),
         data: {

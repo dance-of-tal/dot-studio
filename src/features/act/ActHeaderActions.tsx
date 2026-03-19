@@ -1,4 +1,4 @@
-import { Activity, EyeOff, Pencil, Plus, Workflow } from 'lucide-react'
+import { Activity, EyeOff, Plus, Workflow } from 'lucide-react'
 import './ActHeaderActions.css'
 
 type ActHeaderActionsProps = {
@@ -6,7 +6,6 @@ type ActHeaderActionsProps = {
     onToggleActivity: () => void
     onAddParticipant: () => void
     onCreateThread: () => void
-    onEnterAdvancedLayout: () => void
     onHide: () => void
 }
 
@@ -15,7 +14,6 @@ export default function ActHeaderActions({
     onToggleActivity,
     onAddParticipant,
     onCreateThread,
-    onEnterAdvancedLayout,
     onHide,
 }: ActHeaderActionsProps) {
     return (
@@ -40,13 +38,6 @@ export default function ActHeaderActions({
                 onClick={onCreateThread}
             >
                 <Workflow size={11} />
-            </button>
-            <button
-                className="icon-btn act-frame__edit-btn"
-                title="Advanced Layout"
-                onClick={onEnterAdvancedLayout}
-            >
-                <Pencil size={11} />
             </button>
             <button
                 className="icon-btn act-frame__close-btn"

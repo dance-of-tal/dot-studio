@@ -298,7 +298,6 @@ export const createWorkspaceSlice: StateCreator<
                 isTrackingOpen: false,
                 acts: [],
                 selectedActId: null,
-                layoutActId: null,
                 selectedActParticipantKey: null,
                 selectedRelationId: null,
                 actThreads: {},

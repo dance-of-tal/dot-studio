@@ -57,62 +57,7 @@ export function addActRelationImpl(
     return inserted ? relation.id : existingRelationId
 }
 
-export function enterActLayoutModeImpl(get: GetState, set: SetState, actId: string) {
-    const state = get()
-    const act = state.acts.find((entry) => entry.id === actId)
-    if (!act) return
 
-    const focusSnapshot = {
-        type: 'act' as const,
-        actId,
-        hiddenPerformerIds: state.performers.filter((performer) => performer.hidden).map((performer) => performer.id),
-        hiddenActIds: state.acts.filter((entry) => (entry as any).hidden).map((entry) => entry.id),
-        hiddenEditorIds: state.markdownEditors.filter((editor) => editor.hidden).map((editor) => editor.id),
-        hiddenTerminalIds: [] as string[],
-        nodeSize: { width: 0, height: 0 },
-        assetLibraryOpen: state.isAssetLibraryOpen,
-        assistantOpen: state.isAssistantOpen,
-        terminalOpen: state.isTerminalOpen,
-    }
-
-    set({
-        layoutActId: actId,
-        selectedActId: actId,
-        selectedActParticipantKey: null,
-        focusSnapshot,
-        performers: state.performers.map((performer) => ({ ...performer, hidden: true })),
-        markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: true })),
-        isAssistantOpen: false,
-        isTerminalOpen: false,
-        editingTarget: null,
-        inspectorFocus: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
-    })
-}
-
-export function exitActLayoutModeImpl(get: GetState, set: SetState) {
-    const state = get()
-    const snapshot = state.focusSnapshot
-    if (!snapshot || snapshot.type !== 'act') return
-
-    set({
-        layoutActId: null,
-        selectedActParticipantKey: null,
-        focusSnapshot: null,
-        performers: state.performers.map((performer) => ({
-            ...performer,
-            hidden: snapshot.hiddenPerformerIds.includes(performer.id),
-        })),
-        markdownEditors: state.markdownEditors.map((editor) => ({
-            ...editor,
-            hidden: snapshot.hiddenEditorIds.includes(editor.id),
-        })),
-        isAssetLibraryOpen: snapshot.assetLibraryOpen,
-        isAssistantOpen: snapshot.assistantOpen,
-        isTerminalOpen: snapshot.terminalOpen,
-    })
-}
 
 export function createActFromPerformersImpl(
     get: GetState,

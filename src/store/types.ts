@@ -244,7 +244,7 @@ export interface ActThreadState {
 export interface ActSlice {
     acts: StageAct[]
     selectedActId: string | null
-    layoutActId: string | null
+
     selectedActParticipantKey: string | null
     selectedRelationId: string | null
 
@@ -282,10 +282,6 @@ export interface ActSlice {
     // ── Canvas ──────────────────────────────────
     updateActPosition: (id: string, x: number, y: number) => void
     updateActSize: (id: string, width: number, height: number) => void
-
-    // ── Focus mode ──────────────────────────────
-    enterActLayoutMode: (actId: string) => void
-    exitActLayoutMode: () => void
 
     // ── Authoring / import ──────────────────────
     updateActAuthoringMeta: (id: string, meta: StageAct['meta']) => void

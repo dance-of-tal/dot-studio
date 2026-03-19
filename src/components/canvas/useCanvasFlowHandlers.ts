@@ -5,15 +5,12 @@ import {
     resolveCanvasDragStop,
     resolveCanvasEdgeClick,
     resolveCanvasNodeClick,
-    shouldResetCanvasPaneSelection,
 } from './canvas-event-router'
 import { resolveCanvasResizeChange } from './canvas-resize-router'
 
 type EditingTargetLike = { type: string; id: string } | null
 
 type UseCanvasFlowHandlersArgs = {
-    isActLayoutMode: boolean
-    layoutActId: string | null
     nodes: Node[]
     editingTarget: EditingTargetLike
     reactFlowInstance: ReactFlowInstance<Node> | null
@@ -27,28 +24,22 @@ type UseCanvasFlowHandlersArgs = {
     selectAct: (id: string | null) => void
     selectActParticipant: (participantKey: string | null) => void
     selectRelation: (relationId: string | null) => void
-    addRelation: (actId: string, between: [string, string], direction?: 'one-way' | 'both') => string | null
-    createActFromPerformers: (performerIds: [string, string], options?: { actName?: string }) => string | null
+    createActFromPerformers: (performerIds: [string, string], options?: { name?: string }) => string | null
     attachPerformerToAct: (actId: string, performerId: string) => string | null
     onNodesChange: (changes: NodeChange<Node>[]) => void
     updateMarkdownEditorPosition: (id: string, x: number, y: number) => void
     updateCanvasTerminalPosition: (id: string, x: number, y: number) => void
     updateTrackingWindowPosition: (x: number, y: number) => void
     updateActPosition: (id: string, x: number, y: number) => void
-    updateActParticipantPosition: (actId: string, participantKey: string, x: number, y: number) => void
     updatePerformerPosition: (id: string, x: number, y: number) => void
     updateMarkdownEditorSize: (id: string, width: number, height: number) => void
     updateCanvasTerminalSize: (id: string, width: number, height: number) => void
     updateTrackingWindowSize: (width: number, height: number) => void
     updatePerformerSize: (id: string, width: number, height: number) => void
-    resolveActLayoutRelation: (connection: Pick<Connection, 'source' | 'target'>) => [string, string] | null
-    shouldHandleActLayoutConnection: (isActLayoutMode: boolean, layoutActId: string | null, connection: Pick<Connection, 'source' | 'target'>) => boolean
 }
 
 export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     const {
-        isActLayoutMode,
-        layoutActId,
         nodes,
         editingTarget,
         reactFlowInstance,
@@ -62,7 +53,6 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         selectAct,
         selectActParticipant,
         selectRelation,
-        addRelation,
         createActFromPerformers,
         attachPerformerToAct,
         onNodesChange,
@@ -70,24 +60,21 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         updateCanvasTerminalPosition,
         updateTrackingWindowPosition,
         updateActPosition,
-        updateActParticipantPosition,
         updatePerformerPosition,
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
         updateTrackingWindowSize,
         updatePerformerSize,
-        resolveActLayoutRelation,
-        shouldHandleActLayoutConnection,
     } = args
 
     const onEdgeClick = useCallback((_event: React.MouseEvent, edge: import('@xyflow/react').Edge) => {
-        const relationId = resolveCanvasEdgeClick(isActLayoutMode, edge)
+        const relationId = resolveCanvasEdgeClick(edge)
         if (!relationId) return
         selectRelation(relationId)
-    }, [isActLayoutMode, selectRelation])
+    }, [selectRelation])
 
     const onNodeDragStop = useCallback((_: unknown, node: Node) => {
-        const result = resolveCanvasDragStop(node, layoutActId)
+        const result = resolveCanvasDragStop(node)
 
         switch (result.kind) {
             case 'markdownEditor':
@@ -102,20 +89,15 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
             case 'act':
                 updateActPosition(result.id, result.x, result.y)
                 return
-            case 'act-participant':
-                updateActParticipantPosition(result.actId, result.participantKey, result.x, result.y)
-                return
             case 'performer':
                 updatePerformerPosition(result.id, result.x, result.y)
                 return
         }
     }, [
-        layoutActId,
         updateMarkdownEditorPosition,
         updateCanvasTerminalPosition,
         updateTrackingWindowPosition,
         updateActPosition,
-        updateActParticipantPosition,
         updatePerformerPosition,
     ])
 
@@ -144,17 +126,12 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
                 selectMarkdownEditor(null)
                 selectAct(result.id)
                 return
-            case 'act-participant':
-                selectActParticipant(result.participantKey)
-                return
             case 'performer':
                 if (result.shouldCloseEditor) {
                     closeEditor()
                 }
                 selectPerformer(result.id)
                 setActiveChatPerformer(result.id)
-                return
-            case 'ignore':
                 return
         }
     }, [
@@ -164,7 +141,6 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         selectMarkdownEditor,
         selectPerformer,
         selectAct,
-        selectActParticipant,
         setActiveChatPerformer,
     ])
 
@@ -174,45 +150,29 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         selectPerformer(null)
         selectMarkdownEditor(null)
         selectAct(null)
-        if (shouldResetCanvasPaneSelection(isActLayoutMode)) {
-            selectActParticipant(null)
-            selectRelation(null)
-        }
+        selectActParticipant(null)
+        selectRelation(null)
     }, [
         clearTransformTarget,
         closeEditor,
         selectPerformer,
         selectMarkdownEditor,
         selectAct,
-        isActLayoutMode,
         selectActParticipant,
         selectRelation,
     ])
 
     const onConnect = useCallback((connection: Connection) => {
         routeActConnection({
-            isActLayoutMode,
-            layoutActId,
             connection,
             nodes,
-            onAddLayoutRelation: (between) => {
-                if (!layoutActId) return
-                addRelation(layoutActId, between, 'both')
-            },
             onCreateActFromPerformers: createActFromPerformers,
             onAttachPerformerToAct: attachPerformerToAct,
-            resolveActLayoutRelation,
-            shouldHandleActLayoutConnection,
         })
     }, [
-        isActLayoutMode,
-        layoutActId,
         nodes,
-        addRelation,
         createActFromPerformers,
         attachPerformerToAct,
-        resolveActLayoutRelation,
-        shouldHandleActLayoutConnection,
     ])
 
     const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {

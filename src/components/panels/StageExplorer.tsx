@@ -6,7 +6,6 @@ import { mapSessionMessagesToChatMessages } from '../../lib/chat-messages';
 import { parseStudioSessionTitle, renameStudioSessionTitle } from '../../../shared/session-metadata';
 import {
     Folder,
-    MessageSquare,
     Trash2,
 } from 'lucide-react';
 import './StageExplorer.css';
@@ -81,7 +80,7 @@ export default function StageExplorer() {
     const selectedActId = useStudioStore((s) => s.selectedActId);
     const selectAct = useStudioStore((s) => s.selectAct);
     const removeAct = useStudioStore((s) => s.removeAct);
-    const enterActLayoutMode = useStudioStore((s) => s.enterActLayoutMode);
+
     const toggleActVisibility = useStudioStore((s) => s.toggleActVisibility);
     const actThreads = useStudioStore((s) => s.actThreads);
     const activeThreadId = useStudioStore((s) => s.activeThreadId);
@@ -296,7 +295,7 @@ export default function StageExplorer() {
                 onSwitchFocusTarget={switchFocusTarget}
                 onSelectAct={selectAct}
                 onCreateThread={createThread}
-                onEnterActLayoutMode={enterActLayoutMode}
+
                 onSaveActAsDraft={saveActAsDraft}
                 onToggleActVisibility={toggleActVisibility}
                 onRemoveAct={removeAct}

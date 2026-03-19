@@ -4,21 +4,16 @@
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { StudioState, ActSlice } from './types'
-import type { StageAct, StageActParticipantBinding, ActRelation } from '../types'
+import type { StageAct, StageActParticipantBinding } from '../types'
 import {
     autoLayoutBindings,
     createActThreadImpl,
-    fallbackParticipantLabel,
     importActFromAssetImpl,
     loadActThreadsImpl,
-    normalizeRelationPermissions,
-    normalizeSubscriptions,
 } from './act-slice-helpers'
 import {
     addActRelationImpl,
     createActFromPerformersImpl,
-    enterActLayoutModeImpl,
-    exitActLayoutModeImpl,
 } from './act-slice-actions'
 
 const ACT_DEFAULT_WIDTH = 340
@@ -27,7 +22,6 @@ const ACT_DEFAULT_HEIGHT = 80
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
     acts: [],
     selectedActId: null,
-    layoutActId: null,
     selectedActParticipantKey: null,
     selectedRelationId: null,
 
@@ -71,7 +65,6 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                 Object.entries(s.actThreads).filter(([actId]) => actId !== id),
             ),
             selectedActId: s.selectedActId === id ? null : s.selectedActId,
-            layoutActId: s.layoutActId === id ? null : s.layoutActId,
             selectedActParticipantKey: s.selectedActId === id ? null : s.selectedActParticipantKey,
             selectedRelationId: s.selectedActId === id ? null : s.selectedRelationId,
             activeThreadId: s.selectedActId === id ? null : s.activeThreadId,
@@ -181,9 +174,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         if (existingParticipantKeys.length === 1) {
             relationId = get().addRelation(actId, [existingParticipantKeys[0], newKey], 'both')
         }
-        if (get().layoutActId !== actId) {
-            get().autoLayoutActParticipants(actId)
-        }
+        get().autoLayoutActParticipants(actId)
         set({
             selectedActId: actId,
             selectedPerformerId: null,
@@ -338,11 +329,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }))
     },
 
-    // ── Layout mode for Act editing ─────────────────────
 
-    enterActLayoutMode: (actId) => enterActLayoutModeImpl(get, set, actId),
-
-    exitActLayoutMode: () => exitActLayoutModeImpl(get, set),
 
     // ── Authoring / import ──────────────────────────────
 

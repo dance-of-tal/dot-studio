@@ -20,7 +20,6 @@ export default function ActFrame({ data, id }: any) {
         selectAct,
         selectActParticipant,
         selectRelation,
-        enterActLayoutMode,
         toggleActVisibility,
         updateActSize,
         activeThreadId,
@@ -129,7 +128,6 @@ export default function ActFrame({ data, id }: any) {
                         onToggleActivity={() => setShowActivity(!showActivity)}
                         onAddParticipant={handleAddParticipant}
                         onCreateThread={handleCreateThread}
-                        onEnterAdvancedLayout={() => enterActLayoutMode(id)}
                         onHide={() => toggleActVisibility(id)}
                     />
                 ) : null}

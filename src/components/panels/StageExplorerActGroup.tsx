@@ -4,7 +4,6 @@ import {
     ChevronRight,
     Eye,
     EyeOff,
-    Pencil,
     Plus,
     Trash2,
     User,
@@ -28,7 +27,7 @@ type Props = {
     onSwitchFocusTarget: (id: string, type: 'performer' | 'act') => void
     onSelectAct: (id: string) => void
     onCreateThread: (id: string) => void | Promise<void>
-    onEnterActLayoutMode: (id: string) => void
+
     onSaveActAsDraft: (id: string) => void
     onToggleActVisibility: (id: string) => void
     onRemoveAct: (id: string) => void
@@ -50,7 +49,7 @@ export default function StageExplorerActGroup({
     onSwitchFocusTarget,
     onSelectAct,
     onCreateThread,
-    onEnterActLayoutMode,
+
     onSaveActAsDraft,
     onToggleActVisibility,
     onRemoveAct,
@@ -109,9 +108,7 @@ export default function StageExplorerActGroup({
                     <button className="icon-btn" onClick={() => void onCreateThread(act.id)} title="New Thread">
                         <Plus size={11} />
                     </button>
-                    <button className="icon-btn" onClick={() => onEnterActLayoutMode(act.id)} title="Advanced Layout">
-                        <Pencil size={11} />
-                    </button>
+
                     <button
                         className="icon-btn"
                         onClick={() => {
