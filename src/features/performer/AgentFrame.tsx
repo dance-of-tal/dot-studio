@@ -25,33 +25,13 @@ import SafeReviewModal from '../../components/modals/SafeReviewModal'
 
 import PerformerEditPanel from './PerformerEditPanel'
 import PerformerChatPanel from './PerformerChatPanel'
+import PerformerFrameHeaderMeta from './PerformerFrameHeaderMeta'
+import { usePerformerSafeReview } from './usePerformerSafeReview'
 
 import { Pencil, EyeOff, Maximize2, Minimize2 } from 'lucide-react'
 import './AgentFrame.css'
 import './AgentChat.css'
 import './AgentInput.css'
-
-/* ── Header Meta Badge ── */
-
-function PerformerHeaderMeta({
-    modelLabel, modelTitle, talLabel, danceSummary, executionMode, pendingCount, conflictCount,
-}: {
-    modelLabel: string | null; modelTitle: string | null; talLabel: string | null;
-    danceSummary: string | null; executionMode: 'direct' | 'safe'; pendingCount: number; conflictCount: number;
-}) {
-    return (
-        <div className="canvas-frame__badges">
-            <span className="canvas-frame__badge" title={executionMode === 'safe' ? 'Safe mode enabled' : 'Direct mode enabled'}>
-                {executionMode === 'safe' ? 'Safe' : 'Direct'}
-            </span>
-            {conflictCount > 0 ? <span className="canvas-frame__badge" title={`${conflictCount} conflict${conflictCount === 1 ? '' : 's'} require review`}>Conflict</span> : null}
-            {pendingCount > 0 ? <span className="canvas-frame__badge" title={`${pendingCount} pending change${pendingCount === 1 ? '' : 's'}`}>{pendingCount} change{pendingCount === 1 ? '' : 's'}</span> : null}
-            {talLabel ? <span className="canvas-frame__badge" title={`Tal: ${talLabel}`}>{talLabel}</span> : null}
-            {danceSummary ? <span className="canvas-frame__badge" title={`Dance: ${danceSummary}`}>{danceSummary}</span> : null}
-            {modelLabel ? <span className="canvas-frame__badge" title={modelTitle || modelLabel}>{modelLabel}</span> : null}
-        </div>
-    )
-}
 
 /* ── Main Component ── */
 
@@ -76,9 +56,6 @@ export default function AgentFrame({ data, id }: any) {
     } = useStudioStore()
 
     // ─── Local State ──────────────────────────────────
-    const [showSafeReview, setShowSafeReview] = useState(false)
-    const [safeBusy, setSafeBusy] = useState(false)
-    const [pendingModeSwitch, setPendingModeSwitch] = useState<'direct' | null>(null)
     const chatEndRef = useRef<HTMLDivElement>(null)
     const bodyRef = useRef<HTMLDivElement>(null)
 
@@ -147,13 +124,6 @@ export default function AgentFrame({ data, id }: any) {
         }
     }, [id, mcpServers, performer?.mcpBindingMap, setPerformerMcpBinding])
 
-    // ─── Safe mode refresh ────────────────────────────
-    useEffect(() => {
-        if (performer?.executionMode !== 'safe') return
-        if (!(isSelected || isFocused || isEditMode || showSafeReview)) return
-        void refreshSafeOwner('performer', id)
-    }, [id, isEditMode, isFocused, isSelected, performer?.executionMode, refreshSafeOwner, showSafeReview])
-
     // ─── Wheel isolation ──────────────────────────────
     useEffect(() => {
         const el = bodyRef.current
@@ -168,39 +138,32 @@ export default function AgentFrame({ data, id }: any) {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages, isLoading])
 
-    // ─── Safe mode callbacks ──────────────────────────
-    const handleToggleExecutionMode = useCallback(async () => {
-        if (!performer) return
-        if (performer.executionMode === 'safe') {
-            const summary = safeSummary || await refreshSafeOwner('performer', id)
-            if (summary && summary.pendingCount > 0) {
-                setPendingModeSwitch('direct')
-                setShowSafeReview(true)
-                return
-            }
-            setPerformerExecutionMode(id, 'direct')
-            return
-        }
-        setPerformerExecutionMode(id, 'safe')
-        void refreshSafeOwner('performer', id)
-    }, [id, performer, refreshSafeOwner, safeSummary, setPerformerExecutionMode])
-
-    const runSafeAction = useCallback(async (
-        task: () => Promise<void>,
-        nextMode?: 'direct',
-        notice = 'Updated the safe workspace and started a new thread lineage.',
-    ) => {
-        setSafeBusy(true)
-        try {
-            await task()
-            if (nextMode) { setPerformerExecutionMode(id, nextMode) } else { detachPerformerSession(id, notice) }
-            void refreshSafeOwner('performer', id)
-            setShowSafeReview(false)
-            setPendingModeSwitch(null)
-        } finally {
-            setSafeBusy(false)
-        }
-    }, [detachPerformerSession, id, refreshSafeOwner, setPerformerExecutionMode])
+    const {
+        showSafeReview,
+        safeBusy,
+        pendingModeSwitch,
+        setShowSafeReview,
+        setPendingModeSwitch,
+        handleToggleExecutionMode,
+        applySafeReview,
+        discardSafeReviewAll,
+        discardSafeReviewFile,
+        undoSafeReviewApply,
+    } = usePerformerSafeReview({
+        performerId: id,
+        performer,
+        isSelected,
+        isFocused,
+        isEditMode,
+        refreshSafeOwner,
+        safeSummary,
+        setPerformerExecutionMode,
+        detachPerformerSession,
+        applySafeOwner,
+        discardSafeOwnerFile,
+        discardAllSafeOwner,
+        undoLastSafeApply,
+    })
 
     const openAssetEditor = useCallback(async (
         kind: 'tal' | 'dance',
@@ -260,7 +223,7 @@ export default function AgentFrame({ data, id }: any) {
                 headerStart={<span className="canvas-frame__name">{data.name}</span>}
                 headerEnd={(
                     <div className="canvas-frame__header-actions">
-                        <PerformerHeaderMeta
+                        <PerformerFrameHeaderMeta
                             modelLabel={data.modelLabel || null}
                             modelTitle={data.modelTitle || null}
                             talLabel={data.talLabel || null}
@@ -370,21 +333,13 @@ export default function AgentFrame({ data, id }: any) {
                     summary={safeSummary}
                     busy={safeBusy}
                     onClose={() => { setShowSafeReview(false); setPendingModeSwitch(null) }}
-                    onApply={() => { void runSafeAction(() => applySafeOwner('performer', id), pendingModeSwitch || undefined) }}
-                    onDiscardAll={() => { void runSafeAction(() => discardAllSafeOwner('performer', id), pendingModeSwitch || undefined) }}
+                    onApply={() => { void applySafeReview() }}
+                    onDiscardAll={() => { void discardSafeReviewAll() }}
                     onDiscardFile={(filePath) => {
-                        void runSafeAction(
-                            () => discardSafeOwnerFile('performer', id, filePath),
-                            undefined,
-                            `Discarded ${filePath} from the safe workspace and started a new thread lineage.`,
-                        )
+                        void discardSafeReviewFile(filePath)
                     }}
                     onUndoLastApply={() => {
-                        void runSafeAction(
-                            () => undoLastSafeApply('performer', id),
-                            undefined,
-                            'Undid the last apply and started a new thread lineage.',
-                        )
+                        void undoSafeReviewApply()
                     }}
                 />
             ) : null}

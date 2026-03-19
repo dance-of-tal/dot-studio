@@ -14,6 +14,12 @@ import {
     normalizeRelationPermissions,
     normalizeSubscriptions,
 } from './act-slice-helpers'
+import {
+    addActRelationImpl,
+    createActFromPerformersImpl,
+    enterActLayoutModeImpl,
+    exitActLayoutModeImpl,
+} from './act-slice-actions'
 
 const ACT_DEFAULT_WIDTH = 340
 const ACT_DEFAULT_HEIGHT = 80
@@ -187,152 +193,13 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         return newKey
     },
 
-    createActFromPerformers: (performerIds, options) => {
-        const [sourcePerformerId, targetPerformerId] = performerIds
-        if (!sourcePerformerId || !targetPerformerId || sourcePerformerId === targetPerformerId) {
-            return null
-        }
-
-        const state = get()
-        const sourcePerformer = state.performers.find((p) => p.id === sourcePerformerId)
-        const targetPerformer = state.performers.find((p) => p.id === targetPerformerId)
-        if (!sourcePerformer || !targetPerformer) {
-            return null
-        }
-
-        const performerToRef = (performer: typeof sourcePerformer) => {
-            const derivedFrom = performer.meta?.derivedFrom?.trim()
-            if (derivedFrom) {
-                return { kind: 'registry' as const, urn: derivedFrom }
-            }
-            return { kind: 'draft' as const, draftId: performer.id }
-        }
-
-        const bindingMatchesPerformer = (
-            binding: StageActParticipantBinding,
-            performerId: string,
-            performerUrn?: string | null,
-        ) => (
-            (binding.performerRef.kind === 'draft' && binding.performerRef.draftId === performerId)
-            || (binding.performerRef.kind === 'registry' && !!performerUrn && binding.performerRef.urn === performerUrn)
-        )
-
-        const findBindingInAct = (act: StageAct, performerId: string) => (
-            Object.entries(act.participants).find(([, binding]) => (
-                bindingMatchesPerformer(
-                    binding,
-                    performerId,
-                    performerId === sourcePerformerId ? sourcePerformer.meta?.derivedFrom : targetPerformer.meta?.derivedFrom,
-                )
-            )) || null
-        )
-
-        const sourceMatch = state.acts
-            .map((act) => ({ act, binding: findBindingInAct(act, sourcePerformerId) }))
-            .find((entry) => !!entry.binding) || null
-        const targetMatch = state.acts
-            .map((act) => ({ act, binding: findBindingInAct(act, targetPerformerId) }))
-            .find((entry) => !!entry.binding) || null
-
-        if (sourceMatch && targetMatch) {
-            if (sourceMatch.act.id !== targetMatch.act.id) {
-                // Cross-act merge stays explicit in v1.
-                set({ selectedActId: sourceMatch.act.id, selectedPerformerId: null })
-                return sourceMatch.act.id
-            }
-
-            const sourceKey = sourceMatch.binding?.[0]
-            const targetKey = targetMatch.binding?.[0]
-            if (sourceKey && targetKey) {
-                const relationId = get().addRelation(sourceMatch.act.id, [sourceKey, targetKey], 'both')
-                set({
-                    selectedActId: sourceMatch.act.id,
-                    selectedPerformerId: null,
-                    selectedActParticipantKey: null,
-                    selectedRelationId: relationId,
-                })
-                return sourceMatch.act.id
-            }
-        }
-
-        if (sourceMatch && !targetMatch) {
-            const targetKey = get().bindPerformerToAct(sourceMatch.act.id, performerToRef(targetPerformer))
-            const sourceKey = sourceMatch.binding?.[0]
-            let relationId: string | null = null
-            if (sourceKey && targetKey) {
-                relationId = get().addRelation(sourceMatch.act.id, [sourceKey, targetKey], 'both')
-            }
-            set({
-                selectedActId: sourceMatch.act.id,
-                selectedPerformerId: null,
-                selectedActParticipantKey: relationId ? null : targetKey,
-                selectedRelationId: relationId,
-            })
-            return sourceMatch.act.id
-        }
-
-        if (!sourceMatch && targetMatch) {
-            const sourceKey = get().bindPerformerToAct(targetMatch.act.id, performerToRef(sourcePerformer))
-            const targetKey = targetMatch.binding?.[0]
-            let relationId: string | null = null
-            if (sourceKey && targetKey) {
-                relationId = get().addRelation(targetMatch.act.id, [sourceKey, targetKey], 'both')
-            }
-            set({
-                selectedActId: targetMatch.act.id,
-                selectedPerformerId: null,
-                selectedActParticipantKey: relationId ? null : sourceKey,
-                selectedRelationId: relationId,
-            })
-            return targetMatch.act.id
-        }
-
-        const id = nanoid(12)
-        const sourceKey = nanoid(8)
-        const targetKey = nanoid(8)
-        const actName = options?.name?.trim() || `${sourcePerformer.name} + ${targetPerformer.name}`
-        const initialRelationId = `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-
-        const act: StageAct = {
-            id,
-            name: actName,
-            position: {
-                x: Math.round((sourcePerformer.position.x + targetPerformer.position.x) / 2 + 120),
-                y: Math.round((sourcePerformer.position.y + targetPerformer.position.y) / 2 + 40),
-            },
-            width: ACT_DEFAULT_WIDTH,
-            height: 320,
-            participants: autoLayoutBindings({
-                [sourceKey]: {
-                    performerRef: performerToRef(sourcePerformer),
-                    position: { x: 40, y: 120 },
-                },
-                [targetKey]: {
-                    performerRef: performerToRef(targetPerformer),
-                    position: { x: 360, y: 120 },
-                },
-            }),
-            relations: [{
-                id: initialRelationId,
-                between: [sourceKey, targetKey],
-                direction: 'both',
-                name: `${sourcePerformer.name}_to_${targetPerformer.name}`,
-                maxCalls: 10,
-                timeout: 300,
-            }],
-            createdAt: Date.now(),
-        }
-
-        set((s) => ({
-            acts: [...s.acts, act],
-            selectedActId: id,
-            selectedPerformerId: null,
-            selectedActParticipantKey: null,
-            selectedRelationId: initialRelationId,
-            stageDirty: true,
-        }))
-        return id
-    },
+    createActFromPerformers: (performerIds, options) => createActFromPerformersImpl(
+        get,
+        set,
+        performerIds,
+        options,
+        { width: ACT_DEFAULT_WIDTH, height: 320 },
+    ),
 
     attachPerformerToAct: (actId, performerId) => {
         const state = get()
@@ -420,51 +287,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
 
     // ── Relation (communication contract) ───────────────
 
-    addRelation: (actId, between, direction) => {
-        const act = get().acts.find((entry) => entry.id === actId)
-        const performers = get().performers
-        const leftBinding = act?.participants[between[0]]
-        const rightBinding = act?.participants[between[1]]
-        const leftLabel = leftBinding
-            ? (leftBinding.performerRef.kind === 'draft'
-                ? performers.find((performer) => performer.id === leftBinding.performerRef.draftId)?.name || fallbackParticipantLabel(leftBinding.performerRef)
-                : performers.find((performer) => performer.meta?.derivedFrom === leftBinding.performerRef.urn)?.name || fallbackParticipantLabel(leftBinding.performerRef))
-            : between[0]
-        const rightLabel = rightBinding
-            ? (rightBinding.performerRef.kind === 'draft'
-                ? performers.find((performer) => performer.id === rightBinding.performerRef.draftId)?.name || fallbackParticipantLabel(rightBinding.performerRef)
-                : performers.find((performer) => performer.meta?.derivedFrom === rightBinding.performerRef.urn)?.name || fallbackParticipantLabel(rightBinding.performerRef))
-            : between[1]
-        const relation: ActRelation = {
-            id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            between,
-            direction,
-            name: `${leftLabel}_to_${rightLabel}`,
-            maxCalls: 10,
-            timeout: 300,
-        }
-        let inserted = false
-        let existingRelationId: string | null = null
-        set((s) => ({
-            acts: s.acts.map((a) => {
-                if (a.id !== actId) return a
-                // Prevent duplicates (same pair)
-                const existing = a.relations.find(
-                    (r) =>
-                        (r.between[0] === between[0] && r.between[1] === between[1]) ||
-                        (r.between[0] === between[1] && r.between[1] === between[0]),
-                )
-                if (existing) {
-                    existingRelationId = existing.id
-                    return a
-                }
-                inserted = true
-                return { ...a, relations: [...a.relations, relation] }
-            }),
-            stageDirty: true,
-        }))
-        return inserted ? relation.id : existingRelationId
-    },
+    addRelation: (actId, between, direction) => addActRelationImpl(get, set, actId, between, direction),
 
     removeRelation: (actId, relationId) => {
         set((s) => ({
@@ -517,62 +340,9 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
 
     // ── Layout mode for Act editing ─────────────────────
 
-    enterActLayoutMode: (actId) => {
-        const state = get()
-        const act = state.acts.find((a) => a.id === actId)
-        if (!act) return
+    enterActLayoutMode: (actId) => enterActLayoutModeImpl(get, set, actId),
 
-        const focusSnapshot = {
-            type: 'act' as const,
-            actId,
-            hiddenPerformerIds: state.performers.filter((p) => p.hidden).map((p) => p.id),
-            hiddenActIds: state.acts.filter((a) => (a as any).hidden).map((a) => a.id),
-            hiddenEditorIds: state.markdownEditors.filter((e) => e.hidden).map((e) => e.id),
-            hiddenTerminalIds: [] as string[],
-            nodeSize: { width: 0, height: 0 },
-            assetLibraryOpen: state.isAssetLibraryOpen,
-            assistantOpen: state.isAssistantOpen,
-            terminalOpen: state.isTerminalOpen,
-        }
-
-        set({
-            layoutActId: actId,
-            selectedActId: actId,
-            selectedActParticipantKey: null,
-            focusSnapshot,
-            performers: state.performers.map((p) => ({ ...p, hidden: true })),
-            markdownEditors: state.markdownEditors.map((e) => ({ ...e, hidden: true })),
-            isAssistantOpen: false,
-            isTerminalOpen: false,
-            editingTarget: null,
-            inspectorFocus: null,
-            focusedPerformerId: null,
-            focusedNodeType: null,
-        })
-    },
-
-    exitActLayoutMode: () => {
-        const state = get()
-        const snapshot = state.focusSnapshot
-        if (!snapshot || snapshot.type !== 'act') return
-
-        set({
-            layoutActId: null,
-            selectedActParticipantKey: null,
-            focusSnapshot: null,
-            performers: state.performers.map((p) => ({
-                ...p,
-                hidden: snapshot.hiddenPerformerIds.includes(p.id),
-            })),
-            markdownEditors: state.markdownEditors.map((e) => ({
-                ...e,
-                hidden: snapshot.hiddenEditorIds.includes(e.id),
-            })),
-            isAssetLibraryOpen: snapshot.assetLibraryOpen,
-            isAssistantOpen: snapshot.assistantOpen,
-            isTerminalOpen: snapshot.terminalOpen,
-        })
-    },
+    exitActLayoutMode: () => exitActLayoutModeImpl(get, set),
 
     // ── Authoring / import ──────────────────────────────
 

@@ -1,24 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
     X,
 } from 'lucide-react';
-import { api } from '../../api';
 import {
     useAssetKind,
     useAssets,
     useDotAuthUser,
     useModels,
-    queryKeys,
     useRegistrySearch,
-    useInstallAsset,
 } from '../../hooks/queries';
 import './AssetLibrary.css';
 import { useStudioStore } from '../../store';
-import { showToast } from '../../lib/toast';
 
 
-import { slugifyAssetName } from '../../lib/performers';
 import type { AssetCard } from '../../types';
 import { useMcpCatalog } from './useMcpCatalog';
 
@@ -32,27 +26,25 @@ import type {
     ModelProviderFilter,
 } from './asset-library-utils';
 import {
-    isInstalledAssetKind,
     getAssetUrn,
     buildMcpHaystack,
     buildDraftAssetCards,
     filterInstalledAssets,
     groupModels,
     buildRegistryGroups,
-    buildAuthoringPayloadFromAsset,
     placeholderForLocalSection,
 } from './asset-library-utils';
+import { useAssetLibraryActions } from './useAssetLibraryActions';
 import AssetLibraryLocalView from './AssetLibraryLocalView';
 import AssetLibraryRegistryView from './AssetLibraryRegistryView';
 
+function getAssetSelectionKey(asset: any): string {
+    return asset?.draftId || asset?.urn || asset?.name || ''
+}
+
 export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const workingDir = useStudioStore((state) => state.workingDir)
-    const performers = useStudioStore((state) => state.performers)
     const drafts = useStudioStore((state) => state.drafts)
-    const addPerformer = useStudioStore((state) => state.addPerformer)
-    const createMarkdownEditor = useStudioStore((state) => state.createMarkdownEditor)
-    const selectPerformer = useStudioStore((state) => state.selectPerformer)
-    const setActiveChatPerformer = useStudioStore((state) => state.setActiveChatPerformer)
     const [filter, setFilter] = useState('')
     const [scope, setScope] = useState<AssetScope>('local')
     const [localSection, setLocalSection] = useState<LocalSection>('installed')
@@ -72,7 +64,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     const [detailActionStatus, setDetailActionStatus] = useState<string | null>(null)
     const [detailActionLoading, setDetailActionLoading] = useState<null | 'save-local' | 'publish' | 'import'>(null)
     const { data: authUser } = useDotAuthUser()
-    const queryClient = useQueryClient()
 
     const showInstalledAssets = scope === 'local' && localSection === 'installed'
     const showModels = scope === 'local' && localSection === 'runtime' && runtimeKind === 'models'
@@ -87,25 +78,16 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         searchEnabled,
     )
 
-    // MCP catalog state & operations (extracted to useMcpCatalog hook)
     const mcp = useMcpCatalog(workingDir, showMcps)
     const mcpServers = mcp.mcpServers ?? []
+
     const {
-        mcpDraftEntries,
-        mcpCatalogDirty,
-        mcpCatalogStatus,
-        mcpCatalogSaving,
-        pendingMcpAuthName,
-        updateMcpEntry,
-        addMcpEntry,
-        removeMcpEntry,
-        saveMcpCatalog,
-        resetMcpCatalog,
-        connectMcpServer,
-        disconnectMcpServer,
-        authenticateMcpServer,
-        clearMcpAuth,
-    } = mcp
+        handleRegistryInstall,
+        createNewPerformerDraftEntry,
+        createNewPerformer,
+        handlePinnedAssetAction,
+        handleDeleteDraft,
+    } = useAssetLibraryActions(workingDir)
 
     const draftAssetCards = useMemo<AssetCard[]>(
         () => buildDraftAssetCards(drafts, installedKind),
@@ -116,8 +98,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         () => [...draftAssetCards, ...installedAssets],
         [draftAssetCards, installedAssets],
     )
-
-    const installMutation = useInstallAsset()
 
     useEffect(() => {
         setSelectedAsset(null)
@@ -147,106 +127,6 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
         setSearchEnabled(false)
     }
 
-    const handleRegistryInstall = async (urn: string, targetScope: 'global' | 'stage') => {
-        return installMutation.mutateAsync({ urn, scope: targetScope })
-    }
-
-    const createNewPerformerDraftEntry = (kind: 'tal' | 'dance') => {
-        createMarkdownEditor(kind)
-        setAuthoringHint(`Opened a new ${kind} editor on the canvas.`)
-    }
-
-    const createNewPerformer = () => {
-        const beforeIds = new Set(performers.map((performer) => performer.id))
-        addPerformer(`Performer ${performers.filter((performer) => performer.scope === 'shared').length + 1}`, 80, 80)
-        const created = useStudioStore.getState().performers.find((performer) => !beforeIds.has(performer.id))
-        if (created) {
-            selectPerformer(created.id)
-            setActiveChatPerformer(created.id)
-            setAuthoringHint(`Created ${created.name}. Configure and publish it from the inspector.`)
-        }
-    }
-
-
-    const invalidateInstalledAssetQueries = async (kind: InstalledKind) => {
-        await Promise.all([
-            queryClient.invalidateQueries({ queryKey: queryKeys.assets(workingDir) }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(workingDir) }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.assetKind(workingDir, kind) }),
-        ])
-    }
-
-    const handlePinnedAssetAction = async (asset: any, action: 'save-local' | 'publish') => {
-        if (!asset || !isInstalledAssetKind(asset.kind)) {
-            return
-        }
-
-        try {
-            setDetailActionLoading(action)
-            setDetailActionStatus(null)
-            const payload = buildAuthoringPayloadFromAsset(asset)
-            const targetSlug = asset.slug || slugifyAssetName(asset.name)
-
-            if (action === 'save-local') {
-                if (!authUser?.username) {
-                    throw new Error('Run dot login first to save a local fork under your namespace.')
-                }
-                const result = await api.dot.saveLocalAsset(asset.kind, targetSlug, payload, authUser.username)
-                await invalidateInstalledAssetQueries(asset.kind)
-
-                // Draft promotion: delete draft from disk after successful save
-                if (asset.source === 'draft' && asset.draftId) {
-                    api.drafts.delete(asset.kind, asset.draftId).catch(() => {})
-                    useStudioStore.setState((s) => {
-                        const next = { ...s.drafts }
-                        delete next[asset.draftId]
-                        return { drafts: next }
-                    })
-                }
-
-                setDetailActionStatus(result.existed
-                    ? `Updated local ${asset.kind} asset at ${result.urn}.`
-                    : `Saved local ${asset.kind} asset at ${result.urn}.`)
-                return
-            }
-
-
-            const result = await api.dot.publishAsset(asset.kind, targetSlug, payload, Array.isArray(asset.tags) ? asset.tags : [], true)
-            await invalidateInstalledAssetQueries(asset.kind)
-            setDetailActionStatus(result.published
-                ? `Published ${result.urn}.`
-                : `${result.urn} already exists in the registry.`)
-        } catch (err: any) {
-            setDetailActionStatus(err?.message || 'Asset action failed.')
-        } finally {
-            setDetailActionLoading(null)
-        }
-    }
-
-    const handleDeleteDraft = async (asset: any) => {
-        if (!asset?.draftId || !asset?.kind) return
-        try {
-            await api.drafts.delete(asset.kind, asset.draftId)
-            // Remove from Zustand store
-            useStudioStore.setState((s) => {
-                const next = { ...s.drafts }
-                delete next[asset.draftId]
-                return { drafts: next }
-            })
-            setSelectedAsset(null)
-            showToast(`Deleted draft "${asset.name}"`, 'success', {
-                title: 'Draft deleted',
-                dedupeKey: `draft:delete:${asset.draftId}`,
-            })
-        } catch (err: any) {
-            showToast(err?.message || 'Failed to delete draft', 'error', {
-                title: 'Delete failed',
-                dedupeKey: `draft:delete-error:${asset.draftId}`,
-            })
-        }
-    }
-
-
     const queryText = filter.trim().toLowerCase()
 
     const filteredInstalledAssets = useMemo(
@@ -260,7 +140,7 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
     )
 
     const filteredMcps = useMemo(
-        () => mcpServers.filter((mcp) => !queryText || buildMcpHaystack(mcp).includes(queryText)),
+        () => mcpServers.filter((m) => !queryText || buildMcpHaystack(m).includes(queryText)),
         [mcpServers, queryText],
     )
 
@@ -308,14 +188,12 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     className={`scope-btn ${scope === 'local' ? 'active' : ''}`}
                     onClick={() => setScope('local')}
                 >
-                    <HardDrive size={10} style={{ marginRight: 3, verticalAlign: -1 }} />
                     Local
                 </button>
                 <button
                     className={`scope-btn ${scope === 'registry' ? 'active' : ''}`}
                     onClick={() => setScope('registry')}
                 >
-                    <Globe size={10} style={{ marginRight: 3, verticalAlign: -1 }} />
                     Registry
                 </button>
             </div>
@@ -349,28 +227,28 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     detailActionLoading={detailActionLoading}
                     onSelectAsset={setSelectedAsset}
                     onCloseAsset={() => setSelectedAsset(null)}
-                    onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
-                    onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
-                    onDeleteDraft={handleDeleteDraft}
-                    createNewPerformer={createNewPerformer}
-                    createNewPerformerDraftEntry={createNewPerformerDraftEntry}
+                    onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local', authUser, setDetailActionLoading, setDetailActionStatus)}
+                    onPublish={(asset) => handlePinnedAssetAction(asset, 'publish', authUser, setDetailActionLoading, setDetailActionStatus)}
+                    onDeleteDraft={(asset) => handleDeleteDraft(asset, setSelectedAsset)}
+                    createNewPerformer={() => createNewPerformer(setAuthoringHint)}
+                    createNewPerformerDraftEntry={(kind) => createNewPerformerDraftEntry(kind, setAuthoringHint)}
                     showInstalledAssets={showInstalledAssets}
                     showModels={showModels}
                     showMcps={showMcps}
-                    mcpDraftEntries={mcpDraftEntries}
-                    mcpCatalogDirty={mcpCatalogDirty}
-                    mcpCatalogStatus={mcpCatalogStatus}
-                    mcpCatalogSaving={mcpCatalogSaving}
-                    pendingMcpAuthName={pendingMcpAuthName}
-                    updateMcpEntry={updateMcpEntry}
-                    addMcpEntry={addMcpEntry}
-                    removeMcpEntry={removeMcpEntry}
-                    saveMcpCatalog={saveMcpCatalog}
-                    resetMcpCatalog={resetMcpCatalog}
-                    connectMcpServer={connectMcpServer}
-                    disconnectMcpServer={disconnectMcpServer}
-                    authenticateMcpServer={authenticateMcpServer}
-                    clearMcpAuth={clearMcpAuth}
+                    mcpDraftEntries={mcp.mcpDraftEntries}
+                    mcpCatalogDirty={mcp.mcpCatalogDirty}
+                    mcpCatalogStatus={mcp.mcpCatalogStatus}
+                    mcpCatalogSaving={mcp.mcpCatalogSaving}
+                    pendingMcpAuthName={mcp.pendingMcpAuthName}
+                    updateMcpEntry={mcp.updateMcpEntry}
+                    addMcpEntry={mcp.addMcpEntry}
+                    removeMcpEntry={mcp.removeMcpEntry}
+                    saveMcpCatalog={mcp.saveMcpCatalog}
+                    resetMcpCatalog={mcp.resetMcpCatalog}
+                    connectMcpServer={mcp.connectMcpServer}
+                    disconnectMcpServer={mcp.disconnectMcpServer}
+                    authenticateMcpServer={mcp.authenticateMcpServer}
+                    clearMcpAuth={mcp.clearMcpAuth}
                     showMcpRawConfig={showMcpRawConfig}
                     setShowMcpRawConfig={setShowMcpRawConfig}
                     expandedMcpEntries={expandedMcpEntries}
@@ -405,9 +283,9 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     onSelectAsset={setSelectedAsset}
                     onInstall={handleRegistryInstall}
                     onCloseAsset={() => setSelectedAsset(null)}
-                    onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local')}
-                    onPublish={(asset) => handlePinnedAssetAction(asset, 'publish')}
-                    onDeleteDraft={handleDeleteDraft}
+                    onSaveLocal={(asset) => handlePinnedAssetAction(asset, 'save-local', authUser, setDetailActionLoading, setDetailActionStatus)}
+                    onPublish={(asset) => handlePinnedAssetAction(asset, 'publish', authUser, setDetailActionLoading, setDetailActionStatus)}
+                    onDeleteDraft={(asset) => handleDeleteDraft(asset, setSelectedAsset)}
                 />
             )}
         </div>

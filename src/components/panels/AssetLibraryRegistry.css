@@ -1,0 +1,167 @@
+/* DOT Studio — Asset Library Registry Styles */
+
+.registry-filters {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+}
+
+.registry-filters .select,
+.asset-mcp-editor__field .select,
+.sub-scope-row .select {
+    flex: 1;
+    font-size: var(--font-sm);
+    padding: 4px 24px 4px 6px;
+}
+
+.registry-search-btn {
+    background: transparent;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    padding: 4px 7px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.registry-search-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(13, 153, 255, 0.06);
+}
+
+.registry-search-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.registry-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 12px 8px;
+}
+
+.registry-count-chip {
+    font-size: var(--font-xs);
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-main);
+    color: var(--text-secondary);
+}
+
+.registry-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.registry-group__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 0;
+}
+
+.registry-result {
+    position: relative;
+}
+
+
+
+.registry-install-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+    display: flex;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.registry-install-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.registry-install-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.registry-install-btn.is-installed {
+    border-color: rgba(20, 174, 92, 0.25);
+    color: #14ae5c;
+    background: rgba(20, 174, 92, 0.08);
+}
+
+
+
+/* ── Install Scope Menu ──────────────────────────────── */
+.install-scope-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    overflow: hidden;
+    min-width: 100px;
+}
+
+.install-scope-opt {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 10px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: var(--font-base);
+    color: var(--text-primary);
+    transition: background 0.1s;
+    white-space: nowrap;
+}
+
+.install-scope-opt:hover {
+    background: var(--bg-hover);
+}
+
+.install-scope-opt:first-child {
+    border-bottom: 1px solid var(--border-main);
+}
+
+/* ── Install Error ───────────────────────────────────── */
+.install-error {
+    margin-top: 4px;
+    padding: 4px 6px;
+    font-size: var(--font-sm);
+    color: #F24822;
+    background: rgba(242, 72, 34, 0.06);
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(242, 72, 34, 0.15);
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.asset-card.has-error {
+    border-color: rgba(242, 72, 34, 0.3);
+}

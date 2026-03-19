@@ -1,0 +1,253 @@
+/* DOT Studio — Asset Popover, Scope Selector & Source Badge */
+
+/* ── Hover Detail Popover ────────────────────────── */
+.asset-popover {
+    position: fixed;
+    z-index: 1000;
+    width: 320px;
+    max-height: 70vh;
+    overflow-y: auto;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    padding: 12px;
+    pointer-events: auto;
+    animation: popover-in 0.15s ease-out;
+}
+
+.asset-popover__urn {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    font-family: var(--font-mono, monospace);
+    background: var(--bg-hover);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    word-break: break-all;
+}
+
+.asset-popover__content {
+    font-size: var(--font-base);
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    margin: 4px 0 0;
+    max-height: 260px;
+    overflow-y: auto;
+    line-height: 1.5;
+}
+
+.asset-popover__content h1,
+.asset-popover__content h2,
+.asset-popover__content h3 {
+    font-size: var(--font-md);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 8px 0 4px;
+}
+
+.asset-popover__content h1:first-child,
+.asset-popover__content h2:first-child,
+.asset-popover__content h3:first-child {
+    margin-top: 0;
+}
+
+.asset-popover__content p {
+    margin: 4px 0;
+}
+
+.asset-popover__content ul,
+.asset-popover__content ol {
+    margin: 4px 0;
+    padding-left: 16px;
+}
+
+.asset-popover__content li {
+    margin: 2px 0;
+}
+
+.asset-popover__content code {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-sm);
+    background: var(--bg-hover);
+    padding: 1px 4px;
+    border-radius: var(--radius-sm);
+}
+
+.asset-popover__content pre {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    overflow-x: auto;
+    margin: 4px 0;
+}
+
+.asset-popover__content pre code {
+    background: none;
+    padding: 0;
+    font-size: var(--font-sm);
+}
+
+@keyframes popover-in {
+    from {
+        opacity: 0;
+        transform: translateX(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.asset-popover__title {
+    font-size: var(--font-md);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.asset-popover__meta {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.asset-popover__desc {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin-bottom: 8px;
+}
+
+.asset-popover__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.asset-popover__tag {
+    font-size: var(--font-xs);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+    background: var(--border-light);
+    color: var(--text-muted);
+}
+
+.asset-popover__section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-light);
+}
+
+
+
+.asset-popover__section-item {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    padding: 2px 0;
+}
+
+/* ── Scope Selector ──────────────────────────────── */
+.scope-selector {
+    display: flex;
+    gap: 2px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+}
+
+.scope-btn {
+    flex: 1;
+    padding: 4px 0;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+}
+
+.scope-btn:hover {
+    color: var(--text-primary);
+    background: var(--border-light);
+}
+
+.scope-btn.active {
+    color: var(--accent);
+    background: rgba(13, 153, 255, 0.08);
+    border-color: rgba(13, 153, 255, 0.2);
+}
+
+/* ── Sub-Scope Tags (All / Global / Stage) ───────── */
+.sub-scope-row {
+    display: flex;
+    gap: 4px;
+    padding: 4px 8px;
+    flex-shrink: 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+}
+
+.sub-scope-row::-webkit-scrollbar {
+    display: none;
+}
+
+.sub-scope-tag {
+    padding: 2px 8px;
+    font-size: var(--font-xs);
+    font-weight: 600;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.sub-scope-tag:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.sub-scope-tag.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+/* ── Source Badge on Asset Cards ──────────────────── */
+.source-badge {
+    font-size: var(--font-xs);
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.source-badge.global {
+    background: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+}
+
+.source-badge.stage {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.source-badge.draft {
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+}

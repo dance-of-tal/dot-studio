@@ -41,6 +41,7 @@
     "build:all": "npm run clean && npm run build:client && npm run build:server",
     "pack:check": "npm run build:all && npm pack --dry-run",
     "type-check": "tsc -b --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "test": "vitest run",
     "lint": "eslint .",
     "preview": "vite preview",
     "opencode": "opencode --port 4096 .",
@@ -98,6 +99,7 @@
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
-    "vite": "^6.4.1"
+    "vite": "^6.4.1",
+    "vitest": "^4.1.0"
   }
 }

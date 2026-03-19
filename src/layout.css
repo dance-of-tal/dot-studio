@@ -1,0 +1,255 @@
+/* DOT Studio — Layout, Canvas & App Shell */
+
+.studio-app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    position: relative;
+    overflow: hidden;
+}
+
+.sidebar {
+    min-width: 180px;
+    height: 100%;
+    background: var(--bg-panel);
+    box-shadow: var(--shadow-panel);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    z-index: 10;
+    border-right: 1px solid var(--border-main);
+}
+
+.canvas-area {
+    flex: 1;
+    position: relative;
+    background: var(--bg-canvas);
+    overflow: hidden;
+    transition: background 0.3s ease;
+}
+
+/* Focus mode — clean background, no grid */
+.canvas-area--focus {
+    background: var(--bg-panel);
+}
+
+.canvas-area--focus .react-flow__background {
+    display: none !important;
+}
+
+.canvas-drop-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.16s ease;
+}
+
+.canvas-drop-overlay.is-active {
+    opacity: 1;
+}
+
+.canvas-drop-overlay__card {
+    min-width: 260px;
+    max-width: 360px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(80, 120, 255, 0.32);
+    background: rgba(15, 20, 32, 0.84);
+    box-shadow: 0 24px 60px rgba(4, 10, 24, 0.35);
+    backdrop-filter: blur(16px);
+    text-align: center;
+}
+
+.canvas-drop-overlay__title {
+    font-size: var(--font-base);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.canvas-drop-overlay__body {
+    font-size: var(--font-lg);
+    color: var(--text-primary);
+    line-height: 1.5;
+}
+
+/* ── Act Edit Dimming Overlay ─── */
+.canvas-act-dimming {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.canvas-act-dimming:hover {
+    background: rgba(0, 0, 0, 0.18);
+}
+
+/* ── Canvas Top-Right Bar (Controls + Toolbar) ─── */
+.canvas-top-right-bar {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+.canvas-controls {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-dropdown);
+}
+
+.canvas-controls__btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-panel);
+    border: none;
+    border-right: 1px solid var(--border-light);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.canvas-controls__btn:last-child {
+    border-right: none;
+}
+
+.canvas-controls__btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.canvas-controls__btn svg {
+    fill: currentColor;
+}
+
+.compose-banner {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(56, 189, 248, 0.28);
+    background: rgba(10, 14, 24, 0.72);
+    backdrop-filter: blur(10px);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-window);
+    font-size: var(--font-base);
+}
+
+.compose-banner strong {
+    color: #38bdf8;
+    font-weight: 700;
+}
+
+/* Override ReactFlow Background */
+.react-flow__background {
+    background: var(--bg-canvas) !important;
+}
+
+/* Override ReactFlow Controls Theme */
+.react-flow__controls {
+    box-shadow: var(--shadow-window) !important;
+    border: 1px solid var(--border-main) !important;
+    border-radius: var(--radius) !important;
+    overflow: hidden;
+    background: var(--bg-panel) !important;
+    /* Horizontal layout */
+    display: flex !important;
+    flex-direction: row !important;
+}
+
+.react-flow__controls-button {
+    background: var(--bg-panel) !important;
+    border-bottom: none !important;
+    border-right: 1px solid var(--border-light) !important;
+    color: var(--text-secondary) !important;
+    transition: background 0.15s, color 0.15s !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.react-flow__controls-button:last-child {
+    border-right: none !important;
+    border-bottom: none !important;
+}
+
+.react-flow__controls-button:hover {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.react-flow__controls-button svg {
+    fill: currentColor !important;
+}
+
+
+
+/* ── Drag Overlay Card ───────────────────────────── */
+.drag-overlay-card {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    font-size: var(--font-base);
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+.app-warning-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(242, 72, 34, 0.18);
+    background: rgba(242, 72, 34, 0.08);
+    color: #9f341f;
+}
+
+.app-warning-banner__copy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: var(--font-base);
+    font-weight: 500;
+}
+
+.app-warning-banner__copy span {
+    min-width: 0;
+    line-height: 1.4;
+}
