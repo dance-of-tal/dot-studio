@@ -105,6 +105,7 @@ export interface ActRelation {
     }
     maxCalls: number
     timeout: number
+    sessionPolicy?: 'fresh' | 'reuse'
 }
 
 // ── Act Participant Binding ─────────────────────────────

@@ -25,7 +25,7 @@ dotPerformer.get('/api/dot/performers/:name', async (c) => {
     try {
         const performer = await getDotPerformer(cwd, name)
         if (!performer) return jsonError(c, 'Performer not found', 404)
-        return c.json({ name, ...performer })
+        return c.json({ ...performer, name: performer.name || name })
     } catch (err: any) {
         return jsonError(c, err.message, 500)
     }

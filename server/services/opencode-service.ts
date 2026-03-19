@@ -16,8 +16,6 @@ import { projectMcpEntryEnabled } from '../../shared/project-mcp.js'
 import { invalidateProviderListCache } from '../lib/model-catalog.js'
 import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
 
-type DirectoryQuery = { directory: string }
-
 // ── Response helpers ────────────────────────────────────
 
 export function opencodeModeMeta() {
@@ -300,7 +298,7 @@ export function mergeProjectConfig(
 // ── MCP ─────────────────────────────────────────────────
 
 export async function runMcpMutation(
-    directory: string,
+    _directory: string,
     action: (oc: Awaited<ReturnType<typeof getOpencode>>) => Promise<unknown>,
 ) {
     const oc = await getOpencode()

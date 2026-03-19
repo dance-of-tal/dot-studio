@@ -10,7 +10,7 @@
  * Edit-mode composition → PerformerEditPanel
  * Chat-mode conversation → PerformerChatPanel
  */
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useCallback, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { Handle, Position, useStore } from '@xyflow/react'
 
@@ -31,6 +31,8 @@ import { usePerformerSafeReview } from './usePerformerSafeReview'
 import { Pencil, EyeOff, Maximize2, Minimize2 } from 'lucide-react'
 import './AgentFrame.css'
 import './AgentChat.css'
+import './AgentChatComposer.css'
+import './MarkdownRenderer.css'
 import './AgentInput.css'
 
 /* ── Main Component ── */

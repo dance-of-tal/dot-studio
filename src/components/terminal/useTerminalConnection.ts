@@ -70,7 +70,6 @@ export function useTerminalConnection(
     const xtermRef = useRef<Terminal | null>(null)
     const fitRef = useRef<FitAddon | null>(null)
     const wsRef = useRef<WebSocket | null>(null)
-    const resizingRef = useRef(false)
     const initializedRef = useRef(false)
 
     const [sessions, setSessions] = useState<TermSession[]>([])

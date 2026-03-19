@@ -23,9 +23,9 @@ type Props = {
     onSelectAsset: (asset: any) => void
     onInstall: (urn: string, targetScope: 'global' | 'stage') => Promise<any>
     onCloseAsset: () => void
-    onSaveLocal: (asset: any) => void
-    onPublish: (asset: any) => void
-    onDeleteDraft: (asset: any) => void
+    onSaveLocal: (asset: any) => void | Promise<void>
+    onPublish: (asset: any) => void | Promise<void>
+    onDeleteDraft: (asset: any) => void | Promise<void>
 }
 
 export default function AssetLibraryRegistryView(props: Props) {

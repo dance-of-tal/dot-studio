@@ -6,7 +6,7 @@
  * - host composer state hook
  * - manage revert confirmation modal
  */
-import { useState, useMemo, useRef, useEffect, type RefObject } from 'react'
+import { useState, useMemo, useEffect, type RefObject } from 'react'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import type { ChatMessage, AssetCard, DraftAsset, PerformerNode } from '../../types'

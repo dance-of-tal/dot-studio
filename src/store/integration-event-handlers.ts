@@ -7,29 +7,11 @@
  */
 
 import type { StudioState } from './types'
-import type { SessionStreamTarget } from './integration-streaming'
 import {
     diagnosticMatchesWorkingDir,
     invalidateRuntimeQueries,
 } from './integration-streaming'
 import { showToast } from '../lib/toast'
-import {
-    handleMessagePartDelta,
-    handleMessagePartRemoved,
-    handleMessagePartUpdated,
-    handleMessageUpdated,
-} from './integration-message-handlers'
-import {
-    handlePermissionAsked,
-    handlePermissionReplied,
-    handleQuestionAsked,
-    handleQuestionReplied,
-    handleSessionCompacted,
-    handleSessionError,
-    handleSessionIdle,
-    handleSessionStatus,
-    handleTodoUpdated,
-} from './integration-session-handlers'
 export {
     handleMessageUpdated,
     handleMessagePartUpdated,

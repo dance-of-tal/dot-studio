@@ -242,11 +242,12 @@ export function usePerformerChatComposerState({
             Array.from(e.dataTransfer.files).forEach((file) => {
                 const reader = new FileReader()
                 reader.onload = (event) => {
-                    if (event.target?.result) {
+                    const target = event.target
+                    if (target?.result) {
                         setAttachments((current) => [...current, {
                             name: file.name,
                             path: file.name,
-                            absolute: event.target.result as string,
+                            absolute: target.result as string,
                             type: file.type,
                         }])
                     }

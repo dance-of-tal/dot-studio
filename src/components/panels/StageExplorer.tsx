@@ -9,6 +9,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import './StageExplorer.css';
+import './StageExplorerItems.css';
 import {
     stageLabel,
     buildPerformerSessionRows,
@@ -294,7 +295,9 @@ export default function StageExplorer() {
                 onSavePerformerAsDraft={savePerformerAsDraft}
                 onSwitchFocusTarget={switchFocusTarget}
                 onSelectAct={selectAct}
-                onCreateThread={createThread}
+                onCreateThread={async (actId) => {
+                    await createThread(actId)
+                }}
 
                 onSaveActAsDraft={saveActAsDraft}
                 onToggleActVisibility={toggleActVisibility}

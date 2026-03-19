@@ -1,4 +1,4 @@
-import { Hexagon, Zap, Pencil, X, Server, Cpu } from 'lucide-react'
+import { Hexagon, Zap, Pencil, X, Server } from 'lucide-react'
 import type { AssetRef, DanceDeliveryMode, ModelConfig, PerformerNode } from '../../types'
 import ModelVariantSelect from './ModelVariantSelect'
 

@@ -1,5 +1,5 @@
 import type { DotAuthUserResponse, DotInitResponse, DotInstallRequest, DotLoginResponse, DotPublishRequest, DotSaveLocalRequest, DotStatusResponse } from '../../shared/dot-contracts'
-import { deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
+import { fetchJSON, postJSON, putJSON } from '../api-core'
 
 export const dotApi = {
     status: () =>

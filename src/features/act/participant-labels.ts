@@ -14,11 +14,12 @@ export function resolveActParticipantLabel(
     const binding = act.participants[participantKey]
     if (!binding) return participantKey
 
-    if (binding.performerRef.kind === 'draft') {
-        return performers.find((performer) => performer.id === binding.performerRef.draftId)?.name || participantKey
+    const ref = binding.performerRef
+    if (ref.kind === 'draft') {
+        return performers.find((performer) => performer.id === ref.draftId)?.name || participantKey
     }
 
-    return performers.find((performer) => performer.meta?.derivedFrom === binding.performerRef.urn)?.name
-        || fallbackLabelFromRegistryUrn(binding.performerRef.urn)
+    return performers.find((performer) => performer.meta?.derivedFrom === ref.urn)?.name
+        || fallbackLabelFromRegistryUrn(ref.urn)
         || participantKey
 }

@@ -1,6 +1,5 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { ReactNode } from 'react'
 import { displayUrn, getAssetUrn, normalizeAuthor } from './asset-library-utils'
 
 export default function AssetDetailBody({

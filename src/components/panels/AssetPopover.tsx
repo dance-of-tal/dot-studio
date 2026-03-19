@@ -134,10 +134,10 @@ export function PinnedDetailPanel({
     authUser?: { authenticated: boolean; username: string | null }
     actionStatus?: string | null
     actionLoading?: 'save-local' | 'publish' | 'import' | null
-    onSaveLocal?: (asset: any) => Promise<void>
-    onPublish?: (asset: any) => Promise<void>
-    onImportToStage?: (asset: any) => Promise<void>
-    onDeleteDraft?: (asset: any) => Promise<void>
+    onSaveLocal?: (asset: any) => void | Promise<void>
+    onPublish?: (asset: any) => void | Promise<void>
+    onImportToStage?: (asset: any) => void | Promise<void>
+    onDeleteDraft?: (asset: any) => void | Promise<void>
 }) {
     const { resolvedAsset, loading } = useResolvedAssetDetail(asset)
 

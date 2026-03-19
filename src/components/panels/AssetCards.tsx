@@ -14,9 +14,7 @@ import {
     GitBranch,
 } from 'lucide-react';
 import {
-    displayUrn,
     normalizeAuthor,
-    isInstalledAssetKind,
     getAssetUrn,
     buildInstalledAssetDragPayload,
     buildModelDragPayload,

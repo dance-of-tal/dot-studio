@@ -8,7 +8,7 @@
  *   Back button returns to main card view.
  */
 import { useState } from 'react'
-import { ArrowLeft, ChevronLeft } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, Cpu, Hexagon, Server, Zap } from 'lucide-react'
 
 import { unresolvedDeclaredMcpServerNames } from '../../lib/performers'
 import type { PerformerNode, ModelConfig, AssetRef, DanceDeliveryMode } from '../../types'

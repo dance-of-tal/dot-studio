@@ -104,6 +104,7 @@ export const createWorkspaceSlice: StateCreator<
     canvasTerminals: [],
     trackingWindow: null,
     canvasCenter: null,
+    layoutActId: null,
 
     setTerminalOpen: (open) => set({ isTerminalOpen: open }),
     setTrackingOpen: (open) => set((state) => {
@@ -132,13 +133,16 @@ export const createWorkspaceSlice: StateCreator<
     }),
 
     setCanvasCenter: (x, y) => set({ canvasCenter: { x, y } }),
+    exitActLayoutMode: () => set({ layoutActId: null }),
 
     addPerformer: (name, x, y) => {
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
+        const count = get().performers.length
+        const offset = count * 40
         
-        const finalX = x ?? get().canvasCenter?.x ?? (60 + (get().performers.length * 28))
-        const finalY = y ?? get().canvasCenter?.y ?? (60 + (get().performers.length * 20))
+        const finalX = x ?? ((get().canvasCenter?.x ?? 60) + offset)
+        const finalY = y ?? ((get().canvasCenter?.y ?? 60) + offset)
 
         set((s) => ({
             performers: [...s.performers, createPerformerNode({ id, name, x: finalX, y: finalY })],
@@ -155,9 +159,11 @@ export const createWorkspaceSlice: StateCreator<
     addPerformerFromAsset: (asset, x, y) => {
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
+        const count = get().performers.length
+        const offset = count * 40
 
-        const finalX = x ?? get().canvasCenter?.x ?? (60 + (get().performers.length * 28))
-        const finalY = y ?? get().canvasCenter?.y ?? (60 + (get().performers.length * 20))
+        const finalX = x ?? ((get().canvasCenter?.x ?? 60) + offset)
+        const finalY = y ?? ((get().canvasCenter?.y ?? 60) + offset)
 
         set((s) => ({
             performers: [...s.performers, createPerformerNodeFromAsset({ id, asset, x: finalX, y: finalY })],

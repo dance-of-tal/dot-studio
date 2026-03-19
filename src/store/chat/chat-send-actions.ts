@@ -28,7 +28,13 @@ export function createChatSendActions(
     ) => Promise<{ sessionId: string | null; runtimeConfig: any }>,
 ) {
     return {
-        sendMessage: async (performerId: string, text: string, attachments?: any[], extraDanceRefs = [], mentionedPerformers = []) => {
+        sendMessage: async (
+            performerId: string,
+            text: string,
+            attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
+            extraDanceRefs: any[] = [],
+            mentionedPerformers: Array<{ performerId: string; name: string }> = [],
+        ) => {
             let sessionId: string | undefined = get().sessionMap[performerId]
             const performer = getPerformerById(get, performerId)
             const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {

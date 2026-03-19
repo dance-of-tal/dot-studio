@@ -16,15 +16,17 @@ export function addActRelationImpl(
     const performers = get().performers
     const leftBinding = act?.participants[between[0]]
     const rightBinding = act?.participants[between[1]]
-    const leftLabel = leftBinding
-        ? (leftBinding.performerRef.kind === 'draft'
-            ? performers.find((performer) => performer.id === leftBinding.performerRef.draftId)?.name || fallbackParticipantLabel(leftBinding.performerRef)
-            : performers.find((performer) => performer.meta?.derivedFrom === leftBinding.performerRef.urn)?.name || fallbackParticipantLabel(leftBinding.performerRef))
+    const leftRef = leftBinding?.performerRef
+    const rightRef = rightBinding?.performerRef
+    const leftLabel = leftRef
+        ? (leftRef.kind === 'draft'
+            ? performers.find((performer) => performer.id === leftRef.draftId)?.name || fallbackParticipantLabel(leftRef)
+            : performers.find((performer) => performer.meta?.derivedFrom === leftRef.urn)?.name || fallbackParticipantLabel(leftRef))
         : between[0]
-    const rightLabel = rightBinding
-        ? (rightBinding.performerRef.kind === 'draft'
-            ? performers.find((performer) => performer.id === rightBinding.performerRef.draftId)?.name || fallbackParticipantLabel(rightBinding.performerRef)
-            : performers.find((performer) => performer.meta?.derivedFrom === rightBinding.performerRef.urn)?.name || fallbackParticipantLabel(rightBinding.performerRef))
+    const rightLabel = rightRef
+        ? (rightRef.kind === 'draft'
+            ? performers.find((performer) => performer.id === rightRef.draftId)?.name || fallbackParticipantLabel(rightRef)
+            : performers.find((performer) => performer.meta?.derivedFrom === rightRef.urn)?.name || fallbackParticipantLabel(rightRef))
         : between[1]
 
     const relation: ActRelation = {

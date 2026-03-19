@@ -264,7 +264,7 @@ export function createMarkdownEditorImpl(
             description?: string
             tags?: string[]
             content?: string
-            derivedFrom?: string | undefined
+            derivedFrom?: string | null | undefined
         }
         position?: { x: number; y: number }
         attachTarget?: any

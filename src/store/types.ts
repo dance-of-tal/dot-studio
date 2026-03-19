@@ -61,6 +61,7 @@ export interface WorkspaceSlice {
     canvasTerminals: CanvasTerminalNode[]
     trackingWindow: CanvasTrackingWindow | null
     canvasCenter: { x: number; y: number } | null
+    layoutActId: string | null
 
     setTerminalOpen: (open: boolean) => void
     setTrackingOpen: (open: boolean) => void
@@ -99,6 +100,7 @@ export interface WorkspaceSlice {
     enterFocusMode: (nodeId: string, nodeType: 'performer' | 'act', viewportSize: { width: number; height: number }) => void
     exitFocusMode: () => void
     switchFocusTarget: (nodeId: string, nodeType: 'performer' | 'act') => void
+    exitActLayoutMode: () => void
     setInspectorFocus: (focus: string | null) => void
     openPerformerEditor: (id: string, focus?: string | null) => void
     closeEditor: () => void

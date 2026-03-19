@@ -174,7 +174,7 @@ export async function createActThreadImpl(get: GetState, set: SetState, actId: s
     return thread.id
 }
 
-export async function loadActThreadsImpl(get: GetState, set: SetState, actId: string) {
+export async function loadActThreadsImpl(_get: GetState, set: SetState, actId: string) {
     const result = await api.actRuntime.listThreads(actId)
     set((state: StudioState) => ({
         actThreads: {
