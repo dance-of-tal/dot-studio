@@ -67,6 +67,8 @@ function danceSummaryLabel(
 }
 
 export function buildPerformerCanvasNodes(args: {
+    acts: StageAct[]
+    editingActId: string | null
     performers: PerformerNode[]
     selectedPerformerId: string | null
     focusedPerformerId: string | null
@@ -78,6 +80,8 @@ export function buildPerformerCanvasNodes(args: {
     onDeactivateTransform: (type: CanvasNodeKind, id: string) => void
 }) {
     const {
+        acts,
+        editingActId,
         performers,
         selectedPerformerId,
         focusedPerformerId,
@@ -88,6 +92,21 @@ export function buildPerformerCanvasNodes(args: {
         onActivateTransform,
         onDeactivateTransform,
     } = args
+
+    const editingAct = editingActId
+        ? acts.find((act) => act.id === editingActId) || null
+        : null
+
+    const isPerformerInEditingAct = (performer: PerformerNode) => {
+        if (!editingAct) return false
+        return Object.values(editingAct.participants).some((binding) => {
+            const ref = binding.performerRef
+            if (ref.kind === 'draft') {
+                return ref.draftId === performer.id
+            }
+            return performer.meta?.derivedFrom === ref.urn
+        })
+    }
 
     return performers.map((performer) => ({
         id: performer.id,
@@ -120,6 +139,9 @@ export function buildPerformerCanvasNodes(args: {
             danceSummary: danceSummaryLabel(performer.danceRefs, drafts),
             mcpSummary: performerMcpSummary(performer),
             editMode: editingTarget?.type === 'performer' && editingTarget.id === performer.id,
+            actEditConnectVisible: !!editingAct,
+            actEditParticipant: isPerformerInEditingAct(performer),
+            actEditDimmed: !!editingAct && !isPerformerInEditingAct(performer),
         } as Record<string, unknown>,
     })) satisfies Node[]
 }

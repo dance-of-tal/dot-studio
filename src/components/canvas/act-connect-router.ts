@@ -1,37 +1,29 @@
 import type { Connection, Node } from '@xyflow/react'
 
 type ConnectRouterArgs = {
+    currentActId: string | null
     connection: Connection
     nodes: Node[]
-    onCreateActFromPerformers: (performerIds: [string, string]) => void
-    onAttachPerformerToAct: (actId: string, performerId: string) => void
+    onConnectPerformersInAct: (actId: string, performerIds: [string, string]) => void
 }
 
 export function routeActConnection(args: ConnectRouterArgs) {
     const {
+        currentActId,
         connection,
         nodes,
-        onCreateActFromPerformers,
-        onAttachPerformerToAct,
+        onConnectPerformersInAct,
     } = args
 
-    if (!connection.source || !connection.target) return false
+    if (!currentActId || !connection.source || !connection.target || connection.source === connection.target) {
+        return false
+    }
 
     const sourceNode = nodes.find((node) => node.id === connection.source)
     const targetNode = nodes.find((node) => node.id === connection.target)
 
     if (sourceNode?.type === 'performer' && targetNode?.type === 'performer') {
-        onCreateActFromPerformers([connection.source, connection.target])
-        return true
-    }
-
-    if (sourceNode?.type === 'performer' && targetNode?.type === 'act') {
-        onAttachPerformerToAct(connection.target, connection.source)
-        return true
-    }
-
-    if (sourceNode?.type === 'act' && targetNode?.type === 'performer') {
-        onAttachPerformerToAct(connection.source, connection.target)
+        onConnectPerformersInAct(currentActId, [connection.source, connection.target])
         return true
     }
 

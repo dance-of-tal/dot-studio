@@ -13,8 +13,6 @@ import {
     getAssetAuthor,
     getAssetSlug,
     applyAssetToPerformerTarget,
-    parseActParticipantDropId,
-    applyAssetToActParticipant,
 } from './lib/dnd-handlers'
 import type { DragAsset, DropTargetData, PerformerAssetPayload } from './lib/dnd-handlers'
 import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
@@ -120,7 +118,27 @@ export async function resolvePerformerAssetForStudio(
         )
     }
     if (unresolvedMcpNames.length > 0) {
-        showDropWarning(`Imported MCP placeholders need mapping in the performer editor or Asset Library: ${unresolvedMcpNames.join(', ')}`)
+        const mcpConfig = (asset.mcpConfig && typeof asset.mcpConfig === 'object') ? asset.mcpConfig as Record<string, any> : {}
+        const details = unresolvedMcpNames.map((name) => {
+            const cfg = mcpConfig[name]
+            if (cfg && cfg.command) {
+                const cmd = Array.isArray(cfg.command) ? cfg.command.join(' ') : String(cfg.command)
+                return `• ${name} (local: ${cmd})`
+            }
+            if (cfg && cfg.url) {
+                return `• ${name} (remote: ${cfg.url})`
+            }
+            return `• ${name}`
+        }).join('\n')
+        showToast(
+            `This performer requires the following MCP servers not yet configured in your project:\n${details}\n\nAdd them in Asset Library → MCP.`,
+            'warning',
+            {
+                title: 'MCP servers required',
+                dedupeKey: `performer-import-mcp-missing:${asset.urn || asset.name}`,
+                durationMs: 8000,
+            },
+        )
     }
     return normalized as PerformerAssetPayload
 }
@@ -153,25 +171,6 @@ export function createDragEndHandler(
 
         const handleCanvasRootDrop = async () => {
             if (dropData.type !== 'canvas-root') {
-                return false
-            }
-
-            const targetActId = store.layoutActId
-
-            // Layout mode: dropping performer onto canvas adds new act participant
-            if (targetActId && asset.kind === 'performer') {
-                if (asset.kind === 'performer') {
-                    const ref = asset.source === 'draft' && asset.draftId
-                        ? { kind: 'draft' as const, draftId: asset.draftId as string }
-                        : asset.urn
-                            ? { kind: 'registry' as const, urn: asset.urn }
-                            : null
-                    if (ref) {
-                        store.attachPerformerRefToAct(targetActId, ref)
-                    }
-                    return true
-                }
-                // Don't handle other drops on canvas root while targeting an act layout
                 return false
             }
 
@@ -223,53 +222,12 @@ export function createDragEndHandler(
             return true
         }
 
-        const handleActRootDrop = async () => {
-            if (dropData.type !== 'act-root' || !dropData.actId) {
-                return false
-            }
-            if (asset.kind !== 'performer') {
-                return false
-            }
-
-            const ref = asset.source === 'draft' && asset.draftId
-                ? { kind: 'draft' as const, draftId: asset.draftId as string }
-                : asset.urn
-                    ? { kind: 'registry' as const, urn: asset.urn }
-                    : null
-
-            if (ref) {
-                store.attachPerformerRefToAct(dropData.actId, ref)
-            }
-            return true
-        }
-
         if (await handleCanvasRootDrop()) {
             return
         }
 
         if (await handleMarkdownEditorDrop()) {
             return
-        }
-
-        if (await handleActRootDrop()) {
-            return
-        }
-
-        // Act participant drops — prefer the current act target when available
-        if (dropData.performerId && over?.id) {
-            const actParticipant = parseActParticipantDropId(String(over.id))
-            const targetActId = store.layoutActId || store.selectedActId
-            if (actParticipant && targetActId) {
-                applyAssetToActParticipant(
-                    store,
-                    targetActId,
-                    actParticipant.participantKey,
-                    dropData.type,
-                    asset,
-                    showDropWarning,
-                )
-                return
-            }
         }
 
         // Standalone performer drops

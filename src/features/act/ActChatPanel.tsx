@@ -6,7 +6,7 @@
  * Wake-up prompts are visually distinguished from user input.
  */
 import { useState, useCallback, useMemo, useRef } from 'react'
-import { Send, Square, Workflow, Users, Plus, User, Circle, Activity } from 'lucide-react'
+import { Send, Square, Workflow, Users, User, Circle, Activity, Pencil } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { hasModelConfig } from '../../lib/performers'
 import ThreadBody from '../chat/ThreadBody'
@@ -28,7 +28,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const {
         acts, chats, loadingPerformerId, sendActMessage, abortChat,
         actThreads, activeThreadId, activeThreadParticipantKey,
-        createThread, selectThread, selectThreadParticipant, selectAct, setAssetLibraryOpen,
+        selectThreadParticipant, openActEditor,
     } = useStudioStore()
 
     const act = useMemo(() => acts.find((a) => a.id === actId), [acts, actId])
@@ -38,7 +38,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
 
     // Thread state
     const threads = actThreads[actId] || []
-    const currentThread = threads.find((t) => t.id === activeThreadId) || threads[0] || null
+    const currentThread = threads.find((t) => t.id === activeThreadId) || null
 
     // Active participant in thread
     const participantKeys = act ? Object.keys(act.participants) : []
@@ -73,13 +73,11 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const modelConfigured = hasModelConfig(resolvedPerformer?.model || null)
 
     const handleSend = useCallback(async () => {
-        if (!input.trim() || isLoading || !activeParticipantKey || !modelConfigured) return
+        if (!input.trim() || isLoading || !currentThread || !activeParticipantKey || !modelConfigured) return
         const text = input.trim()
         setInput('')
-        const threadId = currentThread?.id || await createThread(actId)
-        if (!threadId) return
-        await sendActMessage(actId, threadId, activeParticipantKey, text)
-    }, [input, isLoading, activeParticipantKey, modelConfigured, sendActMessage, actId, currentThread, createThread])
+        await sendActMessage(actId, currentThread.id, activeParticipantKey, text)
+    }, [input, isLoading, currentThread, activeParticipantKey, modelConfigured, sendActMessage, actId])
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.nativeEvent.isComposing) return
@@ -88,14 +86,6 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             void handleSend()
         }
     }, [handleSend])
-
-    const handleCreateThread = useCallback(async () => {
-        try {
-            await createThread(actId)
-        } catch (err) {
-            console.error('Failed to create thread', err)
-        }
-    }, [actId, createThread])
 
     if (!act) return null
 
@@ -107,37 +97,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
 
     return (
         <div className="act-chat">
-            {/* Thread selector mini bar */}
-            {threads.length > 0 && (
-                <div className="act-chat__thread-bar">
-                    {threads.map((thread, idx) => {
-                        const statusCls = thread.status === 'active' ? 'act-chat__status--active'
-                            : thread.status === 'completed' ? 'act-chat__status--done'
-                            : 'act-chat__status--idle'
-                        return (
-                            <button
-                                key={thread.id}
-                                className={`act-chat__thread-tab ${thread.id === currentThread?.id ? 'act-chat__thread-tab--active' : ''}`}
-                                onClick={() => selectThread(thread.id)}
-                                title={`Thread #${idx + 1} (${thread.status})`}
-                            >
-                                <span className={`act-chat__status-dot ${statusCls}`} />
-                                <span>#{idx + 1}</span>
-                            </button>
-                        )
-                    })}
-                    <button
-                        className="act-chat__thread-tab act-chat__thread-tab--add"
-                        onClick={handleCreateThread}
-                        title="New Thread"
-                    >
-                        <Plus size={9} />
-                    </button>
-                </div>
-            )}
-
             {/* Performer tabs */}
-            {threads.length > 0 && (
+            {currentThread && (
             <div className="act-chat__filters">
                 <button
                     className={`act-chat__filter-tab ${isCallboardView ? 'act-chat__filter-tab--active' : ''}`}
@@ -204,15 +165,12 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                             <>
                                 <Users size={20} className="act-chat__empty-icon" />
                                 <strong>No participants bound</strong>
-                                <span>Connect performers on the canvas or drag from the Asset Library to bind them to this act.</span>
+                                <span>Enter edit mode to connect performers on the canvas.</span>
                                 <button
                                     className="act-chat__action-btn"
-                                    onClick={() => {
-                                        selectAct(actId)
-                                        setAssetLibraryOpen(true)
-                                    }}
+                                    onClick={() => openActEditor(actId, 'act')}
                                 >
-                                    <Workflow size={11} /> Add Performers
+                                    <Pencil size={11} /> Edit Act
                                 </button>
                             </>
                         ) : !modelConfigured ? (
@@ -221,14 +179,11 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                 <strong>Model not configured</strong>
                                 <span>Set up a model for &ldquo;{activeParticipantLabel || activeParticipantKey}&rdquo; in the performer editor.</span>
                             </>
-                        ) : threads.length === 0 ? (
+                        ) : !currentThread ? (
                             <>
                                 <Workflow size={20} className="act-chat__empty-icon" />
-                                <strong>Ready to choreograph</strong>
-                                <span>Create a thread to start the act runtime.</span>
-                                <button className="act-chat__action-btn" onClick={handleCreateThread}>
-                                    <Plus size={11} /> New Thread
-                                </button>
+                                <strong>No thread selected</strong>
+                                <span>Select or create a thread from the left sidebar to start the act runtime.</span>
                             </>
                         ) : (
                             <>
@@ -265,12 +220,14 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                 placeholder={
                                     noParticipants
                                         ? 'Add performers first…'
+                                        : !currentThread
+                                            ? 'Select a thread from the sidebar…'
                                         : !modelConfigured
                                             ? 'Configure a model for this performer…'
                                             : `Message ${activeParticipantLabel ?? activeParticipantKey ?? 'participant'}…`
                                 }
                                 rows={1}
-                                disabled={noParticipants || !modelConfigured || isLoading}
+                                disabled={noParticipants || !currentThread || !modelConfigured || isLoading}
                                 className="text-input"
                             />
                             {isLoading ? (
@@ -278,7 +235,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                     <Square size={12} fill="currentColor" />
                                 </button>
                             ) : (
-                                <button className="send-btn" onClick={() => void handleSend()} disabled={!input.trim() || noParticipants || !modelConfigured}>
+                                <button className="send-btn" onClick={() => void handleSend()} disabled={!input.trim() || noParticipants || !currentThread || !modelConfigured}>
                                     <Send size={12} />
                                 </button>
                             )}

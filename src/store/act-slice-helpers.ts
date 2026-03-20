@@ -192,7 +192,7 @@ export async function loadActThreadsImpl(_get: GetState, set: SetState, actId: s
         activeThreadId: state.selectedActId === actId
             ? ((state.actThreads[actId] || []).some((thread) => thread.id === state.activeThreadId)
                 ? state.activeThreadId
-                : (result.threads[0]?.id || null))
+                : null)
             : state.activeThreadId,
     }))
 }

@@ -75,6 +75,8 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
 
     const buildPerformerNodes = useCallback(() => buildPerformerCanvasNodes({
+        acts,
+        editingActId,
         performers,
         selectedPerformerId,
         focusedPerformerId,
@@ -85,6 +87,8 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
         onActivateTransform,
         onDeactivateTransform,
     }), [
+        acts,
+        editingActId,
         performers,
         selectedPerformerId,
         focusedPerformerId,
@@ -180,8 +184,8 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
     ])
 
     const edges = useMemo(
-        () => composeCanvasEdges(acts),
-        [acts],
+        () => composeCanvasEdges(acts, editingActId),
+        [acts, editingActId],
     )
 
     return {

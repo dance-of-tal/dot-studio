@@ -17,7 +17,6 @@ import {
 } from './act-slice-helpers'
 import {
     addActRelationImpl,
-    createActFromPerformersImpl,
 } from './act-slice-actions'
 
 function createActEditorState(
@@ -114,13 +113,13 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         const nextThreads = id ? (state.actThreads[id] || []) : []
         const nextActiveThreadId = nextThreads.some((thread) => thread.id === state.activeThreadId)
             ? state.activeThreadId
-            : (nextThreads[0]?.id || null)
+            : null
         set({
             selectedActId: id,
             selectedPerformerId: null,
             actEditorState: state.actEditorState?.actId === id ? state.actEditorState : null,
             activeThreadId: nextActiveThreadId,
-            activeThreadParticipantKey: null,
+            activeThreadParticipantKey: state.selectedActId === id ? state.activeThreadParticipantKey : null,
         })
         if (id) {
             void get().loadThreads(id)
@@ -194,14 +193,6 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         })
         return newKey
     },
-
-    createActFromPerformers: (performerIds, options) => createActFromPerformersImpl(
-        get,
-        set,
-        performerIds,
-        options,
-        { width: ACT_DEFAULT_WIDTH, height: ACT_DEFAULT_EXPANDED_HEIGHT },
-    ),
 
     attachPerformerToAct: (actId, performerId) => {
         const state = get()

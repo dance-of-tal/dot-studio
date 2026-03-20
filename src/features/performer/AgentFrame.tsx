@@ -69,16 +69,18 @@ export default function AgentFrame({ data, id }: any) {
     const prefixCount = useMemo(() => (chatPrefixes[id] || []).length, [chatPrefixes, id])
     const modelConfigured = hasModelConfig(data.model)
     const isEditMode = editingTarget?.type === 'performer' && editingTarget.id === id
+    const isActEditMode = !!data.actEditConnectVisible
+    const shouldShowEditPanel = isEditMode || isActEditMode
     const performer = performers.find((item) => item.id === id) || null
     const safeSummary = safeSummaries[`performer:${id}`] || null
     const sessionId = sessionMap[id] || null
     const hasActiveSession = !!sessionId
 
     // ─── Queries ──────────────────────────────────────
-    const { data: agents = [] } = useAgents(isSelected || isEditMode)
-    const { data: danceAssets = [] } = useAssetKind('dance', isSelected || isFocused || isEditMode)
-    const { data: assetInventory = [] } = useAssets(isSelected || isEditMode)
-    const { data: mcpServers = [] } = useMcpServers(isSelected || isEditMode)
+    const { data: agents = [] } = useAgents(isSelected || shouldShowEditPanel)
+    const { data: danceAssets = [] } = useAssetKind('dance', isSelected || isFocused || shouldShowEditPanel)
+    const { data: assetInventory = [] } = useAssets(isSelected || shouldShowEditPanel)
+    const { data: mcpServers = [] } = useMcpServers(isSelected || shouldShowEditPanel)
 
     // ─── DnD ──────────────────────────────────────────
     const talDrop = useDroppable({ id: `performer-edit-tal-${id}`, data: { performerId: id, type: 'tal' } })
@@ -100,7 +102,7 @@ export default function AgentFrame({ data, id }: any) {
     // ─── Presentation ─────────────────────────────────
     const { presentation: performerPresentation, runtimeTools } = usePerformerPresentation(
         performer, assetInventory, mcpServers, drafts,
-        { enableTools: (isSelected || isEditMode) },
+        { enableTools: (isSelected || shouldShowEditPanel) },
     )
     // Standalone performers no longer have edges — relations live inside Acts only
     const requestRelations: Array<{ targetName: string; description: string }> = []
@@ -160,7 +162,7 @@ export default function AgentFrame({ data, id }: any) {
         performer,
         isSelected,
         isFocused,
-        isEditMode,
+        isEditMode: shouldShowEditPanel,
         refreshSafeOwner,
         safeSummary,
         setPerformerExecutionMode,
@@ -213,9 +215,13 @@ export default function AgentFrame({ data, id }: any) {
 
     // ─── Render ───────────────────────────────────────
     return (
-        <div className="performer-node-shell">
-            <Handle type="target" position={Position.Left} className="performer-node-shell__handle" />
-            <Handle type="source" position={Position.Right} className="performer-node-shell__handle" />
+        <div className={`performer-node-shell ${data.actEditParticipant ? 'performer-node-shell--act-participant' : ''} ${data.actEditDimmed ? 'performer-node-shell--act-dimmed' : ''}`}>
+            {data.actEditConnectVisible ? (
+                <>
+                    <Handle type="target" position={Position.Left} className="performer-node-shell__handle" />
+                    <Handle type="source" position={Position.Right} className="performer-node-shell__handle" />
+                </>
+            ) : null}
             <CanvasWindowFrame
                 className={`nowheel ${isFocused ? 'canvas-frame--focused' : ''}`}
                 width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}
@@ -258,7 +264,7 @@ export default function AgentFrame({ data, id }: any) {
                         >
                             {isFocused ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
                         </button>
-                        {!isEditMode && (
+                        {!shouldShowEditPanel && (
                             <button
                                 className="icon-btn"
                                 onClick={(e) => { e.stopPropagation(); useStudioStore.getState().openPerformerEditor(id) }}
@@ -281,7 +287,7 @@ export default function AgentFrame({ data, id }: any) {
                 bodyClassName="nowheel nodrag"
                 bodyRef={bodyRef}
             >
-                {isEditMode ? (
+                {shouldShowEditPanel ? (
                     <PerformerEditPanel
                         performerId={id}
                         performer={performer}

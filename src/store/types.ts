@@ -283,7 +283,6 @@ export interface ActSlice {
     // ── Participant Binding (ref-based) ─────────
     bindPerformerToAct: (actId: string, performerRef: StageActParticipantBinding['performerRef']) => string
     attachPerformerRefToAct: (actId: string, performerRef: StageActParticipantBinding['performerRef']) => string | null
-    createActFromPerformers: (performerIds: [string, string], options?: { name?: string }) => string | null
     attachPerformerToAct: (actId: string, performerId: string) => string | null
     autoLayoutActParticipants: (actId: string) => void
     unbindPerformerFromAct: (actId: string, participantKey: string) => void

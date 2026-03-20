@@ -87,10 +87,8 @@ export default function StageExplorer() {
     const toggleActVisibility = useStudioStore((s) => s.toggleActVisibility);
     const actThreads = useStudioStore((s) => s.actThreads);
     const activeThreadId = useStudioStore((s) => s.activeThreadId);
-    const activeThreadParticipantKey = useStudioStore((s) => s.activeThreadParticipantKey);
     const createThread = useStudioStore((s) => s.createThread);
     const selectThread = useStudioStore((s) => s.selectThread);
-    const selectThreadParticipant = useStudioStore((s) => s.selectThreadParticipant);
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -321,7 +319,6 @@ export default function StageExplorer() {
             <StageExplorerThreadsSection
                 stageId={stageId}
                 acts={acts}
-                performers={performers}
                 threadRows={threadRows}
                 expandedRows={expandedRows}
                 pendingDelete={pendingDelete}
@@ -329,7 +326,6 @@ export default function StageExplorer() {
                 editingTarget={editingTarget}
                 selectedActId={selectedActId}
                 activeThreadId={activeThreadId}
-                activeThreadParticipantKey={activeThreadParticipantKey}
                 actThreads={actThreads}
                 onToggleExpanded={toggleExpanded}
                 onSetPendingDelete={setPendingDelete}
@@ -357,7 +353,6 @@ export default function StageExplorer() {
                 onToggleActVisibility={toggleActVisibility}
                 onRemoveAct={removeAct}
                 onSelectThread={selectThread}
-                onSelectThreadParticipant={selectThreadParticipant}
             />
         </div>
     );

@@ -16,6 +16,18 @@
     border-color: var(--accent);
 }
 
+.performer-node-shell--act-participant .canvas-frame {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--act-accent, #f59e0b) 30%, transparent);
+}
+
+.performer-node-shell--act-dimmed {
+    opacity: 0.55;
+}
+
+.performer-node-shell--act-dimmed .canvas-frame {
+    filter: saturate(0.7);
+}
+
 .canvas-frame__body {
     display: flex;
     flex-direction: column;

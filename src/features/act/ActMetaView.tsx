@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
     User, ArrowRightLeft, AlertTriangle,
 } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { resolveActParticipantLabel } from './participant-labels'
-import { isPerformerAttachedToAct } from './act-inspector-helpers'
 
 export default function ActMetaView() {
     const {
@@ -13,13 +12,11 @@ export default function ActMetaView() {
         renameAct,
         updateActAuthoringMeta,
         updateActDescription,
-        performers,
         autoLayoutActParticipants,
         openActParticipantEditor,
         openActRelationEditor,
         setAssetLibraryOpen,
         addRelation,
-        attachPerformerToAct,
     } = useStudioStore()
     const updateActRules = useStudioStore((s) => s.updateActRules)
     const activeActId = actEditorState?.actId || null
@@ -30,7 +27,7 @@ export default function ActMetaView() {
     const [localName, setLocalName] = useState(act.name)
     const [localDesc, setLocalDesc] = useState(act.description || meta.description || '')
     const [ruleInput, setRuleInput] = useState('')
-    const [participantDraftId, setParticipantDraftId] = useState('')
+
 
     const participantKeys = Object.keys(act.participants)
     const [relationDraft, setRelationDraft] = useState<{
@@ -39,10 +36,7 @@ export default function ActMetaView() {
         direction: 'both' | 'one-way'
     }>({ source: '', target: '', direction: 'both' })
 
-    const availablePerformers = useMemo(
-        () => performers.filter((performer) => performer.scope === 'shared' && performer.id !== 'studio-assistant' && !isPerformerAttachedToAct(act, performer)),
-        [act, performers],
-    )
+
 
     useEffect(() => {
         setLocalName(act.name)
@@ -170,33 +164,13 @@ export default function ActMetaView() {
             </div>
 
             <div className="act-panel__section">
-                <label className="act-panel__label">Add Existing Performer</label>
-                {availablePerformers.length > 0 ? (
-                    <>
-                        <select
-                            className="act-panel__input"
-                            value={participantDraftId}
-                            onChange={(e) => setParticipantDraftId(e.target.value)}
-                        >
-                            <option value="">Choose a performer…</option>
-                            {availablePerformers.map((performer) => (
-                                <option key={performer.id} value={performer.id}>{performer.name}</option>
-                            ))}
-                        </select>
-                        <button
-                            className="act-panel__toggle"
-                            onClick={() => {
-                                if (!participantDraftId) return
-                                attachPerformerToAct(activeActId, participantDraftId)
-                                setParticipantDraftId('')
-                            }}
-                        >
-                            Add Participant
-                        </button>
-                    </>
-                ) : (
-                    <span className="act-panel__empty">No standalone performers available to attach</span>
-                )}
+                <label className="act-panel__label">Add Participant</label>
+                <button
+                    className="act-panel__toggle"
+                    onClick={() => setAssetLibraryOpen(true)}
+                >
+                    Open Asset Library
+                </button>
             </div>
 
             <div className="act-panel__section">

@@ -41,6 +41,13 @@ function buildRelationEdges(acts: StageAct[]): Edge[] {
     return edges
 }
 
-export function composeCanvasEdges(acts: StageAct[]) {
-    return buildRelationEdges(acts)
+export function composeCanvasEdges(acts: StageAct[], editingActId: string | null) {
+    if (!editingActId) {
+        return []
+    }
+    const editingAct = acts.find((act) => act.id === editingActId)
+    if (!editingAct) {
+        return []
+    }
+    return buildRelationEdges([editingAct])
 }

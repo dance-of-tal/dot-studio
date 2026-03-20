@@ -1,28 +1,21 @@
 import { useState } from 'react'
 import {
-    Activity,
     Archive,
     ChevronRight,
     Eye,
     EyeOff,
     Plus,
     Trash2,
-    User,
     Workflow,
 } from 'lucide-react'
 import { showToast } from '../../lib/toast'
-import { resolveActParticipantLabel } from '../../features/act/participant-labels'
-import { LayerRow } from './stage-explorer-utils'
 
 type Props = {
     act: any
-    performers: any[]
     selectedActId: string | null
     activeThreadId: string | null
-    activeThreadParticipantKey: string | null
     threads: any[]
     expanded: boolean
-    expandedRows: Record<string, boolean>
     onToggleExpanded: (key: string) => void
     onOpenAct: (id: string) => void
     onCreateThread: (id: string) => void | Promise<void>
@@ -31,18 +24,14 @@ type Props = {
     onToggleActVisibility: (id: string) => void
     onRemoveAct: (id: string) => void
     onSelectThread: (threadId: string) => void
-    onSelectThreadParticipant: (participantKey: string | null) => void
 }
 
 export default function StageExplorerActGroup({
     act,
-    performers,
     selectedActId,
     activeThreadId,
-    activeThreadParticipantKey,
     threads,
     expanded,
-    expandedRows,
     onToggleExpanded,
     onOpenAct,
     onCreateThread,
@@ -51,7 +40,6 @@ export default function StageExplorerActGroup({
     onToggleActVisibility,
     onRemoveAct,
     onSelectThread,
-    onSelectThreadParticipant,
 }: Props) {
     const actKey = `act-${act.id}`
     const isActSelected = selectedActId === act.id
@@ -135,75 +123,31 @@ export default function StageExplorerActGroup({
                                 const isThreadActive = activeThreadId === thread.id
                                 const statusIcon = thread.status === 'active' ? '●' : thread.status === 'completed' ? '✓' : '⏸'
                                 const statusClass = `thread-status--${thread.status || 'idle'}`
-                                const threadKey = `thread-${thread.id}`
-                                const threadExpanded = expandedRows[threadKey] ?? isThreadActive
-                                const boundParticipantKeys = Object.keys(act.participants)
                                 return (
-                                    <div key={thread.id} className="thread-group">
-                                        <div
-                                            role="button"
-                                            tabIndex={0}
-                                            className={`layer-row ${isThreadActive ? 'active' : ''}`}
-                                            onClick={() => {
-                                                onSelectThread(thread.id)
-                                                onOpenAct(act.id)
-                                            }}
-                                        >
-                                            {boundParticipantKeys.length > 0 ? (
-                                                <span
-                                                    className={`thread-card__chevron ${threadExpanded ? 'is-open' : ''}`}
-                                                    onClick={(event) => {
-                                                        event.stopPropagation()
-                                                        onToggleExpanded(threadKey)
-                                                    }}
-                                                >
-                                                    <ChevronRight size={10} />
-                                                </span>
-                                            ) : (
-                                                <span className="thread-card__chevron-spacer" style={{ width: 10 }} />
-                                            )}
-                                            <span className="layer-row__icon">
-                                                <Workflow size={11} />
-                                            </span>
-                                            <span className="layer-row__body">
-                                                <span className="layer-row__label">
-                                                    <span className="thread-label">
-                                                        <span className={`thread-status-dot ${statusClass}`}>{statusIcon}</span>
-                                                        Thread {thread.id.slice(0, 6)}
-                                                    </span>
-                                                </span>
-                                                <span className="layer-row__meta">
-                                                    {new Date(thread.createdAt).toLocaleTimeString()}
+                                    <div
+                                        key={thread.id}
+                                        role="button"
+                                        tabIndex={0}
+                                        className={`layer-row ${isThreadActive ? 'active' : ''}`}
+                                        onClick={() => {
+                                            onSelectThread(thread.id)
+                                            onOpenAct(act.id)
+                                        }}
+                                    >
+                                        <span className="layer-row__icon">
+                                            <Workflow size={11} />
+                                        </span>
+                                        <span className="layer-row__body">
+                                            <span className="layer-row__label">
+                                                <span className="thread-label">
+                                                    <span className={`thread-status-dot ${statusClass}`}>{statusIcon}</span>
+                                                    Thread {thread.id.slice(0, 6)}
                                                 </span>
                                             </span>
-                                        </div>
-                                        {threadExpanded ? (
-                                            <div className="thread-children">
-                                                <LayerRow
-                                                    icon={<Activity size={10} />}
-                                                    label="Callboard / Activity"
-                                                    active={isThreadActive && !activeThreadParticipantKey}
-                                                    onClick={() => {
-                                                        onSelectThread(thread.id)
-                                                        onSelectThreadParticipant(null)
-                                                        onOpenAct(act.id)
-                                                    }}
-                                                />
-                                                {boundParticipantKeys.map((participantKey) => (
-                                                    <LayerRow
-                                                        key={participantKey}
-                                                        icon={<User size={10} />}
-                                                        label={resolveActParticipantLabel(act, participantKey, performers)}
-                                                        active={isThreadActive && activeThreadParticipantKey === participantKey}
-                                                        onClick={() => {
-                                                            onSelectThread(thread.id)
-                                                            onSelectThreadParticipant(participantKey)
-                                                            onOpenAct(act.id)
-                                                        }}
-                                                    />
-                                                ))}
-                                            </div>
-                                        ) : null}
+                                            <span className="layer-row__meta">
+                                                {new Date(thread.createdAt).toLocaleTimeString()}
+                                            </span>
+                                        </span>
                                     </div>
                                 )
                             })}

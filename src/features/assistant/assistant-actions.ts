@@ -30,9 +30,11 @@ export function handleAssistantToolCall(_callId: string, name: string, args: Rec
                     }
                     return { success: true, action: 'connectPerformers' }
                 }
-
-                const actId = store.createActFromPerformers([args.sourcePerformerId, args.targetPerformerId])
-                return { success: !!actId, action: 'connectPerformers', actId }
+                return {
+                    success: false,
+                    action: 'connectPerformers',
+                    error: 'An Act must be created explicitly before connecting performers.',
+                }
             }
             case 'assistant_set_performer_model': {
                 store.setPerformerModel(args.performerId, {

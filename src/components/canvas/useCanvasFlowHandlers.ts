@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 import type { Connection, Node, NodeChange, ReactFlowInstance } from '@xyflow/react'
-import type { StageAct } from '../../types'
 import { routeActConnection } from './act-connect-router'
 import {
     resolveCanvasDragStop,
@@ -12,21 +11,23 @@ import { resolveCanvasResizeChange } from './canvas-resize-router'
 type EditingTargetLike = { type: string; id: string } | null
 
 type UseCanvasFlowHandlersArgs = {
-    acts: StageAct[]
     nodes: Node[]
+    editingActId: string | null
     editingTarget: EditingTargetLike
     reactFlowInstance: ReactFlowInstance<Node> | null
     canvasAreaRef: React.RefObject<HTMLDivElement | null>
     clearTransformTarget: () => void
     closeEditor: () => void
     closeActEditor: () => void
+    openActEditor: (actId: string, mode?: 'act' | 'participant' | 'relation', options?: { participantKey?: string | null; relationId?: string | null }) => void
+    openActRelationEditor: (actId: string, relationId: string) => void
     setCanvasCenter: (x: number, y: number) => void
     selectMarkdownEditor: (id: string | null) => void
     selectPerformer: (id: string | null) => void
     setActiveChatPerformer: (id: string | null) => void
     selectAct: (id: string | null) => void
-    createActFromPerformers: (performerIds: [string, string], options?: { name?: string }) => string | null
     attachPerformerToAct: (actId: string, performerId: string) => string | null
+    addRelation: (actId: string, between: [string, string], direction: 'both' | 'one-way') => string | null
     onNodesChange: (changes: NodeChange<Node>[]) => void
     updateMarkdownEditorPosition: (id: string, x: number, y: number) => void
     updateCanvasTerminalPosition: (id: string, x: number, y: number) => void
@@ -41,21 +42,23 @@ type UseCanvasFlowHandlersArgs = {
 
 export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     const {
-        acts,
         nodes,
+        editingActId,
         editingTarget,
         reactFlowInstance,
         canvasAreaRef,
         clearTransformTarget,
         closeEditor,
         closeActEditor,
+        openActEditor,
+        openActRelationEditor,
         setCanvasCenter,
         selectMarkdownEditor,
         selectPerformer,
         setActiveChatPerformer,
         selectAct,
-        createActFromPerformers,
         attachPerformerToAct,
+        addRelation,
         onNodesChange,
         updateMarkdownEditorPosition,
         updateCanvasTerminalPosition,
@@ -69,15 +72,11 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     } = args
 
     const onEdgeClick = useCallback((_event: React.MouseEvent, edge: import('@xyflow/react').Edge) => {
+        if (!editingActId) return
         const relationId = resolveCanvasEdgeClick(edge)
         if (!relationId) return
-        const actId = acts.find((act) => act.relations.some((relation) => relation.id === relationId))?.id
-        if (!actId) return
-        closeEditor()
-        selectPerformer(null)
-        selectMarkdownEditor(null)
-        selectAct(actId)
-    }, [acts, closeEditor, selectPerformer, selectMarkdownEditor, selectAct])
+        openActRelationEditor(editingActId, relationId)
+    }, [editingActId, openActRelationEditor])
 
     const onNodeDragStop = useCallback((_: unknown, node: Node) => {
         const result = resolveCanvasDragStop(node)
@@ -135,6 +134,11 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
                 selectAct(result.id)
                 return
             case 'performer':
+                if (editingActId) {
+                    closeEditor()
+                    selectAct(editingActId)
+                    return
+                }
                 if (result.shouldCloseEditor) {
                     closeEditor()
                 }
@@ -145,6 +149,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         }
     }, [
         editingTarget,
+        editingActId,
         clearTransformTarget,
         closeEditor,
         closeActEditor,
@@ -172,15 +177,25 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
 
     const onConnect = useCallback((connection: Connection) => {
         routeActConnection({
+            currentActId: editingActId,
             connection,
             nodes,
-            onCreateActFromPerformers: createActFromPerformers,
-            onAttachPerformerToAct: attachPerformerToAct,
+            onConnectPerformersInAct: (actId, performerIds) => {
+                const sourceKey = attachPerformerToAct(actId, performerIds[0])
+                const targetKey = attachPerformerToAct(actId, performerIds[1])
+                if (!sourceKey || !targetKey || sourceKey === targetKey) {
+                    return
+                }
+                addRelation(actId, [sourceKey, targetKey], 'both')
+                openActEditor(actId, 'act')
+            },
         })
     }, [
+        editingActId,
         nodes,
-        createActFromPerformers,
         attachPerformerToAct,
+        addRelation,
+        openActEditor,
     ])
 
     const handleNodesChange = useCallback((changes: NodeChange<Node>[]) => {

@@ -7,7 +7,6 @@ import StageExplorerPerformerGroup from './StageExplorerPerformerGroup'
 type Props = {
     stageId: string | null
     acts: any[]
-    performers: any[]
     threadRows: ThreadRow[]
     expandedRows: Record<string, boolean>
     pendingDelete: string | null
@@ -15,7 +14,6 @@ type Props = {
     editingTarget: any
     selectedActId: string | null
     activeThreadId: string | null
-    activeThreadParticipantKey: string | null
     actThreads: Record<string, any[]>
     onToggleExpanded: (key: string) => void
     onSetPendingDelete: (key: string | null) => void
@@ -41,13 +39,11 @@ type Props = {
     onToggleActVisibility: (id: string) => void
     onRemoveAct: (id: string) => void
     onSelectThread: (threadId: string) => void
-    onSelectThreadParticipant: (participantKey: string | null) => void
 }
 
 export default function StageExplorerThreadsSection({
     stageId,
     acts,
-    performers,
     threadRows,
     expandedRows,
     pendingDelete,
@@ -55,7 +51,6 @@ export default function StageExplorerThreadsSection({
     editingTarget,
     selectedActId,
     activeThreadId,
-    activeThreadParticipantKey,
     actThreads,
     onToggleExpanded,
     onSetPendingDelete,
@@ -81,7 +76,6 @@ export default function StageExplorerThreadsSection({
     onToggleActVisibility,
     onRemoveAct,
     onSelectThread,
-    onSelectThreadParticipant,
 }: Props) {
     const hasPerformers = threadRows.length > 0
     const hasActs = acts.length > 0
@@ -199,29 +193,25 @@ export default function StageExplorerThreadsSection({
                                     <StageExplorerActGroup
                                         key={actKey}
                                         act={act}
-                                        performers={performers}
                                         selectedActId={selectedActId}
                                         activeThreadId={activeThreadId}
-                                                activeThreadParticipantKey={activeThreadParticipantKey}
-                                                threads={threads}
-                                                expanded={isExpanded}
-                                                expandedRows={expandedRows}
-                                                onToggleExpanded={onToggleExpanded}
-                                                onOpenAct={onOpenAct}
-                                                onCreateThread={onCreateThread}
+                                        threads={threads}
+                                        expanded={isExpanded}
+                                        onToggleExpanded={onToggleExpanded}
+                                        onOpenAct={onOpenAct}
+                                        onCreateThread={onCreateThread}
 
                                         onSaveActAsDraft={onSaveActAsDraft}
                                         onToggleActVisibility={onToggleActVisibility}
                                         onRemoveAct={onRemoveAct}
                                         onSelectThread={onSelectThread}
-                                        onSelectThreadParticipant={onSelectThreadParticipant}
                                     />
                                 )
                             })}
                         </div>
                     ) : (
                         <div className="empty-state empty-state--tight empty-state--nested">
-                            No acts yet — connect performers to create one
+                            No acts yet
                         </div>
                     )}
                 </div>
