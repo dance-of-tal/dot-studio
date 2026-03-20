@@ -81,6 +81,7 @@ export default function CanvasArea() {
         selectAct,
         openActRelationEditor,
         updateActPosition,
+        updateActSize,
         attachPerformerToAct,
         addRelation,
     } = useStudioStore();
@@ -186,6 +187,7 @@ export default function CanvasArea() {
         updateTrackingWindowPosition,
         updateActPosition,
         updatePerformerPosition,
+        updateActSize,
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
         updateTrackingWindowSize,

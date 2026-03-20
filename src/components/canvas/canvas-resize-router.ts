@@ -4,6 +4,7 @@ export type CanvasResizeResult =
     | { kind: 'markdownEditor'; id: string; width: number; height: number }
     | { kind: 'canvasTerminal'; id: string; width: number; height: number }
     | { kind: 'stageTracking'; width: number; height: number }
+    | { kind: 'act'; id: string; width: number; height: number }
     | { kind: 'performer'; id: string; width: number; height: number }
 
 export function resolveCanvasResizeChange(
@@ -27,6 +28,10 @@ export function resolveCanvasResizeChange(
 
     if (changedNode?.type === 'stageTracking') {
         return { kind: 'stageTracking', width, height }
+    }
+
+    if (changedNode?.type === 'act') {
+        return { kind: 'act', id: change.id, width, height }
     }
 
     return { kind: 'performer', id: change.id, width, height }

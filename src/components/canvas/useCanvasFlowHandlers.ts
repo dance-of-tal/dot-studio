@@ -34,6 +34,7 @@ type UseCanvasFlowHandlersArgs = {
     updateTrackingWindowPosition: (x: number, y: number) => void
     updateActPosition: (id: string, x: number, y: number) => void
     updatePerformerPosition: (id: string, x: number, y: number) => void
+    updateActSize: (id: string, width: number, height: number) => void
     updateMarkdownEditorSize: (id: string, width: number, height: number) => void
     updateCanvasTerminalSize: (id: string, width: number, height: number) => void
     updateTrackingWindowSize: (width: number, height: number) => void
@@ -65,6 +66,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         updateTrackingWindowPosition,
         updateActPosition,
         updatePerformerPosition,
+        updateActSize,
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
         updateTrackingWindowSize,
@@ -216,6 +218,9 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
                 case 'stageTracking':
                     updateTrackingWindowSize(resizeResult.width, resizeResult.height)
                     return
+                case 'act':
+                    updateActSize(resizeResult.id, resizeResult.width, resizeResult.height)
+                    return
                 case 'performer':
                     updatePerformerSize(resizeResult.id, resizeResult.width, resizeResult.height)
                     return
@@ -227,6 +232,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
         updateTrackingWindowSize,
+        updateActSize,
         updatePerformerSize,
     ])
 

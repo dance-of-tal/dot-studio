@@ -24,7 +24,6 @@ export default function ActFrame({ data, id }: any) {
         openActEditor,
         closeActEditor,
         toggleActVisibility,
-        updateActSize,
         activeThreadId,
         actThreads,
         focusedPerformerId, focusedNodeType,
@@ -41,15 +40,6 @@ export default function ActFrame({ data, id }: any) {
     const rfHeight = useStore((state) => state.height)
     const width = data.width || act?.width || ACT_DEFAULT_WIDTH
     const height = resolveActExpandedHeight(act?.height)
-
-    const handleResizeEnd = () => {
-        if (!isSelected) return
-        const node = document.querySelector(`[data-id="${id}"]`) as HTMLElement | null
-        if (node) {
-            const rect = node.getBoundingClientRect()
-            updateActSize(id, Math.round(rect.width), Math.round(rect.height))
-        }
-    }
 
     const handleSelectAct = () => selectAct(id)
     const handleToggleEdit = () => {
@@ -87,7 +77,6 @@ export default function ActFrame({ data, id }: any) {
                 transformActive={isSelected ? data.transformActive || false : false}
                 onActivateTransform={data.onActivateTransform}
                 onDeactivateTransform={data.onDeactivateTransform}
-                onResizeEnd={handleResizeEnd}
                 selected={isSelected}
                 headerStart={
                     <div className="act-frame__title" onClick={handleSelectAct}>
