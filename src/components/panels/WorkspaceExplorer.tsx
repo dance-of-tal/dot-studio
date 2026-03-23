@@ -9,10 +9,10 @@ import {
     Folder,
     MoreHorizontal,
 } from 'lucide-react';
-import './StageExplorer.css';
-import './StageExplorerItems.css';
+import './WorkspaceExplorer.css';
+import './WorkspaceExplorerItems.css';
 import {
-    stageLabel,
+    workspaceLabel,
     buildPerformerSessionRows,
     groupPerformerSessionsById,
     buildThreadRows,
@@ -24,19 +24,19 @@ import WorkspaceExplorerThreadsSection from './WorkspaceExplorerThreadsSection';
 
 
 export default function WorkspaceExplorer() {
-    const [stagesHeight, setStagesHeight] = useState(190);
+    const [workspacesHeight, setWorkspacesHeight] = useState(190);
     const dividerDragging = useRef(false);
 
     const onDividerMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         dividerDragging.current = true;
         const startY = e.clientY;
-        const startH = stagesHeight;
+        const startH = workspacesHeight;
 
         const onMove = (ev: MouseEvent) => {
             if (!dividerDragging.current) return;
             const delta = ev.clientY - startY;
-            setStagesHeight(Math.min(400, Math.max(80, startH + delta)));
+            setWorkspacesHeight(Math.min(400, Math.max(80, startH + delta)));
         };
         const onUp = () => {
             dividerDragging.current = false;
@@ -49,7 +49,7 @@ export default function WorkspaceExplorer() {
         document.addEventListener('mouseup', onUp);
         document.body.style.cursor = 'row-resize';
         document.body.style.userSelect = 'none';
-    }, [stagesHeight]);
+    }, [workspacesHeight]);
     const {
         workspaceId,
         workingDir,
@@ -122,14 +122,14 @@ export default function WorkspaceExplorer() {
         });
     }, [editingTarget, performerSessionsById, selectedPerformerId, selectedPerformerSessionId, sharedPerformers]);
 
-    const stageRows = workspaceList.map((entry) => {
+    const workspaceRows = workspaceList.map((entry) => {
         const segments = entry.workingDir.trim().replace(/\/+$/, '').split('/');
         const shortPath = segments.length > 2 ? `…/${segments.slice(-2).join('/')}` : entry.workingDir;
         return (
             <LayerRow
                 key={entry.id}
                 icon={<Folder size={12} className={entry.id === workspaceId ? 'icon-active' : 'icon-muted'} />}
-                label={stageLabel(entry.workingDir)}
+                label={workspaceLabel(entry.workingDir)}
                 meta={shortPath}
                 active={entry.id === workspaceId}
                 onClick={() => loadWorkspace(entry.id)}
@@ -143,13 +143,13 @@ export default function WorkspaceExplorer() {
                         )}
                         items={[
                             {
-                                label: 'Close stage',
+                                label: 'Close workspace',
                                 onClick: () => closeWorkspace(),
                                 disabled: entry.id !== workspaceId,
                             },
                             'separator',
                             {
-                                label: 'Delete stage',
+                                label: 'Delete workspace',
                                 onClick: () => deleteWorkspace(entry.id),
                                 variant: 'danger',
                             },
@@ -309,10 +309,10 @@ export default function WorkspaceExplorer() {
     return (
         <div className="explorer explorer--stacked">
             <WorkspaceExplorerWorkspacesSection
-                stagesHeight={stagesHeight}
-                stageRows={stageRows}
+                workspacesHeight={workspacesHeight}
+                workspaceRows={workspaceRows}
                 workingDir={workingDir}
-                onNewStage={newWorkspace}
+                onOpenWorkspace={newWorkspace}
             />
 
             <div className="explorer__divider" onMouseDown={onDividerMouseDown} />

@@ -9,7 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../hooks/queries';
 import { DropdownMenu } from '../shared/DropdownMenu';
 
-import './StageToolbar.css';
+import './WorkspaceToolbar.css';
 
 const SettingsModal = lazy(() =>
     import('../../features/providers').then((module) => ({ default: module.SettingsModal })),

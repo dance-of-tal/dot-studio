@@ -1,0 +1,307 @@
+/* ── Thread & Item Styles for WorkspaceExplorer ─────────── */
+
+/* ── Thread Group ───────────────────────────────── */
+.thread-group {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Thread Row (flat tree-view) ────────────────── */
+.thread-card {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px 5px 4px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.1s ease;
+}
+
+.thread-card:hover {
+    background: var(--bg-hover);
+}
+
+.thread-card.active {
+    background: var(--bg-selected);
+}
+
+.thread-card--hidden .thread-card__name {
+    color: var(--text-muted);
+}
+
+.thread-card--hidden .thread-card__icon {
+    opacity: 0.4;
+}
+
+.thread-card.muted .thread-card__name {
+    color: var(--text-muted);
+}
+
+.thread-card.muted .thread-card__icon {
+    opacity: 0.5;
+}
+
+/* ── Chevron ─────────────────────────────────────────── */
+.thread-card__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+    cursor: pointer;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+}
+
+.thread-card__chevron:hover {
+    color: var(--text-primary);
+}
+
+.thread-card__chevron.is-open {
+    transform: rotate(90deg);
+}
+
+.thread-card__chevron-spacer {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+/* ── Icon ────────────────────────────────────────────── */
+.thread-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: color 0.1s ease;
+}
+
+.thread-card.active .thread-card__icon {
+    color: var(--text-secondary);
+}
+
+/* ── Body ────────────────────────────────────────────── */
+.thread-card__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.thread-card__name {
+    font-size: var(--font-md);
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.4;
+}
+
+/* ── Actions (always visible) ────────────────────────── */
+.thread-card__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+    opacity: 0.5;
+    transition: opacity 0.1s ease;
+}
+
+.thread-card:hover .thread-card__actions,
+.thread-card.active .thread-card__actions {
+    opacity: 1;
+}
+
+.thread-card__actions .icon-btn {
+    color: var(--text-muted);
+    transition: color 0.1s ease;
+}
+
+.thread-card__actions .icon-btn:hover {
+    color: var(--text-primary);
+}
+
+.thread-card__actions .icon-btn.visibility-on {
+    color: var(--text-secondary);
+}
+
+.thread-card__actions .icon-btn.visibility-off {
+    color: var(--text-secondary);
+}
+
+.thread-card__delete-label {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--tal-color);
+    padding-right: 2px;
+}
+
+/* ── Children (nested tree items) ────────────────────── */
+.thread-children {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0 0 2px 12px;
+    margin-left: 12px;
+    border-left: 1px solid var(--border-light);
+}
+
+.thread-children .layer-row {
+    padding: 4px 8px;
+    border-radius: var(--radius);
+}
+
+.thread-children .layer-row__label {
+    font-size: var(--font-base);
+}
+
+.thread-children .layer-row__meta {
+    font-size: var(--font-xs);
+}
+
+.thread-inline-input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: var(--font-base);
+    padding: 4px 6px;
+}
+
+.thread-inline-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* ── Act Chat Input ──────────────────────────────────── */
+.act-chat-input {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px 6px 24px;
+}
+
+.act-chat-messages {
+    width: 100%;
+    max-height: 100px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 4px;
+    font-size: var(--font-xs);
+}
+
+.act-chat-msg {
+    display: flex;
+    gap: 4px;
+    align-items: baseline;
+    line-height: 1.3;
+}
+
+.act-chat-msg__role {
+    flex-shrink: 0;
+    opacity: 0.5;
+    font-size: 8px;
+}
+
+.act-chat-msg__text {
+    color: var(--text-secondary);
+    word-break: break-word;
+}
+
+.act-chat-msg--user .act-chat-msg__text {
+    color: var(--text-primary);
+}
+
+.act-chat-msg--assistant .act-chat-msg__text {
+    color: var(--accent);
+}
+
+.act-chat-input__caller {
+    flex: 0 0 auto;
+    max-width: 90px;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: var(--font-xs);
+    padding: 3px 4px;
+    cursor: pointer;
+}
+
+.act-chat-input__caller:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.act-chat-input__message {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font-size: var(--font-sm);
+    padding: 3px 6px;
+}
+
+.act-chat-input__message:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.act-chat-input__message:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Thread Card Meta (show for acts) ────────────────── */
+.thread-card__meta {
+    display: block;
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+/* ── Thread Status Indicators ────────────────────────── */
+.thread-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--font-base);
+}
+
+.thread-status-dot {
+    font-size: 8px;
+    line-height: 1;
+}
+
+.thread-status--active {
+    color: #10b981;
+}
+
+.thread-status--completed {
+    color: var(--text-muted);
+}
+
+.thread-status--interrupted {
+    color: #f59e0b;
+}
+
+.thread-status--idle {
+    color: var(--text-muted);
+    opacity: 0.5;
+}
