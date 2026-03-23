@@ -1,31 +1,31 @@
 import type { ReactNode } from 'react'
 import { Plus } from 'lucide-react'
-import { stageLabel } from './workspace-explorer-utils'
+import { workspaceLabel } from './workspace-explorer-utils'
 
 type Props = {
-    stagesHeight: number
-    stageRows: ReactNode[]
+    workspacesHeight: number
+    workspaceRows: ReactNode[]
     workingDir: string
-    onNewStage: () => void
+    onOpenWorkspace: () => void
 }
 
 export default function WorkspaceExplorerWorkspacesSection({
-    stagesHeight,
-    stageRows,
+    workspacesHeight,
+    workspaceRows,
     workingDir,
-    onNewStage,
+    onOpenWorkspace,
 }: Props) {
     return (
-        <section className="explorer-section explorer-section--stages" style={{ flex: `0 0 ${stagesHeight}px` }}>
+        <section className="explorer-section explorer-section--stages" style={{ flex: `0 0 ${workspacesHeight}px` }}>
             <div className="explorer__subheader">
-                <span className="explorer__title">Stages</span>
-                <button className="icon-btn" onClick={onNewStage} title="Open working directory">
+                <span className="explorer__title">Workspaces</span>
+                <button className="icon-btn" onClick={onOpenWorkspace} title="Open workspace directory">
                     <Plus size={12} />
                 </button>
             </div>
             <div className="explorer__context">
                 <span className="explorer__context-label">Current</span>
-                <strong>{workingDir ? stageLabel(workingDir) : 'No working directory'}</strong>
+                <strong>{workingDir ? workspaceLabel(workingDir) : 'No workspace open'}</strong>
                 {workingDir ? (
                     <span className="explorer__context-path" title={workingDir}>
                         {workingDir}
@@ -33,7 +33,7 @@ export default function WorkspaceExplorerWorkspacesSection({
                 ) : null}
             </div>
             <div className="explorer__tree scroll-area">
-                {stageRows.length > 0 ? stageRows : <div className="empty-state">No saved working directories</div>}
+                {workspaceRows.length > 0 ? workspaceRows : <div className="empty-state">No saved workspaces</div>}
             </div>
         </section>
     )

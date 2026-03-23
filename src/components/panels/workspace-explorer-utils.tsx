@@ -45,9 +45,9 @@ export type ThreadRow = {
 
 // ── Pure helpers ────────────────────────────────────────
 
-export function stageLabel(workingDir: string) {
+export function workspaceLabel(workingDir: string) {
     const normalized = workingDir.trim().replace(/\/+$/, '')
-    return normalized.split(/[/\\]/).pop() || 'Working Directory'
+    return normalized.split(/[/\\]/).pop() || 'Workspace'
 }
 
 export function buildPerformerSessionRows(

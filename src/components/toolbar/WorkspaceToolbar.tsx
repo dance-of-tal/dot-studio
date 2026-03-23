@@ -3,7 +3,7 @@ import { api } from '../../api';
 import { showToast } from '../../lib/toast';
 import { GitBranch, CheckCircle, AlertCircle, Settings, Moon, Sun, Hexagon, Terminal as TerminalIcon, Github, ChevronDown, Upload, LogIn, UserRound } from 'lucide-react';
 import { useStudioStore } from '../../store';
-import { useServerHealth, useDotStatus, usePerformers } from '../../hooks/queries';
+import { useServerHealth, useDotStatus } from '../../hooks/queries';
 import { useDotLogin } from '../../hooks/useDotLogin';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../hooks/queries';
@@ -35,13 +35,11 @@ export default function WorkspaceToolbar() {
 
     const { data: serverHealthy } = useServerHealth();
     const { data: dotStatus } = useDotStatus();
-    const { data: performerData } = usePerformers();
     const { authUser, startLogin, logout, isAuthenticating, isLoggingOut } = useDotLogin();
     const queryClient = useQueryClient();
 
     const serverConnected = !!serverHealthy;
     const dotInitialized = dotStatus?.initialized ?? false;
-    const performers = performerData?.names ?? [];
     const [gitBranch, setGitBranch] = useState<string | null>(null);
 
     // Git branch polling
@@ -65,7 +63,6 @@ export default function WorkspaceToolbar() {
         try {
             await api.dot.init();
             queryClient.invalidateQueries({ queryKey: queryKeys.dotStatus(workingDir) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.performers(workingDir) });
         } catch (err) {
             console.error('Failed to init DOT workspace:', err);
             showToast('Failed to initialize the DOT workspace for this project.', 'error', {
@@ -86,16 +83,13 @@ export default function WorkspaceToolbar() {
                     className={`toolbar__item dot-status ${dotInitialized ? 'dot-ok' : 'dot-missing'}`}
                     onClick={handleDotInit}
                     title={dotInitialized
-                        ? `DOT: ${performers.length} performer${performers.length !== 1 ? 's' : ''} locked`
+                        ? 'DOT initialized for this workspace'
                         : 'DOT not initialized — click to init'
                     }
                     style={{ cursor: dotInitialized ? 'default' : 'pointer', border: 'none', background: 'none', display: 'flex', alignItems: 'center', gap: '4px', padding: '0 6px', fontSize: '11px', color: 'var(--text-secondary)' }}
                 >
                     <Hexagon size={12} color={dotInitialized ? '#14AE5C' : '#F24822'} />
                     <span>DOT</span>
-                    {dotInitialized && performers.length > 0 && (
-                        <span style={{ opacity: 0.6 }}>({performers.length})</span>
-                    )}
                 </button>
 
                 {gitBranch && (

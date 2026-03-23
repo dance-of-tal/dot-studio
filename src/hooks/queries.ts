@@ -23,7 +23,6 @@ export const queryKeys = {
     serverHealth: ['server-health'] as const,
     dotStatus: (workingDir: string) => ['dot-status', workingDir] as const,
     dotAuthUser: ['dot-auth-user'] as const,
-    performers: (workingDir: string) => ['performers', workingDir] as const,
     registrySearch: (workingDir: string, q: string) => ['registry-search', workingDir, q] as const,
 } as const
 
@@ -150,16 +149,6 @@ export function useDotAuthUser() {
     })
 }
 
-// ── DOT Performers ──────────────────────────────────────
-export function usePerformers() {
-    const workingDir = useStudioStore((s) => s.workingDir)
-    return useQuery<{ names: string[]; skipped: Array<{ file: string; reason: string }> }>({
-        queryKey: queryKeys.performers(workingDir),
-        queryFn: () => api.dot.performers(),
-        staleTime: 30_000,
-    })
-}
-
 // ── Registry Search ─────────────────────────────────────
 export function useRegistrySearch(
     query: string,
@@ -187,7 +176,6 @@ export function useInstallAsset() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.assets(workingDir) })
             queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(workingDir) })
-            queryClient.invalidateQueries({ queryKey: queryKeys.performers(workingDir) })
             queryClient.invalidateQueries({ queryKey: queryKeys.dotStatus(workingDir) })
         },
     })

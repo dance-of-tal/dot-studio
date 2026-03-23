@@ -2,49 +2,89 @@
 
 ## Purpose
 
-This document defines the canonical `act` model that Studio must use.
+This document defines the current Act contract boundaries used by DOT Studio.
 
 Studio must stay aligned with:
 
-- `dot` contract types in `dance-of-tal/contracts`
-- `registry` publish validation
-- Studio runtime/import/export behavior
+- `dance-of-tal/contracts`
+- Registry publish validation
+- Studio import/export boundaries
+- Studio runtime thread behavior
 
 Full rewrite policy applies.
-Do not add migration fallbacks for old act shapes.
+Do not add compatibility fallbacks for legacy Act shapes.
 
-## Single Source of Truth
+For current implementation gaps and the recommended remediation plan, see `ACT_STUDIO_IMPLEMENTATION.md`.
 
-Canonical asset schema lives in:
+## Source of Truth
+
+The canonical shared asset contract lives in:
 
 - `dot/src/contracts/act.ts`
+- exported through `dance-of-tal/contracts`
 
-Studio may extend that schema for runtime-only fields, but it must not redefine the asset shape.
+Studio may add workspace-only and runtime-only fields, but it must not redefine the shared asset shape.
 
-## Canonical Asset Shape
+## Four Distinct Act Layers
 
-### Act participant
+Studio currently works with four related but different representations:
+
+1. **Canonical Act asset**
+   - Shared across package boundaries
+   - Parsed by `parseActAsset`
+   - Used for installed assets, registry assets, local save, and publish boundaries
+
+2. **Studio workspace Act**
+   - Canvas/editor representation stored in Studio workspace state
+   - Uses participant records keyed by participant key
+   - Adds relation ids, canvas position, size, visibility, and authoring metadata
+
+3. **Studio runtime Act definition**
+   - Snapshot sent to `/api/act/:actId/threads`
+   - Uses participant records with `performerRef`
+   - Used only for thread creation and runtime execution
+
+4. **Act thread runtime state**
+   - Mailbox, callboard, wake conditions, per-participant sessions, and event log
+   - Never serialized as a canonical asset
+
+These layers must not be conflated.
+
+## Canonical Act Asset Contract
+
+### Participant subscriptions
+
+```ts
+type ActParticipantSubscriptionsV1 = {
+  messagesFrom?: string[]
+  messageTags?: string[]
+  callboardKeys?: string[]
+  eventTypes?: Array<'runtime.idle'>
+}
+```
+
+Rules:
+
+- every value must be a non-empty string
+- `eventTypes` currently only supports `runtime.idle`
+
+### Participant
 
 ```ts
 type ActParticipantV1 = {
   key: string
   performer: string
-  subscriptions?: {
-    messagesFrom?: string[]
-    messageTags?: string[]
-    callboardKeys?: string[]
-    eventTypes?: Array<'runtime.idle'>
-  }
+  subscriptions?: ActParticipantSubscriptionsV1
 }
 ```
 
 Rules:
 
 - use `key`, never `id`
-- `performer` must be a canonical performer URN
-- `eventTypes` currently only supports `runtime.idle`
+- `performer` must be a canonical 4-segment performer URN
+- `performer` is validated with `parseDotAssetUrn(..., 'performer')`
 
-### Act relation
+### Relation
 
 ```ts
 type ActRelationV1 = {
@@ -57,10 +97,12 @@ type ActRelationV1 = {
 
 Rules:
 
+- `between` must be a 2-item non-empty string tuple
+- `direction` must be `both` or `one-way`
+- `name` is required
 - `description` is required
-- `direction` is required
 - relation order matters for `one-way`
-- opposite one-way relations are valid and must be allowed
+- opposite one-way relations are valid and must be allowed as separate relations
 
 ### Asset payload
 
@@ -72,15 +114,18 @@ type ActAssetPayloadV1 = {
 }
 ```
 
-Structural invariants:
+Canonical parser invariants:
 
+- `participants` must be an array
+- `relations` must be an array
+- there must be at least one participant
 - participant keys must be unique
 - every relation endpoint must reference an existing participant key
-- acts with multiple participants must include at least one relation
+- if there are multiple participants, there must be at least one relation
 
 ## Forbidden Legacy Fields
 
-These must not be accepted, written, or reintroduced:
+These fields are intentionally unsupported in canonical Act assets:
 
 - participant `id`
 - participant `activeDances`
@@ -90,44 +135,108 @@ These must not be accepted, written, or reintroduced:
 - relation `timeout`
 - relation `sessionPolicy`
 
-## Studio Runtime Extensions
+Studio may keep runtime-only data separately, but it must never write these legacy fields into canonical assets.
 
-Studio-only runtime state is allowed outside the asset contract:
+## Studio Workspace Model
 
-- `ActRelation = ActRelationV1 & { id: string }`
-- `ActDefinition.participants: Record<string, ActParticipantBinding>`
-- `ActDefinition.safety?: ActSafetyConfig`
-- canvas position/size metadata
+The Studio workspace model is intentionally richer than the canonical asset shape.
 
-These runtime fields must never be written into registry/local act assets.
+Workspace-specific Act state includes:
 
-## Data Flow
+- `participants: Record<string, WorkspaceActParticipantBinding>`
+- `relations: ActRelation[]` where `ActRelation = ActRelationV1 & { id: string }`
+- canvas `position`, `width`, `height`
+- `hidden`
+- authoring metadata such as `meta.authoring`
 
-### Publish
+Participant bindings are Studio-specific:
 
-Studio `StageAct`
-→ convert participant record to array
-→ strip runtime-only relation ids
-→ emit canonical `ActAssetV1`
+```ts
+type ActParticipantBinding = {
+  performerRef: SharedAssetRef
+  subscriptions?: ActParticipantSubscriptionsV1
+}
+```
 
-### Import
+Key rule:
+
+- `performerRef` is a Studio runtime/editor concept
+- canonical assets use `performer: string` URNs instead
+
+## Studio Runtime Model
+
+Thread creation uses a runtime snapshot, not a canonical asset:
+
+```ts
+type ActDefinition = {
+  id: string
+  name: string
+  description?: string
+  actRules?: string[]
+  participants: Record<string, ActParticipantBinding>
+  relations: ActRelation[]
+  safety?: ActSafetyConfig
+}
+```
+
+Thread runtime state includes:
+
+- mailbox messages
+- callboard entries
+- wake conditions
+- `participantSessions`
+- event history
+- thread status
+
+These runtime fields must never be written into installed or published Act assets.
+
+## Boundary Rules
+
+### Import from installed or registry asset
 
 Canonical `ActAssetV1`
-→ parse with dot contract
-→ convert participant array to Studio record
+→ parse with `parseActAsset`
+→ convert participant array to Studio participant record
 → assign runtime-only relation ids
+→ store as workspace Act
+
+### Save as Studio draft
+
+Workspace Act
+→ keep Studio-only draft shape
+→ allowed to preserve `performerRef`, relation `id`, and workspace-only metadata
+
+Drafts are Studio-local authoring state, not canonical assets.
+
+### Save local asset or publish
+
+Workspace Act
+→ convert participant record to canonical participant array
+→ convert `performerRef` to canonical performer URN
+→ strip relation ids and workspace-only metadata
+→ emit canonical `ActAssetV1`
+→ validate again at the contract boundary
+
+### Create thread
+
+Workspace Act
+→ build runtime `ActDefinition`
+→ send to `/api/act/:actId/threads`
+→ create or select participant sessions lazily during chat
 
 ## Ownership Rules
 
-- `dot` owns asset schema
-- `registry` owns publish-time semantic validation
-- `studio` owns runtime-only fields and canvas/editor behavior
-- safety is runtime-only, not part of the act asset
+- `dot` owns the canonical asset schema
+- `registry` owns publish-time validation at the shared boundary
+- `studio` owns workspace-only shape, canvas behavior, editor behavior, and runtime-only thread state
+- `safety` is runtime-only unless and until it becomes part of the canonical contract
 
 ## Implementation Rules
 
-1. Parse installed and registry act assets through `parseActAsset`.
-2. Build published act payloads in canonical shape only.
-3. Do not preserve or silently ignore removed legacy fields.
-4. Allow opposite-direction one-way relations in Studio.
-5. Treat subscription as a wake-up filter, not as relation permission metadata.
+1. Parse installed and registry Act assets with `parseActAsset`.
+2. Treat parser failures as real contract failures.
+3. Build local-save and publish payloads in canonical shape only.
+4. Never write `performerRef`, relation `id`, canvas metadata, or workspace metadata into canonical Act assets.
+5. Allow opposite-direction one-way relations in Studio.
+6. Treat subscriptions as wake-up filters, not relation permission metadata.
+7. Studio uses `workspace` terminology for local state, but canonical URNs still use `stage` as the third segment.

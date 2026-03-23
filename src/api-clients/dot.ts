@@ -20,9 +20,6 @@ export const dotApi = {
     init: () =>
         postJSON<DotInitResponse>('/api/dot/init'),
 
-    performers: () =>
-        fetchJSON<{ names: string[]; skipped: Array<{ file: string; reason: string }> }>('/api/dot/performers'),
-
     performer: (name: string) =>
         fetchJSON<DotPerformerResponse>(`/api/dot/performers/${name}`),
 

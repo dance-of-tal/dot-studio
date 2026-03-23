@@ -3,11 +3,11 @@
 **If you are an AI agent operating within the `studio` package, read this carefully.**
 You are modifying the visual workspace that interfaces with OpenCode and `dance-of-tal` internal contracts.
 
-## Codebase Boundaries \& Responsibilities
+## Codebase Boundaries & Responsibilities
 The `studio` acts as an interactive node-based editor (utilizing `@xyflow/react` and `@dnd-kit/core`).
 
 1. **Drafts vs Final Saves**:
-   - `studio` is allowed to keep drafts and stage state in studio-specific shapes while the user is visually editing.
+   - `studio` is allowed to keep drafts and workspace state in studio-specific shapes while the user is visually editing.
    - HOWEVER, it MUST convert these structures to the canonical contract (`parseDotAsset`) at install/save/publish/import boundaries. No exceptions.
 
 2. **Parsing Assets**:
@@ -18,7 +18,12 @@ The `studio` acts as an interactive node-based editor (utilizing `@xyflow/react`
    - The studio contains a local `server/` (built with Hono and TS) that orchestrates saving files internally, interfacing with OpenCode (`opencode-ai/sdk`), and communicating with the global registry.
    - Ensure you use explicit file manipulation carefully and handle validation before saving to `.dance-of-tal/`.
 
-4. **Dance Draft Storage (Bundle Format)**:
+4. **Terminology: Workspace vs. Stage**:
+   - **Workspace**: The user's active project / working directory. The internal Studio system uses "Workspace" (e.g., `WorkspaceExplorer`, `.dance-of-tal/workspaces/`, `workspaceId`).
+   - **Stage**: The 3rd segment of a 4-segment URN (`kind/@author/stage/name`), representing a target deployment or repository scope. In local authoring, `stage` is derived from the workspace directory's basename.
+   - Never use "Stage" in variables referring to the local project workspace to avoid colliding with URN conventions.
+
+5. **Dance Draft Storage (Bundle Format)**:
    - Dance drafts use a directory-backed bundle format: `.dance-of-tal/drafts/dance/<draftId>/`
    - Each bundle contains: `draft.json` (metadata), `SKILL.md` (main content), and optional `scripts/`, `references/`, `assets/` directories.
    - `draft.json` stores metadata only (no content field). Content lives in `SKILL.md`.
