@@ -1,3 +1,5 @@
+import type { CanvasTerminalNode, MarkdownEditorNode, PerformerNode } from '../types'
+
 export function normalizePath(dir: string): string {
     return dir.trim().replace(/\/+$/, '')
 }
@@ -22,11 +24,15 @@ export function getMaxMarkdownEditorCounter(editors: Array<{ id: string }>): num
     }, 0)
 }
 
-export function defaultMarkdownContent(_kind: 'tal' | 'dance') {
-    return ''
+export function defaultMarkdownContent(kind: 'tal' | 'dance') {
+    return kind === 'tal' ? '' : ''
 }
 
-export function applyPerformerPatch<T extends Record<string, any>>(performer: any, patch: T) {
+type PerformerPatch = Partial<Omit<PerformerNode, 'meta'>> & {
+    meta?: Partial<NonNullable<PerformerNode['meta']>>
+}
+
+export function applyPerformerPatch<T extends PerformerPatch>(performer: PerformerNode, patch: T): PerformerNode {
     const mutatesPublishIdentity = (
         'name' in patch
         || 'talRef' in patch
@@ -53,10 +59,10 @@ export function applyPerformerPatch<T extends Record<string, any>>(performer: an
 }
 
 export function mapPerformers(
-    performers: any[],
+    performers: PerformerNode[],
     performerId: string,
-    updater: (performer: any) => any,
-) {
+    updater: (performer: PerformerNode) => PerformerNode,
+): PerformerNode[] {
     return performers.map((performer) => (
         performer.id === performerId
             ? updater(performer)
@@ -65,10 +71,10 @@ export function mapPerformers(
 }
 
 export function mapCanvasTerminals(
-    canvasTerminals: Array<{ id: string }>,
+    canvasTerminals: CanvasTerminalNode[],
     id: string,
-    updater: (terminal: any) => any,
-) {
+    updater: (terminal: CanvasTerminalNode) => CanvasTerminalNode,
+): CanvasTerminalNode[] {
     return canvasTerminals.map((terminal) => (
         terminal.id === id
             ? updater(terminal)
@@ -77,10 +83,10 @@ export function mapCanvasTerminals(
 }
 
 export function mapMarkdownEditors(
-    markdownEditors: Array<{ id: string }>,
+    markdownEditors: MarkdownEditorNode[],
     id: string,
-    updater: (editor: any) => any,
-) {
+    updater: (editor: MarkdownEditorNode) => MarkdownEditorNode,
+): MarkdownEditorNode[] {
     return markdownEditors.map((editor) => (
         editor.id === id
             ? updater(editor)

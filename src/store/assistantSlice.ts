@@ -1,68 +1,52 @@
 /**
  * Assistant slice — minimal UI state only.
  *
- * The assistant is treated as a hidden performer with ID 'studio-assistant'.
+ * The assistant is a runtime-only chat target keyed by `studio-assistant`.
  * All chat logic (session, sending, streaming) is delegated to chatSlice.
  *
  * This slice only manages:
  *   - isAssistantOpen (sidebar toggle)
- *   - ensureAssistantPerformer (create/update the hidden performer node with selected model)
+ *   - assistantModel (selected runtime model)
+ *   - appliedAssistantActionMessageIds (dedupe applied action blocks)
  */
 import type { StateCreator } from 'zustand'
 import type { StudioState, AssistantSlice } from './types'
 
 export const ASSISTANT_PERFORMER_ID = 'studio-assistant'
 
-export const createAssistantSlice: StateCreator<StudioState, [], [], AssistantSlice> = (set, get) => ({
+export const createAssistantSlice: StateCreator<StudioState, [], [], AssistantSlice> = (set) => ({
     isAssistantOpen: false,
+    assistantModel: null,
+    assistantAvailableModels: [],
+    appliedAssistantActionMessageIds: {},
+    assistantActionResults: {},
 
     toggleAssistant: () => {
         set((state) => ({ isAssistantOpen: !state.isAssistantOpen }))
     },
 
-    ensureAssistantPerformer: (model) => {
-        const state = get()
-        const existing = state.performers.find((p) => p.id === ASSISTANT_PERFORMER_ID)
+    setAssistantModel: (model) => set({ assistantModel: model }),
 
-        if (existing) {
-            // Update model if changed
-            if (
-                existing.model?.provider !== model.provider ||
-                existing.model?.modelId !== model.modelId
-            ) {
-                set((s) => ({
-                    performers: s.performers.map((p) =>
-                        p.id === ASSISTANT_PERFORMER_ID
-                            ? { ...p, model }
-                            : p,
-                    ),
-                }))
-            }
-            return
-        }
+    setAssistantAvailableModels: (models) => set({ assistantAvailableModels: models }),
 
-        // Create hidden performer node for assistant
-        set((s) => ({
-            performers: [
-                ...s.performers,
-                {
-                    id: ASSISTANT_PERFORMER_ID,
-                    name: 'Studio Assistant',
-                    position: { x: -9999, y: -9999 },
-                    width: 0,
-                    height: 0,
-                    scope: 'shared' as const,
-                    model,
-                    talRef: null,
-                    danceRefs: [],
-                    mcpServerNames: [],
-                    mcpBindingMap: {},
-                    declaredMcpConfig: null,
-                    danceDeliveryMode: 'auto' as const,
-                    executionMode: 'direct' as const,
-                    hidden: true,
-                },
-            ],
-        }))
-    },
+    markAssistantActionsApplied: (messageId) => set((state) => ({
+        appliedAssistantActionMessageIds: {
+            ...state.appliedAssistantActionMessageIds,
+            [messageId]: true,
+        },
+    })),
+
+    recordAssistantActionResult: (messageId, result) => set((state) => ({
+        assistantActionResults: {
+            ...state.assistantActionResults,
+            [messageId]: result,
+        },
+    })),
+
+    resetAssistantRuntimeState: () => set({
+        assistantModel: null,
+        assistantAvailableModels: [],
+        appliedAssistantActionMessageIds: {},
+        assistantActionResults: {},
+    }),
 })

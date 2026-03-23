@@ -185,7 +185,7 @@
     border-color: rgba(13, 153, 255, 0.2);
 }
 
-/* ── Sub-Scope Tags (All / Global / Stage) ───────── */
+/* ── Sub-Scope Tags (All / Global / Workspace) ───────── */
 .sub-scope-row {
     display: flex;
     gap: 4px;

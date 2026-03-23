@@ -1,4 +1,5 @@
 import type { AssetCard, AssetRef, DraftAsset } from '../../types'
+import { assetUrnDisplayName } from '../../lib/asset-urn'
 import { assetRefKey } from '../../lib/performers'
 import type { FileMention } from '../../hooks/useFileMentions'
 
@@ -36,7 +37,7 @@ export function assetRefDisplayLabel(ref: AssetRef, drafts: Record<string, Draft
         const draft = drafts[ref.draftId]
         return draft?.name || draft?.slug || `Draft ${ref.draftId.slice(0, 8)}`
     }
-    return ref.urn.split('/').pop() || ref.urn
+    return assetUrnDisplayName(ref.urn)
 }
 
 export function danceSearchText(label: string, subtitle: string, scope: DanceSearchItem['scope']) {
@@ -48,7 +49,7 @@ export function buildAttachedDraftDanceItems(
     drafts: Record<string, DraftAsset>,
 ): DanceSearchItem[] {
     return (performer?.danceRefs || [])
-        .filter((ref) => ref.kind === 'draft')
+        .filter((ref): ref is Extract<AssetRef, { kind: 'draft' }> => ref.kind === 'draft')
         .map((ref) => ({
             key: `draft:${assetRefKey(ref) || Math.random().toString(36).slice(2)}`,
             ref,
@@ -64,7 +65,7 @@ export function buildStandaloneDraftDanceItems(
 ): DanceSearchItem[] {
     const attachedDraftIds = new Set(
         (performer?.danceRefs || [])
-            .filter((ref) => ref.kind === 'draft')
+            .filter((ref): ref is Extract<AssetRef, { kind: 'draft' }> => ref.kind === 'draft')
             .map((ref) => ref.draftId),
     )
 
@@ -84,7 +85,7 @@ export function buildPerformerDanceItems(
     drafts: Record<string, DraftAsset>,
 ): DanceSearchItem[] {
     return (performer?.danceRefs || [])
-        .filter((ref) => ref.kind !== 'draft')
+        .filter((ref): ref is Extract<AssetRef, { kind: 'registry' }> => ref.kind === 'registry')
         .map((ref) => ({
             key: `performer:${assetRefKey(ref) || Math.random().toString(36).slice(2)}`,
             ref,
@@ -152,7 +153,7 @@ export function buildDanceSearchSections(
         },
         {
             key: 'stage',
-            title: 'Stage',
+            title: 'Workspace',
             items: availableItems.filter((item) => item.scope === 'stage').filter(byQuery),
         },
         {

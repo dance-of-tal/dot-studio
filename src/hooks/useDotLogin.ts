@@ -110,9 +110,9 @@ export function useDotLogin() {
             }
 
             popup?.close()
-        } catch (error: any) {
+        } catch (error: unknown) {
             popup?.close()
-            showToast(error?.message || 'Failed to start DOT login.', 'error', {
+            showToast(error instanceof Error ? error.message : 'Failed to start DOT login.', 'error', {
                 title: 'DOT login failed',
                 dedupeKey: 'dot-login:failed',
             })
@@ -137,8 +137,8 @@ export function useDotLogin() {
                 title: 'DOT logout complete',
                 dedupeKey: 'dot-login:logout',
             })
-        } catch (error: any) {
-            showToast(error?.message || 'Failed to sign out from DOT.', 'error', {
+        } catch (error: unknown) {
+            showToast(error instanceof Error ? error.message : 'Failed to sign out from DOT.', 'error', {
                 title: 'DOT logout failed',
                 dedupeKey: 'dot-login:logout-failed',
             })

@@ -5,6 +5,10 @@ import { createSSEResponse } from '../lib/sse.js'
 
 const adapter = new Hono()
 
+function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : 'Adapter action is not available yet.'
+}
+
 adapter.get('/api/adapter/views', async (c) => {
     const performerId = c.req.query('performerId')?.trim()
     const projections = await listAdapterViewProjections(performerId || undefined)
@@ -16,12 +20,12 @@ adapter.post('/api/adapter/action', async (c) => {
         const body = await c.req.json<AdapterViewActionRequest>()
         const result = await dispatchAdapterViewAction(body)
         return c.json(result)
-    } catch (err: any) {
-        return c.json({ error: err.message || 'Adapter action is not available yet.' }, 501)
+    } catch (error: unknown) {
+        return c.json({ error: errorMessage(error) }, 501)
     }
 })
 
-adapter.get('/api/adapter/events', async (_c) => {
+adapter.get('/api/adapter/events', async () => {
     const stream = new ReadableStream({
         start(controller) {
             const encoder = new TextEncoder()

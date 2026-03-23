@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { ActDefinition } from '../../shared/act-types.js'
 import { getActRuntimeService } from '../services/act-runtime/act-runtime-service.js'
 import { requestWorkingDir } from './route-errors.js'
 
@@ -6,7 +7,7 @@ const actRuntimeThreads = new Hono()
 
 actRuntimeThreads.post('/api/act/:actId/threads', async (c) => {
     const actId = c.req.param('actId')
-    const body = await c.req.json<{ actDefinition?: any }>().catch(() => ({ actDefinition: undefined }))
+    const body = await c.req.json<{ actDefinition?: ActDefinition }>().catch(() => ({ actDefinition: undefined }))
     return c.json(getActRuntimeService(requestWorkingDir(c)).createThread(actId, body.actDefinition))
 })
 

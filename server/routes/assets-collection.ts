@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { InstalledAssetKind } from '../../shared/asset-contracts.js'
 import { cached, TTL } from '../lib/cache.js'
 import { listStudioAssets } from '../services/asset-service.js'
 import { jsonError, requestWorkingDir } from './route-errors.js'
@@ -12,7 +13,8 @@ assetsCollection.get('/api/assets/:kind', async (c) => {
     }
 
     const cwd = requestWorkingDir(c)
-    const assetList = await cached(`assets-${kind}-${cwd}`, TTL.ASSETS, () => listStudioAssets(cwd, kind))
+    const assetKind = kind as InstalledAssetKind
+    const assetList = await cached(`assets-${assetKind}-${cwd}`, TTL.ASSETS, () => listStudioAssets(cwd, assetKind))
     return c.json(assetList)
 })
 

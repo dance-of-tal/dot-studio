@@ -241,3 +241,74 @@
     overflow-y: auto;
     line-height: 1.5;
 }
+
+/* ── Transport Tabs ───────────────────────────── */
+.asset-mcp-tabs {
+    display: flex;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-top: var(--space-4);
+}
+
+.asset-mcp-tab {
+    flex: 1;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--font-sm);
+    font-weight: 600;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.asset-mcp-tab + .asset-mcp-tab {
+    border-left: 1px solid var(--border-main);
+}
+
+.asset-mcp-tab--active {
+    background: var(--bg-selected);
+    color: var(--accent);
+}
+
+.asset-mcp-tab:hover:not(.asset-mcp-tab--active) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* ── Dynamic list field ───────────────────────── */
+.asset-mcp-list-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-top: var(--space-4);
+}
+
+.asset-mcp-list-field__label {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.asset-mcp-list-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.asset-mcp-list-row .text-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.asset-mcp-list-row--kv .text-input:first-child {
+    flex: 1;
+}
+
+.asset-mcp-list-row--kv .text-input:nth-child(2) {
+    flex: 2;
+}
+

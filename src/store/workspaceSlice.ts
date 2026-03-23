@@ -11,10 +11,10 @@ import {
     mapMarkdownEditors,
 } from './workspace-helpers'
 import {
-    newStage as newStageImpl,
-    saveStage as saveStageImpl,
-    loadStage as loadStageImpl,
-} from './workspace-stage'
+    newWorkspace as newWorkspaceImpl,
+    saveWorkspace as saveWorkspaceImpl,
+    loadWorkspace as loadWorkspaceImpl,
+} from './workspace-operations'
 import {
     setPerformerTal as setPerformerTalImpl,
     setPerformerTalRef as setPerformerTalRefImpl,
@@ -37,6 +37,7 @@ import {
     createMarkdownEditorImpl,
     importActFromDraftImpl,
     loadDraftsFromDiskImpl,
+    openDraftEditorImpl,
     saveActAsDraftImpl,
     savePerformerAsDraftImpl,
     upsertDraftImpl,
@@ -55,14 +56,23 @@ import {
     updateTrackingWindowPositionImpl,
     updateTrackingWindowSizeImpl,
 } from './workspace-focus-actions'
+import { buildPerformerDeleteCascade } from './cascade-cleanup'
 
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
 export const canvasTerminalIdCounter = { value: 0 }
-const TRACKING_WINDOW_ID = 'stage-tracking-window'
+const TRACKING_WINDOW_ID = 'workspace-tracking-window'
 
 function makeId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+/** Ensure performer name is unique on the canvas by appending " (N)" suffix if needed. */
+function uniquePerformerName(desired: string, existingNames: string[]): string {
+    if (!existingNames.includes(desired)) return desired
+    let i = 2
+    while (existingNames.includes(`${desired} (${i})`)) i++
+    return `${desired} (${i})`
 }
 
 // Debounce draft persistence to disk
@@ -76,9 +86,9 @@ function scheduleDraftPersist(draftId: string, fn: () => void, delay = 1500) {
     }, delay))
 }
 
-function buildClosedStageState(): Partial<StudioState> {
+function buildClosedWorkspaceState(): Partial<StudioState> {
     return {
-        stageId: null,
+        workspaceId: null,
         workingDir: '',
         performers: [],
         drafts: {},
@@ -96,29 +106,8 @@ function buildClosedStageState(): Partial<StudioState> {
         focusSnapshot: null,
         canvasRevealTarget: null,
         inspectorFocus: null,
-        activeChatPerformerId: null,
-        chats: {},
-        chatPrefixes: {},
-        sessionMap: {},
-        sessions: [],
-        pendingPermissions: {},
-        pendingQuestions: {},
-        todos: {},
-        safeSummaries: {},
-        lspServers: [],
-        lspDiagnostics: {},
-        adapterViewsByPerformer: {},
-        isTerminalOpen: false,
-        isTrackingOpen: false,
-        isAssetLibraryOpen: false,
-        isAssistantOpen: false,
-        acts: [],
-        selectedActId: null,
-        actEditorState: null,
-        actThreads: {},
-        activeThreadId: null,
-        activeThreadParticipantKey: null,
-        stageDirty: false,
+        workspaceList: [],
+        workspaceDirty: false,
     }
 }
 
@@ -128,7 +117,7 @@ export const createWorkspaceSlice: StateCreator<
     [],
     WorkspaceSlice
 > = (set, get) => ({
-    stageId: null,
+    workspaceId: null,
     performers: [],
     drafts: {},
     markdownEditors: [],
@@ -141,8 +130,8 @@ export const createWorkspaceSlice: StateCreator<
     focusSnapshot: null,
     canvasRevealTarget: null,
     inspectorFocus: null,
-    stageList: [],
-    stageDirty: false,
+    workspaceList: [],
+    workspaceDirty: false,
     theme: (localStorage.getItem('dot-theme') as 'light' | 'dark') || 'light',
     workingDir: '',
     isTerminalOpen: false,
@@ -162,13 +151,13 @@ export const createWorkspaceSlice: StateCreator<
             trackingWindow: open
                 ? (state.trackingWindow || {
                     id: TRACKING_WINDOW_ID,
-                    title: 'Stage Tracking',
+                    title: 'Workspace Tracking',
                     position: { x: 260, y: 180 },
                     width: 420,
                     height: 360,
                 })
                 : state.trackingWindow,
-            stageDirty: created ? true : state.stageDirty,
+            workspaceDirty: created ? true : state.workspaceDirty,
         }
     }),
     setAssetLibraryOpen: (open) => set({ isAssetLibraryOpen: open }),
@@ -188,20 +177,22 @@ export const createWorkspaceSlice: StateCreator<
         const id = `performer-${performerIdCounter.value}`
         const count = get().performers.length
         const offset = count * 40
-        
+        const safeName = uniquePerformerName(name, get().performers.map(p => p.name))
+
         const finalX = x ?? ((get().canvasCenter?.x ?? 60) + offset)
         const finalY = y ?? ((get().canvasCenter?.y ?? 60) + offset)
 
         set((s) => ({
-            performers: [...s.performers, createPerformerNode({ id, name, x: finalX, y: finalY })],
+            performers: [...s.performers, createPerformerNode({ id, name: safeName, x: finalX, y: finalY })],
             editingTarget: null,
             selectedPerformerId: id,
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
             activeChatPerformerId: id,
             inspectorFocus: null,
-            stageDirty: true,
+            workspaceDirty: true,
         }))
+        return id
     },
 
     addPerformerFromAsset: (asset, x, y) => {
@@ -209,19 +200,20 @@ export const createWorkspaceSlice: StateCreator<
         const id = `performer-${performerIdCounter.value}`
         const count = get().performers.length
         const offset = count * 40
+        const safeName = uniquePerformerName(asset.name, get().performers.map(p => p.name))
 
         const finalX = x ?? ((get().canvasCenter?.x ?? 60) + offset)
         const finalY = y ?? ((get().canvasCenter?.y ?? 60) + offset)
 
         set((s) => ({
-            performers: [...s.performers, createPerformerNodeFromAsset({ id, asset, x: finalX, y: finalY })],
+            performers: [...s.performers, createPerformerNodeFromAsset({ id, asset: { ...asset, name: safeName }, x: finalX, y: finalY })],
             editingTarget: null,
             selectedPerformerId: id,
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
             activeChatPerformerId: id,
             inspectorFocus: null,
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -244,35 +236,67 @@ export const createWorkspaceSlice: StateCreator<
                     meta: normalized.meta,
                 })
             }),
-            stageDirty: true,
+            workspaceDirty: true,
         }
     }),
 
     removePerformer: (id) => {
-        set((s) => ({
-            performers: s.performers.filter(a => a.id !== id),
-            selectedPerformerId: s.selectedPerformerId === id ? null : s.selectedPerformerId,
-            selectedPerformerSessionId: s.selectedPerformerId === id ? null : s.selectedPerformerSessionId,
-            selectedMarkdownEditorId: s.selectedMarkdownEditorId,
-            editingTarget: s.editingTarget?.type === 'performer' && s.editingTarget.id === id ? null : s.editingTarget,
-            stageDirty: true,
-        }))
+        set((s) => {
+            const actCascade = buildPerformerDeleteCascade(id, s.acts)
+            return {
+                performers: s.performers.filter(a => a.id !== id),
+                acts: actCascade.acts || s.acts,
+                selectedPerformerId: s.selectedPerformerId === id ? null : s.selectedPerformerId,
+                selectedPerformerSessionId: s.selectedPerformerId === id ? null : s.selectedPerformerSessionId,
+                selectedMarkdownEditorId: s.selectedMarkdownEditorId,
+                editingTarget: s.editingTarget?.type === 'performer' && s.editingTarget.id === id ? null : s.editingTarget,
+                activeChatPerformerId: s.activeChatPerformerId === id ? null : s.activeChatPerformerId,
+                focusedPerformerId: s.focusedPerformerId === id ? null : s.focusedPerformerId,
+                focusedNodeType: s.focusedPerformerId === id ? null : s.focusedNodeType,
+                focusSnapshot: s.focusedPerformerId === id ? null : s.focusSnapshot,
+                workspaceDirty: true,
+            }
+        })
     },
 
     updatePerformerPosition: (id, x, y) => set((s) => ({
         performers: s.performers.map(a => a.id === id ? { ...a, position: { x, y } } : a),
-        stageDirty: true
+        workspaceDirty: true
     })),
 
     updatePerformerSize: (id, width, height) => set((s) => ({
         performers: s.performers.map(a => a.id === id ? { ...a, width, height } : a),
-        stageDirty: true
+        workspaceDirty: true
     })),
 
-    updatePerformerName: (id, name) => set((s) => ({
-        performers: s.performers.map(a => a.id === id ? applyPerformerPatch(a, { name }) : a),
-        stageDirty: true,
-    })),
+    updatePerformerName: (id, name) => {
+        const state = get()
+        const performer = state.performers.find(p => p.id === id)
+        if (!performer) return
+        const oldName = performer.name
+        const safeName = uniquePerformerName(name, state.performers.filter(p => p.id !== id).map(p => p.name))
+        set((s) => ({
+            performers: s.performers.map(a => a.id === id ? applyPerformerPatch(a, { name: safeName }) : a),
+            // Cascade rename: update Act participant keys and relation.between
+            acts: oldName !== safeName ? s.acts.map(act => {
+                const oldKey = Object.keys(act.participants).find(k => k === oldName)
+                if (!oldKey) return act
+                const { [oldKey]: binding, ...restParticipants } = act.participants
+                return {
+                    ...act,
+                    participants: { ...restParticipants, [safeName]: binding },
+                    relations: act.relations.map(r => {
+                        const relation = r as unknown as { between: [string, string] }
+                        return {
+                            ...r,
+                            between: relation.between.map((b: string) => b === oldName ? safeName : b) as [string, string],
+                        }
+                    }),
+                }
+            }) : s.acts,
+            workspaceDirty: true,
+        }))
+    },
 
     selectPerformer: (id) => set((s) => ({
         selectedPerformerId: id,
@@ -336,46 +360,46 @@ export const createWorkspaceSlice: StateCreator<
 
     setWorkingDir: (dir) => setWorkingDirImpl(get, set, dir),
 
-    newStage: async () => newStageImpl(get, set),
+    newWorkspace: async () => newWorkspaceImpl(get, set),
 
-    closeStage: async () => {
-        const currentStageId = get().stageId
-        if (currentStageId) {
-            if (get().stageDirty) {
-                await saveStageImpl(get, set)
+    closeWorkspace: async () => {
+        const currentWorkspaceId = get().workspaceId
+        if (currentWorkspaceId) {
+            if (get().workspaceDirty) {
+                await saveWorkspaceImpl(get, set)
             }
-            await api.stages.setHidden(currentStageId, true)
+            await api.workspaces.setHidden(currentWorkspaceId, true)
         }
         get().cleanupRealtimeEvents()
         setApiWorkingDirContext(null)
-        set(buildClosedStageState())
-        await get().listStages()
-        api.studio.updateConfig({ lastStage: undefined }).catch(err => console.warn('[studio] clear lastStage failed', err))
+        set(buildClosedWorkspaceState())
+        await get().listWorkspaces()
+        api.studio.updateConfig({ lastWorkspaceId: undefined }).catch(err => console.warn('[studio] clear lastWorkspaceId failed', err))
     },
 
-    saveStage: async () => saveStageImpl(get, set),
+    saveWorkspace: async () => saveWorkspaceImpl(get, set),
 
-    loadStage: async (stageId) => loadStageImpl(stageId, get, set),
+    loadWorkspace: async (workspaceId) => loadWorkspaceImpl(workspaceId, get, set),
 
-    listStages: async () => {
+    listWorkspaces: async () => {
         try {
-            const list = await api.stages.list()
-            set({ stageList: list })
+            const list = await api.workspaces.list()
+            set({ workspaceList: list })
         } catch {
-            set({ stageList: [] })
+            set({ workspaceList: [] })
         }
     },
 
-    deleteStage: async (stageId) => {
-        if (!stageId) return
-        await api.stages.delete(stageId)
-        if (get().stageId === stageId) {
+    deleteWorkspace: async (workspaceId) => {
+        if (!workspaceId) return
+        await api.workspaces.delete(workspaceId)
+        if (get().workspaceId === workspaceId) {
             get().cleanupRealtimeEvents()
             setApiWorkingDirContext(null)
-            set(buildClosedStageState())
-            api.studio.updateConfig({ lastStage: undefined }).catch(err => console.warn('[studio] clear lastStage failed', err))
+            set(buildClosedWorkspaceState())
+            api.studio.updateConfig({ lastWorkspaceId: undefined }).catch(err => console.warn('[studio] clear lastWorkspaceId failed', err))
         }
-        get().listStages()
+        get().listWorkspaces()
     },
 
     setPerformerTal: (performerId, tal) => setPerformerTalImpl(set, performerId, tal),
@@ -416,7 +440,7 @@ export const createWorkspaceSlice: StateCreator<
                     ? { ...performer, executionMode: mode }
                     : performer
             )),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
         get().clearSafeOwner('performer', performerId)
         get().detachPerformerSession(
@@ -464,25 +488,27 @@ export const createWorkspaceSlice: StateCreator<
 
     createMarkdownEditor: (kind, options) => createMarkdownEditorImpl(get, set, markdownEditorIdCounter, makeId, kind, options),
 
+    openDraftEditor: (draftId) => openDraftEditorImpl(get, set, markdownEditorIdCounter, draftId),
+
     updateMarkdownEditorPosition: (id, x, y) => set((s) => ({
         markdownEditors: mapMarkdownEditors(s.markdownEditors, id, (editor) => ({ ...editor, position: { x, y } })),
-        stageDirty: true,
+        workspaceDirty: true,
     })),
 
     updateMarkdownEditorSize: (id, width, height) => set((s) => ({
         markdownEditors: mapMarkdownEditors(s.markdownEditors, id, (editor) => ({ ...editor, width, height })),
-        stageDirty: true,
+        workspaceDirty: true,
     })),
 
     updateMarkdownEditorBaseline: (id, baseline) => set((s) => ({
         markdownEditors: mapMarkdownEditors(s.markdownEditors, id, (editor) => ({ ...editor, baseline })),
-        stageDirty: true,
+        workspaceDirty: true,
     })),
 
     removeMarkdownEditor: (id) => set((s) => ({
         markdownEditors: s.markdownEditors.filter((editor) => editor.id !== id),
         selectedMarkdownEditorId: s.selectedMarkdownEditorId === id ? null : s.selectedMarkdownEditorId,
-        stageDirty: true,
+        workspaceDirty: true,
     })),
 
 })

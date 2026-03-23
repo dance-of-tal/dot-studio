@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { queryKeys, useMcpServers } from '../../hooks/queries'
 import { showToast } from '../../lib/toast'
+import { extractProjectMcpCatalog } from '../../../shared/project-mcp'
 import type { ProjectMcpEntryDraft } from '../modals/settings-utils'
 import { buildProjectMcpDrafts, serializeProjectMcpEntries } from '../modals/settings-utils'
 
@@ -52,8 +53,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         }
         api.config.getProject()
             .then((result) => {
-                const config = result?.config && typeof result.config === 'object' ? result.config : {}
-                const drafts = buildProjectMcpDrafts((config as any).mcp || {})
+                const drafts = buildProjectMcpDrafts(extractProjectMcpCatalog(result?.config))
                 setMcpDraftEntries(drafts)
                 setMcpDraftSnapshot(drafts)
                 setMcpCatalogStatus(null)
@@ -119,10 +119,13 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
                 key,
                 name: '',
                 enabled: true,
-                serverText: '',
-                environmentText: '',
+                transport: 'stdio' as const,
                 timeoutText: '',
-                headersText: '',
+                command: '',
+                args: [],
+                env: [],
+                url: '',
+                headers: [],
                 oauthEnabled: true,
                 oauthClientId: '',
                 oauthClientSecret: '',
@@ -159,8 +162,8 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
             options.onSuccess?.()
             setMcpCatalogStatus(options.successMessage)
             await invalidateMcpQueries(!!options.includeRuntimeTools)
-        } catch (error: any) {
-            setMcpCatalogStatus(error?.message || options.failureMessage)
+        } catch (error: unknown) {
+            setMcpCatalogStatus(error instanceof Error ? error.message : options.failureMessage)
         }
     }
 
@@ -169,11 +172,12 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         setMcpCatalogStatus(null)
         try {
             const invalidEntry = mcpDraftEntries.find((entry) => (
-                entry.name.trim() && !entry.serverText.trim()
+                entry.name.trim() && entry.transport === 'stdio' && !entry.command.trim()
+                    || entry.name.trim() && entry.transport === 'http' && !entry.url.trim()
             ))
             if (invalidEntry) {
                 throw new Error(
-                    `MCP '${invalidEntry.name}' needs a server command or URL before saving.`,
+                    `MCP '${invalidEntry.name}' needs a ${invalidEntry.transport === 'http' ? 'URL' : 'command'} before saving.`,
                 )
             }
 
@@ -183,8 +187,8 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
             setMcpDraftSnapshot(mcpDraftEntries)
             setMcpCatalogStatus('Saved project MCP catalog.')
             await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
-        } catch (error: any) {
-            setMcpCatalogStatus(error?.message || 'Failed to save project MCP catalog.')
+        } catch (error: unknown) {
+            setMcpCatalogStatus(error instanceof Error ? error.message : 'Failed to save project MCP catalog.')
         } finally {
             setMcpCatalogSaving(false)
         }
@@ -253,10 +257,10 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
             setPendingMcpAuthName(name)
             setMcpCatalogStatus(`Complete authentication for ${name} in the browser.`)
             await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
-        } catch (error: any) {
+        } catch (error: unknown) {
             popup?.close()
             setPendingMcpAuthName(null)
-            setMcpCatalogStatus(error?.message || `Failed to start authentication for ${name}.`)
+            setMcpCatalogStatus(error instanceof Error ? error.message : `Failed to start authentication for ${name}.`)
         }
     }
 

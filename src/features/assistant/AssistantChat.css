@@ -220,6 +220,33 @@
     margin: 0 0 4px 0;
 }
 
+.assistant-action-status {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.assistant-action-status--success {
+    background: rgba(34, 197, 94, 0.12);
+    color: #15803d;
+}
+
+.assistant-action-status--warning {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+}
+
+.assistant-action-status--error {
+    background: rgba(239, 68, 68, 0.14);
+    color: #b91c1c;
+}
+
 .assistant-empty__desc {
     font-size: var(--font-md);
     margin: 0;

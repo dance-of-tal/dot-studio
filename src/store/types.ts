@@ -2,6 +2,8 @@ import type {
     AssetRef,
     DraftAsset,
     ExecutionMode,
+    LspDiagnostic,
+    LspServerInfo,
     MarkdownEditorKind,
     MarkdownEditorNode,
     PerformerNode,
@@ -9,21 +11,19 @@ import type {
     ChatMessage,
     ModelConfig,
     McpServer,
-    SavedStageSummary,
+    SavedWorkspaceSummary,
     CanvasTerminalNode,
     CanvasTrackingWindow,
     SafeOwnerKind,
     SafeOwnerSummary,
-    StageAct,
-    StageActParticipantBinding,
+    WorkspaceAct,
+    WorkspaceActParticipantBinding,
     ActRelation,
 } from '../types'
 import type { AdapterViewProjection } from '../../shared/adapter-view'
-import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
+import type { PermissionRequest, QuestionAnswer, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
 
-export interface PerformerRelationSlice {
-    // Stand-alone edges removed — edges live inside Act.relations
-}
+export type PerformerRelationSlice = Record<never, never>
 
 export interface FocusSnapshot {
     type: 'performer' | 'act'
@@ -45,7 +45,7 @@ export interface CanvasRevealTarget {
 }
 
 export interface WorkspaceSlice {
-    stageId: string | null
+    workspaceId: string | null
     performers: PerformerNode[]
     drafts: Record<string, DraftAsset>
     markdownEditors: MarkdownEditorNode[]
@@ -58,8 +58,8 @@ export interface WorkspaceSlice {
     focusSnapshot: FocusSnapshot | null
     canvasRevealTarget: CanvasRevealTarget | null
     inspectorFocus: string | null
-    stageList: SavedStageSummary[]
-    stageDirty: boolean
+    workspaceList: SavedWorkspaceSummary[]
+    workspaceDirty: boolean
     theme: 'light' | 'dark'
     workingDir: string
     isTerminalOpen: boolean
@@ -75,7 +75,7 @@ export interface WorkspaceSlice {
     setAssetLibraryOpen: (open: boolean) => void
     toggleTheme: () => void
     setCanvasCenter: (x: number, y: number) => void
-    addPerformer: (name: string, x?: number, y?: number) => void
+    addPerformer: (name: string, x?: number, y?: number) => string
     addPerformerFromAsset: (asset: {
         name: string
         talUrn?: string | null
@@ -85,7 +85,7 @@ export interface WorkspaceSlice {
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
         mcpBindingMap?: Record<string, string>
-        mcpConfig?: Record<string, any> | null
+        mcpConfig?: Record<string, unknown> | null
     }, x?: number, y?: number) => void
     applyPerformerAsset: (performerId: string, asset: {
         name: string
@@ -96,7 +96,7 @@ export interface WorkspaceSlice {
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
         mcpBindingMap?: Record<string, string>
-        mcpConfig?: Record<string, any> | null
+        mcpConfig?: Record<string, unknown> | null
     }) => void
     removePerformer: (id: string) => void
     updatePerformerPosition: (id: string, x: number, y: number) => void
@@ -115,12 +115,12 @@ export interface WorkspaceSlice {
     openPerformerEditor: (id: string, focus?: string | null) => void
     closeEditor: () => void
     setWorkingDir: (dir: string) => void
-    newStage: () => Promise<void>
-    closeStage: () => Promise<void>
-    saveStage: () => Promise<void>
-    loadStage: (stageId: string) => Promise<void>
-    listStages: () => Promise<void>
-    deleteStage: (stageId: string) => Promise<void>
+    newWorkspace: () => Promise<void>
+    closeWorkspace: () => Promise<void>
+    saveWorkspace: () => Promise<void>
+    loadWorkspace: (workspaceId: string) => Promise<void>
+    listWorkspaces: () => Promise<void>
+    deleteWorkspace: (workspaceId: string) => Promise<void>
 
     setPerformerTal: (performerId: string, tal: AssetCard | null) => void
     setPerformerTalRef: (performerId: string, talRef: AssetRef | null) => void
@@ -150,8 +150,8 @@ export interface WorkspaceSlice {
     savePerformerAsDraft: (performerId: string) => Promise<void>
     saveActAsDraft: (actId: string) => Promise<void>
     loadDraftsFromDisk: () => Promise<void>
-    addPerformerFromDraft: (name: string, draftContent: Record<string, any>) => void
-    importActFromDraft: (name: string, draftContent: Record<string, any>) => void
+    addPerformerFromDraft: (name: string, draftContent: Record<string, unknown>) => void
+    importActFromDraft: (name: string, draftContent: Record<string, unknown>) => void
     createMarkdownEditor: (
         kind: MarkdownEditorKind,
         options?: {
@@ -171,6 +171,7 @@ export interface WorkspaceSlice {
     updateMarkdownEditorSize: (id: string, width: number, height: number) => void
     updateMarkdownEditorBaseline: (id: string, baseline: MarkdownEditorNode['baseline']) => void
     removeMarkdownEditor: (id: string) => void
+    openDraftEditor: (draftId: string) => string | null
 }
 
 export interface ChatSlice {
@@ -206,20 +207,20 @@ export interface ChatSlice {
     undoLastTurn: (performerId: string) => Promise<void>
     rehydrateSessions: () => Promise<void>
     revertSession: (performerId: string, messageId: string) => Promise<void>
-    getDiff: (performerId: string) => Promise<any[]>
+    getDiff: (performerId: string) => Promise<Array<Record<string, unknown>>>
     listSessions: () => Promise<void>
     deleteSession: (sessionId: string) => Promise<void>
     detachPerformerSession: (performerId: string, notice?: string) => void
-    
+
     respondToPermission: (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') => Promise<void>
-    respondToQuestion: (sessionId: string, questionId: string, answers: Record<string, string[]>) => Promise<void>
+    respondToQuestion: (sessionId: string, questionId: string, answers: QuestionAnswer[]) => Promise<void>
     rejectQuestion: (sessionId: string, questionId: string) => Promise<void>
 }
 
 export interface IntegrationSlice {
     // Realtime integrations (OpenCode chat stream, LSP diagnostics)
-    lspServers: any[]
-    lspDiagnostics: Record<string, any[]>
+    lspServers: LspServerInfo[]
+    lspDiagnostics: Record<string, LspDiagnostic[]>
 
     fetchLspStatus: () => Promise<void>
     initRealtimeEvents: () => void
@@ -262,7 +263,7 @@ export interface ActEditorState {
 }
 
 export interface ActSlice {
-    acts: StageAct[]
+    acts: WorkspaceAct[]
     selectedActId: string | null
     actEditorState: ActEditorState | null
 
@@ -281,12 +282,12 @@ export interface ActSlice {
     toggleActVisibility: (id: string) => void
 
     // ── Participant Binding (ref-based) ─────────
-    bindPerformerToAct: (actId: string, performerRef: StageActParticipantBinding['performerRef']) => string
-    attachPerformerRefToAct: (actId: string, performerRef: StageActParticipantBinding['performerRef']) => string | null
+    bindPerformerToAct: (actId: string, performerRef: WorkspaceActParticipantBinding['performerRef']) => string
+    attachPerformerRefToAct: (actId: string, performerRef: WorkspaceActParticipantBinding['performerRef']) => string | null
     attachPerformerToAct: (actId: string, performerId: string) => string | null
     autoLayoutActParticipants: (actId: string) => void
     unbindPerformerFromAct: (actId: string, participantKey: string) => void
-    updatePerformerBinding: (actId: string, participantKey: string, update: Partial<StageActParticipantBinding>) => void
+    updatePerformerBinding: (actId: string, participantKey: string, update: Partial<WorkspaceActParticipantBinding>) => void
     openActEditor: (
         actId: string,
         mode?: ActEditorState['mode'],
@@ -307,8 +308,8 @@ export interface ActSlice {
     updateActSize: (id: string, width: number, height: number) => void
 
     // ── Authoring / import ──────────────────────
-    updateActAuthoringMeta: (id: string, meta: StageAct['meta']) => void
-    importActFromAsset: (asset: any) => void
+    updateActAuthoringMeta: (id: string, meta: WorkspaceAct['meta']) => void
+    importActFromAsset: (asset: AssetCard) => void
 
     // ── Thread management ───────────────────────
     createThread: (actId: string) => Promise<string>
@@ -320,10 +321,17 @@ export interface ActSlice {
 
 export interface AssistantSlice {
     isAssistantOpen: boolean
+    assistantModel: { provider: string; modelId: string } | null
+    assistantAvailableModels: Array<{ provider: string; providerName: string; modelId: string; name: string }>
+    appliedAssistantActionMessageIds: Record<string, true>
+    assistantActionResults: Record<string, { applied: number; failed: number }>
 
     toggleAssistant: () => void
-    /** Ensure the hidden 'studio-assistant' performer node exists with the given model */
-    ensureAssistantPerformer: (model: { provider: string; modelId: string }) => void
+    setAssistantModel: (model: { provider: string; modelId: string } | null) => void
+    setAssistantAvailableModels: (models: Array<{ provider: string; providerName: string; modelId: string; name: string }>) => void
+    markAssistantActionsApplied: (messageId: string) => void
+    recordAssistantActionResult: (messageId: string, result: { applied: number; failed: number }) => void
+    resetAssistantRuntimeState: () => void
 }
 
 export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice & ActSlice & AssistantSlice

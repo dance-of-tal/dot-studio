@@ -4,6 +4,7 @@ import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import { showToast } from '../../lib/toast'
 import { slugifyAssetName } from '../../lib/performers'
+import { buildDraftDeleteCascade, buildInstalledDeleteCascade } from '../../store/cascade-cleanup'
 import type { AssetCard } from '../../types'
 import {
     useAssetKind,
@@ -15,6 +16,7 @@ import {
     useRegistrySearch,
 } from '../../hooks/queries'
 import { useMcpCatalog } from './useMcpCatalog'
+import type { AssetPanelAction, AssetPanelAsset, LibraryAsset } from './asset-panel-types'
 import type {
     AssetScope,
     InstalledKind,
@@ -43,8 +45,10 @@ export function useAssetLibraryController() {
     const drafts = useStudioStore((state) => state.drafts)
     const addPerformer = useStudioStore((state) => state.addPerformer)
     const createMarkdownEditor = useStudioStore((state) => state.createMarkdownEditor)
+    const openDraftEditor = useStudioStore((state) => state.openDraftEditor)
     const selectPerformer = useStudioStore((state) => state.selectPerformer)
     const setActiveChatPerformer = useStudioStore((state) => state.setActiveChatPerformer)
+    const addAct = useStudioStore((state) => state.addAct)
 
     const [filter, setFilter] = useState('')
     const [scope, setScope] = useState<AssetScope>('local')
@@ -57,13 +61,13 @@ export function useAssetLibraryController() {
 
     const [registryQuery, setRegistryQuery] = useState('')
     const [searchEnabled, setSearchEnabled] = useState(false)
-    const [selectedAsset, setSelectedAsset] = useState<any | null>(null)
+    const [selectedAsset, setSelectedAsset] = useState<AssetPanelAsset | null>(null)
     const [expandedModelProviders, setExpandedModelProviders] = useState<Record<string, boolean>>({})
     const [expandedMcpEntries, setExpandedMcpEntries] = useState<Record<string, boolean>>({})
     const [showMcpRawConfig, setShowMcpRawConfig] = useState(false)
     const [authoringHint, setAuthoringHint] = useState<string | null>(null)
     const [detailActionStatus, setDetailActionStatus] = useState<string | null>(null)
-    const [detailActionLoading, setDetailActionLoading] = useState<null | 'save-local' | 'publish' | 'import'>(null)
+    const [detailActionLoading, setDetailActionLoading] = useState<AssetPanelAction | null>(null)
 
     const { data: authUser } = useDotAuthUser()
     const queryClient = useQueryClient()
@@ -82,7 +86,7 @@ export function useAssetLibraryController() {
     )
 
     const mcp = useMcpCatalog(workingDir, showMcps)
-    const mcpServers = mcp.mcpServers ?? []
+    const mcpServers = useMemo(() => mcp.mcpServers ?? [], [mcp.mcpServers])
     const {
         mcpDraftEntries,
         mcpCatalogDirty,
@@ -160,6 +164,13 @@ export function useAssetLibraryController() {
         }
     }
 
+    const createNewAct = () => {
+        const acts = useStudioStore.getState().acts
+        const name = `Act ${acts.length + 1}`
+        addAct(name)
+        setAuthoringHint(`Created ${name}. Configure it from the inspector.`)
+    }
+
     const invalidateInstalledAssetQueries = async (kind: InstalledKind) => {
         await Promise.all([
             queryClient.invalidateQueries({ queryKey: queryKeys.assets(workingDir) }),
@@ -168,7 +179,7 @@ export function useAssetLibraryController() {
         ])
     }
 
-    const handlePinnedAssetAction = async (asset: any, action: 'save-local' | 'publish') => {
+    const handlePinnedAssetAction = async (asset: AssetPanelAsset, action: 'save-local' | 'publish') => {
         if (!asset || !isInstalledAssetKind(asset.kind)) return
 
         try {
@@ -189,7 +200,8 @@ export function useAssetLibraryController() {
                     useStudioStore.setState((state) => {
                         const next = { ...state.drafts }
                         delete next[asset.draftId]
-                        return { drafts: next }
+                        const cascade = buildDraftDeleteCascade(asset.kind, asset.draftId, state.performers, state.acts)
+                        return { drafts: next, ...cascade }
                     })
                 }
 
@@ -204,32 +216,142 @@ export function useAssetLibraryController() {
             setDetailActionStatus(result.published
                 ? `Published ${result.urn}.`
                 : `${result.urn} already exists in the registry.`)
-        } catch (error: any) {
-            setDetailActionStatus(error?.message || 'Asset action failed.')
+        } catch (error: unknown) {
+            setDetailActionStatus(error instanceof Error ? error.message : 'Asset action failed.')
         } finally {
             setDetailActionLoading(null)
         }
     }
 
-    const handleDeleteDraft = async (asset: any) => {
+    const [uninstallPlan, setUninstallPlan] = useState<{
+        asset: AssetPanelAsset
+        actionName?: 'Uninstall' | 'Delete'
+        target: { urn?: string; draftId?: string; kind: string; name: string; source: string; reason: string }
+        dependents: Array<{ urn?: string; draftId?: string; kind: string; name: string; source: string; reason: string }>
+    } | null>(null)
+    const [uninstallLoading, setUninstallLoading] = useState(false)
+
+    const handleUninstallAsset = async (asset: AssetPanelAsset) => {
+        if (!asset?.kind || !asset?.urn) return
+        try {
+            const plan = await api.dot.previewUninstall(asset.kind, asset.urn)
+            // Always show confirmation dialog, even if no dependents
+            setUninstallPlan({ asset, actionName: 'Uninstall', ...plan })
+        } catch (err: unknown) {
+            showToast(err instanceof Error ? err.message : 'Failed to check dependencies', 'error', {
+                title: 'Uninstall preview failed',
+                dedupeKey: `uninstall-error:${asset.urn}`,
+            })
+        }
+    }
+
+    const executeUninstall = async (asset: AssetPanelAsset, cascade: boolean) => {
+        try {
+            setUninstallLoading(true)
+            const result = await api.dot.uninstallAsset(asset.kind, asset.urn, cascade)
+            // Apply canvas cascade for all deleted URNs
+            useStudioStore.setState((state) => {
+                const newState: Partial<ReturnType<typeof useStudioStore.getState>> = {}
+                for (const deletedUrn of result.deletedUrns) {
+                    const kind = deletedUrn.split('/')[0]
+                    const patch = buildInstalledDeleteCascade(kind, deletedUrn, state.performers, state.acts)
+                    if (patch.performers) newState.performers = patch.performers
+                    if (patch.acts) newState.acts = patch.acts
+                    if (patch.workspaceDirty) newState.workspaceDirty = true
+                }
+                return newState
+            })
+            await invalidateInstalledAssetQueries(asset.kind)
+            setSelectedAsset(null)
+            setUninstallPlan(null)
+            const count = cascade ? 'all related assets' : `"${asset.name || asset.urn}"`
+            showToast(`Uninstalled ${count}`, 'success', {
+                title: 'Asset uninstalled',
+                dedupeKey: `uninstall:${asset.urn}`,
+            })
+        } catch (err: unknown) {
+            showToast(err instanceof Error ? err.message : 'Failed to uninstall asset', 'error', {
+                title: 'Uninstall failed',
+                dedupeKey: `uninstall-error:${asset.urn}`,
+            })
+        } finally {
+            setUninstallLoading(false)
+        }
+    }
+
+    const confirmUninstall = () => {
+        if (!uninstallPlan) return
+        const hasDependents = uninstallPlan.dependents.length > 0
+        if (uninstallPlan.actionName === 'Delete') {
+            executeDeleteDraft(uninstallPlan.asset, hasDependents)
+        } else {
+            executeUninstall(uninstallPlan.asset, hasDependents)
+        }
+    }
+
+    const cancelUninstall = () => {
+        setUninstallPlan(null)
+    }
+
+    const handleDeleteDraft = async (asset: AssetPanelAsset) => {
         if (!asset?.draftId || !asset?.kind) return
         try {
-            await api.drafts.delete(asset.kind, asset.draftId)
+            const plan = await api.drafts.previewDelete(asset.kind, asset.draftId)
+            setUninstallPlan({ asset, actionName: 'Delete', ...plan })
+        } catch (error: unknown) {
+            showToast(error instanceof Error ? error.message : 'Failed to check dependencies', 'error', {
+                title: 'Delete preview failed',
+                dedupeKey: `draft:delete-error:${asset.draftId}`,
+            })
+        }
+    }
+
+    const handleEditDraft = (asset: AssetPanelAsset) => {
+        if (!asset?.draftId) return
+        openDraftEditor(asset.draftId)
+    }
+
+    const executeDeleteDraft = async (asset: AssetPanelAsset, cascade: boolean) => {
+        try {
+            setUninstallLoading(true)
+            const result = await api.drafts.delete(asset.kind, asset.draftId, cascade)
+
             useStudioStore.setState((state) => {
                 const next = { ...state.drafts }
-                delete next[asset.draftId]
-                return { drafts: next }
+                const newState: Partial<ReturnType<typeof useStudioStore.getState>> = { drafts: next }
+
+                // Remove all deleted drafts from store
+                for (const deletedId of result.deletedIds) {
+                    delete next[deletedId]
+                }
+
+                // Apply canvas cascade for each deleted draft across all asset kinds
+                for (const deletedId of result.deletedIds) {
+                    for (const maybeKind of ['tal', 'dance', 'performer', 'act']) {
+                        const patch = buildDraftDeleteCascade(maybeKind, deletedId, newState.performers || state.performers, newState.acts || state.acts)
+                        if (patch.performers) newState.performers = patch.performers
+                        if (patch.acts) newState.acts = patch.acts
+                        if (patch.workspaceDirty) newState.workspaceDirty = true
+                    }
+                }
+
+                return newState
             })
+
             setSelectedAsset(null)
-            showToast(`Deleted draft "${asset.name}"`, 'success', {
+            setUninstallPlan(null)
+            const count = cascade ? 'all related drafts' : `"${asset.name || asset.draftId}"`
+            showToast(`Deleted ${count}`, 'success', {
                 title: 'Draft deleted',
                 dedupeKey: `draft:delete:${asset.draftId}`,
             })
-        } catch (error: any) {
-            showToast(error?.message || 'Failed to delete draft', 'error', {
+        } catch (error: unknown) {
+            showToast(error instanceof Error ? error.message : 'Failed to delete draft', 'error', {
                 title: 'Delete failed',
                 dedupeKey: `draft:delete-error:${asset.draftId}`,
             })
+        } finally {
+            setUninstallLoading(false)
         }
     }
 
@@ -247,7 +369,7 @@ export function useAssetLibraryController() {
         [mcpServers, queryText],
     )
     const registryGroups = useMemo(
-        () => buildRegistryGroups(registryResults as Array<any>),
+        () => buildRegistryGroups(registryResults as LibraryAsset[]),
         [registryResults],
     )
 
@@ -304,6 +426,7 @@ export function useAssetLibraryController() {
         detailActionStatus,
         detailActionLoading,
         createNewPerformer,
+        createNewAct,
         createNewPerformerDraftEntry,
         showInstalledAssets,
         showModels,
@@ -342,6 +465,12 @@ export function useAssetLibraryController() {
         handleRegistryInstall,
         handlePinnedAssetAction,
         handleDeleteDraft,
+        handleEditDraft,
+        handleUninstallAsset,
+        uninstallPlan,
+        uninstallLoading,
+        confirmUninstall,
+        cancelUninstall,
         setSearchEnabled,
     }
 }

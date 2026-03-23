@@ -34,7 +34,7 @@ export default function App() {
   const sessionMap = useStudioStore(s => s.sessionMap);
   const canvasTerminals = useStudioStore(s => s.canvasTerminals);
 
-  const stageDirty = useStudioStore(s => s.stageDirty);
+  const workspaceDirty = useStudioStore(s => s.workspaceDirty);
   const isTerminalOpen = useStudioStore(s => s.isTerminalOpen);
   const setTerminalOpen = useStudioStore(s => s.setTerminalOpen);
   const focusedPerformerId = useStudioStore(s => s.focusedPerformerId);
@@ -43,23 +43,23 @@ export default function App() {
 
   const isInitialMount = useRef(true);
 
-  // Auto-save Stage configuration (debounced 2 seconds)
+  // Auto-save Workspace configuration (debounced 2 seconds)
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;
     }
 
-    if (!stageDirty) {
+    if (!workspaceDirty) {
       return;
     }
 
     const timer = setTimeout(() => {
-      useStudioStore.getState().saveStage();
+      useStudioStore.getState().saveWorkspace();
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [stageDirty, performers, acts, drafts, markdownEditors, workingDir, sessionMap, canvasTerminals]);
+  }, [workspaceDirty, performers, acts, drafts, markdownEditors, workingDir, sessionMap, canvasTerminals]);
 
   // Apply theme to HTML root
   useEffect(() => {
@@ -71,16 +71,16 @@ export default function App() {
     const store = useStudioStore.getState();
     store.initRealtimeEvents();
 
-    // Auto-restore: load studio config → apply theme → load last stage
+    // Auto-restore: load studio config → apply theme → load last workspace
     api.studio.getConfig()
-      .then((config: any) => {
+      .then((config) => {
         setApiWorkingDirContext(config.projectDir || null);
         if (config.theme && config.theme !== useStudioStore.getState().theme) {
           useStudioStore.setState({ theme: config.theme });
           localStorage.setItem('dot-theme', config.theme);
         }
-        if (config.lastStage) {
-          useStudioStore.getState().loadStage(config.lastStage);
+        if (config.lastWorkspaceId) {
+          useStudioStore.getState().loadWorkspace(config.lastWorkspaceId);
         }
       })
       .catch(() => { /* server not up yet, skip restore */ });
@@ -92,28 +92,34 @@ export default function App() {
 
   const [activeDrag, setActiveDrag] = useState<{ kind: string; label: string } | null>(null);
   const [dropWarning, setDropWarning] = useState<string | null>(null);
-  const warningTimerRef = useRef<number | null>(null);
+  const [dropWarningVersion, setDropWarningVersion] = useState(0);
   const [termHeight, setTermHeight] = useState(250);
 
-  useEffect(() => () => {
-    if (warningTimerRef.current) {
-      window.clearTimeout(warningTimerRef.current);
+  useEffect(() => {
+    if (!dropWarning) {
+      return;
     }
-  }, []);
+
+    const timerId = window.setTimeout(() => {
+      setDropWarning(null);
+    }, 4800);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [dropWarning, dropWarningVersion]);
 
   const showDropWarning = (message: string) => {
     setDropWarning(message);
-    if (warningTimerRef.current) {
-      window.clearTimeout(warningTimerRef.current);
-    }
-    warningTimerRef.current = window.setTimeout(() => {
-      setDropWarning(null);
-      warningTimerRef.current = null;
-    }, 4800);
+    setDropWarningVersion((current) => current + 1);
+  };
+
+  const clearActiveDrag = () => {
+    setActiveDrag(null);
   };
 
   const handleDragStart = createDragStartHandler(setActiveDrag);
-  const handleDragEnd = createDragEndHandler(setActiveDrag.bind(null, null) as () => void, showDropWarning);
+  const handleDragEnd = createDragEndHandler(clearActiveDrag, showDropWarning);
 
   return (
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

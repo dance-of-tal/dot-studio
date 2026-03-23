@@ -2,30 +2,31 @@ import { Globe, Search } from 'lucide-react'
 import { PinnedDetailPanel, RegistryResult } from './AssetCards'
 import type { RegistryKind } from './asset-library-utils'
 import { getAssetSelectionKey, getAssetUrn } from './asset-library-utils'
+import type { AssetPanelAction, AssetPanelAsset, AssetPanelAuthUser, AssetPanelHandler, LibraryAsset, RegistryGroup } from './asset-panel-types'
 
 type Props = {
     registryQuery: string
     setRegistryQuery: (value: string) => void
     triggerSearch: () => void
     registryLoading: boolean
-    registryResults: any[]
+    registryResults: LibraryAsset[]
     registryError: unknown
     registryKind: RegistryKind
     setRegistryKind: (value: RegistryKind) => void
-    registryGroups: Array<{ kind: string; label: string; items: any[] }>
+    registryGroups: RegistryGroup[]
     installedUrns: Set<string>
-    selectedAsset: any
+    selectedAsset: AssetPanelAsset | null
     selectedAssetKey: string | null
     selectedInstalled: boolean
-    authUser: any
+    authUser?: AssetPanelAuthUser
     detailActionStatus: string | null
-    detailActionLoading: null | 'save-local' | 'publish' | 'import'
-    onSelectAsset: (asset: any) => void
-    onInstall: (urn: string, targetScope: 'global' | 'stage') => Promise<any>
+    detailActionLoading: AssetPanelAction | null
+    onSelectAsset: AssetPanelHandler
+    onInstall: (urn: string, targetScope: 'global' | 'stage') => Promise<unknown>
     onCloseAsset: () => void
-    onSaveLocal: (asset: any) => void | Promise<void>
-    onPublish: (asset: any) => void | Promise<void>
-    onDeleteDraft: (asset: any) => void | Promise<void>
+    onSaveLocal: AssetPanelHandler
+    onPublish: AssetPanelHandler
+    onDeleteDraft: AssetPanelHandler
 }
 
 export default function AssetLibraryRegistryView(props: Props) {

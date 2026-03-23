@@ -7,6 +7,7 @@
  */
 
 import type { StudioState } from './types'
+import type { LspDiagnostic } from '../types'
 import {
     diagnosticMatchesWorkingDir,
     invalidateRuntimeQueries,
@@ -36,7 +37,7 @@ type GetFn = () => StudioState
 // ── lsp.client.diagnostics ──
 
 export function handleLspDiagnostics(
-    data: any,
+    data: { properties?: { uri?: unknown; diagnostics?: unknown } },
     get: GetFn,
     set: SetFn,
 ) {
@@ -44,10 +45,13 @@ export function handleLspDiagnostics(
     if (typeof uri !== 'string' || !diagnosticMatchesWorkingDir(uri, get().workingDir)) {
         return
     }
+    const normalizedDiagnostics: LspDiagnostic[] = Array.isArray(diagnostics)
+        ? diagnostics.filter((item): item is LspDiagnostic => !!item && typeof item === 'object' && typeof (item as LspDiagnostic).message === 'string')
+        : []
     set((state) => ({
         lspDiagnostics: {
             ...state.lspDiagnostics,
-            [uri]: diagnostics,
+            [uri]: normalizedDiagnostics,
         },
     }))
 }
@@ -66,7 +70,7 @@ export function handleMcpToolsChanged(get: GetFn) {
 
 // ── mcp.browser.open.failed ──
 
-export function handleMcpBrowserOpenFailed(data: any) {
+export function handleMcpBrowserOpenFailed(data: { type?: string; properties?: { mcpName?: unknown; url?: unknown } }) {
     const mcpName = data.properties?.mcpName
     const url = data.properties?.url
     if (typeof mcpName !== 'string' || typeof url !== 'string' || !url.trim()) {

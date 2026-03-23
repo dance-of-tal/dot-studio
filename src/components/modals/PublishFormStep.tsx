@@ -1,4 +1,8 @@
 import { DOT_TOS_URL } from '../../lib/dot-terms'
+import type { DraftAsset, MarkdownEditorNode } from '../../types'
+import type { PerformerPreflightEntry } from './publish-modal-utils'
+
+type MarkdownDraft = Pick<DraftAsset, 'derivedFrom'>
 
 type Props = {
     slug: string
@@ -7,10 +11,10 @@ type Props = {
     setSlug: (value: string) => void
     setDescription: (value: string) => void
     setTagsText: (value: string) => void
-    performerPreflight: any[]
-    markdownEditor: any
+    performerPreflight: PerformerPreflightEntry[]
+    markdownEditor: MarkdownEditorNode | null
     markdownDirty: boolean
-    draft: any
+    draft: MarkdownDraft | null
     authUser: { authenticated?: boolean } | null | undefined
     isAuthenticating: boolean
     onStartLogin: () => void
@@ -56,7 +60,7 @@ export default function PublishFormStep({
             {performerPreflight.length > 0 ? (
                 <div className="publish-modal__preflight">
                     <strong>Performer dependencies</strong>
-                    {performerPreflight.map((entry: any) => (
+                    {performerPreflight.map((entry) => (
                         <div key={`${entry.label}-${entry.detail}`} className={`publish-modal__preflight-row is-${entry.status}`}>
                             <span>{entry.label}</span>
                             <span>{entry.detail}</span>

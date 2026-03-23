@@ -1,6 +1,6 @@
 import type { RuntimeModelCatalogEntry } from '../../shared/model-variants'
 import type { AdapterViewActionRequest, AdapterViewProjection } from '../../shared/adapter-view'
-import type { ModelConfig } from '../types'
+import type { ModelConfig, LspServerInfo } from '../types'
 import { createApiEventSource, deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
 
 export const opencodeApi = {
@@ -19,18 +19,18 @@ export const opencodeApi = {
         postJSON<{ ok: boolean; managed: boolean; mode: 'managed' | 'external' }>('/api/opencode/restart'),
 
     lsp: {
-        status: () => fetchJSON<any[]>('/api/lsp/status'),
+        status: () => fetchJSON<LspServerInfo[]>('/api/lsp/status'),
     },
 
     mcp: {
         list: () => fetchJSON<import('../types').McpServer[]>('/api/mcp/servers'),
-        add: (name: string, config: { command: string; args?: string[] } | { url: string }) => postJSON<any>('/api/mcp/add', { name, config }),
+        add: (name: string, config: { command: string; args?: string[] } | { url: string }) => postJSON<unknown>('/api/mcp/add', { name, config }),
         authStart: (name: string) => postJSON<{ authorizationUrl: string }>(`/api/mcp/${name}/auth/start`),
-        authCallback: (name: string, code: string) => postJSON<any>(`/api/mcp/${name}/auth/callback`, { code }),
-        authenticate: (name: string) => postJSON<any>(`/api/mcp/${name}/auth/authenticate`),
+        authCallback: (name: string, code: string) => postJSON<unknown>(`/api/mcp/${name}/auth/callback`, { code }),
+        authenticate: (name: string) => postJSON<unknown>(`/api/mcp/${name}/auth/authenticate`),
         clearAuth: (name: string) => deleteJSON<{ success: true }>(`/api/mcp/${name}/auth`),
-        connect: (name: string) => postJSON<any>(`/api/mcp/${name}/connect`),
-        disconnect: (name: string) => postJSON<any>(`/api/mcp/${name}/disconnect`),
+        connect: (name: string) => postJSON<unknown>(`/api/mcp/${name}/connect`),
+        disconnect: (name: string) => postJSON<unknown>(`/api/mcp/${name}/disconnect`),
     },
 
     models: {
@@ -52,7 +52,7 @@ export const opencodeApi = {
 
     tools: {
         list: () => fetchJSON<string[]>('/api/tools'),
-        listForModel: (provider: string, model: string) => fetchJSON<any[]>(`/api/tools/${provider}/${model}`),
+        listForModel: (provider: string, model: string) => fetchJSON<Array<Record<string, unknown>>>(`/api/tools/${provider}/${model}`),
     },
 
     runtime: {
@@ -68,14 +68,14 @@ export const opencodeApi = {
             fetchJSON<{ projections: AdapterViewProjection[] }>(
                 `/api/adapter/views${performerId ? `?performerId=${encodeURIComponent(performerId)}` : ''}`,
             ),
-        action: (payload: AdapterViewActionRequest) => postJSON<any>('/api/adapter/action', payload),
+        action: (payload: AdapterViewActionRequest) => postJSON<unknown>('/api/adapter/action', payload),
         events: () => createApiEventSource('/api/adapter/events'),
     },
 
     config: {
-        get: () => fetchJSON<any>('/api/config'),
-        getProject: () => fetchJSON<{ exists: boolean; path: string; config: any }>('/api/config/project'),
-        update: (config: any) => putJSON<any>('/api/config', config),
+        get: () => fetchJSON<Record<string, unknown>>('/api/config'),
+        getProject: () => fetchJSON<{ exists: boolean; path: string; config: Record<string, unknown> }>('/api/config/project'),
+        update: (config: Record<string, unknown>) => putJSON<unknown>('/api/config', config),
     },
 
     providers: {
@@ -91,9 +91,9 @@ export const opencodeApi = {
     },
 
     provider: {
-        auth: () => fetchJSON<any>('/api/provider/auth'),
-        oauthAuthorize: (providerId: string, method: number) => postJSON<any>(`/api/provider/${providerId}/oauth/authorize`, { method }),
-        oauthCallback: (providerId: string, method: number, code?: string) => postJSON<any>(`/api/provider/${providerId}/oauth/callback`, code ? { method, code } : { method }),
+        auth: () => fetchJSON<Record<string, unknown>>('/api/provider/auth'),
+        oauthAuthorize: (providerId: string, method: number) => postJSON<unknown>(`/api/provider/${providerId}/oauth/authorize`, { method }),
+        oauthCallback: (providerId: string, method: number, code?: string) => postJSON<unknown>(`/api/provider/${providerId}/oauth/callback`, code ? { method, code } : { method }),
         setAuth: (
             providerId: string,
             auth:
@@ -105,18 +105,18 @@ export const opencodeApi = {
     },
 
     file: {
-        list: (path = '.') => fetchJSON<any[]>(`/api/file/list?path=${encodeURIComponent(path)}`),
-        read: (path: string) => fetchJSON<any>(`/api/file/read?path=${encodeURIComponent(path)}`),
-        status: () => fetchJSON<any[]>('/api/file/status'),
+        list: (path = '.') => fetchJSON<Array<Record<string, unknown>>>(`/api/file/list?path=${encodeURIComponent(path)}`),
+        read: (path: string) => fetchJSON<unknown>(`/api/file/read?path=${encodeURIComponent(path)}`),
+        status: () => fetchJSON<Array<Record<string, unknown>>>('/api/file/status'),
     },
 
     find: {
-        text: (pattern: string) => fetchJSON<any[]>(`/api/find/text?pattern=${encodeURIComponent(pattern)}`),
+        text: (pattern: string) => fetchJSON<Array<Record<string, unknown>>>(`/api/find/text?pattern=${encodeURIComponent(pattern)}`),
         files: (pattern: string) => fetchJSON<string[]>(`/api/find/files?pattern=${encodeURIComponent(pattern)}`),
-        symbols: (pattern: string) => fetchJSON<any[]>(`/api/find/symbols?pattern=${encodeURIComponent(pattern)}`),
+        symbols: (pattern: string) => fetchJSON<Array<Record<string, unknown>>>(`/api/find/symbols?pattern=${encodeURIComponent(pattern)}`),
     },
 
     vcs: {
-        get: () => fetchJSON<any>('/api/vcs'),
+        get: () => fetchJSON<{ branch?: string | null }>('/api/vcs'),
     },
 }

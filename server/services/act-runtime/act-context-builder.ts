@@ -2,11 +2,10 @@
  * act-context-builder.ts — Act context injection
  *
  * PRD §9: Act context is injected as runtime prompt, not as Dance.
- * Includes: goal, participants, collaboration runtime, relations, subscriptions, dances, rules.
+ * Includes: goal, participants, collaboration runtime, relations, subscriptions, rules.
  */
 
 import type { ActDefinition } from '../../../shared/act-types.js'
-import type { Mailbox } from './mailbox.js'
 
 /**
  * Build markdown Act context for a participant's agent prompt.
@@ -14,7 +13,6 @@ import type { Mailbox } from './mailbox.js'
 export function buildActContext(
     actDefinition: ActDefinition,
     participantKey: string,
-    _mailbox: Mailbox,
 ): string {
     const lines: string[] = []
 
@@ -77,14 +75,8 @@ export function buildActContext(
         lines.push('')
     }
 
-    // ── Active Dances ───────────────────────────────
-    if (binding?.activeDanceIds && binding.activeDanceIds.length > 0) {
-        lines.push('# Active Dances')
-        for (const danceId of binding.activeDanceIds) {
-            lines.push(`- ${danceId}`)
-        }
-        lines.push('')
-    }
+    // activeDances section removed per PRD-005
+    // Performer uses all its dances by default
 
     // ── Act Rules ───────────────────────────────────
     if (actDefinition.actRules && actDefinition.actRules.length > 0) {

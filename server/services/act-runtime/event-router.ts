@@ -26,6 +26,11 @@ export interface WakeUpTarget {
     reason: 'subscription' | 'wake-condition'
 }
 
+function payloadString(payload: Record<string, unknown>, key: string) {
+    const value = payload[key]
+    return typeof value === 'string' ? value : undefined
+}
+
 // ── Subscription matching ───────────────────────────────
 
 function matchSubscription(
@@ -34,20 +39,20 @@ function matchSubscription(
 ): boolean {
     if (!subscriptions) return false
 
-    const payload = event.payload as Record<string, any>
+    const payload = event.payload
 
     switch (event.type) {
         case 'message.sent':
         case 'message.delivered': {
-            const from = payload.from as string | undefined
-            const tag = payload.tag as string | undefined
+            const from = payloadString(payload, 'from')
+            const tag = payloadString(payload, 'tag')
             const fromMatch = subscriptions.messagesFrom?.includes(from || '') ?? false
             const tagMatch = subscriptions.messageTags?.includes(tag || '') ?? false
             return fromMatch || tagMatch
         }
         case 'board.posted':
         case 'board.updated': {
-            const key = payload.key as string | undefined
+            const key = payloadString(payload, 'key')
             if (!key) return false
             return subscriptions.callboardKeys?.some((pattern) => {
                 if (pattern.endsWith('*')) {

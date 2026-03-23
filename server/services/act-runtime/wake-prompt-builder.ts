@@ -1,13 +1,18 @@
 /**
  * wake-prompt-builder.ts — Wake-up prompt generation
  *
- * PRD §15.3: BFF tells a participant WHAT HAPPENED, not WHAT TO DO.
+ * PRD §15.3: Act Runtime Engine tells a participant WHAT HAPPENED, not WHAT TO DO.
  * Wake prompts are informational summaries injected into participant sessions.
  */
 
 import type { MailboxMessage } from '../../../shared/act-types.js'
 import type { WakeUpTarget } from './event-router.js'
 import type { Mailbox } from './mailbox.js'
+
+function payloadString(payload: Record<string, unknown>, key: string) {
+    const value = payload[key]
+    return typeof value === 'string' ? value : undefined
+}
 
 /**
  * Build a wake-up prompt for a participant being woken by an event.
@@ -16,7 +21,7 @@ import type { Mailbox } from './mailbox.js'
 export function buildWakePrompt(target: WakeUpTarget, mailbox: Mailbox): string {
     const parts: string[] = []
     const event = target.triggerEvent
-    const payload = event.payload as Record<string, any>
+    const payload = event.payload
 
     // ── Event summary ───────────────────────────────
     if (target.reason === 'wake-condition' && target.wakeCondition) {
@@ -27,16 +32,16 @@ export function buildWakePrompt(target: WakeUpTarget, mailbox: Mailbox): string 
         switch (event.type) {
             case 'message.sent':
                 parts.push(`[메시지 알림]`)
-                parts.push(`${event.source}이(가) 메시지를 보냈습니다.${payload.tag ? ` tag: ${payload.tag}` : ''}`)
+                parts.push(`${event.source}이(가) 메시지를 보냈습니다.${payloadString(payload, 'tag') ? ` tag: ${payloadString(payload, 'tag')}` : ''}`)
                 break
             case 'board.posted':
                 parts.push(`[Board 알림]`)
-                parts.push(`${event.source}이(가) key="${payload.key}" 항목을 게시했습니다.`)
-                if (payload.kind) parts.push(`kind: ${payload.kind}`)
+                parts.push(`${event.source}이(가) key="${payloadString(payload, 'key') || ''}" 항목을 게시했습니다.`)
+                if (payloadString(payload, 'kind')) parts.push(`kind: ${payloadString(payload, 'kind')}`)
                 break
             case 'board.updated':
                 parts.push(`[Board 업데이트]`)
-                parts.push(`${event.source}이(가) key="${payload.key}" 항목을 업데이트했습니다.`)
+                parts.push(`${event.source}이(가) key="${payloadString(payload, 'key') || ''}" 항목을 업데이트했습니다.`)
                 break
             case 'runtime.idle':
                 parts.push(`[Runtime 알림]`)

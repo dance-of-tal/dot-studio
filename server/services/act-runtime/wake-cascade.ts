@@ -15,6 +15,10 @@ import { SessionQueue } from './session-queue.js'
 import type { Mailbox } from './mailbox.js'
 import type { ThreadManager } from './thread-manager.js'
 
+function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : 'Unknown error'
+}
+
 // Module-level session queue (one per thread)
 const sessionQueues: Map<string, SessionQueue> = new Map()
 
@@ -110,8 +114,8 @@ export async function processWakeCascade(
             // After execution, process any queued events
             queue.markIdle(participantKey)
             // Note: queued events are processed on next cascade
-        } catch (err: any) {
-            result.errors.push(`Wake injection failed for ${participantKey}: ${err.message}`)
+        } catch (error: unknown) {
+            result.errors.push(`Wake injection failed for ${participantKey}: ${errorMessage(error)}`)
             queue.markIdle(participantKey)
         }
     }

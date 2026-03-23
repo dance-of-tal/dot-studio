@@ -54,10 +54,13 @@ export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> 
     })
     if (!res.ok) {
         const raw = await res.text().catch(() => '')
-        let payload: any = { error: raw || res.statusText }
+        let payload: { error?: string } & Record<string, unknown> = { error: raw || res.statusText }
         if (raw) {
             try {
-                payload = JSON.parse(raw)
+                const parsed = JSON.parse(raw)
+                payload = parsed && typeof parsed === 'object'
+                    ? parsed as { error?: string } & Record<string, unknown>
+                    : { error: raw }
             } catch {
                 payload = { error: raw }
             }
@@ -88,8 +91,11 @@ export function patchJSON<T>(url: string, body?: unknown) {
     })
 }
 
-export function deleteJSON<T>(url: string) {
-    return fetchJSON<T>(url, { method: 'DELETE' })
+export function deleteJSON<T>(url: string, body?: unknown) {
+    return fetchJSON<T>(url, {
+        method: 'DELETE',
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    })
 }
 
 export function createApiEventSource(url: string) {

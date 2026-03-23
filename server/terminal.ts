@@ -18,6 +18,66 @@ const MAX_BUFFER = 500;
 const sessions = new Map<string, TerminalSession>();
 let sessionCounter = 0;
 
+function errorMessage(error: unknown, fallback = 'Unknown error'): string {
+    return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function stripTerminalNoise(input: string): string {
+    let result = '';
+
+    for (let index = 0; index < input.length; index += 1) {
+        const char = input[index];
+        const code = char.charCodeAt(0);
+
+        if (code === 27) {
+            const next = input[index + 1];
+
+            if (next === ']') {
+                index += 2;
+                while (index < input.length) {
+                    const oscChar = input[index];
+                    const oscCode = oscChar.charCodeAt(0);
+                    if (oscCode === 7) {
+                        break;
+                    }
+                    if (oscCode === 27 && input[index + 1] === '\\') {
+                        index += 1;
+                        break;
+                    }
+                    index += 1;
+                }
+                continue;
+            }
+
+            if (next === '[') {
+                index += 2;
+                while (index < input.length) {
+                    const csiCode = input[index].charCodeAt(0);
+                    const isLetter = (csiCode >= 65 && csiCode <= 90) || (csiCode >= 97 && csiCode <= 122);
+                    if (isLetter) {
+                        break;
+                    }
+                    index += 1;
+                }
+                continue;
+            }
+
+            if (next) {
+                index += 1;
+            }
+            continue;
+        }
+
+        if (char === '\r' || char === '\n') {
+            continue;
+        }
+
+        result += char;
+    }
+
+    return result.trim();
+}
+
 async function opencodePtyRequest<T>(path: string, init: RequestInit, directory?: string): Promise<T> {
     const url = new URL(path, OPENCODE_URL);
     if (directory) {
@@ -113,9 +173,10 @@ export function setupTerminalWs(server: HttpServer, defaultCwd: string | (() => 
 
             setupWsHandlers(ws, session);
             broadcastSessionList(session.cwd);
-        } catch (err: any) {
-            console.error('Failed to create PTY via OpenCode:', err.message);
-            ws.send(JSON.stringify({ type: 'error', message: `Failed: ${err.message}` }));
+        } catch (error: unknown) {
+            const message = errorMessage(error);
+            console.error('Failed to create PTY via OpenCode:', message);
+            ws.send(JSON.stringify({ type: 'error', message: `Failed: ${message}` }));
             ws.close();
         }
     }
@@ -139,12 +200,7 @@ export function setupTerminalWs(server: HttpServer, defaultCwd: string | (() => 
             // The data may arrive in multiple small chunks with ANSI sequences mixed in.
             if (!session.initialized) {
                 // Strip ALL ANSI escape sequences (CSI, OSC, etc.)
-                const stripped = data
-                    .replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, '')  // OSC sequences
-                    .replace(/\x1b\[[^a-zA-Z]*[a-zA-Z]/g, '')    // CSI sequences
-                    .replace(/\x1b[^[\]].?/g, '')                  // Other escapes
-                    .replace(/[\r\n]/g, '')
-                    .trim();
+                const stripped = stripTerminalNoise(data);
                 // Skip if it's cursor control noise, percent signs, or empty after stripping
                 if (!stripped || /\{"cursor":\d+\}/.test(stripped) || /^%+$/.test(stripped)) {
                     return;
@@ -245,8 +301,8 @@ export function setupTerminalWs(server: HttpServer, defaultCwd: string | (() => 
                                     size: { rows: parsed.rows, cols: parsed.cols },
                                 }),
                             }, session.cwd);
-                        } catch (e: any) {
-                            console.error('PTY resize failed:', e.message);
+                        } catch (error: unknown) {
+                            console.error('PTY resize failed:', errorMessage(error));
                         }
                         break;
                     case 'create':

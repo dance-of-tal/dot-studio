@@ -2,7 +2,7 @@ import type { ActRelation } from '../types'
 import type { StudioState } from './types'
 import { fallbackParticipantLabel } from './act-slice-helpers'
 
-type SetState = (partial: any) => void
+type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
 
 export function addActRelationImpl(
@@ -34,8 +34,7 @@ export function addActRelationImpl(
         between,
         direction,
         name: `${leftLabel}_to_${rightLabel}`,
-        maxCalls: 10,
-        timeout: 300,
+        description: `${leftLabel}과(와) ${rightLabel} 사이의 통신 관계`,
     }
     let inserted = false
     let existingRelationId: string | null = null
@@ -43,9 +42,18 @@ export function addActRelationImpl(
         acts: state.acts.map((entry) => {
             if (entry.id !== actId) return entry
             const existing = entry.relations.find(
-                (item) =>
-                    (item.between[0] === between[0] && item.between[1] === between[1]) ||
-                    (item.between[0] === between[1] && item.between[1] === between[0]),
+                (item) => {
+                    const sameOrderedPair = item.between[0] === between[0] && item.between[1] === between[1]
+                    const sameUnorderedPair =
+                        (item.between[0] === between[0] && item.between[1] === between[1])
+                        || (item.between[0] === between[1] && item.between[1] === between[0])
+
+                    if (direction === 'both' || item.direction === 'both') {
+                        return sameUnorderedPair
+                    }
+
+                    return sameOrderedPair && item.direction === direction
+                },
             )
             if (existing) {
                 existingRelationId = existing.id
@@ -54,7 +62,7 @@ export function addActRelationImpl(
             inserted = true
             return { ...entry, relations: [...entry.relations, relation] }
         }),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
     return inserted ? relation.id : existingRelationId
 }

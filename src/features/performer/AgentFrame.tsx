@@ -12,7 +12,7 @@
  */
 import { useRef, useEffect, useCallback, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
-import { Handle, Position, useStore } from '@xyflow/react'
+import { Handle, Position, useReactFlow } from '@xyflow/react'
 
 import { useStudioStore } from '../../store'
 import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries'
@@ -20,6 +20,10 @@ import { hasModelConfig, resolvePerformerAgentId } from '../../lib/performers'
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
 import { api } from '../../api'
 import { showToast } from '../../lib/toast'
+import { scheduleFitView } from '../../lib/focus-utils'
+import { assetUrnAuthor, assetUrnDisplayName, assetUrnPath } from '../../lib/asset-urn'
+import type { AssetListItem } from '../../../shared/asset-contracts'
+import type { AssetRef, ModelConfig } from '../../types'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
 import SafeReviewModal from '../../components/modals/SafeReviewModal'
 
@@ -37,14 +41,38 @@ import './AgentInput.css'
 
 /* ── Main Component ── */
 
-export default function AgentFrame({ data, id }: any) {
+type AgentFrameData = {
+    name: string
+    width?: number
+    height?: number
+    model?: ModelConfig | null
+    modelLabel?: string | null
+    modelTitle?: string | null
+    talLabel?: string | null
+    danceSummary?: string | null
+    agentId?: string | null
+    planMode?: boolean
+    actEditConnectVisible?: boolean
+    actEditParticipant?: boolean
+    actEditDimmed?: boolean
+    transformActive?: boolean
+    onActivateTransform?: (() => void) | undefined
+    onDeactivateTransform?: (() => void) | undefined
+}
+
+type AgentFrameProps = {
+    data: AgentFrameData
+    id: string
+}
+
+export default function AgentFrame({ data, id }: AgentFrameProps) {
     // ─── Store ────────────────────────────────────────
     const {
         selectedPerformerId, focusedPerformerId, editingTarget,
         chats, chatPrefixes, loadingPerformerId, setPerformerAgentId,
         togglePerformerVisibility, closeEditor,
         performers, drafts,
-        createMarkdownEditor,
+        openDraftEditor,
         updatePerformerName,
         setPerformerTalRef, setPerformerDanceDeliveryMode,
         setPerformerModel, setPerformerModelVariant,
@@ -60,6 +88,7 @@ export default function AgentFrame({ data, id }: any) {
     // ─── Local State ──────────────────────────────────
     const chatEndRef = useRef<HTMLDivElement>(null)
     const bodyRef = useRef<HTMLDivElement>(null)
+    const { fitView: rfFitView } = useReactFlow()
 
     // ─── Derived ──────────────────────────────────────
     const isSelected = selectedPerformerId === id
@@ -87,10 +116,6 @@ export default function AgentFrame({ data, id }: any) {
     const danceDrop = useDroppable({ id: `performer-edit-dance-${id}`, data: { performerId: id, type: 'dance' } })
     const modelDrop = useDroppable({ id: `performer-edit-model-${id}`, data: { performerId: id, type: 'model' } })
     const mcpDrop = useDroppable({ id: `performer-edit-mcp-${id}`, data: { performerId: id, type: 'mcp' } })
-
-    // ─── Canvas size ──────────────────────────────────
-    const rfWidth = useStore((s) => s.width)
-    const rfHeight = useStore((s) => s.height)
 
     // ─── Agent/model resolution ───────────────────────
     const selectedAgentId = performer
@@ -175,32 +200,28 @@ export default function AgentFrame({ data, id }: any) {
 
     const openAssetEditor = useCallback(async (
         kind: 'tal' | 'dance',
-        targetRef: any,
-        attachMode: 'tal' | 'dance-new' | 'dance-replace',
+        targetRef: AssetRef | null,
+        _attachMode: 'tal' | 'dance-new' | 'dance-replace',
     ) => {
+        if (!targetRef) return
         try {
-            if (!targetRef) {
-                createMarkdownEditor(kind, {
-                    attachTarget: performer ? { performerId: performer.id, mode: attachMode, targetRef: attachMode === 'dance-replace' ? null : undefined } : undefined,
-                })
-                return
-            }
             if (targetRef.kind === 'draft') {
                 const draft = drafts[targetRef.draftId]
                 if (!draft) throw new Error('Draft not found.')
-                createMarkdownEditor(kind, {
-                    source: { name: draft.name, slug: draft.slug, description: draft.description, tags: draft.tags, content: typeof draft.content === 'string' ? draft.content : '', derivedFrom: draft.derivedFrom || null },
-                    attachTarget: performer ? { performerId: performer.id, mode: attachMode, targetRef } : undefined,
-                })
+                openDraftEditor(targetRef.draftId)
                 return
             }
-            const [, author, name] = String(targetRef.urn || '').split('/')
-            if (!author || !name) throw new Error('Invalid asset reference.')
-            let detail: any
-            try { detail = await api.assets.get(kind, author.replace(/^@/, ''), name) } catch { detail = await api.assets.getRegistry(kind, author.replace(/^@/, ''), name) }
+            const author = assetUrnAuthor(targetRef.urn)
+            const path = assetUrnPath(targetRef.urn)
+            const displayName = assetUrnDisplayName(targetRef.urn)
+            if (!author || !path) throw new Error('Invalid asset reference.')
+            let detail: AssetListItem
+            try { detail = await api.assets.get(kind, author.replace(/^@/, ''), path) } catch { detail = await api.assets.getRegistry(kind, author.replace(/^@/, ''), path) }
+            // For registry assets, we still open a new editor with the fetched content
+            const { createMarkdownEditor } = useStudioStore.getState()
             createMarkdownEditor(kind, {
-                source: { name: detail.name || name, slug: detail.slug || name, description: detail.description || detail.name || name, tags: Array.isArray(detail.tags) ? detail.tags : [], content: typeof detail.content === 'string' ? detail.content : '', derivedFrom: detail.urn || targetRef.urn || null },
-                attachTarget: performer ? { performerId: performer.id, mode: attachMode, targetRef } : undefined,
+                source: { name: detail.name || displayName, slug: detail.slug || displayName, description: detail.description || detail.name || displayName, tags: Array.isArray(detail.tags) ? detail.tags : [], content: typeof detail.content === 'string' ? detail.content : '', derivedFrom: detail.urn || targetRef.urn || null },
+                attachTarget: performer ? { performerId: performer.id, mode: _attachMode, targetRef } : undefined,
             })
         } catch (error) {
             console.error('Failed to open markdown editor', error)
@@ -208,10 +229,10 @@ export default function AgentFrame({ data, id }: any) {
                 title: `${kind === 'tal' ? 'Tal' : 'Dance'} editor failed`,
                 dedupeKey: `performer-editor-open:${id}:${kind}:${targetRef?.kind}:${targetRef?.kind === 'registry' ? targetRef.urn : targetRef?.draftId}`,
                 actionLabel: 'Retry',
-                onAction: () => { void openAssetEditor(kind, targetRef, attachMode) },
+                onAction: () => { void openAssetEditor(kind, targetRef, _attachMode) },
             })
         }
-    }, [createMarkdownEditor, drafts, id, performer])
+    }, [openDraftEditor, drafts, id, performer])
 
     // ─── Render ───────────────────────────────────────
     return (
@@ -224,8 +245,8 @@ export default function AgentFrame({ data, id }: any) {
             ) : null}
             <CanvasWindowFrame
                 className={`nowheel ${isFocused ? 'canvas-frame--focused' : ''}`}
-                width={isFocused ? Math.max(rfWidth - 40, 320) : (data.width || 320)}
-                height={isFocused ? Math.max(rfHeight - 140, 400) : (data.height || 400)}
+                width={data.width || 320}
+                height={data.height || 400}
                 transformActive={!!data.transformActive}
                 onActivateTransform={data.onActivateTransform as (() => void) | undefined}
                 onDeactivateTransform={data.onDeactivateTransform as (() => void) | undefined}
@@ -250,6 +271,7 @@ export default function AgentFrame({ data, id }: any) {
                                 e.stopPropagation()
                                 if (isFocused) {
                                     exitFocusMode()
+                                    scheduleFitView(rfFitView, 'exit')
                                 } else {
                                     const canvasEl = document.querySelector('.canvas-area')
                                     const rect = canvasEl?.getBoundingClientRect()
@@ -257,6 +279,7 @@ export default function AgentFrame({ data, id }: any) {
                                         width: rect?.width ?? 1200,
                                         height: rect?.height ?? 800,
                                     })
+                                    scheduleFitView(rfFitView, 'enter')
                                 }
                             }}
                             title={isFocused ? 'Exit focus mode' : 'Focus mode'}

@@ -1,8 +1,12 @@
 import { nanoid } from 'nanoid'
-import type { ConditionExpr, MailboxEvent } from '../../../shared/act-types.js'
+import type { ActDefinition, ConditionExpr, MailboxEvent } from '../../../shared/act-types.js'
 import { SafetyGuard } from './safety-guard.js'
 import { ThreadManager } from './thread-manager.js'
 import { processWakeCascade } from './wake-cascade.js'
+
+function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : 'Unknown error'
+}
 
 type SendMessageInput = {
     from: string
@@ -37,7 +41,8 @@ class ActRuntimeService {
 
     private getSafetyGuard(threadId: string): SafetyGuard {
         if (!this.safetyGuards.has(threadId)) {
-            this.safetyGuards.set(threadId, new SafetyGuard())
+            const actDef = this.threadManager.getActDefinition(threadId)
+            this.safetyGuards.set(threadId, SafetyGuard.fromActSafety(actDef?.safety))
         }
         return this.safetyGuards.get(threadId)!
     }
@@ -54,7 +59,7 @@ class ActRuntimeService {
             return { ok: false as const, status: 429, error: pairCheck.reason }
         }
 
-        const loopCheck = guard.checkLoopDetection(body.from, body.to, body.tag)
+        const loopCheck = guard.checkLoopDetection(body.from, body.to)
         if (!loopCheck.ok) {
             return { ok: false as const, status: 429, error: loopCheck.reason }
         }
@@ -134,8 +139,8 @@ class ActRuntimeService {
                 : null
 
             return { ok: true as const, entryId: entry.id, version: entry.version, cascade }
-        } catch (error: any) {
-            return { ok: false as const, status: 403, error: error.message }
+        } catch (error: unknown) {
+            return { ok: false as const, status: 403, error: errorMessage(error) }
         }
     }
 
@@ -169,8 +174,8 @@ class ActRuntimeService {
         return { ok: true as const, conditionId: wakeCondition.id }
     }
 
-    createThread(actId: string, actDefinition?: unknown) {
-        const thread = this.threadManager.createThread(actId, actDefinition as any)
+    createThread(actId: string, actDefinition?: ActDefinition) {
+        const thread = this.threadManager.createThread(actId, actDefinition)
         return { ok: true as const, thread }
     }
 

@@ -2,7 +2,8 @@
  * ActFrame — runtime-first Act canvas window with explicit edit mode.
  */
 import { useMemo } from 'react'
-import { useStore } from '@xyflow/react'
+import { useReactFlow, useStore } from '@xyflow/react'
+import type { NodeProps } from '@xyflow/react'
 import { Workflow } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
@@ -13,9 +14,17 @@ import {
 } from '../../lib/act-layout'
 import ActHeaderActions from './ActHeaderActions'
 import ActSurfacePanel from './ActSurfacePanel'
+import { scheduleFitView } from '../../lib/focus-utils'
 import './ActFrame.css'
 
-export default function ActFrame({ data, id }: any) {
+type ActFrameData = {
+    width?: number
+    transformActive?: boolean
+    onActivateTransform?: () => void
+    onDeactivateTransform?: () => void
+}
+
+export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
     const {
         acts,
         selectedActId,
@@ -41,6 +50,8 @@ export default function ActFrame({ data, id }: any) {
     const width = data.width || act?.width || ACT_DEFAULT_WIDTH
     const height = resolveActExpandedHeight(act?.height)
 
+    const { fitView: rfFitView } = useReactFlow()
+
     const handleSelectAct = () => selectAct(id)
     const handleToggleEdit = () => {
         if (isEditing) {
@@ -52,6 +63,7 @@ export default function ActFrame({ data, id }: any) {
     const handleToggleFocus = () => {
         if (isFocused) {
             exitFocusMode()
+            scheduleFitView(rfFitView, 'exit')
             return
         }
 
@@ -59,6 +71,7 @@ export default function ActFrame({ data, id }: any) {
             width: rfWidth || 1200,
             height: rfHeight || 800,
         })
+        scheduleFitView(rfFitView, 'enter')
     }
 
     if (!act) {

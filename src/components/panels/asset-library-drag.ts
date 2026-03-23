@@ -1,23 +1,29 @@
+import type { McpServer } from '../../types'
+import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
+import type { LibraryAsset } from './asset-panel-types'
+
 // Drag payload builders for the Asset Library
 
-export function buildInstalledAssetDragPayload(asset: any) {
-    if (asset.source === 'draft') {
-        return {
-            kind: asset.kind,
-            urn: asset.urn,
-            draftId: asset.draftId,
-            source: asset.source,
-            name: asset.name,
-            author: asset.author,
-        }
-    }
-
+export function buildInstalledAssetDragPayload(asset: LibraryAsset) {
+    // Performer-specific payload (installed or draft)
     if (asset.kind === 'performer') {
+        if (asset.source === 'draft') {
+            return {
+                kind: 'performer',
+                urn: asset.urn,
+                draftId: asset.draftId,
+                source: asset.source,
+                name: asset.name,
+                author: asset.author,
+                draftContent: asset.draftContent ?? undefined,
+            }
+        }
         return {
             kind: 'performer',
             urn: asset.urn,
             name: asset.name,
             author: asset.author,
+            source: asset.source,
             talUrn: asset.talUrn || null,
             danceUrns: Array.isArray(asset.danceUrns) ? asset.danceUrns : [],
             model: asset.model || null,
@@ -29,6 +35,46 @@ export function buildInstalledAssetDragPayload(asset: any) {
         }
     }
 
+    // Act-specific payload (installed or draft)
+    if (asset.kind === 'act') {
+        if (asset.source === 'draft') {
+            return {
+                kind: 'act',
+                urn: asset.urn,
+                draftId: asset.draftId,
+                source: asset.source,
+                name: asset.name,
+                author: asset.author,
+                draftContent: asset.draftContent ?? undefined,
+            }
+        }
+        return {
+            kind: 'act',
+            urn: asset.urn,
+            slug: asset.slug,
+            name: asset.name,
+            author: asset.author,
+            source: asset.source,
+            description: asset.description || '',
+            actRules: Array.isArray(asset.actRules) ? asset.actRules : [],
+            participants: Array.isArray(asset.participants) ? asset.participants : [],
+            relations: Array.isArray(asset.relations) ? asset.relations : [],
+        }
+    }
+
+    // Generic draft payload (tal/dance drafts)
+    if (asset.source === 'draft') {
+        return {
+            kind: asset.kind,
+            urn: asset.urn,
+            draftId: asset.draftId,
+            source: asset.source,
+            name: asset.name,
+            author: asset.author,
+        }
+    }
+
+    // Generic installed payload (tal/dance)
     return {
         kind: asset.kind,
         urn: asset.urn,
@@ -39,7 +85,7 @@ export function buildInstalledAssetDragPayload(asset: any) {
     }
 }
 
-export function buildModelDragPayload(model: any) {
+export function buildModelDragPayload(model: RuntimeModelCatalogEntry) {
     return {
         kind: 'model',
         provider: model.provider,
@@ -50,7 +96,7 @@ export function buildModelDragPayload(model: any) {
     }
 }
 
-export function buildMcpDragPayload(mcp: any) {
+export function buildMcpDragPayload(mcp: McpServer) {
     return {
         kind: 'mcp',
         name: mcp.name,

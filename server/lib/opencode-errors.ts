@@ -38,6 +38,32 @@ type NormalizeErrorContext = {
     defaultStatus?: number
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+    return value && typeof value === 'object' ? value as Record<string, unknown> : undefined
+}
+
+function readPath(value: unknown, ...keys: string[]): unknown {
+    let current: unknown = value
+    for (const key of keys) {
+        const record = asRecord(current)
+        if (!record) {
+            return undefined
+        }
+        current = record[key]
+    }
+    return current
+}
+
+function readString(value: unknown, ...keys: string[]): string | undefined {
+    const candidate = readPath(value, ...keys)
+    return typeof candidate === 'string' ? candidate : undefined
+}
+
+function readNumber(value: unknown, ...keys: string[]): number | undefined {
+    const candidate = readPath(value, ...keys)
+    return typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : undefined
+}
+
 export class StudioValidationError extends Error {
     readonly action: StudioOpencodeErrorAction
     readonly status: number
@@ -54,19 +80,19 @@ export class StudioValidationError extends Error {
     }
 }
 
-function extractStatus(err: any): number | undefined {
+function extractStatus(err: unknown): number | undefined {
     const candidates = [
-        err?.status,
-        err?.statusCode,
-        err?.data?.statusCode,
-        err?.response?.status,
-        err?.cause?.status,
-        err?.cause?.statusCode,
-        err?.cause?.response?.status,
+        readNumber(err, 'status'),
+        readNumber(err, 'statusCode'),
+        readNumber(err, 'data', 'statusCode'),
+        readNumber(err, 'response', 'status'),
+        readNumber(err, 'cause', 'status'),
+        readNumber(err, 'cause', 'statusCode'),
+        readNumber(err, 'cause', 'response', 'status'),
     ]
 
     for (const candidate of candidates) {
-        if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+        if (candidate !== undefined) {
             return candidate
         }
     }
@@ -81,13 +107,13 @@ function extractBodyMessage(body: unknown): string | null {
 
     try {
         const parsed = JSON.parse(body)
-        if (parsed && typeof parsed === 'object') {
-            if (typeof (parsed as any).error === 'string' && (parsed as any).error.trim()) {
-                return (parsed as any).error.trim()
-            }
-            if (typeof (parsed as any).message === 'string' && (parsed as any).message.trim()) {
-                return (parsed as any).message.trim()
-            }
+        const error = readString(parsed, 'error')
+        if (error?.trim()) {
+            return error.trim()
+        }
+        const message = readString(parsed, 'message')
+        if (message?.trim()) {
+            return message.trim()
         }
     } catch {
         return body.trim()
@@ -96,15 +122,15 @@ function extractBodyMessage(body: unknown): string | null {
     return body.trim()
 }
 
-function extractMessage(err: any): string {
+function extractMessage(err: unknown): string {
     const message = [
-        err?.data?.message,
-        err?.message,
-        err?.error?.message,
-        err?.cause?.data?.message,
-        err?.cause?.message,
-        extractBodyMessage(err?.data?.responseBody),
-        extractBodyMessage(err?.responseBody),
+        readString(err, 'data', 'message'),
+        readString(err, 'message'),
+        readString(err, 'error', 'message'),
+        readString(err, 'cause', 'data', 'message'),
+        readString(err, 'cause', 'message'),
+        extractBodyMessage(readPath(err, 'data', 'responseBody')),
+        extractBodyMessage(readPath(err, 'responseBody')),
     ].find((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0)
 
     if (message) {
@@ -121,10 +147,10 @@ function extractMessage(err: any): string {
     }
 }
 
-function extractProviderId(err: any, context: NormalizeErrorContext): string | undefined {
+function extractProviderId(err: unknown, context: NormalizeErrorContext): string | undefined {
     return context.providerId?.trim()
-        || err?.data?.providerID
-        || err?.providerId
+        || readString(err, 'data', 'providerID')
+        || readString(err, 'providerId')
         || context.model?.provider
         || undefined
 }
@@ -178,17 +204,16 @@ export function normalizeOpencodeError(
         }
     }
 
-    const raw = err as any
-    const name = typeof raw?.name === 'string'
-        ? raw.name
-        : typeof raw?.error?.name === 'string'
-            ? raw.error.name
+    const name = typeof readString(err, 'name') === 'string'
+        ? readString(err, 'name')!
+        : typeof readString(err, 'error', 'name') === 'string'
+            ? readString(err, 'error', 'name')!
             : 'UnknownError'
-    const detail = extractMessage(raw)
-    const status = extractStatus(raw)
-    const providerId = extractProviderId(raw, context)
+    const detail = extractMessage(err)
+    const status = extractStatus(err)
+    const providerId = extractProviderId(err, context)
     const modelId = context.model?.modelId
-    const retryable = raw?.data?.isRetryable === true || (!!status && status >= 500)
+    const retryable = readPath(err, 'data', 'isRetryable') === true || (!!status && status >= 500)
 
     if (isProviderAuthError(name, detail, status)) {
         return {
@@ -286,21 +311,21 @@ export function jsonOpencodeError(
     context: NormalizeErrorContext = {},
 ) {
     const payload = normalizeOpencodeError(err, context)
-    return c.json(payload, payload.status as any)
+    return c.json(payload, payload.status as never)
 }
 
 export function unwrapOpencodeResult<T>(result: unknown): T {
-    const value = result as any
-    if (value && typeof value === 'object' && 'error' in value && value.error) {
+    const value = asRecord(result)
+    if (value && 'error' in value && value.error) {
         throw value.error
     }
-    if (value && typeof value === 'object' && 'data' in value) {
+    if (value && 'data' in value) {
         return value.data as T
     }
-    return value as T
+    return result as T
 }
 
-export function unwrapPromptResult<T extends { info?: any }>(result: unknown): T {
+export function unwrapPromptResult<T extends { info?: { error?: unknown } }>(result: unknown): T {
     const data = unwrapOpencodeResult<T>(result)
     if (data?.info?.error) {
         throw data.info.error

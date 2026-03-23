@@ -4,10 +4,22 @@ import {
     installDotAsset,
     publishDotAsset,
     saveDotLocalAsset,
+    uninstallDotAsset,
+    previewUninstallDotAsset,
 } from '../services/dot-service.js'
 import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const dotAssets = new Hono()
+
+function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : 'Unknown error'
+}
+
+function errorStatus(error: unknown) {
+    return typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number'
+        ? error.status
+        : undefined
+}
 
 dotAssets.post('/api/dot/install', async (c) => {
     const body = await c.req.json<{
@@ -19,8 +31,8 @@ dotAssets.post('/api/dot/install', async (c) => {
 
     try {
         return c.json(await installDotAsset(requestWorkingDir(c), body))
-    } catch (err: any) {
-        return jsonError(c, err.message, 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error), 500)
     }
 })
 
@@ -39,8 +51,8 @@ dotAssets.put('/api/dot/assets/local', async (c) => {
 
     try {
         return c.json(await saveDotLocalAsset(cwd, body))
-    } catch (err: any) {
-        return jsonError(c, err.message, 400)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error), 400)
     }
 })
 
@@ -63,8 +75,45 @@ dotAssets.post('/api/dot/assets/publish', async (c) => {
 
     try {
         return c.json(await publishDotAsset(cwd, body))
-    } catch (err: any) {
-        return jsonError(c, err.message, err?.status === 401 ? 401 : 400)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error), errorStatus(error) === 401 ? 401 : 400)
+    }
+})
+
+dotAssets.delete('/api/dot/assets/local', async (c) => {
+    const cwd = requestWorkingDir(c)
+    const body = await c.req.json<{
+        kind: 'tal' | 'dance' | 'performer' | 'act'
+        urn: string
+        cascade?: boolean
+    }>().catch(() => null)
+
+    if (!body?.kind || !body?.urn) {
+        return jsonError(c, 'kind and urn are required.', 400)
+    }
+
+    try {
+        return c.json(await uninstallDotAsset(cwd, body))
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error), 404)
+    }
+})
+
+dotAssets.post('/api/dot/assets/uninstall-preview', async (c) => {
+    const cwd = requestWorkingDir(c)
+    const body = await c.req.json<{
+        kind: 'tal' | 'dance' | 'performer' | 'act'
+        urn: string
+    }>().catch(() => null)
+
+    if (!body?.kind || !body?.urn) {
+        return jsonError(c, 'kind and urn are required.', 400)
+    }
+
+    try {
+        return c.json(await previewUninstallDotAsset(cwd, body))
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error), 404)
     }
 })
 

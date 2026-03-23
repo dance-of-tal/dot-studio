@@ -10,6 +10,10 @@ import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const safeActions = new Hono()
 
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error && error.message ? error.message : fallback
+}
+
 safeActions.post('/api/safe/:ownerKind/:ownerId/apply', async (c) => {
     const ownerKind = parseSafeOwnerKind(c.req.param('ownerKind'))
     if (!ownerKind) {
@@ -22,8 +26,8 @@ safeActions.post('/api/safe/:ownerKind/:ownerId/apply', async (c) => {
             ownerKind,
             c.req.param('ownerId'),
         ))
-    } catch (error: any) {
-        return jsonError(c, error?.message || 'Failed to apply safe mode changes.', 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error, 'Failed to apply safe mode changes.'), 500)
     }
 })
 
@@ -45,8 +49,8 @@ safeActions.post('/api/safe/:ownerKind/:ownerId/discard', async (c) => {
             c.req.param('ownerId'),
             body.filePath.trim(),
         ))
-    } catch (error: any) {
-        return jsonError(c, error?.message || 'Failed to discard the file.', 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error, 'Failed to discard the file.'), 500)
     }
 })
 
@@ -62,8 +66,8 @@ safeActions.post('/api/safe/:ownerKind/:ownerId/discard-all', async (c) => {
             ownerKind,
             c.req.param('ownerId'),
         ))
-    } catch (error: any) {
-        return jsonError(c, error?.message || 'Failed to discard pending changes.', 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error, 'Failed to discard pending changes.'), 500)
     }
 })
 
@@ -79,8 +83,8 @@ safeActions.post('/api/safe/:ownerKind/:ownerId/undo-last-apply', async (c) => {
             ownerKind,
             c.req.param('ownerId'),
         ))
-    } catch (error: any) {
-        return jsonError(c, error?.message || 'Failed to undo the last apply.', 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error, 'Failed to undo the last apply.'), 500)
     }
 })
 

@@ -1,6 +1,7 @@
 import type { Edge, Node } from '@xyflow/react'
+import type { WorkspaceSlice } from '../../store/types'
 
-type EditingTargetLike = { type: string; id: string } | null | undefined
+type EditingTargetLike = WorkspaceSlice['editingTarget'] | undefined
 
 export type CanvasDragStopResult =
     | { kind: 'markdownEditor'; id: string; x: number; y: number }

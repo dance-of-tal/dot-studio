@@ -17,7 +17,7 @@ import { useCanvasPresentation } from './useCanvasPresentation';
 
 const ActInspectorPanel = lazy(() => import('../../features/act/ActInspectorPanel'));
 
-const StageToolbar = lazy(() => import('../toolbar/StageToolbar'));
+const WorkspaceToolbar = lazy(() => import('../toolbar/WorkspaceToolbar'));
 const AgentFrame = lazy(() =>
     import('../../features/performer').then((module) => ({ default: module.AgentFrame })),
 );
@@ -26,7 +26,7 @@ const CanvasTerminalFrame = lazy(() => import('../../features/workspace/CanvasTe
 const CanvasTrackingFrame = lazy(() => import('../../features/workspace/CanvasTrackingFrame'));
 const ActFrame = lazy(() => import('../../features/act/ActFrame'));
 
-const withCanvasNodeSuspense = (Component: ComponentType<any>) => (props: any) => (
+const withCanvasNodeSuspense = <TProps extends object>(Component: ComponentType<TProps>) => (props: TProps) => (
     <Suspense fallback={null}>
         <Component {...props} />
     </Suspense>
@@ -201,7 +201,7 @@ export default function CanvasArea() {
             <div className="canvas-top-right-bar">
                 <CanvasControls />
                 <Suspense fallback={null}>
-                    <StageToolbar />
+                    <WorkspaceToolbar />
                 </Suspense>
             </div>
 

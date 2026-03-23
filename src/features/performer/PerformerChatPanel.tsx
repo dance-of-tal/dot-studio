@@ -9,7 +9,7 @@
 import { useState, useMemo, useEffect, type RefObject } from 'react'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
-import type { ChatMessage, AssetCard, DraftAsset, PerformerNode } from '../../types'
+import type { ChatMessage, AssetCard, DraftAsset, PerformerNode, SafeOwnerSummary } from '../../types'
 import RevertConfirmModal from '../../components/chat/RevertConfirmModal'
 import PerformerChatComposer from './PerformerChatComposer'
 import PerformerThreadView from './PerformerThreadView'
@@ -38,7 +38,7 @@ type PerformerChatPanelProps = {
     onSetAgentId: (id: string, agentId: string | null) => void
     onSetModelVariant: (id: string, variant: string | null) => void
     onSetExecutionMode: () => void
-    safeSummary: any
+    safeSummary: SafeOwnerSummary | null
 }
 
 export default function PerformerChatPanel({
@@ -81,7 +81,7 @@ export default function PerformerChatPanel({
     useEffect(() => {
         let active = true
         api.vcs.get()
-            .then((result: any) => {
+            .then((result: unknown) => {
                 if (!active) return
                 setHasGit(!!result)
             })
@@ -140,7 +140,6 @@ export default function PerformerChatPanel({
                         setMentionedPerformers={composerState.setMentionedPerformers}
                         turnDanceSelections={composerState.turnDanceSelections}
                         setTurnDanceSelections={composerState.setTurnDanceSelections}
-                        composerInputRef={composerState.composerInputRef}
                         inputRef={composerState.inputRef}
                         handleDrop={composerState.handleDrop}
                         handleInputChange={composerState.handleInputChange}

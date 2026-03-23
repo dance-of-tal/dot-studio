@@ -1,6 +1,11 @@
 // DOT Studio — Core Types
 
 import type { RuntimeModelVariant } from '../../shared/model-variants'
+import type { AssistantAction } from '../../shared/assistant-actions'
+import type {
+    ActParticipantV1 as InstalledActParticipant,
+    ActRelationV1 as InstalledActRelation,
+} from '../../shared/dot-types'
 import type {
     ExecutionMode,
     SafeOwnerKind,
@@ -20,6 +25,7 @@ export type AssetKind = 'tal' | 'dance' | 'act' | 'performer' | 'model' | 'mcp'
 export interface AssetCard {
     kind: AssetKind
     urn: string          // "tal/@acme/senior-engineer"
+    slug?: string
     name: string         // "senior-engineer"
     author: string       // "@acme"
     description?: string
@@ -27,18 +33,24 @@ export interface AssetCard {
     tags?: string[]
     content?: string
     draftId?: string
+    draftContent?: unknown
     talUrn?: string | null
     danceUrns?: string[]
     actUrn?: string | null
-    model?: ModelConfig | string | null
+    model?: ModelConfig | null
     modelVariant?: string | null
-    mcpConfig?: Record<string, any> | null
+    mcpConfig?: Record<string, unknown> | null
     declaredMcpServerNames?: string[]
     projectMcpMatches?: string[]
     projectMcpMissing?: string[]
     participantCount?: number
-    participants?: Array<Record<string, unknown>>
-    relations?: Array<Record<string, unknown>>
+    relationCount?: number
+    participants?: InstalledActParticipant[]
+    relations?: InstalledActRelation[]
+    schema?: string
+    stars?: number
+    tier?: string
+    updatedAt?: string
     connected?: boolean
     context?: number
     output?: number
@@ -55,7 +67,7 @@ export interface AssetCard {
     }
     variants?: RuntimeModelVariant[]
     tools?: Array<{ name: string; description?: string }>
-    resources?: Array<any>
+    resources?: Array<unknown>
 }
 
 export interface ModelConfig {
@@ -128,11 +140,34 @@ export interface ModelCapabilities {
     }
 }
 
+export interface LspServerInfo {
+    name?: string
+    id?: string
+    status?: string
+}
+
+export interface LspDiagnosticPosition {
+    line?: number
+    character?: number
+}
+
+export interface LspDiagnosticRange {
+    start?: LspDiagnosticPosition
+    end?: LspDiagnosticPosition
+}
+
+export interface LspDiagnostic {
+    severity?: number
+    message: string
+    source?: string
+    range?: LspDiagnosticRange
+}
+
 export interface McpServer {
     name: string           // "github", "postgres", etc.
     status: 'connected' | 'disconnected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration' | 'unknown'
     tools: Array<{ name: string; description?: string }>
-    resources: Array<any>
+    resources: Array<unknown>
     enabled?: boolean
     defined?: boolean
     configType?: 'local' | 'remote' | 'toggle'
@@ -159,7 +194,7 @@ export interface PerformerNode {
     danceRefs: AssetRef[]
     mcpServerNames: string[]
     mcpBindingMap?: Record<string, string>
-    declaredMcpConfig?: Record<string, any> | null
+    declaredMcpConfig?: Record<string, unknown> | null
     activeSessionId?: string
     danceDeliveryMode: DanceDeliveryMode
     executionMode?: ExecutionMode
@@ -202,14 +237,13 @@ export type {
 import type { ActRelation, ParticipantSubscriptions } from '../../shared/act-types'
 
 /** Canvas-specific participant binding (extends ActParticipantBinding with UI position) */
-export interface StageActParticipantBinding {
+export interface WorkspaceActParticipantBinding {
     performerRef: AssetRef
-    activeDanceIds?: string[]
     subscriptions?: ParticipantSubscriptions
     position: { x: number; y: number }
 }
 
-export interface StageAct {
+export interface WorkspaceAct {
     id: string
     name: string
     description?: string
@@ -219,7 +253,7 @@ export interface StageAct {
     width: number
     height: number
     /** Participant bindings (key = internal participant key) */
-    participants: Record<string, StageActParticipantBinding>
+    participants: Record<string, WorkspaceActParticipantBinding>
     /** Communication contract relations between participants */
     relations: ActRelation[]
     hidden?: boolean
@@ -252,18 +286,22 @@ export interface CanvasTrackingWindow {
     height: number
 }
 
-export interface Stage {
+export interface SavedWorkspaceSnapshot {
     schemaVersion: 5
     workingDir: string
     performers: PerformerNode[]
-    acts?: StageAct[]
-    drafts: Record<string, DraftAsset>
+    acts?: WorkspaceAct[]
     markdownEditors: MarkdownEditorNode[]
     canvasTerminals?: CanvasTerminalNode[]
     trackingWindow?: CanvasTrackingWindow | null
+    hiddenFromList?: boolean
 }
 
-export interface SavedStageSummary {
+export interface Workspace extends SavedWorkspaceSnapshot {
+    drafts: Record<string, DraftAsset>
+}
+
+export interface SavedWorkspaceSummary {
     id: string
     workingDir: string
     updatedAt: number
@@ -338,6 +376,7 @@ export interface ChatMessage {
         modelId?: string
         provider?: string
         variant?: string
+        assistantActions?: AssistantAction[]
     }
 }
 

@@ -73,7 +73,6 @@ export async function sendStudioChatMessage(
                     rawPerformerId,
                     actDef,
                     request.actThreadId,
-                    executionDir,
                 )
                 // Write tool files to execution dir
                 await writeActToolFiles(executionDir, projection)
@@ -85,30 +84,24 @@ export async function sendStudioChatMessage(
         }
     }
 
-    // ── Studio Assistant — agent projected at stage-save / activate time.
-    //    Fallback: re-ensure here in case files were deleted or never created.
     const isAssistant = rawPerformerId === 'studio-assistant'
-    let ensured: Awaited<ReturnType<typeof ensurePerformerProjection>>
+    let ensured: Awaited<ReturnType<typeof ensurePerformerProjection>> | null = null
+    let assistantContextPrefix = ''
+    let assistantAgentName: string | null = null
+    let capabilitySnapshot: Awaited<ReturnType<typeof ensurePerformerProjection>>['capabilitySnapshot'] = null
+    let toolResolution: Awaited<ReturnType<typeof ensurePerformerProjection>>['toolResolution'] = {
+        selectedMcpServers: [],
+        requestedTools: [],
+        availableTools: [],
+        resolvedTools: [],
+        unavailableTools: [],
+        unavailableDetails: [],
+    }
 
     if (isAssistant) {
-        const { ensureAssistantAgent } = await import('./studio-assistant/assistant-service.js')
-        const agentName = await ensureAssistantAgent(executionDir)
-
-        // Build a minimal "ensured" result compatible with the rest of the function
-        ensured = {
-            compiled: {
-                agentNames: { build: agentName, plan: agentName },
-                agentPaths: { build: '', plan: '' },
-                agentContents: { build: '', plan: '' },
-                allFiles: [],
-            } as any,
-            toolResolution: {
-                selectedMcpServers: [],
-                resolvedTools: [],
-                unavailableTools: [],
-            } as any,
-            capabilitySnapshot: null as any,
-        }
+        const { buildAssistantActionPrompt, ensureAssistantAgent } = await import('./studio-assistant/assistant-service.js')
+        assistantAgentName = await ensureAssistantAgent(executionDir)
+        assistantContextPrefix = buildAssistantActionPrompt(request.assistantContext || null)
     } else {
         ensured = await ensurePerformerProjection({
             performerId: rawPerformerId,
@@ -124,19 +117,25 @@ export async function sendStudioChatMessage(
             // Pass Act runtime tools as extraTools so they're included in projection
             ...(actExtraTools.length > 0 ? { extraTools: actExtraTools } : {}),
         })
+        capabilitySnapshot = ensured.capabilitySnapshot
+        toolResolution = ensured.toolResolution
     }
 
-    const unavailableSummary = describeUnavailableRuntimeTools(ensured.toolResolution)
-    if (ensured.toolResolution.selectedMcpServers.length > 0 && ensured.toolResolution.resolvedTools.length === 0 && unavailableSummary) {
+    const unavailableSummary = describeUnavailableRuntimeTools(toolResolution)
+    if (toolResolution.selectedMcpServers.length > 0 && toolResolution.resolvedTools.length === 0 && unavailableSummary) {
         throw new StudioValidationError(
             `Selected MCP servers are unavailable: ${unavailableSummary}.`,
             'fix_input',
         )
     }
 
-    const parts: any[] = [{ type: 'text', text: actContextPrefix ? `${actContextPrefix}\n\n---\n\n${request.message}` : request.message }]
+    const promptSections = [assistantContextPrefix, actContextPrefix, request.message].filter(Boolean)
+    const parts: Array<
+        | { type: 'text'; text: string }
+        | { type: 'file'; mime: string; url: string; filename?: string }
+    > = [{ type: 'text', text: promptSections.join('\n\n---\n\n') }]
     if (request.attachments && request.attachments.length > 0) {
-        if (ensured.capabilitySnapshot && !ensured.capabilitySnapshot.attachment) {
+        if (capabilitySnapshot && !capabilitySnapshot.attachment) {
             throw new StudioValidationError(
                 'Selected model does not support attachments. Remove the files or choose a model that supports them.',
                 'choose_model',
@@ -156,7 +155,9 @@ export async function sendStudioChatMessage(
     unwrapOpencodeResult(await oc.session.promptAsync({
         sessionID: sessionId,
         directory: executionDir,
-        agent: ensured.compiled.agentNames[performer.planMode ? 'plan' : 'build'],
+        agent: isAssistant
+            ? (assistantAgentName || undefined)
+            : (ensured?.compiled.agentNames[performer.planMode ? 'plan' : 'build']),
         // Pass model directly so OpenCode uses the user's selected model,
         // not the (potentially stale) model cached from the agent file.
         model: performer.model ? {

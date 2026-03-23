@@ -10,6 +10,10 @@ import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const dotCore = new Hono()
 
+function errorMessage(error: unknown, fallback = 'Unknown error') {
+    return error instanceof Error && error.message ? error.message : fallback
+}
+
 dotCore.get('/api/dot/status', async (c) => {
     return c.json(await getDotStatusSnapshot(requestWorkingDir(c)))
 })
@@ -18,16 +22,16 @@ dotCore.post('/api/dot/init', async (c) => {
     const { scope } = await c.req.json<{ scope?: string }>().catch(() => ({ scope: undefined }))
     try {
         return c.json(await initDotRegistry(requestWorkingDir(c), scope))
-    } catch (err: any) {
-        return jsonError(c, err.message, 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error), 500)
     }
 })
 
 dotCore.get('/api/dot/auth-user', async () => {
     try {
         return Response.json(await getDotAuthUser())
-    } catch (err: any) {
-        return Response.json({ authenticated: false, username: null, error: err.message }, { status: 500 })
+    } catch (error: unknown) {
+        return Response.json({ authenticated: false, username: null, error: errorMessage(error) }, { status: 500 })
     }
 })
 
@@ -39,16 +43,16 @@ dotCore.post('/api/dot/login', async (c) => {
 
     try {
         return c.json(await loginToDot())
-    } catch (err: any) {
-        return jsonError(c, err.message || 'Failed to start dot login.', 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error, 'Failed to start dot login.'), 500)
     }
 })
 
 dotCore.post('/api/dot/logout', async (c) => {
     try {
         return c.json(await logoutFromDot())
-    } catch (err: any) {
-        return jsonError(c, err.message || 'Failed to sign out.', 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error, 'Failed to sign out.'), 500)
     }
 })
 

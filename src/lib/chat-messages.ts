@@ -1,4 +1,5 @@
 import type { ChatMessage, ChatMessagePart } from '../types'
+import { extractAssistantActionEnvelope } from '../features/assistant/assistant-protocol'
 
 type SessionPartLike = {
     id?: string
@@ -21,7 +22,7 @@ type SessionPartLike = {
     overflow?: boolean
 }
 
-type SessionMessageLike = {
+export type SessionMessageLike = {
     id?: string
     role?: string
     info?: {
@@ -73,13 +74,16 @@ function mapPartToChatMessagePart(part: SessionPartLike): ChatMessagePart | null
 
     if (part.type === 'tool') {
         const s = part.state || {}
+        const status = s.status === 'pending' || s.status === 'running' || s.status === 'completed' || s.status === 'error'
+            ? s.status
+            : 'pending'
         return {
             id: part.id,
             type: 'tool',
             tool: {
                 name: part.tool || 'unknown',
                 callId: part.callID || part.id,
-                status: (s.status as any) || 'pending',
+                status,
                 title: s.title,
                 input: s.input,
                 output: s.output,
@@ -119,18 +123,38 @@ function mapPartToChatMessagePart(part: SessionPartLike): ChatMessagePart | null
     return null
 }
 
+// Context sections are joined by this separator in chat-service.ts:
+// const promptSections = [assistantContextPrefix, actContextPrefix, request.message].filter(Boolean)
+// They are joined as: promptSections.join('\n\n---\n\n')
+// When syncing from server, user messages contain the full composed prompt.
+// Strip the injected context sections to show only the user's original input.
+const PROMPT_SECTION_SEPARATOR = '\n\n---\n\n'
+
+function stripInjectedContextFromUserMessage(text: string): string {
+    const lastSeparatorIndex = text.lastIndexOf(PROMPT_SECTION_SEPARATOR)
+    if (lastSeparatorIndex === -1) return text
+    return text.slice(lastSeparatorIndex + PROMPT_SECTION_SEPARATOR.length)
+}
+
 export function mapSessionMessageToChatMessage(message: SessionMessageLike): ChatMessage {
     // Build text content from text parts
+    const rawRole = message.info?.role || message.role || 'assistant'
     const rawTextContent = message.parts
         ?.filter((part) => part.type === 'text')
         .map((part) => part.text || '')
         .join('\n') || message.text || ''
+    // Strip auto-injected context (Workspace Snapshot, Act context) from user messages.
+    // The server joins context sections with '\n\n---\n\n', user text is always last.
+    const strippedText = rawRole === 'user'
+        ? stripInjectedContextFromUserMessage(rawTextContent)
+        : rawTextContent
     const errorContent = extractAssistantErrorMessage(message)
-    const textContent = rawTextContent.trim() || errorContent || ''
+    const parsedAssistantEnvelope = extractAssistantActionEnvelope(strippedText.trim() || errorContent || '')
+    const textContent = parsedAssistantEnvelope.content
     const role = (
-        errorContent && (message.info?.role || message.role) === 'assistant'
+        errorContent && rawRole === 'assistant'
             ? 'system'
-            : (message.info?.role || message.role || 'assistant')
+            : rawRole
     ) as ChatMessage['role']
 
     // Build structured parts (reasoning, tool, step)
@@ -150,6 +174,13 @@ export function mapSessionMessageToChatMessage(message: SessionMessageLike): Cha
         content: textContent,
         timestamp: message.info?.time?.created || Date.parse(message.created_at || new Date().toISOString()),
         ...(structuredParts.length > 0 ? { parts: structuredParts } : {}),
+        ...(parsedAssistantEnvelope.envelope?.actions.length
+            ? {
+                metadata: {
+                    assistantActions: parsedAssistantEnvelope.envelope.actions,
+                },
+            }
+            : {}),
     }
 }
 

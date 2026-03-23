@@ -3,6 +3,14 @@ import { createHash } from 'crypto'
 import { getOpencode } from './opencode.js'
 import { unwrapOpencodeResult } from './opencode-errors.js'
 import { resolvePackageBin } from './package-bin.js'
+import type { ProjectMcpLiveStatusMap } from './project-config.js'
+
+type McpAddConfig = {
+    type: 'local'
+    command: string[]
+    enabled?: boolean
+    environment?: Record<string, string>
+}
 
 export const CAPABILITY_LOADER_TOOL_NAME = 'load_capability_context'
 
@@ -36,25 +44,26 @@ export async function ensureDotLoaderServer(cwd: string): Promise<{
     const serverName = dotLoaderServerName(cwd)
     const oc = await getOpencode()
     const params = { directory: path.resolve(cwd) }
-    const statusData = unwrapOpencodeResult<Record<string, any>>(await oc.mcp.status(params)) || {}
+    const statusData = unwrapOpencodeResult<ProjectMcpLiveStatusMap>(await oc.mcp.status(params)) || {}
     const existing = statusData[serverName]
 
     if (!existing) {
+        const config = {
+            type: 'local',
+            command: [resolveDotCommand()],
+            enabled: true,
+            environment: {
+                DANCE_OF_TAL_PROJECT_DIR: path.resolve(cwd),
+            },
+        } as unknown as McpAddConfig
         unwrapOpencodeResult(await oc.mcp.add({
             ...params,
             name: serverName,
-            config: {
-                type: 'local',
-                command: [resolveDotCommand()],
-                enabled: true,
-                environment: {
-                    DANCE_OF_TAL_PROJECT_DIR: path.resolve(cwd),
-                },
-            } as any,
+            config,
         }))
     }
 
-    const refreshedStatusData = unwrapOpencodeResult<Record<string, any>>(await oc.mcp.status(params)) || {}
+    const refreshedStatusData = unwrapOpencodeResult<ProjectMcpLiveStatusMap>(await oc.mcp.status(params)) || {}
     const status = refreshedStatusData[serverName]
 
     if (!status || status.status !== 'connected') {

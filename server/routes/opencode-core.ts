@@ -21,11 +21,15 @@ import { requestWorkingDir } from './route-errors.js'
 
 const opencodeCore = new Hono()
 
+function toError(error: unknown) {
+    return error instanceof Error ? error : new Error('OpenCode is unavailable')
+}
+
 opencodeCore.get('/api/opencode/health', async (c) => {
     try {
         return c.json(await getOpenCodeHealth(requestWorkingDir(c)))
-    } catch (err: any) {
-        return c.json(getOpenCodeUnavailableHealth(err), 503)
+    } catch (error: unknown) {
+        return c.json(getOpenCodeUnavailableHealth(toError(error)), 503)
     }
 })
 

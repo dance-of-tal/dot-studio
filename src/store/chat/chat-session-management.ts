@@ -1,7 +1,7 @@
 import { api } from '../../api'
 import { showToast } from '../../lib/toast'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
-import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers'
+import { hasModelConfig } from '../../lib/performers'
 import {
     appendPerformerSystemMessage,
     getPerformerById,
@@ -10,6 +10,7 @@ import {
     type ChatGet,
     type ChatSet,
 } from './chat-internals'
+import { resolveChatRuntimeTarget } from './chat-runtime-target'
 
 export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
     const createFreshSession = async (
@@ -22,8 +23,9 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         },
     ) => {
         const performer = getPerformerById(get, performerId)
-        const name = options?.performerName || performer?.name || 'Untitled Performer'
-        const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
+        const target = resolveChatRuntimeTarget(get, performerId)
+        const name = options?.performerName || target?.name || performer?.name || 'Untitled Performer'
+        const runtimeConfig = target?.runtimeConfig || {
             talRef: null,
             danceRefs: [],
             model: null,
@@ -41,7 +43,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             }
         }
 
-        const executionMode = options?.executionMode || (performer?.executionMode === 'safe' ? 'safe' : 'direct')
+        const executionMode = options?.executionMode || target?.executionMode || 'direct'
         const result = await api.chat.createSession(
             performerId,
             name,
@@ -50,7 +52,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             options?.actId,
         )
         const sessionId = result.sessionId
-        const nextState: Record<string, any> = {
+        const nextState: Partial<ReturnType<ChatGet>> = {
             sessionMap: { ...get().sessionMap, [performerId]: sessionId },
         }
         if (options?.resetMessages) {
@@ -65,7 +67,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         }
         set(() => nextState)
 
-        if (performer?.executionMode === 'safe') {
+        if (target?.executionMode === 'safe') {
             get().forceReconnectRealtimeEvents()
         }
 
@@ -131,8 +133,8 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         }),
 
         startNewSession: async (performerId: string) => {
-            const performer = getPerformerById(get, performerId)
-            if (!performer || !hasModelConfig(performer.model)) {
+            const target = resolveChatRuntimeTarget(get, performerId)
+            if (!target || !hasModelConfig(target.runtimeConfig.model)) {
                 get().clearSession(performerId)
                 return
             }
@@ -165,7 +167,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             if (!sessionId) return
             const lastUser = [...(get().chats[performerId] || [])]
                 .reverse()
-                .find((message) => message.role === 'user') as any
+                .find((message) => message.role === 'user')
             if (!lastUser) {
                 appendPerformerSystemMessage(set, get, performerId, 'No prior turn is available to undo.')
                 return
@@ -173,7 +175,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
 
             set({ loadingPerformerId: performerId })
             try {
-                await api.chat.revert(sessionId, lastUser.info?.id || lastUser.id)
+                await api.chat.revert(sessionId, lastUser.id)
                 await syncPerformerMessages(set, get, performerId, sessionId)
                 appendPerformerSystemMessage(set, get, performerId, 'Undid the last turn.')
             } catch (error) {

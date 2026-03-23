@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, Wrench, Terminal, FileEdit, ListTodo, CheckCircle2, Circle, XCircle } from 'lucide-react'
+import type { Todo } from '@opencode-ai/sdk/v2'
 import type { ChatMessageToolInfo } from '../../types'
 import { useUISettings } from '../../store/settingsSlice'
 import { useStudioStore } from '../../store'
@@ -46,6 +47,26 @@ const EDIT_NAMES = new Set([
 
 const TODO_NAMES = new Set(['todos', 'todowrite', 'todo', 'todoread'])
 
+type TodoListItem = {
+    content: string
+    status: string
+}
+
+function toTodoListItem(value: unknown): TodoListItem {
+    if (value && typeof value === 'object') {
+        const record = value as Record<string, unknown>
+        return {
+            content: typeof record.content === 'string'
+                ? record.content
+                : typeof record.title === 'string'
+                    ? record.title
+                    : String(value),
+            status: typeof record.status === 'string' ? record.status : 'pending',
+        }
+    }
+    return { content: String(value), status: 'pending' }
+}
+
 function extractShellCommand(input: Record<string, unknown> | undefined): string {
     if (!input) return ''
     // OpenCode bash tool uses input.command; some providers use args array
@@ -57,16 +78,16 @@ function extractShellCommand(input: Record<string, unknown> | undefined): string
 
 function TodoInlineList({ input, output }: { input?: Record<string, unknown>; output?: string }) {
     // Try to extract todos from the tool output or input
-    let items: Array<{ content: string; status: string }> = []
+    let items: TodoListItem[] = []
 
     // Parse from output (JSON array of todos)
     if (output) {
         try {
             const parsed = JSON.parse(output)
             if (Array.isArray(parsed)) {
-                items = parsed.map((t: any) => ({ content: t.content || t.title || String(t), status: t.status || 'pending' }))
+                items = parsed.map(toTodoListItem)
             }
-        } catch (e) {
+        } catch {
             // Try line-based parse
             items = output.split('\n').filter(Boolean).map(line => ({ content: line, status: 'pending' }))
         }
@@ -76,8 +97,8 @@ function TodoInlineList({ input, output }: { input?: Record<string, unknown>; ou
     const sessionTodos = useStudioStore.getState().todos
     // Find the most recent session's todos if inline items are empty
     if (items.length === 0) {
-        const allTodos = Object.values(sessionTodos).flat()
-        if (allTodos.length > 0) items = allTodos.map((t: any) => ({ content: t.content, status: t.status }))
+        const allTodos: Todo[] = Object.values(sessionTodos).flat()
+        if (allTodos.length > 0) items = allTodos.map((todo) => ({ content: todo.content, status: todo.status }))
     }
 
     if (items.length === 0 && input) {
@@ -109,7 +130,7 @@ export function ToolCallRow({ tool }: { tool: ChatMessageToolInfo }) {
     const isShell = SHELL_NAMES.has(tool.name)
     const isEdit = EDIT_NAMES.has(tool.name)
     const isTodo = TODO_NAMES.has(tool.name)
-    
+
     // Determine title block
     let displayTitle = tool.title || tool.name
     let displayDesc = ''
@@ -120,7 +141,9 @@ export function ToolCallRow({ tool }: { tool: ChatMessageToolInfo }) {
         displayDesc = String(tool.input?.path || tool.input?.TargetFile || tool.input?.file || '')
         displayTitle = 'Edit File'
     } else if (isTodo) {
-        displayTitle = tool.title || `${tool.input?.todos ? (tool.input.todos as any[]).length : ''} todos`
+        const todoItems = tool.input?.todos
+        const todoCount = Array.isArray(todoItems) ? todoItems.length : 0
+        displayTitle = tool.title || `${todoCount} todos`
     }
 
     const initialState = isShell ? shellToolPartsExpanded : isEdit ? editToolPartsExpanded : false

@@ -7,6 +7,10 @@ import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const safeSummary = new Hono()
 
+function errorMessage(error: unknown) {
+    return error instanceof Error && error.message ? error.message : 'Failed to load safe mode summary.'
+}
+
 safeSummary.get('/api/safe/:ownerKind/:ownerId', async (c) => {
     const ownerKind = parseSafeOwnerKind(c.req.param('ownerKind'))
     if (!ownerKind) {
@@ -19,8 +23,8 @@ safeSummary.get('/api/safe/:ownerKind/:ownerId', async (c) => {
             ownerKind,
             c.req.param('ownerId'),
         ))
-    } catch (error: any) {
-        return jsonError(c, error?.message || 'Failed to load safe mode summary.', 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error), 500)
     }
 })
 

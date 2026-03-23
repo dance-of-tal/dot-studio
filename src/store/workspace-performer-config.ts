@@ -7,7 +7,7 @@
  */
 
 import type { StudioState } from './types'
-import type { AssetRef } from '../types'
+import type { AssetRef, DanceDeliveryMode } from '../types'
 import {
     assetRefKey,
     isSameAssetRef,
@@ -29,14 +29,14 @@ export function setPerformerTal(set: SetFn, performerId: string, tal: { urn?: st
                 talRef: tal?.urn ? { kind: 'registry' as const, urn: tal.urn } : null,
             })
         }),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
 export function setPerformerTalRef(set: SetFn, performerId: string, talRef: AssetRef | null) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { talRef })),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -51,29 +51,29 @@ export function addPerformerDance(set: SetFn, performerId: string, dance: { urn:
                 })
                 : a
         ),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
 export function addPerformerDanceRef(set: SetFn, performerId: string, danceRef: AssetRef) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => (
-            !performer.danceRefs.some((ref: any) => isSameAssetRef(ref, danceRef))
+            !performer.danceRefs.some((ref) => isSameAssetRef(ref, danceRef))
                 ? applyPerformerPatch(performer, {
                     danceRefs: [...performer.danceRefs, danceRef],
                 })
                 : performer
         )),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
 export function replacePerformerDanceRef(set: SetFn, performerId: string, currentRef: AssetRef, nextRef: AssetRef) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, {
-            danceRefs: performer.danceRefs.map((ref: any) => (isSameAssetRef(ref, currentRef) ? nextRef : ref)),
+            danceRefs: performer.danceRefs.map((ref) => (isSameAssetRef(ref, currentRef) ? nextRef : ref)),
         })),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -87,7 +87,7 @@ export function removePerformerDance(set: SetFn, performerId: string, danceUrn: 
                 })()
                 : a
         ),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -107,14 +107,14 @@ export function setPerformerModel(set: SetFn, performerId: string, model: { prov
                 modelPlaceholder: null,
             })
         }),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
 export function setPerformerModelVariant(set: SetFn, performerId: string, modelVariant: string | null) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { modelVariant: modelVariant || null })),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -129,14 +129,14 @@ export function setPerformerAgentId(set: SetFn, performerId: string, agentId: st
                 planMode: agentId === 'plan',
             })
         }),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
-export function setPerformerDanceDeliveryMode(set: SetFn, performerId: string, danceDeliveryMode: string) {
+export function setPerformerDanceDeliveryMode(set: SetFn, performerId: string, danceDeliveryMode: DanceDeliveryMode) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { danceDeliveryMode })),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -151,7 +151,7 @@ export function addPerformerMcp(set: SetFn, performerId: string, mcp: { name: st
                 })()
                 : a
         ),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -168,7 +168,7 @@ export function removePerformerMcp(set: SetFn, performerId: string, mcpName: str
                 })()
                 : a
         ),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -188,7 +188,7 @@ export function setPerformerMcpBinding(set: SetFn, performerId: string, placehol
             }
             return applyPerformerPatch(performer, { mcpBindingMap })
         }),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -210,7 +210,7 @@ export function updatePerformerAuthoringMeta(set: SetFn, performerId: string, pa
                 }
                 : a
         )),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -219,6 +219,6 @@ export function togglePerformerVisibility(set: SetFn, id: string) {
         performers: s.performers.map(a =>
             a.id === id ? { ...a, hidden: !a.hidden } : a
         ),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }

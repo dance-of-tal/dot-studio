@@ -16,6 +16,12 @@ import type {
     ModelPickerState,
 } from './settings-utils'
 
+type ProjectConfigResponseLike = {
+    config: {
+        disabled_providers?: string[]
+    }
+}
+
 // ── Pure helpers ────────────────────────────────────────
 
 function sortConnectedModels(models: ConnectedModel[], providerId: string) {
@@ -257,8 +263,12 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
             // For custom-source providers (e.g. OpenCode Zen), also add to disabled_providers
             // to suppress them from the connected list — mirrors OpenCode web's disableProvider flow.
             if (isCustomSource) {
-                const projectRes = await api.config.getProject().catch(() => ({ config: {} as any }))
-                const current: string[] = projectRes.config?.disabled_providers ?? []
+                const projectRes = await api.config.getProject().catch(
+                    (): ProjectConfigResponseLike => ({ config: {} }),
+                )
+                const current = Array.isArray(projectRes.config?.disabled_providers)
+                    ? projectRes.config.disabled_providers
+                    : []
                 if (!current.includes(providerId)) {
                     await api.config.update({
                         disabled_providers: [...current, providerId],

@@ -4,7 +4,7 @@
  * PRD §16: Event budget, loop detection, timeout, idle detection, permission checks.
  */
 
-import type { ActRelation, ActThread, BoardEntry, MailboxEvent } from '../../../shared/act-types.js'
+import type { ActRelation, ActSafetyConfig, ActThread, BoardEntry, MailboxEvent } from '../../../shared/act-types.js'
 import type { Mailbox } from './mailbox.js'
 import type { SessionQueue } from './session-queue.js'
 
@@ -49,10 +49,24 @@ export class SafetyGuard {
     }
 
     /**
+     * Create a SafetyGuard from an ActSafetyConfig (from ActDefinition.safety).
+     * Maps field names from the shared type to the internal SafetyConfig.
+     */
+    static fromActSafety(actSafety?: ActSafetyConfig): SafetyGuard {
+        if (!actSafety) return new SafetyGuard()
+        return new SafetyGuard({
+            maxEventsPerAct: actSafety.maxEvents,
+            maxMessagesPerPair: actSafety.maxMessagesPerPair,
+            loopDetectionThreshold: actSafety.loopDetectionThreshold,
+            threadTimeoutMs: actSafety.threadTimeoutMs,
+        })
+    }
+
+    /**
      * Check total event budget for the Act thread.
      */
     checkEventBudget(event: MailboxEvent): { ok: boolean; reason?: string } {
-        const threadKey = (event.payload as any)?.threadId || 'default'
+        const threadKey = typeof event.payload.threadId === 'string' ? event.payload.threadId : 'default'
         const current = (this.eventCounts.get(threadKey) || 0) + 1
         this.eventCounts.set(threadKey, current)
 
@@ -92,7 +106,7 @@ export class SafetyGuard {
     /**
      * Check for loop patterns (A→B→A→B repeated).
      */
-    checkLoopDetection(from: string, to: string, _tag?: string): { ok: boolean; reason?: string } {
+    checkLoopDetection(from: string, to: string): { ok: boolean; reason?: string } {
         const pair = `${from}→${to}`
         this.recentPairs.push(pair)
 

@@ -1,31 +1,59 @@
+import type {
+    ActParticipantV1,
+    ActRelationV1,
+    DotAssetKind,
+    ModelConfigV1,
+} from './dot-types.js'
+
 export type AssetSource = 'global' | 'stage' | 'registry' | 'draft'
 
-export type AssetListItem = {
-    kind: string
-    urn: string
-    slug: string
+export type InstalledAssetKind = DotAssetKind
+
+type AssetListItemBase<K extends InstalledAssetKind> = {
+    kind: K
+    urn?: string
+    slug?: string
     name: string
-    author: string
-    source: AssetSource
-    description: string
+    author?: string
+    source?: Exclude<AssetSource, 'draft'>
+    description?: string
     tags?: string[]
-    talUrn?: string | null
-    danceUrns?: string[]
-    actUrn?: string | null
-    model?: string | { provider: string; modelId: string } | null
-    modelVariant?: string | null
-    mcpConfig?: Record<string, unknown> | null
-    declaredMcpServerNames?: string[]
-    projectMcpMatches?: string[]
-    projectMcpMissing?: string[]
     schema?: string
-    participantCount?: number
-    relationCount?: number
-    actRules?: string[]
-    participants?: Array<Record<string, unknown>>
-    relations?: Array<Record<string, unknown>>
     content?: string
     stars?: number
     tier?: string
     updatedAt?: string
 }
+
+export type TalAssetListItem = AssetListItemBase<'tal'> & {
+    content?: string
+}
+
+export type DanceAssetListItem = AssetListItemBase<'dance'> & {
+    content?: string
+}
+
+export type PerformerAssetListItem = AssetListItemBase<'performer'> & {
+    talUrn: string | null
+    danceUrns: string[]
+    model?: ModelConfigV1 | null
+    modelVariant?: string | null
+    mcpConfig?: Record<string, unknown> | null
+    declaredMcpServerNames?: string[]
+    projectMcpMatches?: string[]
+    projectMcpMissing?: string[]
+}
+
+export type ActAssetListItem = AssetListItemBase<'act'> & {
+    actRules?: string[]
+    participantCount?: number
+    relationCount?: number
+    participants?: ActParticipantV1[]
+    relations?: ActRelationV1[]
+}
+
+export type AssetListItem =
+    | TalAssetListItem
+    | DanceAssetListItem
+    | PerformerAssetListItem
+    | ActAssetListItem

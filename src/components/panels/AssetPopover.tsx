@@ -1,48 +1,12 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { X, Trash2 } from 'lucide-react'
-import { api } from '../../api'
 import AssetDetailBody from './AssetDetailBody'
-
-export function useResolvedAssetDetail(asset: any | null) {
-    const [detail, setDetail] = useState<any>(null)
-    const [loading, setLoading] = useState(false)
-
-    useEffect(() => {
-        let cancelled = false
-        setDetail(null)
-        setLoading(false)
-
-        if (!asset || !['tal', 'dance', 'performer', 'act'].includes(asset.kind) || asset.source === 'draft' || !asset.author || !(asset.slug || asset.name)) {
-            return
-        }
-
-        setLoading(true)
-        const request = asset.source === 'stage' || asset.source === 'global'
-            ? api.assets.get(asset.kind, String(asset.author || '').replace(/^@/, ''), asset.slug || asset.name)
-            : api.assets.getRegistry(asset.kind, String(asset.author || '').replace(/^@/, ''), asset.slug || asset.name)
-
-        request
-            .then((data) => {
-                if (!cancelled) setDetail(data)
-            })
-            .catch(() => {
-                if (!cancelled) setDetail(null)
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false)
-            })
-
-        return () => {
-            cancelled = true
-        }
-    }, [asset?.author, asset?.kind, asset?.name, asset?.slug, asset?.source, asset?.urn])
-
-    return { resolvedAsset: detail || asset, loading }
-}
+import type { AssetPanelAction, AssetPanelAsset, AssetPanelAuthUser, AssetPanelHandler } from './asset-panel-types'
+import { useResolvedAssetDetail } from './useResolvedAssetDetail'
 
 export function AssetPopover({ asset, rect, installed, onEnter, onLeave }: {
-    asset: any
+    asset: AssetPanelAsset
     rect: DOMRect
     installed?: boolean
     onEnter: () => void
@@ -71,7 +35,7 @@ export function HoverableCard({
     installed,
     children,
 }: {
-    asset: any
+    asset: AssetPanelAsset
     installed?: boolean
     children: React.ReactNode
 }) {
@@ -127,17 +91,19 @@ export function PinnedDetailPanel({
     onPublish,
     onImportToStage,
     onDeleteDraft,
+    onUninstall,
 }: {
-    asset: any | null
+    asset: AssetPanelAsset | null
     installed: boolean
     onClose: () => void
-    authUser?: { authenticated: boolean; username: string | null }
+    authUser?: AssetPanelAuthUser
     actionStatus?: string | null
-    actionLoading?: 'save-local' | 'publish' | 'import' | null
-    onSaveLocal?: (asset: any) => void | Promise<void>
-    onPublish?: (asset: any) => void | Promise<void>
-    onImportToStage?: (asset: any) => void | Promise<void>
-    onDeleteDraft?: (asset: any) => void | Promise<void>
+    actionLoading?: AssetPanelAction | null
+    onSaveLocal?: AssetPanelHandler
+    onPublish?: AssetPanelHandler
+    onImportToStage?: AssetPanelHandler
+    onDeleteDraft?: AssetPanelHandler
+    onUninstall?: AssetPanelHandler
 }) {
     const { resolvedAsset, loading } = useResolvedAssetDetail(asset)
 
@@ -179,7 +145,7 @@ export function PinnedDetailPanel({
             {resolvedAsset?.kind === 'act' && (resolvedAsset?.source === 'stage' || resolvedAsset?.source === 'global') && onImportToStage ? (
                 <div className="btns">
                     <button className="btn" onClick={() => onImportToStage(resolvedAsset)} disabled={actionLoading !== null}>
-                        {actionLoading === 'import' ? 'Importing…' : 'Import to Stage'}
+                        {actionLoading === 'import' ? 'Importing…' : 'Import to Workspace'}
                     </button>
                 </div>
             ) : null}
@@ -187,6 +153,13 @@ export function PinnedDetailPanel({
                 <div className="btns">
                     <button className="btn btn--danger" onClick={() => onDeleteDraft(resolvedAsset)}>
                         <Trash2 size={11} style={{ marginRight: 4 }} /> Delete Draft
+                    </button>
+                </div>
+            ) : null}
+            {(resolvedAsset?.source === 'global' || resolvedAsset?.source === 'stage') && onUninstall ? (
+                <div className="btns">
+                    <button className="btn btn--danger" onClick={() => onUninstall(resolvedAsset)}>
+                        <Trash2 size={11} style={{ marginRight: 4 }} /> Uninstall
                     </button>
                 </div>
             ) : null}

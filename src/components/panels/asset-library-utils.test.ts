@@ -17,6 +17,8 @@ import {
     labelForInstalledKind,
     buildInstalledAssetDragPayload,
 } from './asset-library-utils'
+import type { AssetCard, DraftAsset } from '../../types'
+import type { LibraryAsset } from './asset-panel-types'
 
 describe('normalizeAuthor', () => {
     it('prefixes @ when missing', () => {
@@ -173,11 +175,11 @@ describe('scoreModel', () => {
 })
 
 describe('filterInstalledAssets', () => {
-    const assets = [
+    const assets: AssetCard[] = [
         { name: 'Alpha', source: 'global', kind: 'tal', author: '@a', urn: 'tal/@a/alpha' },
         { name: 'Beta', source: 'stage', kind: 'dance', author: '@b', urn: 'dance/@b/beta'  },
         { name: 'Gamma', source: 'draft', kind: 'tal', author: '@c', urn: 'tal/@c/gamma'  },
-    ] as any[]
+    ]
 
     it('filters by source', () => {
         expect(filterInstalledAssets(assets, 'global', '')).toHaveLength(1)
@@ -242,11 +244,11 @@ describe('labelForInstalledKind', () => {
 
 describe('buildDraftAssetCards', () => {
     it('builds cards from drafts filtered by kind', () => {
-        const drafts = {
+        const drafts: Record<string, DraftAsset> = {
             d1: { id: 'd1', kind: 'tal', name: 'Draft Tal', updatedAt: 100, content: '# hello' },
             d2: { id: 'd2', kind: 'dance', name: 'Draft Dance', updatedAt: 200, content: '## dance' },
             d3: { id: 'd3', kind: 'tal', name: 'Another Tal', updatedAt: 300, content: '' },
-        } as any
+        }
         const cards = buildDraftAssetCards(drafts, 'tal')
         expect(cards).toHaveLength(2)
         // Should be sorted by updatedAt descending
@@ -274,11 +276,77 @@ describe('buildInstalledAssetDragPayload', () => {
             declaredMcpServerNames: ['github'],
             projectMcpMatches: ['github'],
             projectMcpMissing: [],
-        })).toMatchObject({
+        } as LibraryAsset)).toMatchObject({
             kind: 'performer',
             modelVariant: 'reasoning-high',
             declaredMcpServerNames: ['github'],
             projectMcpMatches: ['github'],
+        })
+    })
+
+    it('includes draftContent for performer drafts', () => {
+        const draftContent = { talRef: { kind: 'registry', urn: 'tal/@user/reasoning' }, danceRefs: [] }
+        const payload = buildInstalledAssetDragPayload({
+            kind: 'performer',
+            source: 'draft',
+            draftId: 'draft-1',
+            urn: 'draft/draft-1',
+            name: 'Draft Performer',
+            author: '@draft',
+            draftContent,
+        } as LibraryAsset)
+        expect(payload).toMatchObject({
+            kind: 'performer',
+            source: 'draft',
+            draftId: 'draft-1',
+            draftContent,
+        })
+    })
+
+    it('includes participants and relations for installed act assets', () => {
+        const participants = [
+            { id: 'p1', performer: 'performer/@user/coder' },
+            { id: 'p2', performer: 'performer/@user/reviewer' },
+        ]
+        const relations = [
+            { id: 'r1', between: ['p1', 'p2'], direction: 'one-way', name: 'request_review' },
+        ]
+        const payload = buildInstalledAssetDragPayload({
+            kind: 'act',
+            urn: 'act/@user/code-review',
+            name: 'code-review',
+            author: '@user',
+            source: 'stage',
+            description: 'Code review act',
+            actRules: ['Always review before merge'],
+            participants,
+            relations,
+        } as LibraryAsset)
+        expect(payload).toMatchObject({
+            kind: 'act',
+            source: 'stage',
+            participants,
+            relations,
+            actRules: ['Always review before merge'],
+        })
+    })
+
+    it('includes draftContent for act drafts', () => {
+        const draftContent = { description: 'Draft act', participants: [], relations: [] }
+        const payload = buildInstalledAssetDragPayload({
+            kind: 'act',
+            source: 'draft',
+            draftId: 'act-draft-1',
+            urn: 'draft/act-draft-1',
+            name: 'Draft Act',
+            author: '@draft',
+            draftContent,
+        } as LibraryAsset)
+        expect(payload).toMatchObject({
+            kind: 'act',
+            source: 'draft',
+            draftId: 'act-draft-1',
+            draftContent,
         })
     })
 })

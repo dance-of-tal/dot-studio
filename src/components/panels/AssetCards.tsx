@@ -11,7 +11,9 @@ import {
     Globe,
     GripVertical,
     FolderOpen,
-    GitBranch,
+    Workflow,
+    Trash2,
+    Pencil,
 } from 'lucide-react';
 import {
     normalizeAuthor,
@@ -20,10 +22,13 @@ import {
     buildModelDragPayload,
     buildMcpDragPayload,
 } from './asset-library-utils';
-export { HoverableCard, PinnedDetailPanel, useResolvedAssetDetail } from './AssetPopover';
+export { HoverableCard, PinnedDetailPanel } from './AssetPopover';
 import { HoverableCard } from './AssetPopover';
+import type { McpServer } from '../../types';
+import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants';
+import type { AssetPanelHandler, LibraryAsset, McpPanelAsset, ModelPanelAsset } from './asset-panel-types';
 
-function performerMcpSummary(asset: any) {
+function performerMcpSummary(asset: LibraryAsset) {
     if (asset.kind !== 'performer' || !Array.isArray(asset.declaredMcpServerNames) || asset.declaredMcpServerNames.length === 0) {
         return null
     }
@@ -37,7 +42,7 @@ function assetKindIcon(kind: string, className = 'asset-icon combo') {
     if (kind === 'tal') return <Hexagon size={12} className="asset-icon tal" />
     if (kind === 'dance') return <Zap size={12} className="asset-icon dance" />
     if (kind === 'performer') return <Package size={12} className="asset-icon performer" />
-    if (kind === 'act') return <GitBranch size={12} className="asset-icon act" />
+    if (kind === 'act') return <Workflow size={12} className="asset-icon act" />
     if (kind === 'model') return <Cpu size={12} className="asset-icon model" />
     if (kind === 'mcp') return <Server size={12} className="asset-icon mcp" />
     return <Package size={12} className={className} />
@@ -70,16 +75,33 @@ export function DraggableAsset({
     asset,
     selected,
     onSelect,
+    onUninstall,
+    onDeleteDraft,
+    onEditDraft,
 }: {
-    asset: any
+    asset: LibraryAsset
     selected: boolean
-    onSelect: (asset: any) => void
+    onSelect: AssetPanelHandler
+    onUninstall?: AssetPanelHandler
+    onDeleteDraft?: AssetPanelHandler
+    onEditDraft?: AssetPanelHandler
 }) {
     const dragPayload = useMemo(() => buildInstalledAssetDragPayload(asset), [asset])
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: `asset-${asset.urn || asset.name}`,
         data: dragPayload,
     })
+
+    const canDelete = asset.source === 'draft' ? !!onDeleteDraft : (asset.source === 'global' || asset.source === 'stage') ? !!onUninstall : false
+    const handleDelete = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        e.preventDefault()
+        if (asset.source === 'draft') {
+            onDeleteDraft?.(asset)
+        } else {
+            onUninstall?.(asset)
+        }
+    }
 
     return (
         <HoverableCard asset={asset} installed>
@@ -94,7 +116,31 @@ export function DraggableAsset({
                     icon={assetKindIcon(asset.kind)}
                     name={asset.name}
                     dragHandle
-                    trailing={asset.source ? <span className={`source-badge ${asset.source}`}>{asset.source}</span> : undefined}
+                    trailing={
+                        <>
+                            {asset.source ? <span className={`source-badge ${asset.source}`}>{asset.source}</span> : undefined}
+                            {asset.source === 'draft' && (asset.kind === 'tal' || asset.kind === 'dance') && onEditDraft && (
+                                <button
+                                    className="asset-card__edit-btn"
+                                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onEditDraft(asset) }}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    title="Edit draft"
+                                >
+                                    <Pencil size={11} />
+                                </button>
+                            )}
+                            {canDelete && (
+                                <button
+                                    className="asset-card__delete-btn"
+                                    onClick={handleDelete}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    title={asset.source === 'draft' ? 'Delete draft' : 'Uninstall'}
+                                >
+                                    <Trash2 size={11} />
+                                </button>
+                            )}
+                        </>
+                    }
                 />
                 <div className="asset-card__author">{asset.author}</div>
                 <div className="asset-card__desc">{asset.description || 'No description provided.'}</div>
@@ -113,9 +159,9 @@ export function DraggableModel({
     selected,
     onSelect,
 }: {
-    model: any
+    model: RuntimeModelCatalogEntry
     selected: boolean
-    onSelect: (asset: any) => void
+    onSelect: AssetPanelHandler
 }) {
     const dragPayload = useMemo(() => buildModelDragPayload(model), [model])
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -123,7 +169,7 @@ export function DraggableModel({
         data: dragPayload,
     })
 
-    const modelAsset = { ...model, kind: 'model', name: model.name || model.id }
+    const modelAsset: ModelPanelAsset = { ...model, kind: 'model', name: model.name || model.id }
 
     return (
         <HoverableCard asset={modelAsset}>
@@ -156,9 +202,9 @@ export function DraggableMcp({
     selected,
     onSelect,
 }: {
-    mcp: any
+    mcp: McpServer
     selected: boolean
-    onSelect: (asset: any) => void
+    onSelect: AssetPanelHandler
 }) {
     const dragPayload = useMemo(() => buildMcpDragPayload(mcp), [mcp])
     const dragDisabled = mcp.enabled === false || mcp.defined === false
@@ -168,7 +214,7 @@ export function DraggableMcp({
         disabled: dragDisabled,
     })
 
-    const mcpAsset = { ...mcp, kind: 'mcp' }
+    const mcpAsset: McpPanelAsset = { ...mcp, kind: 'mcp' }
 
     return (
         <HoverableCard asset={mcpAsset}>
@@ -208,11 +254,11 @@ export function RegistryResult({
     onInstall,
     onSelect,
 }: {
-    item: any
+    item: LibraryAsset
     installed: boolean
     selected: boolean
-    onInstall: (urn: string, scope: 'global' | 'stage') => Promise<any>
-    onSelect: (asset: any) => void
+    onInstall: (urn: string, scope: 'global' | 'stage') => Promise<unknown>
+    onSelect: AssetPanelHandler
 }) {
     const [installing, setInstalling] = useState(false)
     const [localInstalled, setLocalInstalled] = useState(installed)
@@ -232,8 +278,8 @@ export function RegistryResult({
         try {
             await onInstall(urn, scope)
             setLocalInstalled(true)
-        } catch (err: any) {
-            setError(err?.message || 'Install failed')
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Install failed')
         } finally {
             setInstalling(false)
         }
@@ -266,7 +312,7 @@ export function RegistryResult({
                                 {showScope && (
                                     <div className="install-scope-menu">
                                         <button className="install-scope-opt" onClick={() => handleInstall('stage')}>
-                                            <FolderOpen size={11} /> Stage
+                                            <FolderOpen size={11} /> Workspace
                                         </button>
                                         <button className="install-scope-opt" onClick={() => handleInstall('global')}>
                                             <Globe size={11} /> Global

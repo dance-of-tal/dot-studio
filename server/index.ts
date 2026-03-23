@@ -22,4 +22,4 @@ console.log(`   Project:  ${getActiveProjectDir()}`)
 console.log(`   Data:     ${STUDIO_DIR}\n`)
 
 const server = serve({ fetch: app.fetch, port: PORT })
-setupTerminalWs(server as any, () => getActiveProjectDir())
+setupTerminalWs(server as unknown as Parameters<typeof setupTerminalWs>[0], () => getActiveProjectDir())

@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useNodesState } from '@xyflow/react'
 import type { Node } from '@xyflow/react'
+import type { WorkspaceSlice } from '../../store/types'
 import type {
     CanvasTerminalNode,
     CanvasTrackingWindow,
     DraftAsset,
     MarkdownEditorNode,
     PerformerNode,
-    StageAct,
+    WorkspaceAct,
 } from '../../types'
 import { composeCanvasEdges } from './canvas-edge-composer'
 import { composeCanvasNodes } from './canvas-node-composer'
@@ -22,7 +23,7 @@ import {
 type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
 
 type UseCanvasPresentationArgs = {
-    acts: StageAct[]
+    acts: WorkspaceAct[]
     performers: PerformerNode[]
     markdownEditors: MarkdownEditorNode[]
     canvasTerminals: CanvasTerminalNode[]
@@ -34,7 +35,7 @@ type UseCanvasPresentationArgs = {
     selectedPerformerId: string | null
     selectedMarkdownEditorId: string | null
     focusedPerformerId: string | null
-    editingTarget: { type: string; id: string } | null
+    editingTarget: WorkspaceSlice['editingTarget']
     transformTarget: { id: string; type: CanvasNodeKind } | null
     performerMcpSummary: (performer: PerformerNode) => string | null
     onActivateTransform: (type: CanvasNodeKind, id: string) => void

@@ -1,12 +1,14 @@
 // DOT Studio — API Client
 
 import type {
+    ActThreadStatus,
     AssetRef,
     DanceDeliveryMode,
     DraftAsset,
     ModelConfig,
     PromptPreview,
-    SavedStageSummary,
+    SavedWorkspaceSnapshot,
+    SavedWorkspaceSummary,
     DraftAssetKind,
 } from './types'
 import type { AssetListItem } from '../shared/asset-contracts'
@@ -28,29 +30,46 @@ export const api = {
 
     assets: {
         list: (kind: string) => fetchJSON<AssetListItem[]>(`/api/assets/${kind}`),
-        get: (kind: string, author: string, name: string) => fetchJSON<AssetListItem>(`/api/assets/${kind}/${author}/${name}`),
-        getRegistry: (kind: string, author: string, name: string) => fetchJSON<AssetListItem>(`/api/assets/registry/${kind}/${author}/${name}`),
+        get: (kind: string, author: string, path: string) => fetchJSON<AssetListItem>(`/api/assets/${kind}/${author}?path=${encodeURIComponent(path)}`),
+        getRegistry: (kind: string, author: string, path: string) => fetchJSON<AssetListItem>(`/api/assets/registry/${kind}/${author}?path=${encodeURIComponent(path)}`),
     },
 
-    stages: {
-        list: (includeHidden = false) => fetchJSON<SavedStageSummary[]>(`/api/stages${includeHidden ? '?includeHidden=1' : ''}`),
-        get: (id: string) => fetchJSON<any>(`/api/stages/${id}`),
-        save: (data: any) => putJSON<{ ok: boolean; id: string; workingDir: string; updatedAt: number }>('/api/stages', data),
-        setHidden: (id: string, hiddenFromList: boolean) => patchJSON<{ ok: boolean; id: string; hiddenFromList: boolean }>(`/api/stages/${id}`, { hiddenFromList }),
-        delete: (id: string) => deleteJSON<{ ok: boolean }>(`/api/stages/${id}`),
+    workspaces: {
+        list: (includeHidden = false) => fetchJSON<SavedWorkspaceSummary[]>(`/api/workspaces${includeHidden ? '?includeHidden=1' : ''}`),
+        get: (id: string) => fetchJSON<SavedWorkspaceSnapshot>(`/api/workspaces/${id}`),
+        save: (data: SavedWorkspaceSnapshot) => putJSON<{ ok: boolean; id: string; workingDir: string; updatedAt: number }>('/api/workspaces', data),
+        setHidden: (id: string, hiddenFromList: boolean) => patchJSON<{ ok: boolean; id: string; hiddenFromList: boolean }>(`/api/workspaces/${id}`, { hiddenFromList }),
+        delete: (id: string) => deleteJSON<{ ok: boolean }>(`/api/workspaces/${id}`),
     },
 
     drafts: {
-        list: (kind?: DraftAssetKind) =>
+        list: (kind?: 'tal' | 'dance' | 'performer' | 'act') =>
             fetchJSON<{ drafts: DraftAsset[] }>(`/api/drafts${kind ? `?kind=${kind}` : ''}`).then((response) => response.drafts),
-        get: (kind: DraftAssetKind, id: string) =>
+        get: (kind: 'tal' | 'dance' | 'performer' | 'act', id: string) =>
             fetchJSON<{ draft: DraftAsset }>(`/api/drafts/${kind}/${id}`).then((response) => response.draft),
         create: (body: { kind: DraftAssetKind; name: string; content: unknown; id?: string; slug?: string; description?: string; tags?: string[]; derivedFrom?: string | null }) =>
             postJSON<{ draft: DraftAsset }>('/api/drafts', body).then((response) => response.draft),
-        update: (kind: DraftAssetKind, id: string, patch: { name?: string; content?: unknown; slug?: string; description?: string; tags?: string[]; derivedFrom?: string | null }) =>
+        update: (kind: 'tal' | 'dance' | 'performer' | 'act', id: string, patch: { name?: string; content?: unknown; slug?: string; description?: string; tags?: string[]; derivedFrom?: string | null }) =>
             putJSON<{ draft: DraftAsset }>(`/api/drafts/${kind}/${id}`, patch).then((response) => response.draft),
-        delete: (kind: DraftAssetKind, id: string) =>
-            deleteJSON<{ ok: boolean }>(`/api/drafts/${kind}/${id}`),
+        delete: (kind: 'tal' | 'dance' | 'performer' | 'act', id: string, cascade = false) =>
+            deleteJSON<{ ok: boolean; deletedIds: string[] }>(`/api/drafts/${kind}/${id}`, { cascade }),
+        previewDelete: (kind: 'tal' | 'dance' | 'performer' | 'act', id: string) =>
+            postJSON<{
+                target: { draftId: string; kind: string; name: string; source: string; reason: string }
+                dependents: Array<{ draftId: string; kind: string; name: string; source: string; reason: string }>
+            }>(`/api/drafts/delete-preview/${kind}/${id}`, {}),
+        danceBundle: {
+            tree: (id: string) =>
+                fetchJSON<{ tree: Array<{ name: string; type: 'file' | 'directory'; path: string; children?: unknown[] }> }>(`/api/drafts/dance/${id}/tree`).then((r) => r.tree),
+            readFile: (id: string, filePath: string) =>
+                fetchJSON<{ path: string; content: string }>(`/api/drafts/dance/${id}/file?path=${encodeURIComponent(filePath)}`),
+            writeFile: (id: string, filePath: string, content: string) =>
+                putJSON<{ ok: boolean; path: string }>(`/api/drafts/dance/${id}/file`, { path: filePath, content }),
+            createFile: (id: string, filePath: string, isDirectory?: boolean) =>
+                postJSON<{ ok: boolean; path: string }>(`/api/drafts/dance/${id}/files`, { path: filePath, isDirectory }),
+            deleteFile: (id: string, filePath: string) =>
+                deleteJSON<{ ok: boolean; path: string }>(`/api/drafts/dance/${id}/file`, { path: filePath }),
+        },
     },
 
     compile: (
@@ -87,19 +106,19 @@ export const api = {
     chat: chatApi,
 
     actRuntime: {
-        createThread: (actId: string, actDefinition?: any) =>
-            postJSON<{ ok: boolean; thread: { id: string; actId: string; status: string; createdAt: number } }>(
+        createThread: (actId: string, actDefinition?: Record<string, unknown>) =>
+            postJSON<{ ok: boolean; thread: { id: string; actId: string; status: ActThreadStatus; createdAt: number } }>(
                 `/api/act/${actId}/threads`,
                 actDefinition ? { actDefinition } : undefined,
             ),
         listThreads: (actId: string) =>
-            fetchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: string; createdAt: number; participantSessions: Record<string, string> }> }>(
+            fetchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: ActThreadStatus; createdAt: number; participantSessions: Record<string, string> }> }>(
                 `/api/act/${actId}/threads`,
             ),
         getThread: (actId: string, threadId: string) =>
-            fetchJSON<{ ok: boolean; thread: any }>(`/api/act/${actId}/thread/${threadId}`),
+            fetchJSON<{ ok: boolean; thread: Record<string, unknown> }>(`/api/act/${actId}/thread/${threadId}`),
         events: (actId: string, threadId: string, count = 50) =>
-            fetchJSON<{ ok: boolean; events: any[] }>(`/api/act/${actId}/thread/${threadId}/events?count=${count}`),
+            fetchJSON<{ ok: boolean; events: Array<Record<string, unknown>> }>(`/api/act/${actId}/thread/${threadId}/events?count=${count}`),
     },
 
     safe: {
@@ -133,8 +152,8 @@ export const api = {
 
     studio: {
         getConfig: () =>
-            fetchJSON<{ theme?: string; lastStage?: string; openCodeUrl?: string; projectDir?: string }>('/api/studio/config'),
-        updateConfig: (config: Record<string, any>) => putJSON<any>('/api/studio/config', config),
+            fetchJSON<{ theme?: string; lastWorkspaceId?: string; openCodeUrl?: string; projectDir?: string }>('/api/studio/config'),
+        updateConfig: (config: Record<string, unknown>) => putJSON<unknown>('/api/studio/config', config),
         activate: (workingDir: string) => postJSON<{ ok: boolean; activeProjectDir: string }>('/api/studio/activate', { workingDir }),
         pickDirectory: () => fetchJSON<{ path?: string; error?: string }>('/api/studio/pick-directory'),
     },

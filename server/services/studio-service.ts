@@ -2,6 +2,7 @@ import { exec } from 'child_process'
 import fs from 'fs/promises'
 import path from 'path'
 import { promisify } from 'util'
+import { ensureDotDir } from '../lib/dot-source.js'
 import {
     getActiveProjectDir,
     setActiveProjectDir,
@@ -14,7 +15,7 @@ import { invalidateAll } from '../lib/cache.js'
 const execAsync = promisify(exec)
 
 export async function pickWorkingDirectory() {
-    const { stdout } = await execAsync(`osascript -e 'POSIX path of (choose folder with prompt "Select Working Directory for Stage")'`)
+    const { stdout } = await execAsync(`osascript -e 'POSIX path of (choose folder with prompt "Select Working Directory for Workspace")'`)
     return { path: stdout.trim() }
 }
 
@@ -43,6 +44,7 @@ export async function activateStudioProject(workingDir: string) {
         return { ok: false as const, status: 400, error: `Directory not found: ${resolved}` }
     }
 
+    await ensureDotDir(resolved)
     setActiveProjectDir(resolved)
     invalidateAll()
 

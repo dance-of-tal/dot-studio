@@ -3,14 +3,14 @@
  */
 import type { StudioState } from '../types'
 import { api } from '../../api'
-import { mapSessionMessagesToChatMessages } from '../../lib/chat-messages'
-import type { ChatMessage } from '../../types'
+import { mapSessionMessagesToChatMessages, type SessionMessageLike } from '../../lib/chat-messages'
+import type { ChatMessage, PerformerNode } from '../../types'
 
 export type ChatGet = () => StudioState
 export type ChatSet = (fn: ((state: StudioState) => Partial<StudioState>) | Partial<StudioState>) => void
 
-export function getPerformerById(get: ChatGet, performerId: string) {
-    return get().performers.find((item: any) => item.id === performerId) as any
+export function getPerformerById(get: ChatGet, performerId: string): PerformerNode | null {
+    return get().performers.find((item) => item.id === performerId) || null
 }
 
 export function getPerformerSessionId(get: ChatGet, performerId: string): string | undefined {
@@ -41,8 +41,8 @@ export async function syncPerformerMessages(
     performerId: string,
     sessionId: string,
 ) {
-    const res: any = await api.chat.messages(sessionId)
-    const messages: any[] = res?.messages ?? res ?? []
+    const response = await api.chat.messages(sessionId)
+    const messages: SessionMessageLike[] = Array.isArray(response) ? response : (response.messages || [])
     const mapped = mapSessionMessagesToChatMessages(messages)
     // Only carry forward system-role prefix messages (e.g. mode-switch notices)
     // that aren't already present in the server-synced messages.
@@ -90,7 +90,7 @@ export function scheduleSessionFallbackSync(
             const mapped = mapSessionMessagesToChatMessages(messages)
             const latestAssistant = [...messages]
                 .reverse()
-                .find((message: any) => (message?.info?.role || message?.role) === 'assistant') as any
+                .find((message) => (message?.info?.role || message?.role) === 'assistant')
 
             const settled = !!(
                 latestAssistant

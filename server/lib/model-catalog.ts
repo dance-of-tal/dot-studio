@@ -5,6 +5,38 @@ import {
     type RuntimeModelCatalogEntry,
 } from '../../shared/model-variants.js'
 
+type ProviderModelRecord = Record<string, unknown>
+
+type ProviderListEntry = {
+    id?: string
+    name?: string
+    source?: string
+    env?: unknown[]
+    models?: Record<string, ProviderModelRecord>
+    capabilities?: Record<string, unknown>
+    modalities?: {
+        input?: unknown[]
+        output?: unknown[]
+    }
+} & ProviderModelRecord
+
+type ProviderListData = {
+    all?: ProviderListEntry[]
+    connected?: string[]
+    default?: Record<string, string>
+}
+
+function responseData<T>(response: unknown): T | undefined {
+    if (!response || typeof response !== 'object' || !('data' in response)) {
+        return undefined
+    }
+    return (response as { data?: T }).data
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+}
+
 const incompatibleModelsByAuthType: Record<string, Record<string, Set<string>>> = {
     openai: {
         // ChatGPT account-backed OpenAI auth rejects these at runtime today.
@@ -15,10 +47,8 @@ const incompatibleModelsByAuthType: Record<string, Record<string, Set<string>>> 
     },
 }
 
-function readCapabilityFlag(model: Record<string, any>, ...keys: string[]) {
-    const capabilityRecord = model.capabilities && typeof model.capabilities === 'object'
-        ? model.capabilities as Record<string, unknown>
-        : {}
+function readCapabilityFlag(model: ProviderModelRecord, ...keys: string[]) {
+    const capabilityRecord = asRecord(model.capabilities)
 
     for (const key of keys) {
         if (typeof capabilityRecord[key] === 'boolean') {
@@ -32,20 +62,19 @@ function readCapabilityFlag(model: Record<string, any>, ...keys: string[]) {
     return false
 }
 
-function readModalities(model: Record<string, any>) {
-    const capabilityRecord = model.capabilities && typeof model.capabilities === 'object'
-        ? model.capabilities as Record<string, unknown>
-        : {}
+function readModalities(model: ProviderModelRecord) {
+    const capabilityRecord = asRecord(model.capabilities)
+    const modalityRecord = asRecord(model.modalities)
 
     const input = Array.isArray(capabilityRecord.input)
         ? capabilityRecord.input.filter((value): value is string => typeof value === 'string')
-        : Array.isArray(model.modalities?.input)
-            ? model.modalities.input.filter((value: unknown): value is string => typeof value === 'string')
+        : Array.isArray(modalityRecord.input)
+            ? modalityRecord.input.filter((value: unknown): value is string => typeof value === 'string')
             : ['text']
     const output = Array.isArray(capabilityRecord.output)
         ? capabilityRecord.output.filter((value): value is string => typeof value === 'string')
-        : Array.isArray(model.modalities?.output)
-            ? model.modalities.output.filter((value: unknown): value is string => typeof value === 'string')
+        : Array.isArray(modalityRecord.output)
+            ? modalityRecord.output.filter((value: unknown): value is string => typeof value === 'string')
             : ['text']
 
     return { input, output }
@@ -72,7 +101,7 @@ function isModelVisibleForAuthType(providerId: string, modelId: string, authType
 
 const CACHE_TTL_MS = 3_000
 
-let _cachedPromise: Promise<any> | null = null
+let _cachedPromise: Promise<ProviderListData | undefined> | null = null
 let _cachedCwd: string | null = null
 let _cacheTs = 0
 
@@ -80,7 +109,7 @@ let _cacheTs = 0
  * Fetch the raw oc.provider.list() data with a short TTL cache
  * keyed on the working directory.
  */
-export async function fetchProviderListData(cwd: string): Promise<any> {
+export async function fetchProviderListData(cwd: string): Promise<ProviderListData | undefined> {
     const now = Date.now()
     if (_cachedPromise && _cachedCwd === cwd && now - _cacheTs < CACHE_TTL_MS) {
         return _cachedPromise
@@ -91,7 +120,7 @@ export async function fetchProviderListData(cwd: string): Promise<any> {
     _cachedPromise = (async () => {
         const oc = await getOpencode()
         const res = await oc.provider.list({ directory: cwd })
-        return (res as any).data
+        return responseData<ProviderListData>(res)
     })()
 
     // On failure, clear the cache so the next call retries immediately.
@@ -130,14 +159,14 @@ export async function listProviderSummaries(cwd: string): Promise<ProviderSummar
 
     const connected = new Set<string>((data?.connected || []) as string[])
 
-    return ((data.all || []) as any[]).map((provider) => ({
-        id: provider.id,
-        name: provider.name || provider.id,
-        source: provider.source || 'builtin',
-        env: Array.isArray(provider.env) ? provider.env : [],
-        connected: connected.has(provider.id),
+    return data.all.map((provider) => ({
+        id: typeof provider.id === 'string' ? provider.id : '',
+        name: typeof provider.name === 'string' ? provider.name : (typeof provider.id === 'string' ? provider.id : ''),
+        source: typeof provider.source === 'string' ? provider.source : 'builtin',
+        env: Array.isArray(provider.env) ? provider.env.filter((value): value is string => typeof value === 'string') : [],
+        connected: typeof provider.id === 'string' ? connected.has(provider.id) : false,
         modelCount: provider.models ? Object.keys(provider.models).length : 0,
-        defaultModel: data?.default?.[provider.id] || null,
+        defaultModel: typeof provider.id === 'string' ? data?.default?.[provider.id] || null : null,
     }))
 }
 
@@ -158,7 +187,7 @@ export async function listRuntimeModels(cwd: string): Promise<RuntimeModelCatalo
     const authTypes = new Map<string, string | null>()
 
     const models: RuntimeModelCatalogEntry[] = []
-    for (const provider of data.all as Array<Record<string, any>>) {
+    for (const provider of data.all) {
         const providerId = typeof provider.id === 'string' ? provider.id : ''
         const providerName = typeof provider.name === 'string' ? provider.name : providerId
         const connected = connectedProviders.has(providerId)
@@ -171,7 +200,7 @@ export async function listRuntimeModels(cwd: string): Promise<RuntimeModelCatalo
             : {}
 
         for (const model of Object.values(rawModels)) {
-            const record = model as Record<string, any>
+            const record = model as ProviderModelRecord
             const id = typeof record.id === 'string' ? record.id : ''
             if (!id) {
                 continue
@@ -180,14 +209,16 @@ export async function listRuntimeModels(cwd: string): Promise<RuntimeModelCatalo
                 continue
             }
 
+            const limitRecord = asRecord(record.limit)
+
             models.push({
                 provider: providerId,
                 providerName,
                 id,
                 name: typeof record.name === 'string' ? record.name : id,
                 connected,
-                context: Number(record.limit?.context || 0),
-                output: Number(record.limit?.output || 0),
+                context: Number(limitRecord.context || 0),
+                output: Number(limitRecord.output || 0),
                 toolCall: readCapabilityFlag(record, 'toolcall', 'toolCall', 'tool_call'),
                 reasoning: readCapabilityFlag(record, 'reasoning'),
                 attachment: readCapabilityFlag(record, 'attachment'),

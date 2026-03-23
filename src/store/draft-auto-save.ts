@@ -8,6 +8,7 @@
 
 import { api } from '../api'
 import type { PerformerNode } from '../types'
+import type { StudioState } from './types'
 
 const _timers = new Map<string, ReturnType<typeof setTimeout>>()
 const _hashes = new Map<string, string>()
@@ -31,9 +32,9 @@ function configHash(p: PerformerNode): string {
  * Initialize the auto-save subscriber. Call once after the store is created.
  */
 export function initDraftAutoSave(
-    subscribe: (listener: (state: any, prevState: any) => void) => () => void,
+    subscribe: (listener: (state: StudioState, prevState: StudioState) => void) => () => void,
 ) {
-    subscribe((state: any, prevState: any) => {
+    subscribe((state: StudioState, prevState: StudioState) => {
         if (state.performers === prevState.performers) return
 
         const currentIds = new Set<string>()

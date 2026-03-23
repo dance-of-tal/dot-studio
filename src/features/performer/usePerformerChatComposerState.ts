@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useStudioStore } from '../../store'
 import { useSlashCommands } from '../../hooks/useSlashCommands'
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions'
@@ -99,10 +99,6 @@ export function usePerformerChatComposerState({
         inputRef.current?.focus()
     }, [inputRef, setShowSlashMenu])
 
-    useEffect(() => {
-        setDanceSearchIndex(0)
-    }, [danceSlashMatch])
-
     const handleSend = useCallback(() => {
         if (!input.trim() || isLoading || !modelConfigured || danceSlashMatch !== null) return
         const text = input.trim()
@@ -171,13 +167,14 @@ export function usePerformerChatComposerState({
     ])
 
     const handleInputChange = (value: string) => {
+        setDanceSearchIndex(0)
         onSlashInputChange(value)
         checkPerformerMention(value, inputRef.current?.selectionStart ?? value.length)
         checkFileMention(value, inputRef.current?.selectionStart ?? value.length)
     }
 
     const handleKeyDownWrapper = (e: React.KeyboardEvent) => {
-        if ((e.nativeEvent as any).isComposing) return
+        if (e.nativeEvent.isComposing) return
 
         if (danceSlashMatch !== null) {
             if (danceSearchResults.length > 0) {

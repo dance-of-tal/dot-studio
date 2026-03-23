@@ -1,5 +1,7 @@
 import { useEffect, useState, type RefObject } from 'react'
 import { loadMaterialFileIconForPath } from '../../lib/material-file-icons'
+import type { FileMention } from '../../hooks/useFileMentions'
+import type { PerformerMention } from '../../hooks/usePerformerMention'
 import type { DanceSearchItem } from './agent-frame-utils'
 
 function MentionFileIcon({ path }: { path: string }) {
@@ -31,16 +33,16 @@ interface ComposerMentionMenusProps {
     inputRef: RefObject<HTMLTextAreaElement | null>
     // Performer mention
     isPerformerMentioning: boolean
-    performerMentionResults: any[]
+    performerMentionResults: PerformerMention[]
     performerMentionIndex: number
     extractPerformerMentionText: () => string | null
-    setMentionedPerformers: React.Dispatch<React.SetStateAction<any[]>>
+    setMentionedPerformers: React.Dispatch<React.SetStateAction<PerformerMention[]>>
     // File mention
     isFileMentioning: boolean
-    fileMentionResults: any[]
+    fileMentionResults: FileMention[]
     fileMentionIndex: number
     extractFileMentionText: () => string | null
-    setAttachments: React.Dispatch<React.SetStateAction<any[]>>
+    setAttachments: React.Dispatch<React.SetStateAction<FileMention[]>>
     // Dance slash
     danceSlashMatch: string | null
     danceSearchSections: Array<{ key: string; title: string; items: DanceSearchItem[] }>
@@ -96,7 +98,7 @@ export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
                                 if (newText !== null) {
                                     setInput(newText)
                                     setMentionedPerformers((current) => (
-                                        current.some((item: any) => item.performerId === performerMention.performerId) ? current : [...current, performerMention]
+                                        current.some((item) => item.performerId === performerMention.performerId) ? current : [...current, performerMention]
                                     ))
                                 }
                                 inputRef.current?.focus()

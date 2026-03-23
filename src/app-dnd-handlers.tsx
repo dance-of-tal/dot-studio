@@ -20,6 +20,17 @@ import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
 export { toDragPreview }
 export type { DragAsset }
 
+type McpConfigEntryLike = {
+    command?: string | string[]
+    url?: string
+}
+
+type DraftConfigLike = Record<string, unknown>
+
+function markdownContentFromAssetDetail(detail: { content?: string }) {
+    return typeof detail.content === 'string' ? detail.content : ''
+}
+
 export function getDragIcon(kind: string) {
     switch (kind) {
         case 'tal': return <Hexagon size={12} className="asset-icon tal" />
@@ -60,7 +71,7 @@ export async function loadMarkdownTemplateIntoEditor(
         slug: detail.slug || asset.slug || asset.name,
         description: detail.description || detail.name || asset.name,
         tags: Array.isArray(detail.tags) ? detail.tags : [],
-        content: typeof detail.content === 'string' ? detail.content : '',
+        content: markdownContentFromAssetDetail(detail),
         derivedFrom: detail.urn || asset.urn || undefined,
         updatedAt: Date.now(),
     })
@@ -69,7 +80,7 @@ export async function loadMarkdownTemplateIntoEditor(
         slug: detail.slug || asset.slug || asset.name,
         description: detail.description || detail.name || asset.name,
         tags: Array.isArray(detail.tags) ? detail.tags : [],
-        content: typeof detail.content === 'string' ? detail.content : '',
+        content: markdownContentFromAssetDetail(detail),
     })
     store.selectMarkdownEditor(editor.id)
     showToast(`Loaded ${asset.kind} template into the editor.`, 'success')
@@ -118,7 +129,9 @@ export async function resolvePerformerAssetForStudio(
         )
     }
     if (unresolvedMcpNames.length > 0) {
-        const mcpConfig = (asset.mcpConfig && typeof asset.mcpConfig === 'object') ? asset.mcpConfig as Record<string, any> : {}
+        const mcpConfig = (asset.mcpConfig && typeof asset.mcpConfig === 'object')
+            ? asset.mcpConfig as Record<string, McpConfigEntryLike>
+            : {}
         const details = unresolvedMcpNames.map((name) => {
             const cfg = mcpConfig[name]
             if (cfg && cfg.command) {
@@ -177,7 +190,7 @@ export function createDragEndHandler(
             if (asset.kind === 'performer') {
                 // Draft performer: create from draft content
                 if (asset.source === 'draft' && asset.draftContent) {
-                    const cfg = asset.draftContent as Record<string, any>
+                    const cfg = asset.draftContent as DraftConfigLike
                     store.addPerformerFromDraft(asset.name || 'Draft Performer', cfg)
                     return true
                 }
@@ -188,11 +201,11 @@ export function createDragEndHandler(
             if (asset.kind === 'act') {
                 // Draft act: create from draft content
                 if (asset.source === 'draft' && asset.draftContent) {
-                    const cfg = asset.draftContent as Record<string, any>
+                    const cfg = asset.draftContent as DraftConfigLike
                     store.importActFromDraft(asset.name || 'Draft Act', cfg)
                     return true
                 }
-                store.importActFromAsset(asset)
+                store.importActFromAsset(asset as import('./types').AssetCard)
                 return true
             }
 

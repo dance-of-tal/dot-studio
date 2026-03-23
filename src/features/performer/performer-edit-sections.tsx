@@ -1,11 +1,12 @@
 import { Hexagon, Zap, Pencil, X, Server } from 'lucide-react'
 import type { AssetRef, DanceDeliveryMode, ModelConfig, PerformerNode } from '../../types'
+import { assetUrnDisplayName } from '../../lib/asset-urn'
 import ModelVariantSelect from './ModelVariantSelect'
 
 function assetRefLabel(ref: AssetRef) {
     return ref.kind === 'draft'
         ? `Draft ${ref.draftId.slice(0, 8)}`
-        : ref.urn.split('/').pop() || ref.urn
+        : assetUrnDisplayName(ref.urn)
 }
 
 export function PerformerTalDetail({
@@ -16,7 +17,7 @@ export function PerformerTalDetail({
 }: {
     performer: PerformerNode | null
     talAsset: { urn: string; name: string; description?: string } | null
-    onOpenAssetEditor: (kind: 'tal' | 'dance', targetRef: any, attachMode: 'tal' | 'dance-new' | 'dance-replace') => void
+    onOpenAssetEditor: (kind: 'tal' | 'dance', targetRef: AssetRef | null, attachMode: 'tal' | 'dance-new' | 'dance-replace') => void
     onTalRefChange: (ref: AssetRef | null) => void
 }) {
     return (
@@ -24,9 +25,11 @@ export function PerformerTalDetail({
             <div className="adv-section">
                 <div className="adv-section__head">
                     <span className="section-title">Tal</span>
-                    <button type="button" className="btn btn--sm" onClick={() => void onOpenAssetEditor('tal', performer?.talRef || null, 'tal')}>
-                        {performer?.talRef ? 'Edit' : '+ New'}
-                    </button>
+                    {performer?.talRef && (
+                        <button type="button" className="btn btn--sm" onClick={() => void onOpenAssetEditor('tal', performer.talRef, 'tal')}>
+                            Edit
+                        </button>
+                    )}
                 </div>
                 <div className="adv-section__body">
                     {talAsset ? (
@@ -48,7 +51,7 @@ export function PerformerTalDetail({
                             </div>
                         </div>
                     ) : (
-                        <span className="adv-section__summary">No Tal connected. Drag & drop from Asset Library or click "+ New".</span>
+                        <span className="adv-section__summary">No Tal connected. Drag & drop from the Asset Library.</span>
                     )}
                 </div>
             </div>
@@ -65,7 +68,7 @@ export function PerformerDancesDetail({
 }: {
     performer: PerformerNode | null
     performerId: string
-    onOpenAssetEditor: (kind: 'tal' | 'dance', targetRef: any, attachMode: 'tal' | 'dance-new' | 'dance-replace') => void
+    onOpenAssetEditor: (kind: 'tal' | 'dance', targetRef: AssetRef | null, attachMode: 'tal' | 'dance-new' | 'dance-replace') => void
     onRemoveDance: (id: string, key: string) => void
     onDanceDeliveryModeChange: (value: DanceDeliveryMode) => void
 }) {
@@ -74,9 +77,6 @@ export function PerformerDancesDetail({
             <div className="adv-section">
                 <div className="adv-section__head">
                     <span className="section-title">Dances</span>
-                    <button type="button" className="btn btn--sm" onClick={() => void onOpenAssetEditor('dance', null, 'dance-new')}>
-                        + New
-                    </button>
                 </div>
                 <div className="adv-section__body">
                     {performer?.danceRefs?.length ? (
@@ -97,7 +97,7 @@ export function PerformerDancesDetail({
                             ))}
                         </div>
                     ) : (
-                        <span className="adv-section__summary">No dances connected. Drag & drop from Asset Library or click "+ New".</span>
+                        <span className="adv-section__summary">No dances connected. Drag & drop from the Asset Library.</span>
                     )}
                 </div>
             </div>
@@ -154,9 +154,14 @@ export function PerformerModelDetail({
                         {performer?.model
                             ? `${performer.model.provider} / ${performer.model.modelId}`
                             : performer?.modelPlaceholder
-                                ? `${performer.modelPlaceholder.provider} / ${performer.modelPlaceholder.modelId} (placeholder)`
+                                ? 'No model selected'
                                 : 'No model selected'}
                     </span>
+                    {performer?.modelPlaceholder && (
+                        <span className="adv-section__hint">
+                            Recommended: {performer.modelPlaceholder.provider}/{performer.modelPlaceholder.modelId}
+                        </span>
+                    )}
                 </div>
             </div>
             {performer?.model ? (

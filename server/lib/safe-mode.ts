@@ -113,9 +113,11 @@ async function runGit(
     try {
         const { stdout } = await execFileAsync('git', args, { cwd })
         return stdout
-    } catch (error: any) {
-        if (options?.allowExitCodes?.includes(error?.code)) {
-            return error?.stdout || ''
+    } catch (error: unknown) {
+        const errorCode = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+        const errorStdout = typeof error === 'object' && error !== null && 'stdout' in error ? error.stdout : undefined
+        if (typeof errorCode === 'number' && options?.allowExitCodes?.includes(errorCode)) {
+            return typeof errorStdout === 'string' ? errorStdout : ''
         }
         throw error
     }

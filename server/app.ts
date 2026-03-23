@@ -7,7 +7,7 @@ import fs from 'fs'
 
 import healthRoutes from './routes/health.js'
 import assetRoutes from './routes/assets.js'
-import stageRoutes from './routes/stages.js'
+import stageRoutes from './routes/workspaces.js'
 import chatRoutes from './routes/chat.js'
 import opencodeRoutes from './routes/opencode.js'
 import compileRoutes from './routes/compile.js'

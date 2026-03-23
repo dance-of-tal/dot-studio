@@ -6,7 +6,7 @@
  * preflight builders, and the PickerSection presentational component.
  */
 
-import type { PerformerNode, StageAct } from '../../types'
+import type { AssetCard, PerformerNode, WorkspaceAct } from '../../types'
 import { useStudioStore } from '../../store'
 import { registryUrnFromRef } from '../../lib/performers'
 
@@ -23,6 +23,12 @@ export type PerformerPreflightEntry = {
     required: boolean
     status: 'ready' | 'draft' | 'missing'
     detail: string
+}
+
+type PerformerPreflightCandidate = {
+    label: string
+    ref: NonNullable<PerformerNode['talRef']>
+    required: boolean
 }
 
 // ── Pure helpers ────────────────────────────────────────
@@ -58,7 +64,7 @@ export function getPerformerModelIssue(p: PerformerNode): string | undefined {
 
 // ── Act Validation ──────────────────────────────────────
 
-export function getActIssue(act: StageAct): string | undefined {
+export function getActIssue(act: WorkspaceAct): string | undefined {
     const participantIds = Object.keys(act.participants)
     if (participantIds.length === 0) return 'No participants'
     if (act.relations.length === 0) return 'No relations'
@@ -76,7 +82,7 @@ export function getActIssue(act: StageAct): string | undefined {
     return undefined
 }
 
-export function getActPublishBlockReasons(act: StageAct): string[] {
+export function getActPublishBlockReasons(act: WorkspaceAct): string[] {
     const reasons: string[] = []
     const participantIds = Object.keys(act.participants)
 
@@ -110,12 +116,12 @@ export function getActPublishBlockReasons(act: StageAct): string[] {
 }
 
 export function buildPickerItems(args: {
-    installedTals: any[]
-    installedDances: any[]
+    installedTals: AssetCard[]
+    installedDances: AssetCard[]
     markdownEditors: ReturnType<typeof useStudioStore.getState>['markdownEditors']
     drafts: ReturnType<typeof useStudioStore.getState>['drafts']
     performers: PerformerNode[]
-    acts?: StageAct[]
+    acts?: WorkspaceAct[]
 }): PickerItem[] {
     const items: PickerItem[] = []
 
@@ -168,21 +174,21 @@ export function buildPickerItems(args: {
 export function buildPerformerPreflight(performer: PerformerNode | null): PerformerPreflightEntry[] {
     if (!performer) return []
 
-    return [
-        performer.talRef ? { label: 'Tal', ref: performer.talRef, required: true } : null,
+    const candidates: PerformerPreflightCandidate[] = [
+        ...(performer.talRef ? [{ label: 'Tal', ref: performer.talRef, required: true }] : []),
         ...performer.danceRefs.map((ref, index) => ({ label: `Dance ${index + 1}`, ref, required: false })),
     ]
-        .filter(Boolean)
-        .map((entry: any) => {
-            const urn = registryUrnFromRef(entry.ref)
-            if (urn) {
-                return { ...entry, status: 'ready' as const, detail: urn }
-            }
-            if (entry.ref?.kind === 'draft') {
-                return { ...entry, status: 'draft' as const, detail: `draft:${entry.ref.draftId}` }
-            }
-            return { ...entry, status: 'missing' as const, detail: 'not set' }
-        })
+
+    return candidates.map((entry) => {
+        const urn = registryUrnFromRef(entry.ref)
+        if (urn) {
+            return { ...entry, status: 'ready' as const, detail: urn }
+        }
+        if (entry.ref.kind === 'draft') {
+            return { ...entry, status: 'draft' as const, detail: `draft:${entry.ref.draftId}` }
+        }
+        return { ...entry, status: 'missing' as const, detail: 'not set' }
+    })
 }
 
 export function buildMarkdownAssetPayload(markdownEditor: NonNullable<ReturnType<typeof useStudioStore.getState>['markdownEditors'][number]>, draft: NonNullable<ReturnType<typeof useStudioStore.getState>['drafts'][string]>, _slug: string, description: string, tags: string[]) {

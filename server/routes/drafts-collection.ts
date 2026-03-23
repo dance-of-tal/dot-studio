@@ -8,6 +8,10 @@ import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const VALID_KINDS = new Set<DraftAssetKind>(['tal', 'dance', 'performer', 'act'])
 
+function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : 'Unknown error'
+}
+
 function isValidKind(kind: string): kind is DraftAssetKind {
     return VALID_KINDS.has(kind as DraftAssetKind)
 }
@@ -43,8 +47,8 @@ draftsCollection.post('/api/drafts', async (c) => {
     try {
         const draft = await createDraft(cwd, body)
         return c.json({ draft }, 201)
-    } catch (err: any) {
-        return jsonError(c, err.message, 500)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error), 500)
     }
 })
 

@@ -1,5 +1,7 @@
 import type { StudioState } from './types'
 import type { SessionStreamTarget } from './integration-streaming'
+import type { ChatMessage } from '../types'
+import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
 import {
     applyTargetMessageUpdate,
     clearStreamingSession,
@@ -11,9 +13,48 @@ import { api } from '../api'
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
 
+type SessionStatusEvent = {
+    properties?: {
+        sessionID?: string
+        status?: {
+            type?: string
+            attempt?: number
+            message?: string
+        }
+    }
+}
+
+type SessionIdEvent = {
+    properties?: {
+        sessionID?: string
+    }
+}
+
+type SessionErrorEvent = {
+    properties?: {
+        sessionID?: string
+        error?: unknown
+    }
+}
+
+type PermissionEvent = {
+    properties?: PermissionRequest
+}
+
+type QuestionEvent = {
+    properties?: QuestionRequest
+}
+
+type TodoEvent = {
+    properties?: {
+        sessionID?: string
+        todos?: Todo[]
+    }
+}
+
 const summarizedSessions = new Set<string>()
 
-export function handleSessionStatus(data: any, get: GetFn, set: SetFn) {
+export function handleSessionStatus(data: SessionStatusEvent, get: GetFn, set: SetFn) {
     const context = resolveEventSessionContext(get(), data.properties?.sessionID)
     if (!context) return
     const { sessionId, target } = context
@@ -48,7 +89,7 @@ export function handleSessionStatus(data: any, get: GetFn, set: SetFn) {
 }
 
 export function handleSessionIdle(
-    data: any,
+    data: SessionIdEvent,
     get: GetFn,
     set: SetFn,
     syncSessionMessages: (target: SessionStreamTarget, sessionId: string) => void,
@@ -69,13 +110,13 @@ export function handleSessionIdle(
         summarizedSessions.add(sessionId)
         const chatKey = target.kind === 'performer' ? target.performerId : target.chatKey
         const messages = get().chats[chatKey] || []
-        const firstUserMsg = messages.find((m: any) => m.role === 'user')
+        const firstUserMsg = messages.find((message: ChatMessage) => message.role === 'user')
         if (firstUserMsg) {
             const rawText = (firstUserMsg.content || '').replace(/\n/g, ' ').trim()
             const shortTitle = rawText.length > 50 ? rawText.slice(0, 47) + '...' : rawText
             if (shortTitle) {
                 const sessions = get().sessions || []
-                const session = sessions.find((s: any) => s.id === sessionId)
+                const session = sessions.find((entry) => entry.id === sessionId)
                 if (session?.title) {
                     void (async () => {
                         const { renameStudioSessionTitle } = await import('../../shared/session-metadata')
@@ -93,7 +134,7 @@ export function handleSessionIdle(
 }
 
 export function handleSessionCompacted(
-    data: any,
+    data: SessionIdEvent,
     get: GetFn,
     _set: SetFn,
     syncSessionMessages: (target: SessionStreamTarget, sessionId: string) => void,
@@ -104,7 +145,7 @@ export function handleSessionCompacted(
     void syncSessionMessages(target, sessionId)
 }
 
-export function handleSessionError(data: any, get: GetFn, set: SetFn) {
+export function handleSessionError(data: SessionErrorEvent, get: GetFn, set: SetFn) {
     const context = resolveEventSessionContext(get(), data.properties?.sessionID)
     if (!context) return
     const { sessionId, target } = context
@@ -129,7 +170,7 @@ export function handleSessionError(data: any, get: GetFn, set: SetFn) {
     ])
 }
 
-export function handlePermissionAsked(data: any, get: GetFn, set: SetFn) {
+export function handlePermissionAsked(data: PermissionEvent, get: GetFn, set: SetFn) {
     const request = data.properties
     if (!request || !request.sessionID || !request.id) return
 
@@ -149,7 +190,7 @@ export function handlePermissionAsked(data: any, get: GetFn, set: SetFn) {
     }))
 }
 
-export function handlePermissionReplied(data: any, _get: GetFn, set: SetFn) {
+export function handlePermissionReplied(data: PermissionEvent, _get: GetFn, set: SetFn) {
     const replyInfo = data.properties
     if (!replyInfo || !replyInfo.sessionID) return
 
@@ -160,7 +201,7 @@ export function handlePermissionReplied(data: any, _get: GetFn, set: SetFn) {
     })
 }
 
-export function handleQuestionAsked(data: any, get: GetFn, set: SetFn) {
+export function handleQuestionAsked(data: QuestionEvent, get: GetFn, set: SetFn) {
     const request = data.properties
     if (!request || !request.sessionID || !request.id) return
 
@@ -180,7 +221,7 @@ export function handleQuestionAsked(data: any, get: GetFn, set: SetFn) {
     }))
 }
 
-export function handleQuestionReplied(data: any, _get: GetFn, set: SetFn) {
+export function handleQuestionReplied(data: QuestionEvent, _get: GetFn, set: SetFn) {
     const replyInfo = data.properties
     if (!replyInfo || !replyInfo.sessionID) return
 
@@ -191,7 +232,7 @@ export function handleQuestionReplied(data: any, _get: GetFn, set: SetFn) {
     })
 }
 
-export function handleTodoUpdated(data: any, _get: GetFn, set: SetFn) {
+export function handleTodoUpdated(data: TodoEvent, _get: GetFn, set: SetFn) {
     const payload = data.properties
     if (!payload || !payload.sessionID || !payload.todos) return
 

@@ -1,23 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
-import type { QuestionRequest } from '@opencode-ai/sdk/v2';
+import type { QuestionAnswer, QuestionRequest } from '@opencode-ai/sdk/v2';
 import { HelpCircle, Check, X, ChevronRight, ChevronLeft } from 'lucide-react';
 import './InteractionDock.css';
 
 interface QuestionWizardProps {
     request: QuestionRequest;
-    onRespond: (answers: Record<string, string[]>) => void;
+    onRespond: (answers: QuestionAnswer[]) => void;
     onReject: () => void;
     responding: boolean;
 }
 
 export default function QuestionWizard({ request, onRespond, onReject, responding }: QuestionWizardProps) {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [answers, setAnswers] = useState<Record<string, string[]>>({});
-    const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+    const [answers, setAnswers] = useState<QuestionAnswer[]>(() => (request.questions || []).map(() => []));
+    const inputRef = useRef<HTMLTextAreaElement>(null);
 
     const questions = request.questions || [];
     const isLast = currentIndex === questions.length - 1;
     const currentQ = questions[currentIndex];
+
+    const normalizedAnswers = questions.map((_, index) => answers[index] || []);
 
     useEffect(() => {
         if (inputRef.current) inputRef.current.focus();
@@ -25,9 +27,7 @@ export default function QuestionWizard({ request, onRespond, onReject, respondin
 
     const handleNext = () => {
         if (isLast) {
-            const finalAnswers: Record<string, string[]> = {};
-            questions.forEach(q => { finalAnswers[q.header] = answers[q.header] || []; });
-            onRespond(finalAnswers);
+            onRespond(normalizedAnswers);
         } else {
             setCurrentIndex(currentIndex + 1);
         }
@@ -47,12 +47,16 @@ export default function QuestionWizard({ request, onRespond, onReject, respondin
 
     const setAnswerList = (val: string[]) => {
         if (!currentQ) return;
-        setAnswers((prev) => ({ ...prev, [currentQ.header]: val }));
+        setAnswers((prev) => {
+            const next = questions.map((_, index) => prev[index] || []);
+            next[currentIndex] = val;
+            return next;
+        });
     };
 
     if (!currentQ) return null;
 
-    const currentSelection = answers[currentQ.header] || [];
+    const currentSelection = normalizedAnswers[currentIndex] || [];
     const hasOptions = Array.isArray(currentQ.options) && currentQ.options.length > 0;
     const canTypeCustom = currentQ.custom !== false;
     const isMultiple = !!currentQ.multiple;
@@ -114,7 +118,7 @@ export default function QuestionWizard({ request, onRespond, onReject, respondin
 
                 {canTypeCustom && (
                     <textarea
-                        ref={inputRef as any}
+                        ref={inputRef}
                         className="question-dock__custom-input"
                         value={
                             isMultiple

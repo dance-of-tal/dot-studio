@@ -1,7 +1,20 @@
-// Choreography Act — Shared Types (PRD-003)
-// Mailbox, Board, Events, WakeCondition, Relations, Act Definition, Thread
+// Choreography Act — Shared Types (PRD-005)
+// dot contract types are Source of Truth for the serialization schema.
+// Studio extends them with runtime-only fields (id, performerRef, mailbox, etc.)
 
 import type { SharedAssetRef } from './chat-contracts.js'
+import type {
+    ActRelationV1,
+    ActParticipantSubscriptionsV1,
+} from './dot-types.js'
+
+// ── Re-export dot contract types as Studio aliases ──────
+
+/** dot contract re-export — Subscriptions schema */
+export type ParticipantSubscriptions = ActParticipantSubscriptionsV1
+
+// Re-export the V1 types for direct use
+export type { ActRelationV1, ActParticipantSubscriptionsV1 } from './dot-types.js'
 
 // ── Mailbox Messages ────────────────────────────────────
 
@@ -82,38 +95,31 @@ export interface WakeCondition {
     status: 'waiting' | 'triggered' | 'expired'
 }
 
-// ── Subscriptions ───────────────────────────────────────
+// ── Act Relation (extends dot contract with Studio id) ──
+// dot ActRelationV1 = { between, direction, name, description }
+// Studio adds `id` for internal tracking on the canvas.
 
-export interface ParticipantSubscriptions {
-    messagesFrom?: string[]
-    messageTags?: string[]
-    callboardKeys?: string[]
-    eventTypes?: MailboxEventType[]
-}
-
-// ── Act Relation (communication contract) ───────────────
-
-export interface ActRelation {
+export interface ActRelation extends ActRelationV1 {
     id: string
-    between: [string, string]           // participant pair
-    direction: 'both' | 'one-way'
-    name: string
-    description?: string
-    permissions?: {
-        callboardKeys?: string[]
-        messageTags?: string[]
-    }
-    maxCalls: number
-    timeout: number
-    sessionPolicy?: 'fresh' | 'reuse'
 }
 
 // ── Act Participant Binding ─────────────────────────────
+// dot ActParticipantV1 uses `performer: string` (asset URN).
+// Studio uses `performerRef: SharedAssetRef` (resolved ref).
+// These are semantically different, so Studio keeps its own type.
 
 export interface ActParticipantBinding {
     performerRef: SharedAssetRef
-    activeDanceIds?: string[]
     subscriptions?: ParticipantSubscriptions
+}
+
+// ── Act Safety Config (runtime-only, not in asset) ──────
+
+export interface ActSafetyConfig {
+    maxEvents?: number                   // Act Thread total event cap. Default 500
+    maxMessagesPerPair?: number          // per performer-pair message cap. Default 50
+    threadTimeoutMs?: number             // Thread timeout. Default 30 min
+    loopDetectionThreshold?: number      // ping-pong detection threshold. Default 5
 }
 
 // ── Act Definition ──────────────────────────────────────
@@ -125,6 +131,7 @@ export interface ActDefinition {
     actRules?: string[]
     participants: Record<string, ActParticipantBinding>  // participantKey → binding
     relations: ActRelation[]
+    safety?: ActSafetyConfig
 }
 
 // ── Mailbox (runtime state) ─────────────────────────────

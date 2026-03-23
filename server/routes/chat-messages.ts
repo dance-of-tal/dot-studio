@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import type { ChatSendRequest } from '../../shared/chat-contracts.js'
 import { uniqueAssetRefs } from '../lib/chat-session.js'
 import { resolveSessionExecutionContext } from '../lib/session-execution.js'
@@ -10,7 +11,6 @@ import { sendStudioChatMessage } from '../services/chat-service.js'
 import {
     listStudioSessionDiff,
     listStudioSessionMessages,
-    listStudioSessionTodos,
     rejectQuestion,
     respondQuestion,
 } from '../services/chat-session-service.js'
@@ -50,7 +50,7 @@ chatMessages.post('/api/chat/sessions/:id/send', async (c) => {
 })
 
 chatMessages.post('/api/chat/questions/:qid/respond', async (c) => {
-    const { answers } = await c.req.json<{ answers: any[] }>()
+    const { answers } = await c.req.json<{ answers: QuestionAnswer[] }>()
     try {
         return c.json(await respondQuestion(c.req.param('qid'), answers))
     } catch (err) {
@@ -77,14 +77,6 @@ chatMessages.get('/api/chat/sessions/:id/messages', async (c) => {
 chatMessages.get('/api/chat/sessions/:id/diff', async (c) => {
     try {
         return c.json(await listStudioSessionDiff(requestWorkingDir(c), c.req.param('id')))
-    } catch (err) {
-        return jsonOpencodeError(c, err)
-    }
-})
-
-chatMessages.get('/api/chat/sessions/:id/todo', async (c) => {
-    try {
-        return c.json(await listStudioSessionTodos(requestWorkingDir(c), c.req.param('id')))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

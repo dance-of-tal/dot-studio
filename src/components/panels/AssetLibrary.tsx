@@ -2,6 +2,7 @@ import { HardDrive, Globe, X } from 'lucide-react'
 import './AssetLibrary.css'
 import AssetLibraryLocalView from './AssetLibraryLocalView'
 import AssetLibraryRegistryView from './AssetLibraryRegistryView'
+import UninstallConfirmDialog from './UninstallConfirmDialog'
 import { useAssetLibraryController } from './useAssetLibraryController'
 
 export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
@@ -67,7 +68,10 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     onSaveLocal={(asset) => controller.handlePinnedAssetAction(asset, 'save-local')}
                     onPublish={(asset) => controller.handlePinnedAssetAction(asset, 'publish')}
                     onDeleteDraft={controller.handleDeleteDraft}
+                    onEditDraft={controller.handleEditDraft}
+                    onUninstall={controller.handleUninstallAsset}
                     createNewPerformer={controller.createNewPerformer}
+                    createNewAct={controller.createNewAct}
                     createNewPerformerDraftEntry={controller.createNewPerformerDraftEntry}
                     showInstalledAssets={controller.showInstalledAssets}
                     showModels={controller.showModels}
@@ -121,6 +125,17 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     onSaveLocal={(asset) => controller.handlePinnedAssetAction(asset, 'save-local')}
                     onPublish={(asset) => controller.handlePinnedAssetAction(asset, 'publish')}
                     onDeleteDraft={controller.handleDeleteDraft}
+                />
+            )}
+
+            {controller.uninstallPlan && (
+                <UninstallConfirmDialog
+                    target={controller.uninstallPlan.target}
+                    dependents={controller.uninstallPlan.dependents}
+                    loading={controller.uninstallLoading}
+                    actionName={controller.uninstallPlan.actionName}
+                    onConfirm={controller.confirmUninstall}
+                    onCancel={controller.cancelUninstall}
                 />
             )}
         </div>

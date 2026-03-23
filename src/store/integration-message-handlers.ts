@@ -17,12 +17,69 @@ import {
     upsertMessagePart,
     upsertStreamingAssistant,
 } from './integration-streaming'
-import { handleAssistantToolCall } from '../features/assistant/assistant-actions'
 
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
 
-export function handleMessageUpdated(data: any, get: GetFn, set: SetFn) {
+type MessageUpdatedEvent = {
+    properties?: {
+        info?: {
+            sessionID?: string
+            id?: string
+            role?: string
+            time?: { created?: number }
+        }
+    }
+}
+
+type MessagePartPayload = {
+    sessionID?: string
+    messageID?: string
+    id?: string
+    type?: 'text' | 'reasoning' | 'tool' | 'step-start' | 'step-finish' | 'compaction'
+    text?: string
+    tool?: string
+    callID?: string
+    state?: {
+        status?: 'pending' | 'running' | 'completed' | 'error'
+        title?: string
+        input?: unknown
+        output?: unknown
+        error?: unknown
+        time?: { start: number; end?: number }
+    }
+    reason?: string
+    cost?: unknown
+    tokens?: unknown
+    auto?: boolean
+    overflow?: unknown
+}
+
+type MessagePartEvent = {
+    properties?: {
+        part?: MessagePartPayload
+    }
+}
+
+type MessagePartDeltaEvent = {
+    properties?: {
+        sessionID?: string
+        messageID?: string
+        partID?: string
+        field?: string
+        delta?: string
+    }
+}
+
+type MessagePartRemovedEvent = {
+    properties?: {
+        sessionID?: string
+        messageID?: string
+        partID?: string
+    }
+}
+
+export function handleMessageUpdated(data: MessageUpdatedEvent, get: GetFn, set: SetFn) {
     const info = data.properties?.info
     if (!info?.sessionID || !info?.id || typeof info.role !== 'string') return
 
@@ -42,7 +99,7 @@ export function handleMessageUpdated(data: any, get: GetFn, set: SetFn) {
     ))
 }
 
-export function handleMessagePartUpdated(data: any, get: GetFn, set: SetFn) {
+export function handleMessagePartUpdated(data: MessagePartEvent, get: GetFn, set: SetFn) {
     const part = data.properties?.part
     if (!part?.sessionID || !part?.messageID) return
 
@@ -101,14 +158,6 @@ export function handleMessagePartUpdated(data: any, get: GetFn, set: SetFn) {
             },
         }
 
-        if (target.kind === 'performer' && target.performerId === 'studio-assistant' && state.status === 'completed' && part.tool?.startsWith('assistant_')) {
-            if (state.input) {
-                setTimeout(() => {
-                    handleAssistantToolCall(part.callID || part.id, part.tool, state.input)
-                }, 10)
-            }
-        }
-
         applyTargetMessageUpdate(set, target, (messages) => upsertMessagePart(messages, part.messageID, toolPart))
         return
     }
@@ -135,7 +184,7 @@ export function handleMessagePartUpdated(data: any, get: GetFn, set: SetFn) {
     }
 }
 
-export function handleMessagePartDelta(data: any, get: GetFn, set: SetFn) {
+export function handleMessagePartDelta(data: MessagePartDeltaEvent, get: GetFn, set: SetFn) {
     const { sessionID, messageID, partID, field, delta } = data.properties || {}
     if (!sessionID || !messageID || !partID || field !== 'text' || typeof delta !== 'string') return
 
@@ -167,7 +216,7 @@ export function handleMessagePartDelta(data: any, get: GetFn, set: SetFn) {
     }
 }
 
-export function handleMessagePartRemoved(data: any, get: GetFn, set: SetFn) {
+export function handleMessagePartRemoved(data: MessagePartRemovedEvent, get: GetFn, set: SetFn) {
     const { sessionID, messageID, partID } = data.properties || {}
     if (!sessionID || !messageID || !partID) return
 

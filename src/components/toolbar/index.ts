@@ -1,1 +1,1 @@
-export { default as StageToolbar } from './StageToolbar'
+export { default as WorkspaceToolbar } from './WorkspaceToolbar'

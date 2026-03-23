@@ -1,12 +1,36 @@
 import { api } from '../api'
-import type { DraftAsset } from '../types'
+import type { AssetRef, DanceDeliveryMode, DraftAsset, MarkdownEditorNode, WorkspaceActParticipantBinding, ActRelation } from '../types'
 import { ACT_DEFAULT_EXPANDED_HEIGHT, ACT_DEFAULT_WIDTH } from '../lib/act-layout'
 import { createPerformerNode } from '../lib/performers'
 import { defaultMarkdownContent } from './workspace-helpers'
 import type { StudioState } from './types'
 
-type SetState = (partial: any) => void
+type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
+
+type PerformerDraftContent = {
+    talRef?: AssetRef | null
+    danceRefs?: AssetRef[]
+    model?: StudioState['performers'][number]['model']
+    modelVariant?: string | null
+    mcpServerNames?: string[]
+    mcpBindingMap?: Record<string, string>
+    danceDeliveryMode?: DanceDeliveryMode
+    planMode?: boolean
+}
+
+type ActDraftParticipant = {
+    performerRef?: AssetRef
+    subscriptions?: WorkspaceActParticipantBinding['subscriptions']
+    position?: { x: number; y: number }
+}
+
+type ActDraftContent = {
+    description?: string
+    actRules?: string[]
+    participants?: Record<string, ActDraftParticipant>
+    relations?: ActRelation[]
+}
 
 export function upsertDraftImpl(
     get: GetState,
@@ -19,7 +43,7 @@ export function upsertDraftImpl(
             ...state.drafts,
             [draft.id]: draft,
         },
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 
     scheduleDraftPersist(draft.id, () => {
@@ -85,7 +109,7 @@ export async function savePerformerAsDraftImpl(get: GetState, set: SetState, per
                     updatedAt: draft.updatedAt,
                 },
             },
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     } catch (error) {
         console.error('Failed to save performer as draft', error)
@@ -125,7 +149,6 @@ export async function saveActAsDraftImpl(get: GetState, set: SetState, actId: st
         participants: Object.fromEntries(
             Object.entries(act.participants).map(([key, participant]) => [key, {
                 performerRef: participant.performerRef,
-                activeDanceIds: participant.activeDanceIds,
                 subscriptions: participant.subscriptions,
             }]),
         ),
@@ -135,9 +158,6 @@ export async function saveActAsDraftImpl(get: GetState, set: SetState, actId: st
             direction: relation.direction,
             name: relation.name,
             description: relation.description,
-            permissions: relation.permissions,
-            maxCalls: relation.maxCalls,
-            timeout: relation.timeout,
         })),
     }
 
@@ -161,7 +181,7 @@ export async function saveActAsDraftImpl(get: GetState, set: SetState, actId: st
                     updatedAt: draft.updatedAt,
                 },
             },
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     } catch (error) {
         console.error('Failed to save act as draft', error)
@@ -173,7 +193,7 @@ export function addPerformerFromDraftImpl(
     set: SetState,
     performerIdCounter: { value: number },
     name: string,
-    draftContent: Record<string, any>,
+    draftContent: PerformerDraftContent,
 ) {
     performerIdCounter.value++
     const id = `performer-${performerIdCounter.value}`
@@ -203,7 +223,7 @@ export function addPerformerFromDraftImpl(
         selectedMarkdownEditorId: null,
         activeChatPerformerId: id,
         inspectorFocus: null,
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -212,19 +232,18 @@ export function importActFromDraftImpl(
     set: SetState,
     makeId: (prefix: string) => string,
     name: string,
-    draftContent: Record<string, any>,
+    draftContent: ActDraftContent,
 ) {
     const actId = makeId('act')
     const centerX = get().canvasCenter?.x ?? 200
     const centerY = get().canvasCenter?.y ?? 200
 
-    const participants: Record<string, any> = {}
+    const participants: Record<string, WorkspaceActParticipantBinding> = {}
     if (draftContent.participants && typeof draftContent.participants === 'object') {
         let index = 0
-        for (const [key, participant] of Object.entries(draftContent.participants) as [string, any][]) {
+        for (const [key, participant] of Object.entries(draftContent.participants)) {
             participants[key] = {
                 performerRef: participant.performerRef || { kind: 'draft', draftId: '' },
-                activeDanceIds: participant.activeDanceIds,
                 subscriptions: participant.subscriptions,
                 position: participant.position || { x: centerX + index * 300, y: centerY },
             }
@@ -248,7 +267,7 @@ export function importActFromDraftImpl(
     set((state: StudioState) => ({
         acts: [...state.acts, nextAct],
         selectedActId: actId,
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -268,7 +287,7 @@ export function createMarkdownEditorImpl(
             derivedFrom?: string | null | undefined
         }
         position?: { x: number; y: number }
-        attachTarget?: any
+        attachTarget?: MarkdownEditorNode['attachTarget']
     },
 ) {
     markdownEditorIdCounter.value++
@@ -326,21 +345,74 @@ export function createMarkdownEditorImpl(
         focusedPerformerId: null,
         focusedNodeType: null,
         inspectorFocus: null,
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 
-    api.drafts.create({
-        kind,
-        id: draftId,
-        name,
-        content,
-        slug,
-        description,
-        tags,
-        derivedFrom: source?.derivedFrom || null,
-    }).catch((error) => {
-        console.warn('Failed to persist new editor draft to disk', error)
-    })
+    return editorId
+}
+
+export function openDraftEditorImpl(
+    get: GetState,
+    set: SetState,
+    markdownEditorIdCounter: { value: number },
+    draftId: string,
+) {
+    // If an editor for this draft already exists, just select it
+    const existing = get().markdownEditors.find((e) => e.draftId === draftId)
+    if (existing) {
+        set({
+            selectedMarkdownEditorId: existing.id,
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            focusedPerformerId: null,
+            focusedNodeType: null,
+            inspectorFocus: null,
+        })
+        return existing.id
+    }
+
+    const draft = get().drafts[draftId]
+    if (!draft) return null
+
+    const kind = draft.kind as 'tal' | 'dance'
+    if (kind !== 'tal' && kind !== 'dance') return null
+
+    markdownEditorIdCounter.value++
+    const editorId = `markdown-editor-${markdownEditorIdCounter.value}`
+    const content = typeof draft.content === 'string' ? draft.content : ''
+
+    set((state: StudioState) => ({
+        markdownEditors: [
+            ...state.markdownEditors,
+            {
+                id: editorId,
+                kind,
+                position: {
+                    x: 160 + (state.markdownEditors.length * 28),
+                    y: 140 + (state.markdownEditors.length * 24),
+                },
+                width: 560,
+                height: 380,
+                draftId,
+                baseline: {
+                    name: draft.name,
+                    slug: draft.slug || '',
+                    description: draft.description || '',
+                    tags: draft.tags || [],
+                    content,
+                },
+                attachTarget: null,
+                hidden: false,
+            },
+        ],
+        selectedMarkdownEditorId: editorId,
+        selectedPerformerId: null,
+        selectedPerformerSessionId: null,
+        focusedPerformerId: null,
+        focusedNodeType: null,
+        inspectorFocus: null,
+        workspaceDirty: true,
+    }))
 
     return editorId
 }

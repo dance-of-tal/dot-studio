@@ -12,9 +12,33 @@ import { OPENCODE_URL } from '../lib/config.js'
 import { isManagedOpencode, canRestartOpencodeSidecar, restartOpencodeSidecar } from '../lib/opencode-sidecar.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { readProjectConfigFile, readProjectMcpCatalog, summarizeProjectMcpCatalog } from '../lib/project-config.js'
+import type { ProjectMcpLiveStatusMap } from '../lib/project-config.js'
 import { projectMcpEntryEnabled } from '../../shared/project-mcp.js'
 import { invalidateProviderListCache } from '../lib/model-catalog.js'
 import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
+
+type ResponseEnvelope<T> = { data?: T | null | undefined }
+type ProviderAuthStatus = Record<string, unknown>
+type OauthResponse = Record<string, unknown>
+type McpAuthResponse = Record<string, unknown>
+type ProjectConfigFileResponse = { content?: string }
+type ProviderAuthInput =
+    | { type: 'oauth'; refresh: string; access: string; expires: number; enterpriseUrl?: string; accountId?: string }
+    | { type: 'api'; key: string }
+    | { type: 'wellknown'; key: string; token: string }
+type McpServerConfigInput =
+    | { command: string; args?: string[]; env?: Record<string, string> }
+    | { url: string }
+type McpServerConfig =
+    | { type: 'local'; command: string[]; environment?: Record<string, string>; enabled?: boolean }
+    | { type: 'remote'; url: string; enabled?: boolean }
+
+function extractResponseData<T>(response: unknown): T | undefined {
+    if (!response || typeof response !== 'object' || !('data' in response)) {
+        return undefined
+    }
+    return (response as ResponseEnvelope<T>).data ?? undefined
+}
 
 // ── Response helpers ────────────────────────────────────
 
@@ -27,8 +51,39 @@ export function opencodeModeMeta() {
 }
 
 export function responseData<T>(response: unknown, fallback: T): T {
-    const data = (response as any).data
+    const data = extractResponseData<T>(response)
     return (data || fallback) as T
+}
+
+function isProviderAuthInput(value: unknown): value is ProviderAuthInput {
+    if (!value || typeof value !== 'object') return false
+    const auth = value as Record<string, unknown>
+    if (auth.type === 'oauth') {
+        return typeof auth.refresh === 'string' && typeof auth.access === 'string' && typeof auth.expires === 'number'
+    }
+    if (auth.type === 'api') {
+        return typeof auth.key === 'string'
+    }
+    if (auth.type === 'wellknown') {
+        return typeof auth.key === 'string' && typeof auth.token === 'string'
+    }
+    return false
+}
+
+function normalizeMcpServerConfig(config: McpServerConfigInput): McpServerConfig {
+    if ('url' in config) {
+        return {
+            type: 'remote',
+            url: config.url,
+            enabled: true,
+        }
+    }
+    return {
+        type: 'local',
+        command: [config.command, ...(config.args || [])],
+        environment: config.env,
+        enabled: true,
+    }
 }
 
 // ── Read-only OpenCode queries ─────────────────────────
@@ -84,7 +139,7 @@ export async function getOpenCodeConfig(directory: string) {
 
 export async function getProviderAuthStatus(directory: string) {
     const oc = await getOpencode()
-    return unwrapOpencodeResult<any>(await oc.provider.auth({ directory })) || {}
+    return unwrapOpencodeResult<ProviderAuthStatus>(await oc.provider.auth({ directory })) || {}
 }
 
 export async function getLspStatus(directory: string) {
@@ -157,7 +212,7 @@ export async function updateOpenCodeConfig(directory: string, patch: unknown) {
 
 export async function authorizeProviderOauth(directory: string, providerId: string, method: number) {
     const oc = await getOpencode()
-    return unwrapOpencodeResult<any>(await oc.provider.oauth.authorize({
+    return unwrapOpencodeResult<OauthResponse>(await oc.provider.oauth.authorize({
         providerID: providerId,
         directory,
         method,
@@ -166,7 +221,7 @@ export async function authorizeProviderOauth(directory: string, providerId: stri
 
 export async function completeProviderOauth(directory: string, providerId: string, method: number, code?: string) {
     const oc = await getOpencode()
-    const data = unwrapOpencodeResult<any>(await oc.provider.oauth.callback({
+    const data = unwrapOpencodeResult<OauthResponse>(await oc.provider.oauth.callback({
         providerID: providerId,
         directory,
         method,
@@ -178,10 +233,13 @@ export async function completeProviderOauth(directory: string, providerId: strin
 }
 
 export async function updateProviderAuth(providerId: string, auth: unknown) {
+    if (!isProviderAuthInput(auth)) {
+        throw new StudioValidationError('Invalid provider auth payload.')
+    }
     const oc = await getOpencode()
-    const data = unwrapOpencodeResult<any>(await oc.auth.set({
+    const data = unwrapOpencodeResult<ProviderAuthStatus>(await oc.auth.set({
         providerID: providerId,
-        auth: auth as any,
+        auth,
     }))
     await oc.global.dispose()
     invalidateProviderListCache()
@@ -203,7 +261,7 @@ export async function listMcpServers(directory: string) {
 async function cachedMcpServers(cwd: string) {
     const oc = await getOpencode()
     const res = await oc.mcp.status({ directory: cwd })
-    const data = ((res as any).data || {}) as Record<string, any>
+    const data = responseData<ProjectMcpLiveStatusMap>(res, {})
     const catalog = await readProjectMcpCatalog(cwd)
     return summarizeProjectMcpCatalog(catalog, data)
 }
@@ -211,7 +269,7 @@ async function cachedMcpServers(cwd: string) {
 export async function startMcpAuth(directory: string, name: string) {
     await validateMcpAuthRequest(directory, name)
     const oc = await getOpencode()
-    const data = unwrapOpencodeResult<any>(await oc.mcp.auth.start({
+    const data = unwrapOpencodeResult<McpAuthResponse>(await oc.mcp.auth.start({
         name,
         directory,
     }))
@@ -221,7 +279,7 @@ export async function startMcpAuth(directory: string, name: string) {
 
 export async function completeMcpAuth(directory: string, name: string, code: string) {
     const oc = await getOpencode()
-    const data = unwrapOpencodeResult<any>(await oc.mcp.auth.callback({
+    const data = unwrapOpencodeResult<McpAuthResponse>(await oc.mcp.auth.callback({
         name,
         directory,
         code,
@@ -233,7 +291,7 @@ export async function completeMcpAuth(directory: string, name: string, code: str
 export async function authenticateMcp(directory: string, name: string) {
     await validateMcpAuthRequest(directory, name)
     const oc = await getOpencode()
-    const data = unwrapOpencodeResult<any>(await oc.mcp.auth.authenticate({
+    const data = unwrapOpencodeResult<McpAuthResponse>(await oc.mcp.auth.authenticate({
         name,
         directory,
     }))
@@ -243,7 +301,7 @@ export async function authenticateMcp(directory: string, name: string) {
 
 export async function removeMcpAuth(directory: string, name: string) {
     const oc = await getOpencode()
-    const data = unwrapOpencodeResult<any>(await oc.mcp.auth.remove({
+    const data = unwrapOpencodeResult<McpAuthResponse>(await oc.mcp.auth.remove({
         name,
         directory,
     }))
@@ -259,7 +317,7 @@ export async function readProjectConfigFromOpencode(directory: string) {
         directory,
         path: 'config.json',
     })
-    const data = responseData<any>(res, {})
+    const data = responseData<ProjectConfigFileResponse>(res, {})
     const raw = typeof data?.content === 'string' ? data.content : '{}'
     return {
         cwd: directory,
@@ -309,12 +367,12 @@ export async function runMcpMutation(
 
 export async function addMcpServer(
     directory: string,
-    input: { name: string; config: { command: string; args?: string[]; env?: Record<string, string> } | { url: string } },
+    input: { name: string; config: McpServerConfigInput },
 ) {
     return runMcpMutation(directory, (oc) => oc.mcp.add({
         directory,
         name: input.name,
-        config: input.config as any,
+        config: normalizeMcpServerConfig(input.config),
     }))
 }
 

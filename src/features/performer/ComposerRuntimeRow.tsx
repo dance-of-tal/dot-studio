@@ -1,5 +1,5 @@
 import { Hammer, Lightbulb, Shield } from 'lucide-react'
-import type { PerformerNode } from '../../types'
+import type { PerformerNode, SafeOwnerSummary } from '../../types'
 import ModelVariantSelect from './ModelVariantSelect'
 
 interface ComposerRuntimeRowProps {
@@ -8,7 +8,7 @@ interface ComposerRuntimeRowProps {
     selectedAgentId: string
     buildAgent: { name: string; description?: string } | null
     planAgent: { name: string; description?: string } | null
-    safeSummary: any
+    safeSummary: SafeOwnerSummary | null
     onSetAgentId: (id: string, agentId: string | null) => void
     onSetModelVariant: (id: string, variant: string | null) => void
     onSetExecutionMode: () => void

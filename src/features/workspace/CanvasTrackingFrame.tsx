@@ -1,25 +1,27 @@
 import { useEffect, useState } from 'react'
+import type { NodeProps } from '@xyflow/react'
 import { Activity, FileCode, X } from 'lucide-react'
 import { api } from '../../api'
 import type { FileStatus } from '../../types'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
 import './CanvasTrackingFrame.css'
 
-interface CanvasTrackingFrameProps {
-    data: {
-        title: string
-        width: number
-        height: number
-        onClose: () => void
-        onResize: (width: number, height: number) => void
-    }
+type CanvasTrackingFrameData = {
+    title: string
+    width: number
+    height: number
+    onClose: () => void
+    onResize: (width: number, height: number) => void
+    transformActive?: boolean
+    onActivateTransform?: () => void
+    onDeactivateTransform?: () => void
 }
 
-export default function CanvasTrackingFrame({ data }: CanvasTrackingFrameProps) {
+export default function CanvasTrackingFrame({ data }: NodeProps<CanvasTrackingFrameData>) {
     const { title, width, height, onClose } = data
-    const transformActive = !!(data as any).transformActive
-    const onActivateTransform = (data as any).onActivateTransform as (() => void) | undefined
-    const onDeactivateTransform = (data as any).onDeactivateTransform as (() => void) | undefined
+    const transformActive = !!data.transformActive
+    const onActivateTransform = data.onActivateTransform
+    const onDeactivateTransform = data.onDeactivateTransform
     const [files, setFiles] = useState<FileStatus[]>([])
 
     useEffect(() => {

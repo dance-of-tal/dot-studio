@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { PerformerNode, SafeOwnerSummary } from '../../types'
 
 type Args = {
     performerId: string
-    performer: any
+    performer: PerformerNode | null
     isSelected: boolean
     isFocused: boolean
     isEditMode: boolean
-    refreshSafeOwner: (ownerKind: 'performer', ownerId: string) => Promise<any>
-    safeSummary: any
+    refreshSafeOwner: (ownerKind: 'performer', ownerId: string) => Promise<SafeOwnerSummary | null>
+    safeSummary: SafeOwnerSummary | null
     setPerformerExecutionMode: (performerId: string, mode: 'direct' | 'safe') => void
     detachPerformerSession: (performerId: string, notice?: string) => void
     applySafeOwner: (ownerKind: 'performer', ownerId: string) => Promise<void>

@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import type { Connection, Node, NodeChange, ReactFlowInstance } from '@xyflow/react'
+import type { WorkspaceSlice } from '../../store/types'
 import { routeActConnection } from './act-connect-router'
 import {
     resolveCanvasDragStop,
@@ -8,7 +9,7 @@ import {
 } from './canvas-event-router'
 import { resolveCanvasResizeChange } from './canvas-resize-router'
 
-type EditingTargetLike = { type: string; id: string } | null
+type EditingTargetLike = WorkspaceSlice['editingTarget']
 
 type UseCanvasFlowHandlersArgs = {
     nodes: Node[]

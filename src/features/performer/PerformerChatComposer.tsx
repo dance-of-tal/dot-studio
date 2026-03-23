@@ -1,6 +1,9 @@
 import type { RefObject } from 'react'
+import type { PermissionRequest, QuestionAnswer, QuestionRequest } from '@opencode-ai/sdk/v2'
 import { Send, Square } from 'lucide-react'
-import type { PerformerNode } from '../../types'
+import type { PerformerNode, SafeOwnerSummary } from '../../types'
+import type { FileMention } from '../../hooks/useFileMentions'
+import type { PerformerMention } from '../../hooks/usePerformerMention'
 import type { TurnDanceSelection, DanceSearchItem } from './agent-frame-utils'
 import ComposerPillBar from './ComposerPillBar'
 import ComposerMentionMenus from './ComposerMentionMenus'
@@ -19,14 +22,13 @@ type Props = {
     selectedAgentId: string
     buildAgent: { name: string; description?: string } | null
     planAgent: { name: string; description?: string } | null
-    safeSummary: any
-    attachments: any[]
-    setAttachments: React.Dispatch<React.SetStateAction<any[]>>
-    mentionedPerformers: any[]
-    setMentionedPerformers: React.Dispatch<React.SetStateAction<any[]>>
+    safeSummary: SafeOwnerSummary | null
+    attachments: FileMention[]
+    setAttachments: React.Dispatch<React.SetStateAction<FileMention[]>>
+    mentionedPerformers: PerformerMention[]
+    setMentionedPerformers: React.Dispatch<React.SetStateAction<PerformerMention[]>>
     turnDanceSelections: TurnDanceSelection[]
     setTurnDanceSelections: React.Dispatch<React.SetStateAction<TurnDanceSelection[]>>
-    composerInputRef: RefObject<HTMLTextAreaElement | null>
     inputRef: RefObject<HTMLTextAreaElement | null>
     handleDrop: (e: React.DragEvent) => void
     handleInputChange: (value: string) => void
@@ -44,25 +46,25 @@ type Props = {
     slashIndex: number
     filteredCommands: Array<{ cmd: string; desc: string; mode: 'compose' | 'execute' }>
     isPerformerMentioning: boolean
-    performerMentionResults: any[]
+    performerMentionResults: PerformerMention[]
     performerMentionIndex: number
     extractPerformerMentionText: () => string | null
     setMentionedPerformerIndex: React.Dispatch<React.SetStateAction<number>>
     setIsPerformerMentioning: (value: boolean) => void
     isFileMentioning: boolean
-    fileMentionResults: any[]
+    fileMentionResults: FileMention[]
     fileMentionIndex: number
     extractFileMentionText: () => string | null
     setFileMentionIndex: React.Dispatch<React.SetStateAction<number>>
     setIsFileMentioning: (value: boolean) => void
     checkPerformerMention: () => void
     checkFileMention: () => void
-    pendingPermissions: Record<string, any>
-    pendingQuestions: Record<string, any>
+    pendingPermissions: Record<string, PermissionRequest>
+    pendingQuestions: Record<string, QuestionRequest>
     isRespondingToPermission: boolean
     setIsRespondingToPermission: React.Dispatch<React.SetStateAction<boolean>>
     respondToPermission: (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') => Promise<void>
-    respondToQuestion: (sessionId: string, questionId: string, answers: Record<string, string[]>) => Promise<void>
+    respondToQuestion: (sessionId: string, questionId: string, answers: QuestionAnswer[]) => Promise<void>
     rejectQuestion: (sessionId: string, questionId: string) => Promise<void>
     onSetAgentId: (id: string, agentId: string | null) => void
     onSetModelVariant: (id: string, variant: string | null) => void
@@ -192,9 +194,10 @@ export default function PerformerChatComposer(props: Props) {
 
             {sessionId && pendingQuestions[sessionId] ? (
                 <QuestionWizard
+                    key={pendingQuestions[sessionId].id}
                     request={pendingQuestions[sessionId]}
                     responding={isRespondingToPermission}
-                    onRespond={async (answers: Record<string, string[]>) => {
+                    onRespond={async (answers: QuestionAnswer[]) => {
                         setIsRespondingToPermission(true)
                         await respondToQuestion(sessionId, pendingQuestions[sessionId].id, answers)
                         setIsRespondingToPermission(false)

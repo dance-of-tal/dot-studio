@@ -1,28 +1,34 @@
+import type { Dispatch, SetStateAction } from 'react'
+import type { McpServer } from '../../types'
+import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
 import { DraggableAsset, DraggableMcp, DraggableModel, PinnedDetailPanel } from './AssetCards'
 import { MAX_MODELS_PER_PROVIDER, getAssetSelectionKey } from './asset-library-utils'
+import type { AssetPanelAction, AssetPanelAsset, AssetPanelAuthUser, AssetPanelHandler, LibraryAsset } from './asset-panel-types'
 
 type Props = {
     showInstalledAssets: boolean
     showModels: boolean
     showMcps: boolean
     assetsLoading: boolean
-    filteredInstalledAssets: any[]
-    filteredMcps: any[]
-    groupedModels: Array<{ key: string; label: string; items: any[]; connected?: boolean }>
-    selectedAsset: any
+    filteredInstalledAssets: LibraryAsset[]
+    filteredMcps: McpServer[]
+    groupedModels: Array<{ key: string; label: string; items: RuntimeModelCatalogEntry[]; connected?: boolean }>
+    selectedAsset: AssetPanelAsset | null
     selectedAssetKey: string | null
     selectedInstalled: boolean
-    authUser: any
+    authUser?: AssetPanelAuthUser
     detailActionStatus: string | null
-    detailActionLoading: null | 'save-local' | 'publish' | 'import'
+    detailActionLoading: AssetPanelAction | null
     expandedModelProviders: Record<string, boolean>
-    setExpandedModelProviders: (value: any) => void
+    setExpandedModelProviders: Dispatch<SetStateAction<Record<string, boolean>>>
     installedEmptyMessage: string
-    onSelectAsset: (asset: any) => void
+    onSelectAsset: AssetPanelHandler
     onCloseAsset: () => void
-    onSaveLocal: (asset: any) => void | Promise<void>
-    onPublish: (asset: any) => void | Promise<void>
-    onDeleteDraft: (asset: any) => void | Promise<void>
+    onSaveLocal: AssetPanelHandler
+    onPublish: AssetPanelHandler
+    onDeleteDraft: AssetPanelHandler
+    onEditDraft?: AssetPanelHandler
+    onUninstall?: AssetPanelHandler
 }
 
 export default function AssetLibraryModelList({
@@ -47,6 +53,8 @@ export default function AssetLibraryModelList({
     onSaveLocal,
     onPublish,
     onDeleteDraft,
+    onEditDraft,
+    onUninstall,
 }: Props) {
     return (
         <div className="asset-library-body">
@@ -60,6 +68,9 @@ export default function AssetLibraryModelList({
                                     asset={asset}
                                     selected={selectedAssetKey === getAssetSelectionKey(asset)}
                                     onSelect={onSelectAsset}
+                                    onUninstall={onUninstall}
+                                    onDeleteDraft={onDeleteDraft}
+                                    onEditDraft={onEditDraft}
                                 />
                             ))
                 )}
@@ -81,7 +92,7 @@ export default function AssetLibraryModelList({
                                         {hiddenCount > 0 ? (
                                             <button
                                                 className="asset-group__toggle"
-                                                onClick={() => setExpandedModelProviders((current: any) => ({
+                                                onClick={() => setExpandedModelProviders((current) => ({
                                                     ...current,
                                                     [group.key]: true,
                                                 }))}
@@ -126,6 +137,7 @@ export default function AssetLibraryModelList({
                 onPublish={onPublish}
                 onImportToStage={undefined}
                 onDeleteDraft={onDeleteDraft}
+                onUninstall={onUninstall}
             />
         </div>
     )

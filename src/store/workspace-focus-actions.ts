@@ -3,7 +3,7 @@ import { resolveActExpandedHeight } from '../lib/act-layout'
 import { normalizePath, mapCanvasTerminals } from './workspace-helpers'
 import type { StudioState } from './types'
 
-type SetState = (partial: any) => void
+type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
 
 export function enterFocusModeImpl(
@@ -14,13 +14,14 @@ export function enterFocusModeImpl(
     viewportSize: { width: number; height: number },
 ) {
     const state = get()
-    const FOCUS_PADDING = 48
-    const focusWidth = viewportSize.width - FOCUS_PADDING
-    const focusHeight = viewportSize.height - FOCUS_PADDING
+    const FOCUS_PAD_X = 24
+    const FOCUS_PAD_Y = 80 // extra top clearance for canvas toolbar overlay
+    const focusWidth = viewportSize.width - FOCUS_PAD_X
+    const focusHeight = viewportSize.height - FOCUS_PAD_Y
 
     const focusSnapshotBase = {
         hiddenPerformerIds: state.performers.filter((performer) => performer.hidden).map((performer) => performer.id),
-        hiddenActIds: state.acts.filter((act) => (act as any).hidden).map((act) => act.id),
+        hiddenActIds: state.acts.filter((act) => act.hidden).map((act) => act.id),
         hiddenEditorIds: state.markdownEditors.filter((editor) => editor.hidden).map((editor) => editor.id),
         hiddenTerminalIds: [] as string[],
         assetLibraryOpen: state.isAssetLibraryOpen,
@@ -241,7 +242,7 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
     if (!normalized) return
     setApiWorkingDirContext(normalized)
     set((state: StudioState) => ({
-        stageId: state.stageList.find((entry) => entry.workingDir === normalized)?.id || null,
+        workspaceId: state.workspaceList.find((entry) => entry.workingDir === normalized)?.id || null,
         workingDir: normalized,
         performers: state.performers.map((performer) => ({
             ...performer,
@@ -267,7 +268,7 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
         safeSummaries: {},
         trackingWindow: null,
         isTrackingOpen: false,
-        stageDirty: true,
+        workspaceDirty: true,
         acts: [],
         selectedActId: null,
         actEditorState: null,
@@ -302,28 +303,28 @@ export function addCanvasTerminalImpl(
                 connected: false,
             },
         ],
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
 export function removeCanvasTerminalImpl(set: SetState, id: string) {
     set((state: StudioState) => ({
         canvasTerminals: state.canvasTerminals.filter((terminal) => terminal.id !== id),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
 export function updateCanvasTerminalPositionImpl(set: SetState, id: string, x: number, y: number) {
     set((state: StudioState) => ({
         canvasTerminals: mapCanvasTerminals(state.canvasTerminals, id, (terminal) => ({ ...terminal, position: { x, y } })),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
 export function updateCanvasTerminalSizeImpl(set: SetState, id: string, width: number, height: number) {
     set((state: StudioState) => ({
         canvasTerminals: mapCanvasTerminals(state.canvasTerminals, id, (terminal) => ({ ...terminal, width, height })),
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -337,7 +338,7 @@ export function closeTrackingWindowImpl(set: SetState) {
     set({
         isTrackingOpen: false,
         trackingWindow: null,
-        stageDirty: true,
+        workspaceDirty: true,
     })
 }
 
@@ -346,7 +347,7 @@ export function updateTrackingWindowPositionImpl(set: SetState, x: number, y: nu
         trackingWindow: state.trackingWindow
             ? { ...state.trackingWindow, position: { x, y } }
             : state.trackingWindow,
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
@@ -355,6 +356,6 @@ export function updateTrackingWindowSizeImpl(set: SetState, width: number, heigh
         trackingWindow: state.trackingWindow
             ? { ...state.trackingWindow, width, height }
             : state.trackingWindow,
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }

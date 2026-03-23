@@ -1,12 +1,24 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, Children, isValidElement } from 'react';
 import { Check, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 import 'highlight.js/styles/github-dark.min.css';
 
 interface MarkdownRendererProps {
     content: string;
+}
+
+type CodeElementProps = {
+    children?: unknown
+    className?: string
+}
+
+function toCodeText(value: unknown): string {
+    if (typeof value === 'string') return value
+    if (typeof value === 'number') return String(value)
+    if (Array.isArray(value)) return value.map((item) => toCodeText(item)).join('')
+    return ''
 }
 
 /** Separate thinking/reasoning text from the actual response */
@@ -74,9 +86,10 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 components={{
                     pre({ children, ...props }) {
                         // Extract code text for copy button
-                        const codeEl = (children as any)?.props;
-                        const codeText = codeEl?.children?.[0] || '';
-                        const rawClass = codeEl?.className || '';
+                        const codeChild = Children.toArray(children)[0]
+                        const codeEl = isValidElement<CodeElementProps>(codeChild) ? codeChild : null
+                        const codeText = toCodeText(codeEl?.props.children)
+                        const rawClass = codeEl?.props.className || '';
                         const lang = rawClass.replace(/language-/g, '').replace(/hljs\s*/g, '').trim();
 
                         return (

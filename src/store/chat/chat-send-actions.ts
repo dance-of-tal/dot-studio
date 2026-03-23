@@ -1,6 +1,7 @@
 import { api } from '../../api'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers'
+import type { AssetRef } from '../../types'
 import {
     addChatMessage,
     appendPerformerSystemMessage,
@@ -9,6 +10,7 @@ import {
     type ChatGet,
     type ChatSet,
 } from './chat-internals'
+import { resolveChatRuntimeTarget } from './chat-runtime-target'
 
 function buildActParticipantChatKey(actId: string, threadId: string, participantKey: string) {
     return `act:${actId}:thread:${threadId}:participant:${participantKey}`
@@ -25,19 +27,20 @@ export function createChatSendActions(
             executionMode?: 'direct' | 'safe'
             performerName?: string
         },
-    ) => Promise<{ sessionId: string | null; runtimeConfig: any }>,
+    ) => Promise<{ sessionId: string | null; runtimeConfig: ReturnType<typeof resolvePerformerRuntimeConfig> }>,
 ) {
     return {
         sendMessage: async (
             performerId: string,
             text: string,
             attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
-            extraDanceRefs: any[] = [],
+            extraDanceRefs: AssetRef[] = [],
             mentionedPerformers: Array<{ performerId: string; name: string }> = [],
         ) => {
             let sessionId: string | undefined = get().sessionMap[performerId]
+            const target = resolveChatRuntimeTarget(get, performerId)
             const performer = getPerformerById(get, performerId)
-            const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
+            const runtimeConfig = target?.runtimeConfig || {
                 talRef: null,
                 danceRefs: [],
                 model: null,
@@ -86,7 +89,7 @@ export function createChatSendActions(
                     message: text,
                     performer: {
                         performerId,
-                        performerName: performer?.name || 'Untitled Performer',
+                        performerName: target?.name || performer?.name || 'Untitled Performer',
                         talRef: runtimeConfig.talRef,
                         danceRefs: runtimeConfig.danceRefs,
                         extraDanceRefs,
@@ -98,10 +101,11 @@ export function createChatSendActions(
                         planMode: runtimeConfig.planMode,
                     },
                     attachments,
-                    mentions: mentionedPerformers.map((mention: any) => ({ performerId: mention.performerId })),
+                    mentions: mentionedPerformers.map((mention) => ({ performerId: mention.performerId })),
+                    assistantContext: target?.assistantContext || null,
                 })
                 scheduleSessionFallbackSync(set, get, performerId, sessionId, Date.now())
-            } catch (error: any) {
+            } catch (error) {
                 addChatMessage(set, get, performerId, {
                     id: `msg-${Date.now()}`,
                     role: 'system',
@@ -218,7 +222,7 @@ export function createChatSendActions(
                     actThreadId: threadId,
                 })
                 scheduleSessionFallbackSync(set, get, chatKey, sessionId, Date.now())
-            } catch (error: any) {
+            } catch (error) {
                 addChatMessage(set, get, chatKey, {
                     id: `msg-${Date.now()}`,
                     role: 'system',
@@ -245,7 +249,7 @@ export function createChatSendActions(
                         timestamp: Date.now(),
                     })
                 }
-            } catch (error: any) {
+            } catch (error) {
                 state.addChatMessage(performerId, {
                     id: `msg-${Date.now()}`,
                     role: 'system',

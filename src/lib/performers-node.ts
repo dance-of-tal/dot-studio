@@ -27,7 +27,7 @@ export function createPerformerNode(input: {
     agentId?: string | null
     mcpServerNames?: string[]
     mcpBindingMap?: Record<string, string>
-    declaredMcpConfig?: Record<string, any> | null
+    declaredMcpConfig?: Record<string, unknown> | null
     danceDeliveryMode?: DanceDeliveryMode
     executionMode?: ExecutionMode
     planMode?: boolean
@@ -80,7 +80,7 @@ export function createPerformerNodeFromAsset(input: {
         modelPlaceholder?: ModelConfig | null
         mcpServerNames?: string[]
         mcpBindingMap?: Record<string, string>
-        mcpConfig?: Record<string, any> | null
+        mcpConfig?: Record<string, unknown> | null
     }
     x: number
     y: number

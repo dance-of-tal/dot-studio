@@ -3,7 +3,7 @@
  *
  * Domain logic is split into:
  *   - chat/chat-internals.ts   — shared helpers (sync, fallback poller, system messages)
- *   - chat/chat-approvals.ts   — permission / question / todo handlers
+ *   - chat/chat-approvals.ts   — permission / question handlers
  *
  * This file owns performer standalone chat, session management, and slash commands.
  */
@@ -21,8 +21,8 @@ export const createChatSlice: StateCreator<
     [],
     ChatSlice
 > = (set, get) => {
-    const approvals = createChatApprovals(set as any, get)
-    const sessionActions = createChatSessionActions(set as any, get)
+    const approvals = createChatApprovals(set)
+    const sessionActions = createChatSessionActions(set, get)
 
     return {
         chats: {},
@@ -37,7 +37,7 @@ export const createChatSlice: StateCreator<
 
         setActiveChatPerformer: (performerId) => set({ activeChatPerformerId: performerId }),
 
-        addChatMessage: (performerId, msg) => addChatMessageHelper(set as any, get, performerId, msg),
+        addChatMessage: (performerId, msg) => addChatMessageHelper(set, get, performerId, msg),
 
         // ── Approvals (delegated) ───────────────────
         ...approvals,

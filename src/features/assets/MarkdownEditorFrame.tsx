@@ -1,16 +1,20 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 
 import { FileText, Eye, Save, Upload, X } from 'lucide-react';
+import type { NodeProps } from '@xyflow/react';
 import { useQueryClient } from '@tanstack/react-query';
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer';
 import { useStudioStore } from '../../store';
 import { api } from '../../api';
 import { formatStudioApiErrorMessage } from '../../lib/api-errors';
+import type { MarkdownEditorNode } from '../../types';
 
 import { queryKeys, useDotAuthUser } from '../../hooks/queries';
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame';
 
 import './MarkdownEditorFrame.css';
+
+const DanceBundleEditorFrame = lazy(() => import('./DanceBundleEditorFrame'));
 
 
 function TagsInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
@@ -81,7 +85,31 @@ function equalStringArray(left: string[] = [], right: string[] = []) {
     return left.every((value, index) => value === right[index]);
 }
 
-export default function MarkdownEditorFrame({ id, data, selected }: any) {
+type MarkdownEditorFrameData = Pick<MarkdownEditorNode, 'draftId' | 'kind' | 'baseline' | 'attachTarget' | 'width' | 'height'> & {
+    workingDir: string
+    transformActive?: boolean
+    onActivateTransform?: () => void
+    onDeactivateTransform?: () => void
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export default function MarkdownEditorFrame(props: NodeProps<any>) {
+    const { id, data, selected } = props as { id: string; data: MarkdownEditorFrameData; selected?: boolean };
+
+    // Dance kind → delegate to bundle editor
+    if (data.kind === 'dance') {
+        return (
+            <Suspense fallback={null}>
+                <DanceBundleEditorFrame id={id} data={data} selected={selected} type="markdownEditor" />
+            </Suspense>
+        );
+    }
+
+    // Tal kind (and any other) → original markdown editor
+    return <TalMarkdownEditor id={id} data={data} selected={selected} />;
+}
+
+function TalMarkdownEditor({ id, data, selected }: { id: string; data: MarkdownEditorFrameData; selected?: boolean }) {
     const drafts = useStudioStore((state) => state.drafts);
     const setPerformerTalRef = useStudioStore((state) => state.setPerformerTalRef);
     const addPerformerDanceRef = useStudioStore((state) => state.addPerformerDanceRef);
@@ -104,7 +132,7 @@ export default function MarkdownEditorFrame({ id, data, selected }: any) {
     const currentName = typeof draft?.name === 'string' ? draft.name : '';
     const currentSlug = typeof draft?.slug === 'string' && draft.slug.trim() ? draft.slug : nameToSlug(currentName);
     const currentDescription = typeof draft?.description === 'string' ? draft.description : '';
-    const currentTags = Array.isArray(draft?.tags) ? draft.tags : [];
+    const currentTags = useMemo(() => (Array.isArray(draft?.tags) ? draft.tags : []), [draft?.tags]);
     const currentContent = typeof draft?.content === 'string' ? draft.content : '';
 
     const dirty = useMemo(() => {
@@ -204,7 +232,7 @@ export default function MarkdownEditorFrame({ id, data, selected }: any) {
                     ? `Updated local ${data.kind} asset at ${result.urn}.`
                     : `Saved local ${data.kind} asset at ${result.urn}.`,
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
             setStatus({ tone: 'error', message: formatStudioApiErrorMessage(error, false) });
         } finally {
             setAction(null);
@@ -228,7 +256,7 @@ export default function MarkdownEditorFrame({ id, data, selected }: any) {
                 tone: 'success',
                 message: result.published ? `Published ${result.urn}.` : `${result.urn} already exists in the registry.`,
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
             setStatus({ tone: 'error', message: formatStudioApiErrorMessage(error, false) });
         } finally {
             setAction(null);

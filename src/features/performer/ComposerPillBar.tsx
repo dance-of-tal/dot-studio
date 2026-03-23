@@ -1,19 +1,16 @@
 import { File as FileIcon, Sparkles, X, Zap } from 'lucide-react'
 import { assetRefKey } from '../../lib/performers'
+import type { FileMention } from '../../hooks/useFileMentions'
+import type { PerformerMention } from '../../hooks/usePerformerMention'
 import type { TurnDanceSelection } from './agent-frame-utils'
-
-interface PerformerMention {
-    performerId: string
-    name: string
-}
 
 interface ComposerPillBarProps {
     mentionedPerformers: PerformerMention[]
     setMentionedPerformers: React.Dispatch<React.SetStateAction<PerformerMention[]>>
     turnDanceSelections: TurnDanceSelection[]
     setTurnDanceSelections: React.Dispatch<React.SetStateAction<TurnDanceSelection[]>>
-    attachments: any[]
-    setAttachments: React.Dispatch<React.SetStateAction<any[]>>
+    attachments: FileMention[]
+    setAttachments: React.Dispatch<React.SetStateAction<FileMention[]>>
 }
 
 export default function ComposerPillBar({

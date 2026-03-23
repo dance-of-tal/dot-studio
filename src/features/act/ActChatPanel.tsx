@@ -150,8 +150,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                 <span className="user-input-text">{msg.content}</span>
                             </div>
                         ) : msg.role === 'system' ? (
-                            <div className={`act-chat__system ${(msg.metadata as any)?.isWakeUp ? 'act-chat__system--wakeup' : ''}`}>
-                                {(msg.metadata as any)?.isWakeUp && <Workflow size={10} />}
+                            <div className={`act-chat__system ${msg.metadata?.isWakeUp ? 'act-chat__system--wakeup' : ''}`}>
+                                {msg.metadata?.isWakeUp && <Workflow size={10} />}
                                 {msg.content}
                             </div>
                         ) : (

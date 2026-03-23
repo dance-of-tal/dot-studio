@@ -1,35 +1,31 @@
 import { nanoid } from 'nanoid'
-import type { StageActParticipantBinding, ActRelation } from '../types'
+import type { ActDefinition, AssetCard, WorkspaceAct, WorkspaceActParticipantBinding, ActRelation } from '../types'
 import { api } from '../api'
+import { parseActAsset } from 'dance-of-tal/contracts'
+import { assetUrnDisplayName } from '../lib/asset-urn'
 import type { StudioState } from './types'
 
-type SetState = (partial: any) => void
+type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
 
-export function normalizeSubscriptions(subscriptions: any) {
-    if (!subscriptions) return subscriptions
+export function normalizeSubscriptions<T extends Record<string, unknown> | null | undefined>(subscriptions: T): T {
+    if (!subscriptions || typeof subscriptions !== 'object') return subscriptions
+    const callboardKeys = Array.isArray(subscriptions.callboardKeys) ? subscriptions.callboardKeys : undefined
     return {
         ...subscriptions,
-        ...(subscriptions.callboardKeys ? { callboardKeys: subscriptions.callboardKeys } : {}),
-    }
+        ...(callboardKeys ? { callboardKeys } : {}),
+    } as T
 }
 
-export function normalizeRelationPermissions(permissions: any) {
-    if (!permissions) return permissions
-    return {
-        ...permissions,
-        ...(permissions.callboardKeys ? { callboardKeys: permissions.callboardKeys } : {}),
-    }
-}
 
-export function fallbackParticipantLabel(performerRef: StageActParticipantBinding['performerRef']) {
+export function fallbackParticipantLabel(performerRef: WorkspaceActParticipantBinding['performerRef']) {
     if (performerRef.kind === 'draft') {
         return performerRef.draftId
     }
-    return performerRef.urn.split('/').pop() || performerRef.urn
+    return assetUrnDisplayName(performerRef.urn)
 }
 
-export function autoLayoutBindings(bindings: Record<string, StageActParticipantBinding>) {
+export function autoLayoutBindings(bindings: Record<string, WorkspaceActParticipantBinding>) {
     const entries = Object.entries(bindings)
     if (entries.length === 0) return bindings
 
@@ -53,60 +49,66 @@ export function autoLayoutBindings(bindings: Record<string, StageActParticipantB
 export function importActFromAssetImpl(
     get: GetState,
     set: SetState,
-    asset: any,
+    asset: AssetCard,
     dimensions: { width: number; height: number },
 ) {
     const id = nanoid(12)
     const center = get().canvasCenter
 
-    const participants: Record<string, StageActParticipantBinding> = {}
-    const idMapping: Record<string, string> = {}
+    // CONTRACT_RULES: validate through canonical contract parser at import boundary
+    const raw = asset as unknown as Record<string, unknown>
+    const canonicalPayload = {
+        $schema: asset.schema || 'https://schemas.danceoftal.com/assets/act.v1.json',
+        kind: 'act' as const,
+        urn: asset.urn || `act/@local/${asset.name || 'untitled'}`,
+        description: asset.description,
+        payload: {
+            actRules: Array.isArray(raw.actRules) ? raw.actRules : undefined,
+            participants: asset.participants || [],
+            relations: asset.relations || [],
+        },
+    }
+    const validated = parseActAsset(canonicalPayload)
 
-    const nodes: any[] = Array.isArray(asset.participants)
-        ? asset.participants
-        : typeof asset.participants === 'object' && asset.participants
-            ? Object.values(asset.participants)
-            : []
+    const participants: Record<string, WorkspaceActParticipantBinding> = {}
+    const idMapping: Record<string, string> = {}
+    const nodes = validated.payload.participants
 
     for (const node of nodes) {
-        const newKey = nanoid(8)
-        const oldId = node.id || node.name || newKey
-        idMapping[oldId] = newKey
-
-        const performerRef = node.performerRef || (node.urn
-            ? { kind: 'registry' as const, urn: node.urn }
-            : node.draftId
-                ? { kind: 'draft' as const, draftId: node.draftId }
-                : { kind: 'draft' as const, draftId: '' })
+        const baseKey = node.key
+        let newKey = baseKey
+        const existingKeys = Object.keys(participants)
+        if (existingKeys.includes(newKey)) {
+            let i = 2
+            while (existingKeys.includes(`${baseKey} (${i})`)) i++
+            newKey = `${baseKey} (${i})`
+        }
+        idMapping[baseKey] = newKey
 
         participants[newKey] = {
-            performerRef,
-            activeDanceIds: node.activeDanceIds,
+            performerRef: { kind: 'registry', urn: node.performer },
             subscriptions: normalizeSubscriptions(node.subscriptions),
             position: { x: Object.keys(participants).length * 300, y: 100 },
         }
     }
 
-    const rawRelations: any[] = Array.isArray(asset.relations) ? asset.relations : []
-    const relations: ActRelation[] = rawRelations.map((relation: any) => ({
+    const rawRelations = validated.payload.relations
+    const relations: ActRelation[] = rawRelations.map((relation) => ({
         id: nanoid(8),
         between: [
-            idMapping[relation.between?.[0]] || relation.between?.[0] || '',
-            idMapping[relation.between?.[1]] || relation.between?.[1] || '',
+            idMapping[relation.between[0]] || relation.between[0],
+            idMapping[relation.between[1]] || relation.between[1],
         ] as [string, string],
-        direction: relation.direction || 'both' as const,
-        name: relation.name || `rel_${nanoid(6)}`,
+        direction: relation.direction,
+        name: relation.name,
         description: relation.description,
-        permissions: normalizeRelationPermissions(relation.permissions),
-        maxCalls: relation.maxCalls ?? 10,
-        timeout: relation.timeout ?? 300,
     }))
 
     const nextAct = {
         id,
         name: asset.name || `Act ${get().acts.length + 1}`,
         description: asset.description,
-        actRules: asset.actRules,
+        actRules: validated.payload.actRules,
         participants,
         relations,
         position: { x: (center?.x ?? 400) - dimensions.width / 2, y: center?.y ?? 300 },
@@ -125,27 +127,23 @@ export function importActFromAssetImpl(
         acts: [...state.acts, nextAct],
         selectedActId: id,
         actEditorState: null,
-        stageDirty: true,
+        workspaceDirty: true,
     }))
 }
 
-function buildServerActDefinition(act: any) {
+function buildServerActDefinition(act: WorkspaceAct): ActDefinition {
     return {
         id: act.id,
         name: act.name,
         description: act.description,
         actRules: act.actRules,
         participants: Object.fromEntries(
-            Object.entries(act.participants).map(([key, binding]: [string, any]) => [key, {
+            Object.entries(act.participants).map(([key, binding]) => [key, {
                 performerRef: binding.performerRef,
-                activeDanceIds: binding.activeDanceIds,
                 subscriptions: normalizeSubscriptions(binding.subscriptions),
             }]),
         ),
-        relations: act.relations.map((relation: any) => ({
-            ...relation,
-            permissions: normalizeRelationPermissions(relation.permissions),
-        })),
+        relations: act.relations,
     }
 }
 
@@ -162,7 +160,7 @@ export async function createActThreadImpl(get: GetState, set: SetState, actId: s
                 {
                     id: thread.id,
                     actId: thread.actId,
-                    status: thread.status as any,
+                    status: thread.status,
                     participantSessions: {},
                     createdAt: thread.createdAt,
                 },
@@ -184,7 +182,7 @@ export async function loadActThreadsImpl(_get: GetState, set: SetState, actId: s
             [actId]: result.threads.map((thread) => ({
                 id: thread.id,
                 actId: thread.actId,
-                status: thread.status as any,
+                status: thread.status,
                 participantSessions: thread.participantSessions || {},
                 createdAt: thread.createdAt,
             })),

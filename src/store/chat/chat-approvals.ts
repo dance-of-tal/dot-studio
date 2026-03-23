@@ -1,12 +1,13 @@
+import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 /**
  * Permission and question approval handlers extracted from chatSlice.
  */
 import { api } from '../../api'
 import { showToast } from '../../lib/toast'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
-import type { ChatGet, ChatSet } from './chat-internals'
+import type { ChatSet } from './chat-internals'
 
-export function createChatApprovals(set: ChatSet, _get: ChatGet) {
+export function createChatApprovals(set: ChatSet) {
     return {
         respondToPermission: async (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') => {
             // Optimistically remove from UI to prevent double click
@@ -23,7 +24,7 @@ export function createChatApprovals(set: ChatSet, _get: ChatGet) {
             }
         },
 
-        respondToQuestion: async (sessionId: string, questionId: string, answers: Record<string, string[]>) => {
+        respondToQuestion: async (sessionId: string, questionId: string, answers: QuestionAnswer[]) => {
             set((state) => {
                 const next = { ...state.pendingQuestions }
                 delete next[sessionId]

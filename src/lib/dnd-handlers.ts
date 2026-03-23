@@ -8,6 +8,7 @@
 
 import type { AssetCard, AssetRef } from '../types'
 import type { StudioState } from '../store'
+import { assetUrnPath } from './asset-urn'
 
 // ── Types ───────────────────────────────────────────────
 
@@ -70,6 +71,9 @@ export function getAssetAuthor(asset: DragAsset) {
 }
 
 export function getAssetSlug(asset: DragAsset) {
+    if (typeof asset.urn === 'string' && asset.urn.length > 0) {
+        return assetUrnPath(asset.urn) || asset.slug || asset.name || '';
+    }
     return asset.slug || asset.name || '';
 }
 

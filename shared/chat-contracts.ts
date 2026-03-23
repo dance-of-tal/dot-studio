@@ -1,4 +1,5 @@
 import type { ExecutionMode } from './safe-mode.js'
+import type { AssistantStageContext } from './assistant-actions.js'
 
 export type SharedAssetRef =
     | { kind: 'registry'; urn: string }
@@ -62,4 +63,5 @@ export type ChatSendRequest = {
     actId?: string
     /** Thread within Act — used for choreography runtime context */
     actThreadId?: string
+    assistantContext?: AssistantStageContext | null
 }

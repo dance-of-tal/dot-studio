@@ -285,6 +285,13 @@
     line-height: 1.4;
 }
 
+.adv-section__hint {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    line-height: 1.4;
+    font-style: italic;
+}
+
 /* ── Advanced Field ── */
 .adv-field {
     display: flex;

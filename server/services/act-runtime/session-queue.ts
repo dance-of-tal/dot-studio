@@ -12,6 +12,11 @@ interface QueueEntry {
     enqueuedAt: number
 }
 
+function payloadString(payload: Record<string, unknown>, key: string) {
+    const value = payload[key]
+    return typeof value === 'string' ? value : undefined
+}
+
 export class SessionQueue {
     private queues: Map<string, QueueEntry[]> = new Map()
     private running: Set<string> = new Set()
@@ -49,15 +54,15 @@ export class SessionQueue {
         }
 
         // ── Coalescing rules ────────────────────────
-        const payload = wakeUp.triggerEvent.payload as Record<string, any>
+        const payload = wakeUp.triggerEvent.payload
 
         // Rule 1: Same board key update → replace (latest-only)
         if (wakeUp.triggerEvent.type === 'board.posted' || wakeUp.triggerEvent.type === 'board.updated') {
-            const key = payload.key
+            const key = payloadString(payload, 'key')
             const existingIdx = queue.findIndex((entry) => {
-                const ep = entry.target.triggerEvent.payload as Record<string, any>
+                const ep = entry.target.triggerEvent.payload
                 return (entry.target.triggerEvent.type === 'board.posted' || entry.target.triggerEvent.type === 'board.updated')
-                    && ep.key === key
+                    && payloadString(ep, 'key') === key
             })
             if (existingIdx !== -1) {
                 queue[existingIdx] = { target: wakeUp, enqueuedAt: Date.now() }
@@ -67,13 +72,13 @@ export class SessionQueue {
 
         // Rule 2: Same sender consecutive messages → batch (replace with latest)
         if (wakeUp.triggerEvent.type === 'message.sent') {
-            const from = payload.from
-            const tag = payload.tag
+            const from = payloadString(payload, 'from')
+            const tag = payloadString(payload, 'tag')
             const existingIdx = queue.findIndex((entry) => {
-                const ep = entry.target.triggerEvent.payload as Record<string, any>
+                const ep = entry.target.triggerEvent.payload
                 return entry.target.triggerEvent.type === 'message.sent'
-                    && ep.from === from
-                    && ep.tag === tag  // Different tags are not merged
+                    && payloadString(ep, 'from') === from
+                    && payloadString(ep, 'tag') === tag  // Different tags are not merged
             })
             if (existingIdx !== -1) {
                 queue[existingIdx] = { target: wakeUp, enqueuedAt: Date.now() }

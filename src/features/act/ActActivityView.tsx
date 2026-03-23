@@ -24,7 +24,27 @@ interface ActivityEvent {
     source: string
     sourceType: string
     timestamp: number
-    payload: Record<string, any>
+    payload: Record<string, unknown>
+}
+
+function toActivityEvent(value: Record<string, unknown>, index: number): ActivityEvent | null {
+    const id = typeof value.id === 'string' ? value.id : `event-${index}`
+    const type = typeof value.type === 'string' ? value.type : 'unknown'
+    const source = typeof value.source === 'string' ? value.source : 'runtime'
+    const sourceType = typeof value.sourceType === 'string' ? value.sourceType : 'runtime'
+    const timestamp = typeof value.timestamp === 'number' ? value.timestamp : Date.now()
+    const payload = value.payload && typeof value.payload === 'object'
+        ? value.payload as Record<string, unknown>
+        : {}
+
+    return {
+        id,
+        type,
+        source,
+        sourceType,
+        timestamp,
+        payload,
+    }
 }
 
 export default function ActActivityView({ actId, threadId, mode = 'activity' }: ActActivityViewProps) {
@@ -36,7 +56,9 @@ export default function ActActivityView({ actId, threadId, mode = 'activity' }: 
         setLoading(true)
         try {
             const result = await api.actRuntime.events(actId, threadId, 50)
-            setEvents(result.events || [])
+            setEvents((result.events || [])
+                .map((event, index) => toActivityEvent(event, index))
+                .filter((event): event is ActivityEvent => event !== null))
         } catch (err) {
             console.error('Failed to load act events', err)
         } finally {

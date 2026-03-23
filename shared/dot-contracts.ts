@@ -50,3 +50,8 @@ export type DotPublishRequest = {
     tags?: string[]
     acknowledgedTos?: boolean
 }
+
+export type DotUninstallRequest = {
+    kind: 'tal' | 'dance' | 'performer' | 'act'
+    urn: string
+}

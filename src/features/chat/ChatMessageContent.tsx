@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import type { ChatMessage, ChatMessagePart, ChatMessageToolInfo } from '../../types'
+import { stripAssistantActionBlock } from '../assistant/assistant-protocol'
 
 import { ToolGroup } from './ToolGroup'
 
@@ -104,10 +105,12 @@ export default function ChatMessageContent({
     message: Pick<ChatMessage, 'content' | 'parts'>
     className?: string
 }) {
+    const displayContent = useMemo(() => stripAssistantActionBlock(message.content || ''), [message.content])
+
     return (
         <div className={className}>
             {message.parts && message.parts.length > 0 ? <MessageParts parts={message.parts} /> : null}
-            {message.content ? <MarkdownRenderer content={message.content} /> : null}
+            {displayContent ? <MarkdownRenderer content={displayContent} /> : null}
         </div>
     )
 }

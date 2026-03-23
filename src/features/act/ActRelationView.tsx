@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowRightLeft, Trash2, Hash, RotateCcw, Clock } from 'lucide-react'
+import { ArrowRightLeft, Trash2, Hash } from 'lucide-react'
 import type { ActRelation } from '../../types'
 import { useStudioStore } from '../../store'
 import { resolveActParticipantLabel } from './participant-labels'
+
+type EditableRelationField = 'name' | 'description' | 'direction'
 
 export default function ActRelationView() {
     const {
@@ -16,7 +18,6 @@ export default function ActRelationView() {
     const relation = act?.relations.find((r) => r.id === relationId)
 
     const [form, setForm] = useState<Partial<ActRelation>>({})
-    const [permissionInput, setPermissionInput] = useState({ callboardKeys: '', messageTags: '' })
 
     useEffect(() => {
         if (relation) {
@@ -24,44 +25,15 @@ export default function ActRelationView() {
                 name: relation.name,
                 description: relation.description,
                 direction: relation.direction,
-                maxCalls: relation.maxCalls,
-                timeout: relation.timeout,
-                sessionPolicy: relation.sessionPolicy,
             })
         }
     }, [relation])
 
     if (!relation || !act || !activeActId || !relationId) return null
 
-    const update = (field: string, value: any) => {
+    const update = <K extends EditableRelationField>(field: K, value: ActRelation[K]) => {
         setForm((prev) => ({ ...prev, [field]: value }))
-        updateRelation(activeActId, relationId, { [field]: value })
-    }
-
-    const permissions = relation.permissions || {}
-
-    const addPermissionItem = (field: 'callboardKeys' | 'messageTags') => {
-        const value = permissionInput[field].trim()
-        if (!value) return
-        const current = (permissions as any)[field] || []
-        if (current.includes(value)) return
-        updateRelation(activeActId, relationId, {
-            permissions: {
-                ...permissions,
-                [field]: [...current, value],
-            },
-        })
-        setPermissionInput((prev) => ({ ...prev, [field]: '' }))
-    }
-
-    const removePermissionItem = (field: 'callboardKeys' | 'messageTags', value: string) => {
-        const current = (permissions as any)[field] || []
-        updateRelation(activeActId, relationId, {
-            permissions: {
-                ...permissions,
-                [field]: current.filter((entry: string) => entry !== value),
-            },
-        })
+        updateRelation(activeActId, relationId, { [field]: value } as Partial<ActRelation>)
     }
 
     return (
@@ -99,8 +71,8 @@ export default function ActRelationView() {
                     className="act-panel__textarea"
                     value={form.description || ''}
                     onChange={(e) => update('description', e.target.value)}
-                    placeholder="Communication contract description"
-                    rows={2}
+                    placeholder="이 관계의 목적을 기술하세요. Agent가 이 설명을 읽고 통신 목적을 판단합니다."
+                    rows={3}
                 />
             </div>
 
@@ -118,93 +90,6 @@ export default function ActRelationView() {
                         onClick={() => update('direction', 'one-way')}
                     >
                         One-way
-                    </button>
-                </div>
-            </div>
-
-            <div className="act-panel__section">
-                <label className="act-panel__label">Permissions</label>
-
-                <div className="act-panel__sub-field">
-                    <span className="act-panel__sub-label">Callboard Keys</span>
-                    <div className="act-panel__tags">
-                        {((permissions as any).callboardKeys || []).map((value: string) => (
-                            <span key={value} className="act-panel__tag" onClick={() => removePermissionItem('callboardKeys', value)}>
-                                {value} ×
-                            </span>
-                        ))}
-                    </div>
-                    <div className="act-panel__sub-input-row">
-                        <input
-                            className="act-panel__input act-panel__input--small"
-                            value={permissionInput.callboardKeys}
-                            onChange={(e) => setPermissionInput((prev) => ({ ...prev, callboardKeys: e.target.value }))}
-                            onKeyDown={(e) => e.key === 'Enter' && addPermissionItem('callboardKeys')}
-                            placeholder="key pattern"
-                        />
-                    </div>
-                </div>
-
-                <div className="act-panel__sub-field">
-                    <span className="act-panel__sub-label">Message Tags</span>
-                    <div className="act-panel__tags">
-                        {((permissions as any).messageTags || []).map((value: string) => (
-                            <span key={value} className="act-panel__tag" onClick={() => removePermissionItem('messageTags', value)}>
-                                {value} ×
-                            </span>
-                        ))}
-                    </div>
-                    <div className="act-panel__sub-input-row">
-                        <input
-                            className="act-panel__input act-panel__input--small"
-                            value={permissionInput.messageTags}
-                            onChange={(e) => setPermissionInput((prev) => ({ ...prev, messageTags: e.target.value }))}
-                            onKeyDown={(e) => e.key === 'Enter' && addPermissionItem('messageTags')}
-                            placeholder="tag name"
-                        />
-                    </div>
-                </div>
-            </div>
-
-            <div className="act-panel__row">
-                <div className="act-panel__section act-panel__section--half">
-                    <label className="act-panel__label"><RotateCcw size={11} /> Max Calls</label>
-                    <input
-                        className="act-panel__input act-panel__input--number"
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={form.maxCalls ?? 10}
-                        onChange={(e) => update('maxCalls', parseInt(e.target.value) || 10)}
-                    />
-                </div>
-                <div className="act-panel__section act-panel__section--half">
-                    <label className="act-panel__label"><Clock size={11} /> Timeout (s)</label>
-                    <input
-                        className="act-panel__input act-panel__input--number"
-                        type="number"
-                        min={10}
-                        max={3600}
-                        value={form.timeout ?? 300}
-                        onChange={(e) => update('timeout', parseInt(e.target.value) || 300)}
-                    />
-                </div>
-            </div>
-
-            <div className="act-panel__section">
-                <label className="act-panel__label">Session Policy</label>
-                <div className="act-panel__toggle-group">
-                    <button
-                        className={`act-panel__toggle ${form.sessionPolicy !== 'fresh' ? 'active' : ''}`}
-                        onClick={() => update('sessionPolicy', 'reuse')}
-                    >
-                        Reuse
-                    </button>
-                    <button
-                        className={`act-panel__toggle ${form.sessionPolicy === 'fresh' ? 'active' : ''}`}
-                        onClick={() => update('sessionPolicy', 'fresh')}
-                    >
-                        Fresh
                     </button>
                 </div>
             </div>

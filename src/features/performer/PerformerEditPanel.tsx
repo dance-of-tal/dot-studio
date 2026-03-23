@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { ArrowLeft, ChevronLeft, Cpu, Hexagon, Server, Zap } from 'lucide-react'
 
 import { unresolvedDeclaredMcpServerNames } from '../../lib/performers'
-import type { PerformerNode, ModelConfig, AssetRef, DanceDeliveryMode } from '../../types'
+import type { PerformerNode, ModelConfig, AssetRef, DanceDeliveryMode, McpServer } from '../../types'
 
 import PerformerComposeCards from './PerformerComposeCards'
 import {
@@ -29,7 +29,7 @@ type PerformerEditPanelProps = {
     presentation: {
         talAsset: { urn: string; name: string; description?: string } | null
         danceAssets: Array<{ urn: string; name: string; description?: string }>
-        mcpServers: Array<{ name: string; status: string; tools: any[] }>
+        mcpServers: McpServer[]
         mcpPlaceholders: string[]
         declaredMcpServerNames?: string[]
     }
@@ -59,7 +59,7 @@ type PerformerEditPanelProps = {
     onRemoveMcp: (id: string, serverName: string) => void
     onSetMcpBinding: (id: string, placeholderName: string, serverName: string | null) => void
 
-    onOpenAssetEditor: (kind: 'tal' | 'dance', targetRef: any, attachMode: 'tal' | 'dance-new' | 'dance-replace') => void
+    onOpenAssetEditor: (kind: 'tal' | 'dance', targetRef: AssetRef | null, attachMode: 'tal' | 'dance-new' | 'dance-replace') => void
 }
 
 export default function PerformerEditPanel({

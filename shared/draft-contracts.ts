@@ -24,6 +24,8 @@ export interface DraftFile<T = unknown> {
     derivedFrom?: string | null
     createdAt: number
     updatedAt: number
+    /** 1 = legacy single-file JSON, 2 = bundle directory (Dance only) */
+    formatVersion?: number
 }
 
 /** Map from draft kind to its typed content */
@@ -67,7 +69,6 @@ export interface ActDraftContent {
 
 export interface ActDraftParticipantBinding {
     performerRef: SharedAssetRef
-    activeDanceIds?: string[]
     subscriptions?: {
         messagesFrom?: string[]
         messageTags?: string[]
@@ -82,14 +83,7 @@ export interface ActDraftRelation {
     between: [string, string]
     direction: 'both' | 'one-way'
     name: string
-    description?: string
-    permissions?: {
-        callboardKeys?: string[]
-        messageTags?: string[]
-    }
-    maxCalls: number
-    timeout: number
-    sessionPolicy?: 'fresh' | 'reuse'
+    description: string
 }
 
 // ── CRUD Request / Response types ────────────────────────
@@ -121,4 +115,29 @@ export interface DraftListResponse {
 
 export interface DraftResponse {
     draft: DraftFile
+}
+
+// ── Dance Bundle Types ──────────────────────────────────
+
+export interface BundleTreeEntry {
+    name: string
+    type: 'file' | 'directory'
+    /** Relative path from bundle root */
+    path: string
+    children?: BundleTreeEntry[]
+}
+
+export interface BundleFileReadResponse {
+    path: string
+    content: string
+}
+
+export interface BundleFileWriteRequest {
+    path: string
+    content: string
+}
+
+export interface BundleFileCreateRequest {
+    path: string
+    isDirectory?: boolean
 }

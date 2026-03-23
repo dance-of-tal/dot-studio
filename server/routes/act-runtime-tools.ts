@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { ConditionExpr } from '../../shared/act-types.js'
 import { getActRuntimeService } from '../services/act-runtime/act-runtime-service.js'
 import { requestWorkingDir } from './route-errors.js'
 
@@ -54,7 +55,7 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/set-wake-condition', asyn
         createdBy: string
         target: 'self'
         onSatisfiedMessage: string
-        condition: any
+        condition: ConditionExpr
     }>()
 
     const result = getActRuntimeService(requestWorkingDir(c)).setWakeCondition(threadId, body)

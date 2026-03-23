@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react'
-import { User, ArrowRightLeft, Hexagon, Zap, Trash2 } from 'lucide-react'
+import { User, ArrowRightLeft, Hexagon, Trash2 } from 'lucide-react'
+import type { ParticipantSubscriptions } from '../../types'
 import { useStudioStore } from '../../store'
+import { assetUrnDisplayName } from '../../lib/asset-urn'
 import { resolveActParticipantLabel } from './participant-labels'
 import { getCallboardKeys, nextSubscriptions } from './act-inspector-helpers'
+
+type SubscriptionField = keyof Pick<ParticipantSubscriptions, 'messagesFrom' | 'messageTags' | 'callboardKeys'>
+type DirectSubscriptionField = Exclude<SubscriptionField, 'callboardKeys'>
 
 export default function ActParticipantBindingView() {
     const {
@@ -27,17 +32,19 @@ export default function ActParticipantBindingView() {
     if (!act || !binding || !participantKey || !activeActId) return null
 
     const refLabel = binding.performerRef.kind === 'registry'
-        ? binding.performerRef.urn.split('/').pop() || binding.performerRef.urn
+        ? assetUrnDisplayName(binding.performerRef.urn)
         : `Draft: ${binding.performerRef.draftId}`
 
     const subscriptions = binding.subscriptions || {}
 
-    const addSubItem = (field: keyof typeof subInput) => {
+    const getSubscriptionValues = (field: DirectSubscriptionField) => subscriptions[field] || []
+
+    const addSubItem = (field: SubscriptionField) => {
         const value = subInput[field].trim()
         if (!value) return
         const current = field === 'callboardKeys'
             ? getCallboardKeys(subscriptions)
-            : (subscriptions as any)[field] || []
+            : getSubscriptionValues(field)
         if (current.includes(value)) return
         updatePerformerBinding(activeActId, participantKey, {
             subscriptions: nextSubscriptions(subscriptions, { [field]: [...current, value] }),
@@ -45,10 +52,10 @@ export default function ActParticipantBindingView() {
         setSubInput((prev) => ({ ...prev, [field]: '' }))
     }
 
-    const removeSubItem = (field: string, value: string) => {
+    const removeSubItem = (field: SubscriptionField, value: string) => {
         const current = field === 'callboardKeys'
             ? getCallboardKeys(subscriptions)
-            : (subscriptions as any)[field] || []
+            : getSubscriptionValues(field)
         updatePerformerBinding(activeActId, participantKey, {
             subscriptions: nextSubscriptions(subscriptions, { [field]: current.filter((entry: string) => entry !== value) }),
         })
@@ -79,65 +86,7 @@ export default function ActParticipantBindingView() {
                         <Hexagon size={11} />
                         <span>{refLabel}</span>
                     </div>
-                    {binding.activeDanceIds && binding.activeDanceIds.length > 0 && (
-                        <div className="act-panel__stat">
-                            <Zap size={11} />
-                            <span>{binding.activeDanceIds.length} dance{binding.activeDanceIds.length !== 1 ? 's' : ''}</span>
-                        </div>
-                    )}
                 </div>
-            </div>
-
-            <div className="act-panel__section">
-                <label className="act-panel__label"><Zap size={11} /> Active Dances</label>
-                {(() => {
-                    const ref = binding.performerRef
-                    const resolved = ref.kind === 'draft'
-                        ? performers.find((performer) => performer.id === ref.draftId)
-                        : performers.find((performer) => performer.meta?.derivedFrom === ref.urn)
-                    const availableDances = resolved?.danceRefs || []
-                    const activeIds = binding.activeDanceIds || []
-
-                    const toggleDance = (danceUrn: string) => {
-                        const current = binding.activeDanceIds || []
-                        const next = current.includes(danceUrn)
-                            ? current.filter((id) => id !== danceUrn)
-                            : [...current, danceUrn]
-                        updatePerformerBinding(activeActId, participantKey, {
-                            activeDanceIds: next,
-                        })
-                    }
-
-                    if (availableDances.length === 0) {
-                        return <span className="act-panel__empty">No dances on this participant</span>
-                    }
-
-                    return (
-                        <div className="act-panel__list">
-                            {availableDances.map((danceRef) => {
-                                const urn = danceRef.kind === 'registry' ? danceRef.urn : danceRef.draftId
-                                const label = danceRef.kind === 'registry'
-                                    ? (danceRef.urn.split('/').pop() || danceRef.urn)
-                                    : `draft:${danceRef.draftId}`
-                                const isActive = activeIds.includes(urn)
-                                return (
-                                    <label
-                                        key={urn}
-                                        className={`act-panel__dance-toggle ${isActive ? 'active' : ''}`}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={isActive}
-                                            onChange={() => toggleDance(urn)}
-                                        />
-                                        <Zap size={10} />
-                                        <span>{label}</span>
-                                    </label>
-                                )
-                            })}
-                        </div>
-                    )
-                })()}
             </div>
 
             <div className="act-panel__section">

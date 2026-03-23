@@ -44,13 +44,17 @@ export function setActiveProjectDir(dir: string): void {
 // ── Studio Config ───────────────────────────────────────
 export interface StudioConfig {
     theme?: 'light' | 'dark'
-    lastStage?: string
+    lastWorkspaceId?: string
 }
 
 export async function readStudioConfig(): Promise<StudioConfig> {
     try {
         const raw = await fs.readFile(STUDIO_CONFIG_PATH, 'utf-8')
-        return JSON.parse(raw)
+        const parsed = JSON.parse(raw) as { theme?: 'light' | 'dark'; lastWorkspaceId?: string; lastStage?: string }
+        return {
+            theme: parsed.theme,
+            lastWorkspaceId: parsed.lastWorkspaceId ?? parsed.lastStage,
+        }
     } catch {
         return {}
     }
@@ -65,6 +69,6 @@ export async function writeStudioConfig(partial: Partial<StudioConfig>): Promise
 }
 
 // ── Stages Dir ──────────────────────────────────────────
-export function stagesDir(): string {
+export function workspacesDir(): string {
     return path.join(STUDIO_DIR, 'stages')
 }

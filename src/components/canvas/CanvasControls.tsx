@@ -3,6 +3,7 @@ import { useReactFlow } from '@xyflow/react'
 import type { Viewport } from '@xyflow/react'
 import { Maximize, Maximize2, Minimize, Minimize2 } from 'lucide-react'
 import { useStudioStore } from '../../store'
+import { scheduleFitView } from '../../lib/focus-utils'
 
 export default function CanvasControls() {
     const { fitView, zoomIn, zoomOut, getViewport, setViewport } = useReactFlow()
@@ -33,9 +34,7 @@ export default function CanvasControls() {
     const toggleFocus = useCallback(() => {
         if (isFocusActive) {
             exitFocusMode()
-            setTimeout(() => {
-                fitView({ duration: 400, padding: 0.2, maxZoom: 1 })
-            }, 50)
+            scheduleFitView(fitView, 'exit')
             return
         }
 
@@ -49,6 +48,7 @@ export default function CanvasControls() {
             width: rect?.width ?? 1200,
             height: rect?.height ?? 800,
         })
+        scheduleFitView(fitView, 'enter')
     }, [isFocusActive, selectedPerformerId, selectedActId, enterFocusMode, exitFocusMode, fitView])
 
     useEffect(() => {
@@ -58,17 +58,13 @@ export default function CanvasControls() {
             if (focusSnapshot?.type === 'act') {
                 exitActLayoutMode()
                 exitFocusMode()
-                setTimeout(() => {
-                    fitView({ duration: 400, padding: 0.2, maxZoom: 1 })
-                }, 50)
+                scheduleFitView(fitView, 'exit')
                 return
             }
 
             if (isFocusActive) {
                 exitFocusMode()
-                setTimeout(() => {
-                    fitView({ duration: 400, padding: 0.2, maxZoom: 1 })
-                }, 50)
+                scheduleFitView(fitView, 'exit')
             }
         }
 

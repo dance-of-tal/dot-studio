@@ -1,6 +1,8 @@
 // Pure utility functions and types extracted from AssetLibrary.tsx
 // This file serves as a barrel re-export for the split modules.
 
+import { assetUrnDisplayName } from '../../lib/asset-urn'
+
 export type InstalledKind = 'performer' | 'tal' | 'dance' | 'act'
 export type RuntimeKind = 'models' | 'mcps'
 export type AssetScope = 'local' | 'registry'
@@ -12,7 +14,7 @@ export type ModelProviderFilter = 'all' | 'anthropic' | 'openai' | 'google' | 'x
 export const INSTALLED_KIND_ORDER: InstalledKind[] = ['performer', 'tal', 'dance', 'act']
 
 export function displayUrn(urn: string) {
-    return urn.split('/').slice(-1)[0] || urn
+    return assetUrnDisplayName(urn)
 }
 
 export function normalizeAuthor(author?: string) {
@@ -24,7 +26,26 @@ export function isInstalledAssetKind(kind: string) {
     return kind === 'tal' || kind === 'dance' || kind === 'performer' || kind === 'act'
 }
 
-export function getAssetUrn(asset: any): string | null {
+type AssetUrnInput = {
+    urn?: string
+    kind?: string
+    name?: string
+    author?: string
+    slug?: string
+} | null | undefined
+
+type AssetSelectionKeyInput = {
+    urn?: string
+    kind?: string
+    name?: string
+    author?: string
+    slug?: string
+    provider?: string
+    id?: string
+    modelId?: string
+} | null | undefined
+
+export function getAssetUrn(asset: AssetUrnInput): string | null {
     if (!asset) return null
     if (typeof asset.urn === 'string' && asset.urn.length > 0) {
         return asset.urn
@@ -35,7 +56,8 @@ export function getAssetUrn(asset: any): string | null {
     return `${asset.kind}/${normalizeAuthor(asset.author)}/${asset.slug || asset.name}`
 }
 
-export function getAssetSelectionKey(asset: any): string {
+export function getAssetSelectionKey(asset: AssetSelectionKeyInput): string {
+    if (!asset) return ''
     const urn = getAssetUrn(asset)
     if (urn) return urn
     if (asset.kind === 'model') {

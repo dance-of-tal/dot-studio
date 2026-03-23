@@ -10,6 +10,10 @@ import { join, dirname } from 'node:path'
 import type { BoardEntry } from '../../../shared/act-types.js'
 import { STUDIO_DIR } from '../../lib/config.js'
 
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+    return error instanceof Error
+}
+
 function boardFilePath(actId: string, threadId: string): string {
     return join(STUDIO_DIR, 'act-runtime', actId, threadId, 'board.json')
 }
@@ -40,8 +44,8 @@ export async function loadBoardFromFile(
     try {
         const content = await fs.readFile(filePath, 'utf-8')
         return JSON.parse(content) as BoardEntry[]
-    } catch (err: any) {
-        if (err.code === 'ENOENT') return []
-        throw err
+    } catch (error: unknown) {
+        if (isErrnoException(error) && error.code === 'ENOENT') return []
+        throw error
     }
 }

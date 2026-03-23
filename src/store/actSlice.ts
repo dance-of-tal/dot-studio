@@ -4,11 +4,12 @@
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
 import type { StudioState, ActEditorState, ActSlice } from './types'
-import type { StageAct, StageActParticipantBinding } from '../types'
+import type { WorkspaceAct, WorkspaceActParticipantBinding } from '../types'
 import {
     ACT_DEFAULT_EXPANDED_HEIGHT,
     ACT_DEFAULT_WIDTH,
 } from '../lib/act-layout'
+import { assetUrnDisplayName } from '../lib/asset-urn'
 import {
     autoLayoutBindings,
     createActThreadImpl,
@@ -49,7 +50,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         const center = get().canvasCenter
         const existingCount = get().acts.length
         const offset = existingCount * 40
-        const act: StageAct = {
+        const act: WorkspaceAct = {
             id,
             name,
             position: center
@@ -68,7 +69,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             actEditorState: null,
             activeThreadId: null,
             activeThreadParticipantKey: null,
-            stageDirty: true,
+            workspaceDirty: true,
         }))
         return id
     },
@@ -83,28 +84,28 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             actEditorState: s.actEditorState?.actId === id ? null : s.actEditorState,
             activeThreadId: s.selectedActId === id ? null : s.activeThreadId,
             activeThreadParticipantKey: s.selectedActId === id ? null : s.activeThreadParticipantKey,
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
     renameAct: (id, name) => {
         set((s) => ({
             acts: s.acts.map((a) => (a.id === id ? { ...a, name } : a)),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
     updateActDescription: (id, description) => {
         set((s) => ({
             acts: s.acts.map((a) => (a.id === id ? { ...a, description } : a)),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
     updateActRules: (id, rules) => {
         set((s) => ({
             acts: s.acts.map((a) => (a.id === id ? { ...a, actRules: rules } : a)),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -129,33 +130,50 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     toggleActVisibility: (id) => {
         set((s) => ({
             acts: s.acts.map((a) => (a.id === id ? { ...a, hidden: !a.hidden } : a)),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
     // ── Participant Binding (ref-based) ─────────────────
 
     bindPerformerToAct: (actId, performerRef) => {
-        const newKey = nanoid(12)
-        set((s) => {
-            const act = s.acts.find((a) => a.id === actId)
-            const existingKeys = act ? Object.keys(act.participants) : []
-            const newPos = { x: existingKeys.length * 300, y: 100 }
-            const binding: StageActParticipantBinding = {
-                performerRef,
-                position: newPos,
-            }
-            return {
-                acts: s.acts.map((a) => {
-                    if (a.id !== actId) return a
-                    return {
-                        ...a,
-                        participants: { ...a.participants, [newKey]: binding },
-                    }
-                }),
-                stageDirty: true,
-            }
-        })
+        const state = get()
+        // Resolve performer name from ref
+        let baseName: string | null = null
+        if (performerRef.kind === 'draft') {
+            baseName = state.performers.find(p => p.id === performerRef.draftId)?.name ?? null
+        } else if (performerRef.kind === 'registry') {
+            // Try matching canvas performer, else extract from URN
+            baseName = state.performers.find(p => p.meta?.derivedFrom === performerRef.urn)?.name
+                ?? assetUrnDisplayName(performerRef.urn) ?? null
+        }
+        if (!baseName) baseName = nanoid(8)
+
+        // Ensure unique within this Act's participants
+        const act = state.acts.find((a) => a.id === actId)
+        const existingKeys = act ? Object.keys(act.participants) : []
+        let newKey = baseName
+        if (existingKeys.includes(newKey)) {
+            let i = 2
+            while (existingKeys.includes(`${baseName} (${i})`)) i++
+            newKey = `${baseName} (${i})`
+        }
+
+        const newPos = { x: existingKeys.length * 300, y: 100 }
+        const binding: WorkspaceActParticipantBinding = {
+            performerRef,
+            position: newPos,
+        }
+        set((s) => ({
+            acts: s.acts.map((a) => {
+                if (a.id !== actId) return a
+                return {
+                    ...a,
+                    participants: { ...a.participants, [newKey]: binding },
+                }
+            }),
+            workspaceDirty: true,
+        }))
         return newKey
     },
 
@@ -219,7 +237,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     participants: autoLayoutBindings(act.participants),
                 }
             }),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -227,14 +245,15 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
-                const { [participantKey]: _removed, ...rest } = a.participants
+                const rest = { ...a.participants }
+                delete rest[participantKey]
                 // Remove relations involving this participant
                 const relations = a.relations.filter(
-                    (r) => !r.between.includes(participantKey),
+                    (r) => !(r as unknown as { between: [string, string] }).between.includes(participantKey),
                 )
                 return { ...a, participants: rest, relations }
             }),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -250,7 +269,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     },
                 }
             }),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -294,7 +313,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     },
                 }
             }),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -308,7 +327,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                 if (a.id !== actId) return a
                 return { ...a, relations: a.relations.filter((r) => r.id !== relationId) }
             }),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -323,7 +342,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     ),
                 }
             }),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -332,14 +351,14 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     updateActPosition: (id, x, y) => {
         set((s) => ({
             acts: s.acts.map((a) => (a.id === id ? { ...a, position: { x, y } } : a)),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
     updateActSize: (id, width, height) => {
         set((s) => ({
             acts: s.acts.map((a) => (a.id === id ? { ...a, width, height } : a)),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 
@@ -350,7 +369,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     updateActAuthoringMeta: (id, meta) => {
         set((s) => ({
             acts: s.acts.map((a) => (a.id === id ? { ...a, meta: { ...a.meta, ...meta } } : a)),
-            stageDirty: true,
+            workspaceDirty: true,
         }))
     },
 

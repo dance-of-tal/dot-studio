@@ -1,5 +1,8 @@
 import type { DotAuthUserResponse, DotInitResponse, DotInstallRequest, DotLoginResponse, DotPublishRequest, DotSaveLocalRequest, DotStatusResponse } from '../../shared/dot-contracts'
-import { fetchJSON, postJSON, putJSON } from '../api-core'
+import { fetchJSON, postJSON, putJSON, deleteJSON } from '../api-core'
+
+type DotPerformerResponse = Record<string, unknown>
+type DotInstallResponse = Record<string, unknown>
 
 export const dotApi = {
     status: () =>
@@ -21,7 +24,7 @@ export const dotApi = {
         fetchJSON<{ names: string[]; skipped: Array<{ file: string; reason: string }> }>('/api/dot/performers'),
 
     performer: (name: string) =>
-        fetchJSON<any>(`/api/dot/performers/${name}`),
+        fetchJSON<DotPerformerResponse>(`/api/dot/performers/${name}`),
 
     agents: () =>
         fetchJSON<Record<string, string>>('/api/dot/agents'),
@@ -30,7 +33,7 @@ export const dotApi = {
         putJSON<{ ok: boolean }>('/api/dot/agents', manifest),
 
     install: (urn: string, localName?: string, force?: boolean, scope?: 'global' | 'stage') =>
-        postJSON<any>('/api/dot/install', { urn, localName, force, scope } satisfies DotInstallRequest),
+        postJSON<DotInstallResponse>('/api/dot/install', { urn, localName, force, scope } satisfies DotInstallRequest),
 
     saveLocalAsset: (
         kind: 'tal' | 'dance' | 'performer' | 'act',
@@ -61,6 +64,15 @@ export const dotApi = {
             `/api/dot/search?q=${encodeURIComponent(query)}${kind ? `&kind=${kind}` : ''}${limit ? `&limit=${limit}` : ''}`,
         ),
 
-    validate: (performer: any) =>
+    validate: (performer: Record<string, unknown>) =>
         postJSON<{ valid: boolean; error?: string }>('/api/dot/validate', performer),
+
+    uninstallAsset: (kind: 'tal' | 'dance' | 'performer' | 'act', urn: string, cascade = false) =>
+        deleteJSON<{ ok: boolean; urn: string; scope: 'global' | 'stage'; deletedUrns: string[] }>('/api/dot/assets/local', { kind, urn, cascade }),
+
+    previewUninstall: (kind: 'tal' | 'dance' | 'performer' | 'act', urn: string) =>
+        postJSON<{
+            target: { urn: string; kind: string; name: string; source: string; reason: string }
+            dependents: Array<{ urn: string; kind: string; name: string; source: string; reason: string }>
+        }>('/api/dot/assets/uninstall-preview', { kind, urn }),
 }

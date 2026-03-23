@@ -5,7 +5,19 @@ import { buildModelHaystack } from './asset-library-search'
 
 export const MAX_MODELS_PER_PROVIDER = 8
 
-export function classifyModelProvider(model: any): Exclude<ModelProviderFilter, 'all'> {
+type ModelLike = {
+    provider?: string
+    providerName?: string
+    name?: string
+    id?: string
+    connected?: boolean
+    context?: number
+    toolCall?: boolean
+    reasoning?: boolean
+    attachment?: boolean
+}
+
+export function classifyModelProvider(model: ModelLike): Exclude<ModelProviderFilter, 'all'> {
     const key = `${model.provider || ''} ${model.providerName || ''}`.toLowerCase()
     if (key.includes('anthropic')) return 'anthropic'
     if (key.includes('openai')) return 'openai'
@@ -22,7 +34,7 @@ export function labelForModelProviderFilter(filter: Exclude<ModelProviderFilter,
     return 'Other'
 }
 
-export function scoreModel(model: any): number {
+export function scoreModel(model: ModelLike): number {
     const text = `${model.name || ''} ${model.id || ''}`.toLowerCase()
     let score = model.connected ? 1000 : 0
 
@@ -45,8 +57,8 @@ export function scoreModel(model: any): number {
     return score + Math.min(Math.round((model.context || 0) / 10000), 20)
 }
 
-export function groupModels(
-    models: any[],
+export function groupModels<T extends ModelLike>(
+    models: T[],
     queryText: string,
     modelProviderFilter: ModelProviderFilter,
 ) {
@@ -63,7 +75,7 @@ export function groupModels(
         category: Exclude<ModelProviderFilter, 'all'>
         label: string
         connected: boolean
-        items: any[]
+        items: T[]
     }>()
 
     for (const model of providerFiltered) {

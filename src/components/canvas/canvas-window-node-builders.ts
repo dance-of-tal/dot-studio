@@ -5,12 +5,14 @@ import type {
     DraftAsset,
     MarkdownEditorNode,
     PerformerNode,
-    StageAct,
+    WorkspaceAct,
 } from '../../types'
+import type { WorkspaceSlice } from '../../store/types'
 import {
     ACT_DEFAULT_WIDTH,
     resolveActExpandedHeight,
 } from '../../lib/act-layout'
+import { assetUrnDisplayName } from '../../lib/asset-urn'
 import { hasModelConfig } from '../../lib/performers'
 
 type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
@@ -44,7 +46,7 @@ function assetRefLabel(
         const draft = drafts[ref.draftId]
         return draft?.name || draft?.slug || `Draft · ${ref.draftId.slice(0, 8)}`
     }
-    return ref.urn.split('/').pop() || ref.urn
+    return assetUrnDisplayName(ref.urn)
 }
 
 function danceSummaryLabel(
@@ -67,12 +69,12 @@ function danceSummaryLabel(
 }
 
 export function buildPerformerCanvasNodes(args: {
-    acts: StageAct[]
+    acts: WorkspaceAct[]
     editingActId: string | null
     performers: PerformerNode[]
     selectedPerformerId: string | null
     focusedPerformerId: string | null
-    editingTarget: { type: string; id: string } | null
+    editingTarget: WorkspaceSlice['editingTarget']
     transformTarget: { id: string; type: CanvasNodeKind } | null
     drafts: Record<string, DraftAsset>
     performerMcpSummary: (performer: PerformerNode) => string | null
@@ -271,7 +273,7 @@ export function buildTrackingWindowNodes(args: {
 }
 
 export function buildActCanvasNodes(args: {
-    acts: StageAct[]
+    acts: WorkspaceAct[]
     editingActId: string | null
     selectedActId: string | null
     transformTarget: { id: string; type: CanvasNodeKind } | null

@@ -1,4 +1,7 @@
-import type { ReactNode } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
+import type { McpServer } from '../../types'
+import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
+import type { ProjectMcpEntryDraft } from '../modals/settings-utils'
 import { Cpu, FolderOpen, HardDrive, Hexagon, Plus, Search, Server, Users, Zap } from 'lucide-react'
 import type {
     AssetScope,
@@ -11,6 +14,8 @@ import type {
 import { authoringNoteForInstalledKind, labelForInstalledKind } from './asset-library-utils'
 import AssetLibraryMcpManager from './AssetLibraryMcpManager'
 import AssetLibraryModelList from './AssetLibraryModelList'
+import type { McpCatalogState } from './useMcpCatalog'
+import type { AssetPanelAction, AssetPanelAsset, AssetPanelAuthUser, AssetPanelHandler, LibraryAsset } from './asset-panel-types'
 
 type Props = {
     scope: AssetScope
@@ -29,31 +34,34 @@ type Props = {
     localPlaceholder: string
     authoringHint: string | null
     assetsLoading: boolean
-    filteredInstalledAssets: any[]
-    groupedModels: Array<{ key: string; label: string; items: any[]; connected?: boolean }>
-    filteredMcps: any[]
-    selectedAsset: any
+    filteredInstalledAssets: LibraryAsset[]
+    groupedModels: Array<{ key: string; label: string; items: RuntimeModelCatalogEntry[]; connected?: boolean }>
+    filteredMcps: McpServer[]
+    selectedAsset: AssetPanelAsset | null
     selectedAssetKey: string | null
     selectedInstalled: boolean
-    authUser: any
+    authUser?: AssetPanelAuthUser
     detailActionStatus: string | null
-    detailActionLoading: null | 'save-local' | 'publish' | 'import'
-    onSelectAsset: (asset: any) => void
+    detailActionLoading: AssetPanelAction | null
+    onSelectAsset: AssetPanelHandler
     onCloseAsset: () => void
-    onSaveLocal: (asset: any) => void | Promise<void>
-    onPublish: (asset: any) => void | Promise<void>
-    onDeleteDraft: (asset: any) => void | Promise<void>
+    onSaveLocal: AssetPanelHandler
+    onPublish: AssetPanelHandler
+    onDeleteDraft: AssetPanelHandler
+    onEditDraft?: AssetPanelHandler
+    onUninstall?: AssetPanelHandler
     createNewPerformer: () => void
+    createNewAct: () => void
     createNewPerformerDraftEntry: (kind: 'tal' | 'dance') => void
     showInstalledAssets: boolean
     showModels: boolean
     showMcps: boolean
-    mcpDraftEntries: any[]
+    mcpDraftEntries: ProjectMcpEntryDraft[]
     mcpCatalogDirty: boolean
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
     pendingMcpAuthName: string | null
-    updateMcpEntry: (key: string, updater: (current: any) => any) => void
+    updateMcpEntry: McpCatalogState['updateMcpEntry']
     addMcpEntry: () => void
     removeMcpEntry: (key: string) => void
     saveMcpCatalog: () => Promise<void>
@@ -65,9 +73,9 @@ type Props = {
     showMcpRawConfig: boolean
     setShowMcpRawConfig: (value: boolean | ((prev: boolean) => boolean)) => void
     expandedMcpEntries: Record<string, boolean>
-    setExpandedMcpEntries: (value: any) => void
+    setExpandedMcpEntries: Dispatch<SetStateAction<Record<string, boolean>>>
     expandedModelProviders: Record<string, boolean>
-    setExpandedModelProviders: (value: any) => void
+    setExpandedModelProviders: Dispatch<SetStateAction<Record<string, boolean>>>
     modelProviderTabs: Array<{ key: ModelProviderFilter; label: string }>
 }
 
@@ -101,7 +109,10 @@ export default function AssetLibraryLocalView({
     onSaveLocal,
     onPublish,
     onDeleteDraft,
+    onEditDraft,
+    onUninstall,
     createNewPerformer,
+    createNewAct,
     createNewPerformerDraftEntry,
     showInstalledAssets,
     showModels,
@@ -184,7 +195,7 @@ export default function AssetLibraryLocalView({
                             ) : value === 'draft' ? (
                                 <><Plus size={8} style={{ verticalAlign: -1, marginRight: 2 }} />Draft</>
                             ) : (
-                                <><FolderOpen size={8} style={{ verticalAlign: -1, marginRight: 2 }} />Stage</>
+                                <><FolderOpen size={8} style={{ verticalAlign: -1, marginRight: 2 }} />Workspace</>
                             )}
                         </button>
                     ))}
@@ -209,10 +220,11 @@ export default function AssetLibraryLocalView({
                         </button>
                     )}
                     {installedKind === 'act' && (
-                        <div className="asset-authoring-row__note" style={{ fontStyle: 'italic', opacity: 0.7 }}>
-                            Acts are created from the Threads sidebar or by dragging from the registry.
-                        </div>
+                        <button className="btn" onClick={createNewAct}>
+                            <Plus size={10} /> New Act
+                        </button>
                     )}
+
                     <div className="asset-authoring-row__note">
                         {authoringNoteForInstalledKind(installedKind)}
                     </div>
@@ -284,6 +296,8 @@ export default function AssetLibraryLocalView({
                 onSaveLocal={onSaveLocal}
                 onPublish={onPublish}
                 onDeleteDraft={onDeleteDraft}
+                onEditDraft={onEditDraft}
+                onUninstall={onUninstall}
             />
         </>
     )

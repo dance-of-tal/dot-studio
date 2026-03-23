@@ -7,7 +7,7 @@ interface CacheEntry<T> {
     expiresAt: number
 }
 
-const store = new Map<string, CacheEntry<any>>()
+const store = new Map<string, CacheEntry<unknown>>()
 
 export function cached<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
     const now = Date.now()

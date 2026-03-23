@@ -2,6 +2,7 @@ import { getOpencode } from './opencode.js'
 import type { ModelSelection } from '../../shared/model-types.js'
 import { projectMcpEntryEnabled, type ProjectMcpCatalog } from '../../shared/project-mcp.js'
 import { readProjectMcpCatalog } from './project-config.js'
+import type { ProjectMcpLiveStatusEntry, ProjectMcpLiveStatusMap } from './project-config.js'
 
 export type RuntimeToolResolution = {
     selectedMcpServers: string[]
@@ -19,6 +20,26 @@ export type RuntimeToolResolution = {
 
 function unique(values: string[]) {
     return Array.from(new Set(values.filter(Boolean)))
+}
+
+function responseData<T>(response: unknown, fallback: T): T {
+    if (!response || typeof response !== 'object' || !('data' in response)) {
+        return fallback
+    }
+    return ((response as { data?: T | null }).data ?? fallback) as T
+}
+
+function errorMessage(error: unknown, fallback: string) {
+    return error instanceof Error && error.message ? error.message : fallback
+}
+
+function toolNames(entry: ProjectMcpLiveStatusEntry | undefined): string[] {
+    return (entry?.tools || []).map((tool) => {
+        if (!tool || typeof tool !== 'object' || !('name' in tool) || typeof tool.name !== 'string') {
+            return ''
+        }
+        return tool.name
+    }).filter(Boolean)
 }
 
 export function describeUnavailableRuntimeTools(
@@ -75,7 +96,7 @@ function emptyResolution(selectedMcpServers: string[]): RuntimeToolResolution {
 
 async function currentMcpStatus(oc: Awaited<ReturnType<typeof getOpencode>>, cwd: string) {
     const res = await oc.mcp.status({ directory: cwd })
-    return ((res as any).data || {}) as Record<string, any>
+    return responseData<ProjectMcpLiveStatusMap>(res, {})
 }
 
 async function ensureConnectedServer(
@@ -83,7 +104,7 @@ async function ensureConnectedServer(
     cwd: string,
     serverName: string,
     catalog: ProjectMcpCatalog,
-    statusMap: Record<string, any>,
+    statusMap: ProjectMcpLiveStatusMap,
 ) {
     const config = catalog[serverName]
     if (!config) {
@@ -143,13 +164,13 @@ async function ensureConnectedServer(
             name: serverName,
             directory: cwd,
         })
-    } catch (error: any) {
+    } catch (error: unknown) {
         return {
             statusMap,
             unavailable: {
                 serverName,
                 reason: 'connect_failed' as const,
-                detail: error?.message || 'Connection attempt failed.',
+                detail: errorMessage(error, 'Connection attempt failed.'),
             },
         }
     }
@@ -220,8 +241,7 @@ export async function resolveRuntimeTools(
 
     const requestedTools = unique(
         selectedMcpServers.flatMap((serverName) =>
-            ((mcpStatus[serverName]?.tools || []) as Array<{ name?: string }>)
-                .map((tool) => tool.name || '')
+            toolNames(mcpStatus[serverName])
         )
     )
 
@@ -239,13 +259,13 @@ export async function resolveRuntimeTools(
             model: model.modelId,
             directory: cwd,
         })
-        const items = ((toolListRes as any).data || []) as Array<{ id?: string }>
+        const items = responseData<Array<{ id?: string }>>(toolListRes, [])
         availableTools = unique(items.map((item) => item.id || ''))
     } else {
         const toolIdsRes = await oc.tool.ids({
             directory: cwd,
         })
-        availableTools = unique((((toolIdsRes as any).data || []) as string[]))
+        availableTools = unique(responseData<string[]>(toolIdsRes, []))
     }
 
     const availableSet = new Set(availableTools)
@@ -253,8 +273,7 @@ export async function resolveRuntimeTools(
     const unavailableTools = requestedTools.filter((toolId) => !availableSet.has(toolId))
     const toolServerNames = new Map<string, string[]>()
     for (const serverName of selectedMcpServers) {
-        for (const tool of ((mcpStatus[serverName]?.tools || []) as Array<{ name?: string }>)) {
-            const toolId = tool.name || ''
+        for (const toolId of toolNames(mcpStatus[serverName])) {
             if (!toolId) continue
             const current = toolServerNames.get(toolId) || []
             current.push(serverName)

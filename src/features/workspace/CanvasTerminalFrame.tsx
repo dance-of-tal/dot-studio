@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
+import type { NodeProps } from '@xyflow/react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -31,6 +32,55 @@ const termTheme = {
     brightWhite: '#ffffff',
 };
 
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+
+function stripTerminalNoise(value: string) {
+    let result = '';
+
+    for (let index = 0; index < value.length; index += 1) {
+        const char = value[index];
+
+        if (char === ESC) {
+            const next = value[index + 1];
+
+            if (next === ']') {
+                index += 2;
+                while (index < value.length) {
+                    if (value[index] === BEL) {
+                        break;
+                    }
+                    if (value[index] === ESC && value[index + 1] === '\\') {
+                        index += 1;
+                        break;
+                    }
+                    index += 1;
+                }
+                continue;
+            }
+
+            if (next === '[') {
+                index += 2;
+                while (index < value.length && !/[A-Za-z]/.test(value[index])) {
+                    index += 1;
+                }
+                continue;
+            }
+
+            index += 1;
+            continue;
+        }
+
+        if (char !== '\r' && char !== '\n' && char.charCodeAt(0) < 32) {
+            continue;
+        }
+
+        result += char;
+    }
+
+    return result;
+}
+
 function buildTerminalWebSocketUrl(workingDir: string | null) {
     const url = new URL('/ws/terminal', window.location.href);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -41,23 +91,24 @@ function buildTerminalWebSocketUrl(workingDir: string | null) {
     return url.toString();
 }
 
-interface CanvasTerminalFrameProps {
-    data: {
-        nodeId: string;
-        title: string;
-        width: number;
-        height: number;
-        onClose: () => void;
-        onResize: (width: number, height: number) => void;
-        onSessionChange: (sessionId: string | null, connected: boolean) => void;
-    };
+type CanvasTerminalFrameData = {
+    nodeId: string;
+    title: string;
+    width: number;
+    height: number;
+    onClose: () => void;
+    onResize: (width: number, height: number) => void;
+    onSessionChange: (sessionId: string | null, connected: boolean) => void;
+    transformActive?: boolean;
+    onActivateTransform?: () => void;
+    onDeactivateTransform?: () => void;
 }
 
-export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) {
+export default function CanvasTerminalFrame({ data }: NodeProps<CanvasTerminalFrameData>) {
     const { title, width, height, onClose, onSessionChange } = data;
-    const transformActive = !!(data as any).transformActive;
-    const onActivateTransform = (data as any).onActivateTransform as (() => void) | undefined;
-    const onDeactivateTransform = (data as any).onDeactivateTransform as (() => void) | undefined;
+    const transformActive = !!data.transformActive;
+    const onActivateTransform = data.onActivateTransform;
+    const onDeactivateTransform = data.onDeactivateTransform;
     const termRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
@@ -92,10 +143,7 @@ export default function CanvasTerminalFrame({ data }: CanvasTerminalFrameProps) 
                     case 'output': {
                         // Filter initial noise like {"cursor":0}% from zsh
                         if (!outputInitialized.current) {
-                            const stripped = msg.data
-                                .replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, '')
-                                .replace(/\x1b\[[^a-zA-Z]*[a-zA-Z]/g, '')
-                                .replace(/\x1b[^[\]].?/g, '')
+                            const stripped = stripTerminalNoise(msg.data)
                                 .replace(/[\r\n]/g, '')
                                 .trim();
                             if (!stripped || /\{"cursor":\d+\}/.test(stripped) || /^%+$/.test(stripped)) {

@@ -22,7 +22,7 @@ export interface PerformerCompileInput {
     talRef: AssetRef | null
     model: ModelSelection
     modelVariant?: string | null
-    stageHash: string
+    workspaceHash: string
     executionDir: string
     scope?: 'stage' | 'act'
     actId?: string
@@ -158,11 +158,11 @@ function buildFrontmatter(input: {
 }
 
 function buildAgentFile(input: {
-    stageHash: string
+    workspaceHash: string
     performerId: string
     performerName: string
     executionDir: string
-    scope: 'stage' | 'act'
+    scope: 'workspace' | 'act'
     actId?: string
     model: ModelSelection
     posture: Posture
@@ -174,7 +174,7 @@ function buildAgentFile(input: {
 }): AgentFile {
     const identity = resolveAgentIdentity({
         executionDir: input.executionDir,
-        stageHash: input.stageHash,
+        workspaceHash: input.workspaceHash,
         performerId: input.performerId,
         posture: input.posture,
         scope: input.scope,
@@ -225,13 +225,14 @@ export async function compilePerformer(
         talContent,
         relationPromptSection: input.relationPromptSection || null,
     })
+    const projectionScope = input.scope === 'stage' ? 'workspace' : (input.scope || 'workspace')
 
     const buildFile = buildAgentFile({
-        stageHash: input.stageHash,
+        workspaceHash: input.workspaceHash,
         performerId: input.performerId,
         performerName: input.performerName,
         executionDir: input.executionDir,
-        scope: input.scope || 'stage',
+        scope: projectionScope,
         actId: input.actId,
         model: input.model,
         posture: 'build',
@@ -244,14 +245,14 @@ export async function compilePerformer(
 
     // Act scope: build-only (no plan agent — complex multi-performer Acts
     // make plan mode impractical to control across the whole graph).
-    const includePlan = (input.scope || 'stage') !== 'act'
+    const includePlan = projectionScope !== 'act'
     const planFile = includePlan
         ? buildAgentFile({
-            stageHash: input.stageHash,
+            workspaceHash: input.workspaceHash,
             performerId: input.performerId,
             performerName: input.performerName,
             executionDir: input.executionDir,
-            scope: input.scope || 'stage',
+            scope: projectionScope,
             actId: input.actId,
             model: input.model,
             posture: 'plan',

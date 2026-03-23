@@ -10,6 +10,10 @@ import { join, dirname } from 'node:path'
 import type { MailboxEvent } from '../../../shared/act-types.js'
 import { STUDIO_DIR } from '../../lib/config.js'
 
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+    return error instanceof Error
+}
+
 // ── EventLogger ─────────────────────────────────────────
 
 export class EventLogger {
@@ -49,9 +53,9 @@ export class EventLogger {
             const lines = content.trim().split('\n').filter(Boolean)
             const tail = lines.slice(-count)
             return tail.map((line) => JSON.parse(line) as MailboxEvent)
-        } catch (err: any) {
-            if (err.code === 'ENOENT') return []
-            throw err
+        } catch (error: unknown) {
+            if (isErrnoException(error) && error.code === 'ENOENT') return []
+            throw error
         }
     }
 
@@ -63,9 +67,9 @@ export class EventLogger {
             const content = await fs.readFile(this.logPath, 'utf-8')
             const lines = content.trim().split('\n').filter(Boolean)
             return lines.map((line) => JSON.parse(line) as MailboxEvent)
-        } catch (err: any) {
-            if (err.code === 'ENOENT') return []
-            throw err
+        } catch (error: unknown) {
+            if (isErrnoException(error) && error.code === 'ENOENT') return []
+            throw error
         }
     }
 

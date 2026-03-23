@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useStudioStore } from '../../store';
+import type { LspDiagnostic, LspServerInfo } from '../../types';
 import { X, Activity, Server, AlertTriangle, AlertCircle } from 'lucide-react';
 import './LspModal.css';
 
@@ -15,7 +16,7 @@ export default function LspModal({ open, onClose }: { open: boolean, onClose: ()
     if (!open) return null;
 
     const allDiagnostics = Object.entries(lspDiagnostics).flatMap(([uri, diags]) =>
-        diags.map((d: any) => ({ ...d, uri }))
+        diags.map((diagnostic: LspDiagnostic) => ({ ...diagnostic, uri }))
     );
 
     return (
@@ -32,13 +33,13 @@ export default function LspModal({ open, onClose }: { open: boolean, onClose: ()
                             <div className="empty-state">No language servers running.</div>
                         ) : (
                             <ul className="lsp-server-list">
-                                {lspServers.map((s: any, i) => (
+                                {lspServers.map((server: LspServerInfo, i) => (
                                     <li key={i}>
                                         <div className="server-info">
                                             <Server size={12} className="icon-muted" />
-                                            <span className="server-name">{s.name || s.id || 'Unknown Server'}</span>
+                                            <span className="server-name">{server.name || server.id || 'Unknown Server'}</span>
                                         </div>
-                                        <span className="server-status badge">{s.status || 'connected'}</span>
+                                        <span className="server-status badge">{server.status || 'connected'}</span>
                                     </li>
                                 ))}
                             </ul>

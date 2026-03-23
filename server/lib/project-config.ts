@@ -8,6 +8,15 @@ import {
     type ProjectMcpEntryConfig,
 } from '../../shared/project-mcp.js'
 
+export type ProjectMcpLiveStatusEntry = {
+    status?: string
+    tools?: Array<{ name?: string } | Record<string, unknown>>
+    resources?: unknown[]
+    error?: string
+}
+
+export type ProjectMcpLiveStatusMap = Record<string, ProjectMcpLiveStatusEntry>
+
 export async function readProjectConfigFile(cwd: string): Promise<Record<string, unknown>> {
     try {
         const raw = await fs.readFile(path.join(cwd, 'config.json'), 'utf-8')
@@ -25,7 +34,7 @@ export async function readProjectMcpCatalog(cwd: string): Promise<ProjectMcpCata
 
 export function summarizeProjectMcpCatalog(
     catalog: ProjectMcpCatalog,
-    liveStatus: Record<string, any>,
+    liveStatus: ProjectMcpLiveStatusMap,
 ) {
     return Object.keys({
         ...catalog,

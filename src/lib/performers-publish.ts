@@ -7,6 +7,7 @@ import type {
     PerformerNode,
 } from '../types'
 import { extractMcpServerNamesFromConfig } from '../../shared/mcp-config'
+import { assetUrnAuthor, assetUrnDisplayName, parseStudioAssetUrn } from './asset-urn'
 
 function unique(values: string[]) {
     return Array.from(new Set(values.filter(Boolean)))
@@ -62,7 +63,7 @@ export function registryUrnsFromRefs(refs: AssetRef[] | undefined | null): strin
         .filter((urn): urn is string => !!urn)
 }
 
-function declaredMcpServerNames(declaredMcpConfig: Record<string, any> | null | undefined) {
+function declaredMcpServerNames(declaredMcpConfig: Record<string, unknown> | null | undefined) {
     return extractMcpServerNamesFromConfig(declaredMcpConfig)
 }
 
@@ -73,7 +74,7 @@ function sanitizeMcpBindingMap(mcpBindingMap: Record<string, string> | null | un
 }
 
 export function buildAutoMcpBindingMap(
-    declaredMcpConfig: Record<string, any> | null | undefined,
+    declaredMcpConfig: Record<string, unknown> | null | undefined,
     availableServerNames: string[],
 ) {
     const allowed = new Set(availableServerNames.filter(Boolean))
@@ -179,13 +180,12 @@ export function buildPerformerAssetPayload(
 }
 
 export function buildActAssetPayload(
-    act: import('../types').StageAct,
+    act: import('../types').WorkspaceAct,
     options: { description?: string; tags?: string[] } = {},
 ) {
     const participants = Object.entries(act.participants).map(([key, binding]) => ({
         key,
         performerRef: binding.performerRef,
-        activeDanceIds: binding.activeDanceIds,
         subscriptions: binding.subscriptions,
     }))
 
@@ -194,21 +194,11 @@ export function buildActAssetPayload(
         throw new Error('Save participant performer drafts as local assets before authoring this act asset.')
     }
 
-    const unresolvedDanceIds = participants.flatMap((participant) =>
-        (participant.activeDanceIds || []).filter((value) => !value.startsWith('dance/')),
-    )
-    if (unresolvedDanceIds.length > 0) {
-        throw new Error('Act participant active dances must reference saved Dance assets before authoring this act asset.')
-    }
-
     const relations = act.relations.map((relation) => ({
         between: relation.between,
         direction: relation.direction,
         name: relation.name,
-        description: relation.description || '',
-        permissions: relation.permissions,
-        maxCalls: relation.maxCalls,
-        timeout: relation.timeout,
+        description: relation.description || relation.name,
     }))
 
     return {
@@ -220,28 +210,22 @@ export function buildActAssetPayload(
         payload: {
             ...(act.actRules && act.actRules.length > 0 ? { actRules: act.actRules } : {}),
             participants: participants.map((participant) => ({
-                id: participant.key,
+                key: participant.key,
                 performer: participant.performerRef.kind === 'registry' ? participant.performerRef.urn : '',
-                ...(Array.isArray(participant.activeDanceIds) && participant.activeDanceIds.length > 0
-                    ? { activeDances: participant.activeDanceIds }
-                    : {}),
                 ...(participant.subscriptions ? { subscriptions: participant.subscriptions } : {}),
             })),
-            relations: relations.map((relation, index) => ({
-                id: `relation-${index + 1}`,
-                ...relation,
-            })),
+            relations,
         },
     }
 }
 
 function parseUrn(urn: string): AssetCard {
-    const [kind, author, name] = urn.split('/')
+    const parsed = parseStudioAssetUrn(urn)
     return {
-        kind: kind as AssetCard['kind'],
+        kind: (parsed?.kind || urn.split('/')[0]) as AssetCard['kind'],
         urn,
-        name,
-        author,
+        name: assetUrnDisplayName(urn),
+        author: assetUrnAuthor(urn) || '@unknown',
         description: '',
     }
 }
@@ -278,7 +262,7 @@ export function normalizePerformerAssetInput(asset: {
     modelPlaceholder?: ModelConfig | null
     mcpServerNames?: string[]
     mcpBindingMap?: Record<string, string>
-    mcpConfig?: Record<string, any> | null
+    mcpConfig?: Record<string, unknown> | null
 }) {
     const declaredMcpConfig = asset.mcpConfig && typeof asset.mcpConfig === 'object'
         ? asset.mcpConfig

@@ -1,3 +1,4 @@
+import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import { getOpencode } from '../lib/opencode.js'
 import {
     listSessionExecutionContextsForWorkingDir,
@@ -6,6 +7,16 @@ import {
 } from '../lib/session-execution.js'
 import { normalizeIncompleteToolParts, waitForSessionToSettle } from '../lib/chat-session.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
+
+type OpenCodeSessionSummary = {
+    id: string
+    title?: string
+    createdAt?: number
+} & Record<string, unknown>
+
+type SessionMessageLike = {
+    parts?: unknown[]
+} & Record<string, unknown>
 
 export async function directoryQueryForSession(workingDir: string, sessionId: string): Promise<{ directory: string }> {
     const context = await resolveSessionExecutionContext(sessionId)
@@ -58,7 +69,7 @@ export async function respondSessionPermission(workingDir: string, sessionId: st
     return { ok: true as const }
 }
 
-export async function respondQuestion(questionId: string, answers: any[]) {
+export async function respondQuestion(questionId: string, answers: QuestionAnswer[]) {
     const oc = await getOpencode()
     unwrapOpencodeResult(await oc.question.reply({
         requestID: questionId,
@@ -78,7 +89,7 @@ export async function rejectQuestion(questionId: string) {
 export async function listStudioSessionMessages(workingDir: string, sessionId: string) {
     const oc = await getOpencode()
     const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
-    const data = unwrapOpencodeResult<any[]>(await oc.session.messages({
+    const data = unwrapOpencodeResult<SessionMessageLike[]>(await oc.session.messages({
         sessionID: sessionId,
         ...directoryQuery,
     }))
@@ -94,16 +105,7 @@ export async function listStudioSessionMessages(workingDir: string, sessionId: s
 export async function listStudioSessionDiff(workingDir: string, sessionId: string) {
     const oc = await getOpencode()
     const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
-    return unwrapOpencodeResult<any[]>(await oc.session.diff({
-        sessionID: sessionId,
-        ...directoryQuery,
-    })) || []
-}
-
-export async function listStudioSessionTodos(workingDir: string, sessionId: string) {
-    const oc = await getOpencode()
-    const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
-    return unwrapOpencodeResult<any[]>(await oc.session.todo({
+    return unwrapOpencodeResult<Array<Record<string, unknown>>>(await oc.session.diff({
         sessionID: sessionId,
         ...directoryQuery,
     })) || []
@@ -112,7 +114,7 @@ export async function listStudioSessionTodos(workingDir: string, sessionId: stri
 export async function shareStudioChatSession(workingDir: string, sessionId: string) {
     const oc = await getOpencode()
     const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
-    return unwrapOpencodeResult<any>(await oc.session.share({
+    return unwrapOpencodeResult<Record<string, unknown>>(await oc.session.share({
         sessionID: sessionId,
         ...directoryQuery,
     }))
@@ -140,7 +142,7 @@ export async function revertStudioChatSession(
 ) {
     const oc = await getOpencode()
     const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
-    return unwrapOpencodeResult<any>(await oc.session.revert({
+    return unwrapOpencodeResult<Record<string, unknown>>(await oc.session.revert({
         sessionID: sessionId,
         ...directoryQuery,
         messageID: input.messageId,
@@ -158,9 +160,9 @@ export async function listStudioChatSessions(workingDir: string) {
         ...actContexts.map((context) => context.executionDir),
     ]))
     const lists = await Promise.all(
-        directories.map(async (directory) => unwrapOpencodeResult<any[]>(await oc.session.list({ directory }))),
+        directories.map(async (directory) => unwrapOpencodeResult<OpenCodeSessionSummary[]>(await oc.session.list({ directory }))),
     )
-    const sessions = new Map<string, any>()
+    const sessions = new Map<string, OpenCodeSessionSummary>()
     for (const list of lists) {
         for (const session of list || []) {
             if (!session?.id) continue

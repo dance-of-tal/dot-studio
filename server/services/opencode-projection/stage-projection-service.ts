@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import { createHash } from 'crypto'
 import path from 'path'
 import { getOpencode } from '../../lib/opencode.js'
+import type { ProjectMcpLiveStatusMap } from '../../lib/project-config.js'
 import { resolveRuntimeModel } from '../../lib/model-catalog.js'
 import { resolveRuntimeTools, type RuntimeToolResolution } from '../../lib/runtime-tools.js'
 import {
@@ -80,7 +81,7 @@ export interface PerformerProjectionInput {
         performerName: string
         description?: string
     }>
-    scope?: 'stage' | 'act'
+    scope?: 'workspace' | 'act'
     actId?: string
     extraTools?: Array<{
         name: string
@@ -94,7 +95,7 @@ export interface EnsuredPerformerProjection {
     capabilitySnapshot: CapabilitySnapshot
 }
 
-function computeStageHash(workingDir: string) {
+function computeWorkspaceHash(workingDir: string) {
     return createHash('sha1').update(workingDir).digest('hex').slice(0, 12)
 }
 
@@ -112,16 +113,16 @@ async function writeIfChanged(filePath: string, content: string) {
     return true
 }
 
-async function allMcpToolIds(cwd: string) {
+async function allMcpToolIds(cwd: string): Promise<string[]> {
     const oc = await getOpencode()
     const res = await oc.mcp.status({ directory: cwd })
-    const statusMap = ((res as any).data || {}) as Record<string, { tools?: Array<{ name?: string }> }>
+    const statusMap = ((res && typeof res === 'object' && 'data' in res ? res.data : {}) || {}) as ProjectMcpLiveStatusMap
     return Array.from(
         new Set(
             Object.values(statusMap).flatMap((entry) =>
                 (entry?.tools || [])
-                    .map((tool) => tool.name || '')
-                    .filter(Boolean)
+                    .map((tool) => (typeof tool?.name === 'string' ? tool.name : ''))
+                    .filter((toolId): toolId is string => toolId.length > 0)
             )
         )
     )
@@ -150,7 +151,7 @@ async function resolveCapabilitySnapshot(cwd: string, model: ModelSelection): Pr
 }
 
 export async function ensurePerformerProjection(input: PerformerProjectionInput): Promise<EnsuredPerformerProjection> {
-    const stageHash = computeStageHash(input.workingDir)
+    const workspaceHash = computeWorkspaceHash(input.workingDir)
     const toolResolution = await resolveRuntimeTools(input.executionDir, input.model, input.mcpServerNames)
     const toolMap = buildProjectedToolMap(
         await allMcpToolIds(input.executionDir),
@@ -168,10 +169,10 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         skills.push(await compileDance(
             input.executionDir,
             ref,
-            stageHash,
+            workspaceHash,
             input.performerId,
             input.executionDir,
-            input.scope || 'stage',
+            input.scope || 'workspace',
             input.actId,
         ))
     }
@@ -183,6 +184,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         description: target.description || '',
     }))
     const requestProjection = compileMentionRelations(requestTargets)
+    const compileScope = input.scope === 'workspace' ? 'stage' : input.scope
 
     const compiled = await compilePerformer(
         input.executionDir,
@@ -192,9 +194,9 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             talRef: input.talRef,
             model: input.model,
             modelVariant: input.modelVariant || null,
-            stageHash,
+            workspaceHash,
             executionDir: input.executionDir,
-            scope: input.scope || 'stage',
+            scope: compileScope || 'stage',
             actId: input.actId,
             skillNames: skills.map((skill) => skill.logicalName),
             toolMap,
@@ -217,6 +219,23 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
 
     for (const skill of skills) {
         changed = (await writeIfChanged(skill.filePath, skill.content)) || changed
+        // Track additional bundle files (scripts/, references/, assets/) in the manifest.
+        // copyBundleSiblings already wrote these files; we just need to check if any
+        // were new or updated so that opencode reloads when bundle content changes.
+        if (skill.additionalFiles.length > 0) {
+            compiled.allFiles.push(...skill.additionalFiles)
+            // Mark changed if any extra file is newer than the agent file (proxy for freshness)
+            if (!changed) {
+                for (const extra of skill.additionalFiles) {
+                    const stat = await fs.stat(extra).catch(() => null)
+                    const agentStat = await fs.stat(skill.filePath).catch(() => null)
+                    if (stat && agentStat && stat.mtimeMs > agentStat.mtimeMs) {
+                        changed = true
+                        break
+                    }
+                }
+            }
+        }
     }
     changed = (await writeIfChanged(compiled.agentPaths.build!, compiled.agentContents.build!)) || changed
     if (compiled.agentPaths.plan && compiled.agentContents.plan) {
@@ -225,7 +244,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
 
     await updateManifestGroup(
         input.executionDir,
-        stageHash,
+        workspaceHash,
         groupKey(input.performerId),
         compiled.allFiles,
     )
@@ -247,13 +266,13 @@ export function getProjectedAgentName(
     workingDir: string,
     performerId: string,
     posture: Posture,
-    scope: 'stage' | 'act' = 'stage',
+    scope: 'workspace' | 'act' = 'workspace',
     actId?: string,
 ) {
-    const stageHash = computeStageHash(workingDir)
+    const workspaceHash = computeWorkspaceHash(workingDir)
     return resolveAgentIdentity({
         executionDir: workingDir,
-        stageHash,
+        workspaceHash,
         performerId,
         posture,
         scope,

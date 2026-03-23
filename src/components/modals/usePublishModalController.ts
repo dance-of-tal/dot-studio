@@ -48,7 +48,7 @@ export function usePublishModalController(open: boolean) {
     const draft = markdownEditor ? drafts[markdownEditor.draftId] || null : null
     const isLocalAsset = pickerSelection?.source === 'local'
     const selectedAct = pickerSelection?.kind === 'act'
-        ? acts.find((a) => a.id === (pickerSelection as any).actId) || null
+        ? acts.find((a) => a.id === pickerSelection.actId) || null
         : null
 
     const target = performer
@@ -115,7 +115,7 @@ export function usePublishModalController(open: boolean) {
     }, [draft, markdownEditor])
 
     const performerHasBlockingDependencies = useMemo(
-        () => performerPreflight.some((entry: any) => entry.status !== 'ready'),
+        () => performerPreflight.some((entry) => entry.status !== 'ready'),
         [performerPreflight],
     )
     const publishBlockedReason = useMemo(() => {
@@ -229,7 +229,7 @@ export function usePublishModalController(open: boolean) {
             if ((target.kind === 'tal' || target.kind === 'dance') && isLocalAsset) {
                 setStatus({ tone: 'success', message: `${target.kind}/${target.id} is already saved locally.` })
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             setStatus({ tone: 'error', message: formatStudioApiErrorMessage(error, false) })
         } finally {
             setAction(null)
@@ -290,7 +290,7 @@ export function usePublishModalController(open: boolean) {
                     message: result.published ? `Published ${result.urn}.` : `${result.urn} already exists in the registry.`,
                 })
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             setStatus({ tone: 'error', message: formatStudioApiErrorMessage(error, false) })
         } finally {
             setAction(null)

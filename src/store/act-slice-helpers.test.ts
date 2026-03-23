@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
     normalizeSubscriptions,
-    normalizeRelationPermissions,
     fallbackParticipantLabel,
     autoLayoutBindings,
 } from './act-slice-helpers'
+import type { WorkspaceActParticipantBinding } from '../types'
 
 describe('normalizeSubscriptions', () => {
     it('returns null/undefined as-is', () => {
@@ -13,30 +13,17 @@ describe('normalizeSubscriptions', () => {
     })
 
     it('passes through valid subscriptions', () => {
-        const input = { callboardKeys: ['a', 'b'], other: true }
+        const input: Record<string, unknown> = { callboardKeys: ['a', 'b'], other: true }
         const result = normalizeSubscriptions(input)
         expect(result.callboardKeys).toEqual(['a', 'b'])
         expect(result.other).toBe(true)
     })
 
     it('preserves subscriptions without callboardKeys', () => {
-        const input = { other: 'value' }
+        const input: Record<string, unknown> = { other: 'value' }
         const result = normalizeSubscriptions(input)
         expect(result.other).toBe('value')
         expect(result.callboardKeys).toBeUndefined()
-    })
-})
-
-describe('normalizeRelationPermissions', () => {
-    it('returns null/undefined as-is', () => {
-        expect(normalizeRelationPermissions(null)).toBeNull()
-        expect(normalizeRelationPermissions(undefined)).toBeUndefined()
-    })
-
-    it('passes through permissions with callboardKeys', () => {
-        const input = { callboardKeys: ['x'], read: true }
-        const result = normalizeRelationPermissions(input)
-        expect(result.callboardKeys).toEqual(['x'])
     })
 })
 
@@ -67,7 +54,7 @@ describe('autoLayoutBindings', () => {
     })
 
     it('lays out 3 entries in a single row', () => {
-        const bindings: Record<string, any> = {}
+        const bindings: Record<string, WorkspaceActParticipantBinding> = {}
         for (let i = 0; i < 3; i++) {
             bindings[`k${i}`] = {
                 performerRef: { kind: 'draft', draftId: `d${i}` },
@@ -84,7 +71,7 @@ describe('autoLayoutBindings', () => {
     })
 
     it('wraps to next row for 4+ entries', () => {
-        const bindings: Record<string, any> = {}
+        const bindings: Record<string, WorkspaceActParticipantBinding> = {}
         for (let i = 0; i < 4; i++) {
             bindings[`k${i}`] = {
                 performerRef: { kind: 'draft', draftId: `d${i}` },

@@ -1,7 +1,7 @@
 import { Suspense, lazy, useState, useCallback, useRef } from 'react';
 import { ChevronRight, LayoutGrid } from 'lucide-react';
 import { useStudioStore } from '../../store';
-import StageExplorer from './StageExplorer';
+import WorkspaceExplorer from './WorkspaceExplorer';
 import './LeftSidebar.css';
 
 const AssetLibrary = lazy(() =>
@@ -57,7 +57,7 @@ export default function LeftSidebar() {
         <div className={`sidebar-container ${isAssetLibraryOpen ? 'sidebar-container--drawer-open' : ''}`}>
             <div className="sidebar" style={{ width: sidebarWidth }}>
                 <div className="sidebar-main-top" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <StageExplorer />
+                    <WorkspaceExplorer />
                 </div>
                 {!isFocused && (
                     <div className="sidebar-main-bottom sidebar-main-bottom--asset-drawer">

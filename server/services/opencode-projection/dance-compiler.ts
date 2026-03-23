@@ -1,7 +1,13 @@
 import path from 'path'
-import { getAssetPayload, readAsset } from '../../lib/dot-source.js'
+import fs from 'fs/promises'
+import { getAssetPayload, readAsset, danceAssetDir } from '../../lib/dot-source.js'
 import { localSkillProjectionDir, toRelativePath } from './projection-manifest.js'
 import { readDraft } from '../draft-service.js'
+import {
+    isDanceBundleDraft,
+    danceBundleDir,
+    readBundleSkillContent,
+} from '../dance-bundle-service.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -15,6 +21,8 @@ export interface CompiledSkill {
     filePath: string
     relativePath: string
     content: string
+    /** Additional files projected from bundle (absolute paths) */
+    additionalFiles: string[]
 }
 
 function sanitizeSegment(value: string) {
@@ -45,11 +53,17 @@ function extractDraftDescription(draft: { description?: string; content?: unknow
 }
 
 function parseUrn(urn: string) {
-    const [kind, author, slug] = urn.split('/')
+    // URN is 4-segment: kind/@owner/stage/name
+    const parts = urn.split('/')
+    const kind = parts[0] ?? ''
+    const ownerWithAt = parts[1] ?? ''
+    const stage = parts[2] ?? ''
+    const name = parts[3] ?? ''
     return {
         kind,
-        author: sanitizeSegment(author.replace(/^@/, '')),
-        slug: sanitizeSegment(slug),
+        author: sanitizeSegment(ownerWithAt.replace(/^@/, '')),
+        stage: sanitizeSegment(stage),
+        slug: sanitizeSegment(name),
     }
 }
 
@@ -68,7 +82,7 @@ export async function compileDance(
     stageHash: string,
     performerId: string,
     executionDir: string,
-    scope: 'stage' | 'act' = 'stage',
+    scope: 'workspace' | 'act' = 'workspace',
     actId?: string,
 ): Promise<CompiledSkill> {
     if (ref.kind === 'registry') {
@@ -85,15 +99,20 @@ export async function compileDance(
             stageHash,
             sanitizeSegment(performerId),
             parsed.author,
+            parsed.stage,
             parsed.slug,
         ].join('-')
         const description = typeof asset?.description === 'string' ? asset.description : parsed.slug
-        const filePath = path.join(
+        const skillDir = path.join(
             localSkillProjectionDir(executionDir, stageHash, performerId, scope, actId),
             logicalName,
-            'SKILL.md',
         )
+        const filePath = path.join(skillDir, 'SKILL.md')
         const content = `${buildFrontmatter(logicalName, description)}\n\n${body}`
+
+        // Copy bundle sibling dirs (scripts/, references/, assets/) from locally installed dance
+        const bundleDir = danceAssetDir(cwd, ref.urn)
+        const additionalFiles = await copyBundleSiblings(bundleDir, skillDir)
 
         return {
             logicalName,
@@ -101,6 +120,47 @@ export async function compileDance(
             filePath,
             relativePath: toRelativePath(executionDir, filePath),
             content,
+            additionalFiles,
+        }
+    }
+
+    // ── Draft ref: check if bundle-backed ─────────────────
+    const isBundle = await isDanceBundleDraft(cwd, ref.draftId)
+
+    if (isBundle) {
+        const body = await readBundleSkillContent(cwd, ref.draftId)
+        if (!body) {
+            throw new Error(`Dance draft '${ref.draftId}' is missing SKILL.md.`)
+        }
+
+        const draft = await readDraft(cwd, 'dance', ref.draftId)
+        const logicalName = [
+            'dot-studio',
+            'stage',
+            stageHash,
+            sanitizeSegment(performerId),
+            'draft',
+            sanitizeSegment(ref.draftId),
+        ].join('-')
+        const description = extractDraftDescription(draft) || draft?.name || 'Draft skill'
+        const skillDir = path.join(
+            localSkillProjectionDir(executionDir, stageHash, performerId, scope, actId),
+            logicalName,
+        )
+        const filePath = path.join(skillDir, 'SKILL.md')
+        const content = `${buildFrontmatter(logicalName, description)}\n\n${body}`
+
+        // Copy bundle sibling directories into projection
+        const bundleRoot = danceBundleDir(cwd, ref.draftId)
+        const additionalFiles = await copyBundleSiblings(bundleRoot, skillDir)
+
+        return {
+            logicalName,
+            description,
+            filePath,
+            relativePath: toRelativePath(executionDir, filePath),
+            content,
+            additionalFiles,
         }
     }
 
@@ -132,5 +192,55 @@ export async function compileDance(
         filePath,
         relativePath: toRelativePath(executionDir, filePath),
         content,
+        additionalFiles: [],
+    }
+}
+
+/**
+ * Copy all bundle contents (except SKILL.md itself) from the source bundle directory
+ * into the target projection directory. SKILL.md is handled separately via writeIfChanged.
+ * Returns absolute paths of all copied files.
+ */
+async function copyBundleSiblings(bundleRoot: string, targetDir: string): Promise<string[]> {
+    const copiedFiles: string[] = []
+
+    let entries: import('fs').Dirent[]
+    try {
+        entries = await fs.readdir(bundleRoot, { withFileTypes: true, encoding: 'utf-8' })
+    } catch {
+        return copiedFiles // bundle dir doesn't exist (e.g. SKILL.md-only install)
+    }
+
+    for (const entry of entries) {
+        if (entry.name === 'SKILL.md') continue // handled via writeIfChanged
+        const srcPath = path.join(bundleRoot, entry.name)
+        const destPath = path.join(targetDir, entry.name)
+
+        if (entry.isDirectory()) {
+            await copyDirRecursive(srcPath, destPath, copiedFiles)
+        } else if (entry.isFile()) {
+            await fs.mkdir(path.dirname(destPath), { recursive: true })
+            await fs.copyFile(srcPath, destPath)
+            copiedFiles.push(destPath)
+        }
+    }
+
+    return copiedFiles
+}
+
+async function copyDirRecursive(src: string, dest: string, copiedFiles: string[]): Promise<void> {
+    await fs.mkdir(dest, { recursive: true })
+    const entries = await fs.readdir(src, { withFileTypes: true })
+
+    for (const entry of entries) {
+        const srcPath = path.join(src, entry.name)
+        const destPath = path.join(dest, entry.name)
+
+        if (entry.isDirectory()) {
+            await copyDirRecursive(srcPath, destPath, copiedFiles)
+        } else if (entry.isFile()) {
+            await fs.copyFile(srcPath, destPath)
+            copiedFiles.push(destPath)
+        }
     }
 }

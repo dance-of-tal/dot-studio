@@ -1,13 +1,14 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { displayUrn, getAssetUrn, normalizeAuthor } from './asset-library-utils'
+import type { AssetPanelAsset, McpPanelAsset } from './asset-panel-types'
 
 export default function AssetDetailBody({
     asset,
     loading,
     installed,
 }: {
-    asset: any
+    asset: AssetPanelAsset | null
     loading: boolean
     installed?: boolean
 }) {
@@ -18,7 +19,13 @@ export default function AssetDetailBody({
     const author = normalizeAuthor(asset.author)
     const urn = getAssetUrn(asset)
     const tags = Array.isArray(asset.tags) ? asset.tags : []
-    const inlineContent = asset.body || asset.instructions || asset.content
+    const inlineContent = typeof asset.body === 'string'
+        ? asset.body
+        : typeof asset.instructions === 'string'
+            ? asset.instructions
+            : typeof asset.content === 'string'
+                ? asset.content
+                : null
     const participantCount = asset.participantCount || (Array.isArray(asset.participants) ? asset.participants.length : 0)
     const relationCount = Array.isArray(asset.relations) ? asset.relations.length : 0
     const hasStructuredDetail = !!inlineContent
@@ -99,7 +106,7 @@ export default function AssetDetailBody({
                         <div className="asset-popover__section">
                             <div className="section-title">Model</div>
                             <div className="asset-popover__section-item">
-                                {typeof asset.model === 'string' ? asset.model : asset.model.modelId}
+                                {asset.model.provider}/{asset.model.modelId}
                             </div>
                             {asset.modelVariant && (
                                 <div className="asset-popover__section-item">
@@ -169,7 +176,7 @@ export default function AssetDetailBody({
                     {Array.isArray(asset.tools) && asset.tools.length > 0 && (
                         <div className="asset-popover__section">
                             <div className="section-title">Tools</div>
-                            {asset.tools.slice(0, 8).map((tool: any) => (
+                            {asset.tools.slice(0, 8).map((tool: NonNullable<McpPanelAsset['tools']>[number]) => (
                                 <div key={tool.name} className="asset-popover__section-item">
                                     {tool.name}{tool.description ? ` · ${tool.description}` : ''}
                                 </div>

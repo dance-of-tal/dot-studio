@@ -6,16 +6,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { api } from '../../api'
+import type { ConnectedModel } from './settings-utils'
 
-interface ModelEntry {
-    id: string
-    name: string
-    provider: string
-    providerName: string
-    toolCall: boolean
-    reasoning: boolean
-    connected: boolean
-}
+type ModelEntry = Pick<ConnectedModel, 'id' | 'name' | 'provider' | 'providerName' | 'toolCall' | 'reasoning' | 'connected'>
 
 interface ProviderGroup {
     providerId: string
@@ -35,7 +28,7 @@ export default function SettingsModels() {
             try {
                 const list = await api.models.list()
                 if (cancelled) return
-                const entries: ModelEntry[] = (list || []).map((m: any) => ({
+                const entries: ModelEntry[] = (list || []).map((m) => ({
                     id: m.id,
                     name: m.name || m.id,
                     provider: m.provider,

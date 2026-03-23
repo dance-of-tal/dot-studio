@@ -2,8 +2,24 @@
 
 import type { AssetCard } from '../../types'
 import type { InstalledKind, LocalSection, RuntimeKind, SourceFilter } from './asset-library-utils'
+import type { RegistryGroup } from './asset-panel-types'
 
-export function buildSearchHaystack(asset: any): string {
+type SearchableAsset = Partial<Pick<AssetCard, 'name' | 'author' | 'urn' | 'description' | 'tags'>>
+type SearchableModel = {
+    name?: string
+    id?: string
+    provider?: string
+    providerName?: string
+    toolCall?: boolean
+    attachment?: boolean
+}
+type SearchableMcp = {
+    name?: string
+    status?: string
+    tools?: Array<{ name: string; description?: string }>
+}
+
+export function buildSearchHaystack(asset: SearchableAsset): string {
     return [
         asset.name,
         asset.author,
@@ -16,7 +32,7 @@ export function buildSearchHaystack(asset: any): string {
         .toLowerCase()
 }
 
-export function buildModelHaystack(model: any): string {
+export function buildModelHaystack(model: SearchableModel): string {
     return [
         model.name,
         model.id,
@@ -30,11 +46,11 @@ export function buildModelHaystack(model: any): string {
         .toLowerCase()
 }
 
-export function buildMcpHaystack(mcp: any): string {
+export function buildMcpHaystack(mcp: SearchableMcp): string {
     return [
         mcp.name,
         mcp.status,
-        ...(Array.isArray(mcp.tools) ? mcp.tools.map((tool: any) => `${tool.name} ${tool.description || ''}`) : []),
+        ...(Array.isArray(mcp.tools) ? mcp.tools.map((tool) => `${tool.name} ${tool.description || ''}`) : []),
     ]
         .filter(Boolean)
         .join(' ')
@@ -51,7 +67,7 @@ export function filterInstalledAssets(
         .filter((asset) => !queryText || buildSearchHaystack(asset).includes(queryText))
 }
 
-export function buildRegistryGroups(registryResults: any[]) {
+export function buildRegistryGroups<T extends { kind: InstalledKind }>(registryResults: T[]): RegistryGroup<T>[] {
     const INSTALLED_KIND_ORDER: InstalledKind[] = ['performer', 'tal', 'dance', 'act']
     return INSTALLED_KIND_ORDER
         .map((kind) => ({
@@ -81,10 +97,10 @@ export function placeholderForLocalSection(localSection: LocalSection, runtimeKi
 
 export function authoringNoteForInstalledKind(installedKind: InstalledKind) {
     if (installedKind === 'tal' || installedKind === 'dance') {
-        return 'Creates a new markdown editor on the canvas.'
+        return 'Drag & drop onto a performer, or edit from the draft card.'
     }
     if (installedKind === 'performer') {
-        return 'Creates a new stage performer.'
+        return 'Drag & drop onto the canvas to create a new performer.'
     }
-    return 'Creates a new act area.'
+    return 'Drag & drop onto the canvas to create a new act.'
 }

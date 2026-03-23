@@ -41,3 +41,31 @@
     background: var(--border-strong);
     margin: 0 4px;
 }
+
+/* ── Assistant text button ─── */
+.toolbar__assistant-btn {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+    padding: 3px 10px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    background: transparent;
+    font-size: var(--font-base);
+    font-weight: 700;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.toolbar__assistant-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.toolbar__assistant-btn.is-active {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: rgba(var(--primary-rgb, 99, 102, 241), 0.08);
+}

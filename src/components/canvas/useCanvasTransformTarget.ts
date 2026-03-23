@@ -4,13 +4,13 @@ import type {
     CanvasTrackingWindow,
     MarkdownEditorNode,
     PerformerNode,
-    StageAct,
+    WorkspaceAct,
 } from '../../types'
 
 type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
 
 export function useCanvasTransformTarget(args: {
-    acts: StageAct[]
+    acts: WorkspaceAct[]
     performers: PerformerNode[]
     markdownEditors: MarkdownEditorNode[]
     canvasTerminals: CanvasTerminalNode[]

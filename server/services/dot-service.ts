@@ -1,9 +1,10 @@
 import fs from 'fs/promises'
-import { ensureDotDir, getDotDir, getGlobalCwd, getGlobalDotDir, initRegistry, installActWithDependencies, installAsset, installPerformerWithDeps, readAsset, searchRegistry, parsePerformerAsset } from '../lib/dot-source.js'
+import { ensureDotDir, getDotDir, getGlobalCwd, getGlobalDotDir, initRegistry, installActWithDependencies, installAsset, installPerformerWithDeps, readAsset, reportInstall, searchRegistry, parsePerformerAsset } from '../lib/dot-source.js'
 import type { PerformerAssetV1 } from '../lib/dot-source.js'
-import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
+import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, uninstallStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
 import { startDotLogin } from '../lib/dot-login.js'
 import { invalidate } from '../lib/cache.js'
+import { findInstalledDependents } from './asset-service.js'
 
 export function resolveDotCwd(cwd: string, scope?: string) {
     if (scope === 'global') {
@@ -91,17 +92,25 @@ export async function installDotAsset(cwd: string, input: {
 
     if (input.urn.startsWith('performer/')) {
         const result = await installPerformerWithDeps(targetCwd, input.urn, input.force)
+        // Report installs for non-skipped assets (best-effort)
+        for (const asset of result.installedAssets) {
+            if (!asset.skipped) reportInstall(asset.urn).catch(() => {})
+        }
         invalidate('assets')
         return { ...result, scope: input.scope || 'stage' }
     }
 
     if (input.urn.startsWith('act/')) {
         const result = await installActWithDependencies(targetCwd, input.urn, input.force)
+        for (const asset of result.installedAssets) {
+            if (!asset.skipped) reportInstall(asset.urn).catch(() => {})
+        }
         invalidate('assets')
         return { ...result, scope: input.scope || 'stage' }
     }
 
     const result = await installAsset(targetCwd, input.urn, input.force)
+    if (!result.skipped) reportInstall(input.urn).catch(() => {})
     invalidate('assets')
     return { ...result, scope: input.scope || 'stage' }
 }
@@ -155,8 +164,7 @@ export async function publishDotAsset(cwd: string, input: {
 }) {
     const auth = await readDotAuthUser()
     if (!auth) {
-        const error = new Error('You are not logged in. Run `dot login` first.')
-        ;(error as any).status = 401
+        const error = Object.assign(new Error('You are not logged in. Run `dot login` first.'), { status: 401 })
         throw error
     }
 
@@ -170,4 +178,39 @@ export async function publishDotAsset(cwd: string, input: {
     })
     invalidate('assets')
     return { ok: true, ...result }
+}
+
+export async function uninstallDotAsset(cwd: string, input: {
+    kind: StudioAssetKind
+    urn: string
+    cascade?: boolean
+}) {
+    const deletedUrns: string[] = []
+
+    if (input.cascade) {
+        const plan = await findInstalledDependents(cwd, input.urn)
+        // Delete dependents first (bottom-up: acts before performers)
+        const sortedDependents = [...plan.dependents].sort((a, b) => {
+            const order: Record<string, number> = { act: 0, performer: 1, dance: 2, tal: 3 }
+            return (order[a.kind] ?? 9) - (order[b.kind] ?? 9)
+        })
+        for (const dep of sortedDependents) {
+            try {
+                await uninstallStudioAsset(cwd, dep.urn)
+                deletedUrns.push(dep.urn)
+            } catch { /* skip already-deleted */ }
+        }
+    }
+
+    const result = await uninstallStudioAsset(cwd, input.urn)
+    deletedUrns.push(input.urn)
+    invalidate('assets')
+    return { ok: true, ...result, deletedUrns }
+}
+
+export async function previewUninstallDotAsset(cwd: string, input: {
+    kind: StudioAssetKind
+    urn: string
+}) {
+    return findInstalledDependents(cwd, input.urn)
 }

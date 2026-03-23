@@ -65,7 +65,8 @@ export function resolveImportedModel(
                 provider: match.provider,
                 modelId: match.id,
             },
-            modelPlaceholder: null,
+            // Preserve the original asset recommendation even when matched
+            modelPlaceholder: requested,
         }
     }
 
@@ -91,7 +92,7 @@ export function normalizeAssetModelForStudio<T extends {
 }
 
 export function normalizeAssetMcpForStudio<T extends {
-    mcpConfig?: Record<string, any> | null
+    mcpConfig?: Record<string, unknown> | null
     mcpServerNames?: string[]
 }>(asset: T, projectMcpServerNames: string[]): T & {
     mcpServerNames: string[]

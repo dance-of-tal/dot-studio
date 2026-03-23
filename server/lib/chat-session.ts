@@ -2,18 +2,37 @@ import { unwrapOpencodeResult } from './opencode-errors.js'
 import { getOpencode } from './opencode.js'
 import { requestDirectoryQuery } from './request-context.js'
 
+type ToolPartStateLike = {
+    status?: string
+    error?: string
+    time?: Record<string, unknown>
+} & Record<string, unknown>
+
+type ToolPartLike = {
+    type?: string
+    state?: ToolPartStateLike
+} & Record<string, unknown>
+
+type MessageWithParts = {
+    parts?: unknown[]
+} & Record<string, unknown>
+
+function isToolPartLike(value: unknown): value is ToolPartLike {
+    return !!value && typeof value === 'object'
+}
+
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export function normalizeIncompleteToolParts(messages: any[], settledAt: number) {
+export function normalizeIncompleteToolParts<T extends MessageWithParts>(messages: T[], settledAt: number): T[] {
     return messages.map((message) => {
         if (!Array.isArray(message?.parts) || message.parts.length === 0) {
             return message
         }
 
-        const nextParts = message.parts.map((part: any) => {
-            if (part?.type !== 'tool' || !part.state) {
+        const nextParts = message.parts.map((part) => {
+            if (!isToolPartLike(part) || part.type !== 'tool' || !part.state) {
                 return part
             }
             const status = part.state.status
@@ -38,7 +57,7 @@ export function normalizeIncompleteToolParts(messages: any[], settledAt: number)
         return {
             ...message,
             parts: nextParts,
-        }
+        } as T
     })
 }
 

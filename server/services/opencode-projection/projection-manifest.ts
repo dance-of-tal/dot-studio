@@ -7,7 +7,7 @@ const NAMESPACE = 'dot-studio'
 export interface ProjectionManifest {
     version: 1
     owner: typeof NAMESPACE
-    stageHash: string
+    workspaceHash: string
     groups: Record<string, string[]>
 }
 
@@ -50,18 +50,18 @@ export async function cleanGroupFiles(
 
 export async function updateManifestGroup(
     executionDir: string,
-    stageHash: string,
+    workspaceHash: string,
     groupKey: string,
     files: string[],
 ) {
     const current = (await readManifest(executionDir)) || {
         version: 1 as const,
         owner: NAMESPACE,
-        stageHash,
+        workspaceHash,
         groups: {},
     }
 
-    current.stageHash = stageHash
+    current.workspaceHash = workspaceHash
     current.groups[groupKey] = files
     await writeManifest(executionDir, current)
 }
@@ -100,27 +100,27 @@ export async function updateGitExclude(executionDir: string) {
 
 export function agentProjectionDir(
     executionDir: string,
-    stageHash: string,
-    scope: 'stage' | 'act' = 'stage',
+    workspaceHash: string,
+    scope: 'workspace' | 'act' = 'workspace',
     actId?: string,
 ) {
     if (scope === 'act' && actId) {
-        return path.join(executionDir, '.opencode', 'agents', NAMESPACE, 'act', stageHash, actId)
+        return path.join(executionDir, '.opencode', 'agents', NAMESPACE, 'act', workspaceHash, actId)
     }
-    return path.join(executionDir, '.opencode', 'agents', NAMESPACE, 'stage', stageHash)
+    return path.join(executionDir, '.opencode', 'agents', NAMESPACE, 'workspace', workspaceHash)
 }
 
 export function localSkillProjectionDir(
     executionDir: string,
-    stageHash: string,
+    workspaceHash: string,
     performerId: string,
-    scope: 'stage' | 'act' = 'stage',
+    scope: 'workspace' | 'act' = 'workspace',
     actId?: string,
 ) {
     if (scope === 'act' && actId) {
-        return path.join(executionDir, '.opencode', 'skills', NAMESPACE, 'act', stageHash, actId, performerId)
+        return path.join(executionDir, '.opencode', 'skills', NAMESPACE, 'act', workspaceHash, actId, performerId)
     }
-    return path.join(executionDir, '.opencode', 'skills', NAMESPACE, 'stage', stageHash, performerId)
+    return path.join(executionDir, '.opencode', 'skills', NAMESPACE, 'workspace', workspaceHash, performerId)
 }
 
 export function toRelativePath(executionDir: string, absPath: string) {
@@ -135,13 +135,13 @@ export type Posture = 'build' | 'plan'
  */
 export function resolveAgentIdentity(input: {
     executionDir: string
-    stageHash: string
+    workspaceHash: string
     performerId: string
     posture: Posture
-    scope: 'stage' | 'act'
+    scope: 'workspace' | 'act'
     actId?: string
 }) {
-    const dir = agentProjectionDir(input.executionDir, input.stageHash, input.scope, input.actId)
+    const dir = agentProjectionDir(input.executionDir, input.workspaceHash, input.scope, input.actId)
     const fileName = `${input.performerId}--${input.posture}.md`
     const filePath = path.join(dir, fileName)
     const agentName = path.relative(

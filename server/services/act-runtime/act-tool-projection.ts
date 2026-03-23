@@ -11,7 +11,6 @@ import { join } from 'node:path'
 import type { ActDefinition } from '../../../shared/act-types.js'
 import { getActToolsForParticipant } from './act-tools.js'
 import { buildActContext } from './act-context-builder.js'
-import { Mailbox } from './mailbox.js'
 
 // ── Types ───────────────────────────────────────────────
 
@@ -32,11 +31,9 @@ export function projectActTools(
     participantKey: string,
     actDefinition: ActDefinition,
     threadId: string,
-    _executionDir: string,
 ): ActToolProjection {
     // 1. Act context prompt
-    const mailbox = new Mailbox()  // Fresh mailbox for context building (runtime state comes from thread)
-    const contextPrompt = buildActContext(actDefinition, participantKey, mailbox)
+    const contextPrompt = buildActContext(actDefinition, participantKey)
 
     // 2. Runtime tool definitions
     const tools = getActToolsForParticipant(actDefinition.id, threadId, participantKey)

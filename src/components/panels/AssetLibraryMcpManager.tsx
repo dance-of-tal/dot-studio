@@ -1,14 +1,18 @@
-import { Plus } from 'lucide-react'
-import { serializeProjectMcpEntries, isRemoteServer } from '../modals/settings-utils'
+import type { Dispatch, SetStateAction } from 'react'
+import type { McpServer } from '../../types'
+import type { McpKVPair, ProjectMcpEntryDraft } from '../modals/settings-utils'
+import { Plus, Trash2 } from 'lucide-react'
+import { serializeProjectMcpEntries, isRemoteDraft } from '../modals/settings-utils'
+import type { McpCatalogState } from './useMcpCatalog'
 
 type Props = {
-    filteredMcps: any[]
-    mcpDraftEntries: any[]
+    filteredMcps: McpServer[]
+    mcpDraftEntries: ProjectMcpEntryDraft[]
     mcpCatalogDirty: boolean
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
     pendingMcpAuthName: string | null
-    updateMcpEntry: (key: string, updater: (current: any) => any) => void
+    updateMcpEntry: McpCatalogState['updateMcpEntry']
     addMcpEntry: () => void
     removeMcpEntry: (key: string) => void
     saveMcpCatalog: () => Promise<void>
@@ -20,8 +24,296 @@ type Props = {
     showMcpRawConfig: boolean
     setShowMcpRawConfig: (value: boolean | ((prev: boolean) => boolean)) => void
     expandedMcpEntries: Record<string, boolean>
-    setExpandedMcpEntries: (value: any) => void
+    setExpandedMcpEntries: Dispatch<SetStateAction<Record<string, boolean>>>
 }
+
+// ── Reusable list field helpers ──────────────────────────────
+
+function StringListField({
+    label,
+    items,
+    addLabel,
+    placeholder,
+    onChange,
+}: {
+    label: string
+    items: string[]
+    addLabel: string
+    placeholder?: string
+    onChange: (items: string[]) => void
+}) {
+    return (
+        <div className="asset-mcp-list-field">
+            <span className="asset-mcp-list-field__label">{label}</span>
+            {items.map((item, i) => (
+                <div key={i} className="asset-mcp-list-row">
+                    <input
+                        className="text-input"
+                        value={item}
+                        placeholder={placeholder}
+                        onChange={(e) => {
+                            const next = [...items]
+                            next[i] = e.target.value
+                            onChange(next)
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                    <button
+                        className="icon-btn"
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onChange(items.filter((_, j) => j !== i))
+                        }}
+                        title="Remove"
+                    >
+                        <Trash2 size={12} />
+                    </button>
+                </div>
+            ))}
+            <button
+                className="text-btn"
+                style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '2px', paddingLeft: 0 }}
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onChange([...items, ''])
+                }}
+            >
+                <Plus size={10} /> {addLabel}
+            </button>
+        </div>
+    )
+}
+
+function KVListField({
+    label,
+    items,
+    addLabel,
+    keyPlaceholder,
+    valuePlaceholder,
+    onChange,
+}: {
+    label: string
+    items: McpKVPair[]
+    addLabel: string
+    keyPlaceholder?: string
+    valuePlaceholder?: string
+    onChange: (items: McpKVPair[]) => void
+}) {
+    return (
+        <div className="asset-mcp-list-field">
+            <span className="asset-mcp-list-field__label">{label}</span>
+            {items.map((item, i) => (
+                <div key={i} className="asset-mcp-list-row asset-mcp-list-row--kv">
+                    <input
+                        className="text-input"
+                        value={item.key}
+                        placeholder={keyPlaceholder || 'Key'}
+                        onChange={(e) => {
+                            const next = [...items]
+                            next[i] = { ...item, key: e.target.value }
+                            onChange(next)
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                    <input
+                        className="text-input"
+                        value={item.value}
+                        placeholder={valuePlaceholder || 'Value'}
+                        onChange={(e) => {
+                            const next = [...items]
+                            next[i] = { ...item, value: e.target.value }
+                            onChange(next)
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                    <button
+                        className="icon-btn"
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onChange(items.filter((_, j) => j !== i))
+                        }}
+                        title="Remove"
+                    >
+                        <Trash2 size={12} />
+                    </button>
+                </div>
+            ))}
+            <button
+                className="text-btn"
+                style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '2px', paddingLeft: 0 }}
+                onClick={(e) => {
+                    e.stopPropagation()
+                    onChange([...items, { key: '', value: '' }])
+                }}
+            >
+                <Plus size={10} /> {addLabel}
+            </button>
+        </div>
+    )
+}
+
+// ── Entry body ────────────────────────────────────────────────
+
+function McpEntryBody({
+    entry,
+    updateMcpEntry,
+}: {
+    entry: ProjectMcpEntryDraft
+    updateMcpEntry: Props['updateMcpEntry']
+}) {
+    const update = (updater: (e: ProjectMcpEntryDraft) => ProjectMcpEntryDraft) =>
+        updateMcpEntry(entry.key, updater)
+    const isHttp = entry.transport === 'http'
+
+    return (
+        <div className="asset-mcp-editor__body" onClick={(e) => e.stopPropagation()}>
+            {/* ── Transport tabs ─────────────────────────── */}
+            <div className="asset-mcp-tabs">
+                <button
+                    className={`asset-mcp-tab${!isHttp ? ' asset-mcp-tab--active' : ''}`}
+                    onClick={() => update((e) => ({ ...e, transport: 'stdio' }))}
+                >
+                    STDIO
+                </button>
+                <button
+                    className={`asset-mcp-tab${isHttp ? ' asset-mcp-tab--active' : ''}`}
+                    onClick={() => update((e) => ({ ...e, transport: 'http' }))}
+                >
+                    Streamable HTTP
+                </button>
+            </div>
+
+            {/* ── Common: Name / Enabled ──────────────────── */}
+            <div className="asset-mcp-editor__grid">
+                <label className="asset-mcp-editor__field">
+                    <span>Name</span>
+                    <input
+                        className="text-input"
+                        value={entry.name}
+                        placeholder="MCP server name"
+                        onChange={(e) => update((d) => ({ ...d, name: e.target.value }))}
+                    />
+                </label>
+                <label className="asset-mcp-editor__field">
+                    <span>Enabled</span>
+                    <select
+                        className="select"
+                        value={entry.enabled ? 'enabled' : 'disabled'}
+                        onChange={(e) => update((d) => ({ ...d, enabled: e.target.value === 'enabled' }))}
+                    >
+                        <option value="enabled">Enabled</option>
+                        <option value="disabled">Disabled</option>
+                    </select>
+                </label>
+            </div>
+
+            {/* ── STDIO fields ────────────────────────────── */}
+            {!isHttp && (
+                <>
+                    <div className="asset-mcp-editor__grid">
+                        <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
+                            <span>Command to launch</span>
+                            <input
+                                className="text-input"
+                                value={entry.command}
+                                placeholder="openai-dev-mcp serve-sqlite"
+                                onChange={(e) => update((d) => ({ ...d, command: e.target.value }))}
+                            />
+                        </label>
+                    </div>
+
+                    <StringListField
+                        label="Arguments"
+                        items={entry.args}
+                        addLabel="Add argument"
+                        placeholder=""
+                        onChange={(args) => update((d) => ({ ...d, args }))}
+                    />
+
+                    <KVListField
+                        label="Environment variables"
+                        items={entry.env}
+                        addLabel="Add environment variable"
+                        keyPlaceholder="Key"
+                        valuePlaceholder="Value"
+                        onChange={(env) => update((d) => ({ ...d, env }))}
+                    />
+                </>
+            )}
+
+            {/* ── Streamable HTTP fields ──────────────────── */}
+            {isHttp && (
+                <>
+                    <div className="asset-mcp-editor__grid">
+                        <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
+                            <span>URL</span>
+                            <input
+                                className="text-input"
+                                value={entry.url}
+                                placeholder="https://mcp.example.com/mcp"
+                                onChange={(e) => update((d) => ({ ...d, url: e.target.value }))}
+                            />
+                        </label>
+                    </div>
+
+                    <KVListField
+                        label="Headers"
+                        items={entry.headers}
+                        addLabel="Add header"
+                        keyPlaceholder="Key"
+                        valuePlaceholder="Value"
+                        onChange={(headers) => update((d) => ({ ...d, headers }))}
+                    />
+
+
+                    {/* OAuth section */}
+                    <div className="asset-mcp-editor__grid">
+                        <label className="asset-mcp-editor__field">
+                            <span>OAuth</span>
+                            <select
+                                className="select"
+                                value={entry.oauthEnabled ? 'enabled' : 'disabled'}
+                                onChange={(e) => update((d) => ({ ...d, oauthEnabled: e.target.value === 'enabled' }))}
+                            >
+                                <option value="enabled">Auto / Configured</option>
+                                <option value="disabled">Disabled</option>
+                            </select>
+                        </label>
+                        <label className="asset-mcp-editor__field">
+                            <span>Client ID</span>
+                            <input
+                                className="text-input"
+                                value={entry.oauthClientId}
+                                onChange={(e) => update((d) => ({ ...d, oauthClientId: e.target.value }))}
+                                placeholder="client id"
+                            />
+                        </label>
+                        <label className="asset-mcp-editor__field">
+                            <span>Client Secret</span>
+                            <input
+                                className="text-input"
+                                value={entry.oauthClientSecret}
+                                onChange={(e) => update((d) => ({ ...d, oauthClientSecret: e.target.value }))}
+                                placeholder="client secret"
+                            />
+                        </label>
+                        <label className="asset-mcp-editor__field">
+                            <span>OAuth Scope</span>
+                            <input
+                                className="text-input"
+                                value={entry.oauthScope}
+                                onChange={(e) => update((d) => ({ ...d, oauthScope: e.target.value }))}
+                                placeholder="repo read:org"
+                            />
+                        </label>
+                    </div>
+                </>
+            )}
+        </div>
+    )
+}
+
+// ── Main component ────────────────────────────────────────────
 
 export default function AssetLibraryMcpManager({
     filteredMcps,
@@ -60,7 +352,7 @@ export default function AssetLibraryMcpManager({
                     {mcpDraftEntries.map((entry) => {
                         const live = filteredMcps.find((server) => server.name === entry.name.trim()) || null
                         const liveStatus = live?.status || (entry.enabled ? 'disconnected' : 'disabled')
-                        const remote = isRemoteServer(entry.serverText)
+                        const remote = isRemoteDraft(entry)
                         const canAuthenticate = remote && (liveStatus === 'needs_auth' || liveStatus === 'failed')
                         const canClearAuth = remote && !!live && (live.authStatus === 'needs_auth' || live.status === 'connected' || live.status === 'failed')
                         const isExpanded = !!expandedMcpEntries[entry.key]
@@ -69,7 +361,7 @@ export default function AssetLibraryMcpManager({
                             <div key={entry.key} className="asset-mcp-editor">
                                 <div
                                     className="asset-mcp-editor__header"
-                                    onClick={() => setExpandedMcpEntries((prev: any) => ({ ...prev, [entry.key]: !prev[entry.key] }))}
+                                    onClick={() => setExpandedMcpEntries((prev) => ({ ...prev, [entry.key]: !prev[entry.key] }))}
                                 >
                                     <div className="asset-mcp-editor__header-left">
                                         <span className={`asset-mcp-editor__status-dot asset-mcp-editor__status-dot--${liveStatus}`} />
@@ -88,7 +380,7 @@ export default function AssetLibraryMcpManager({
                                 </div>
 
                                 {isExpanded ? (
-                                    <div className="asset-mcp-editor__body">
+                                    <>
                                         {live?.error ? <div className="asset-authoring-hint">{live.error}</div> : null}
                                         {live?.clientRegistrationRequired ? (
                                             <div className="asset-authoring-hint">
@@ -96,66 +388,7 @@ export default function AssetLibraryMcpManager({
                                             </div>
                                         ) : null}
 
-                                        <div className="asset-mcp-editor__grid">
-                                            <label className="asset-mcp-editor__field">
-                                                <span>Name</span>
-                                                <input className="text-input" value={entry.name} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, name: e.target.value }))} placeholder="github" onClick={(e) => e.stopPropagation()} />
-                                            </label>
-                                            <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                <span>Server</span>
-                                                <input className="text-input" value={entry.serverText} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, serverText: e.target.value }))} placeholder="npx -y @mcp/server or https://example.com/mcp" onClick={(e) => e.stopPropagation()} />
-                                            </label>
-                                            <label className="asset-mcp-editor__field">
-                                                <span>Enabled</span>
-                                                <select className="select" value={entry.enabled ? 'enabled' : 'disabled'} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, enabled: e.target.value === 'enabled' }))} onClick={(e) => e.stopPropagation()}>
-                                                    <option value="enabled">Enabled</option>
-                                                    <option value="disabled">Disabled</option>
-                                                </select>
-                                            </label>
-                                            <label className="asset-mcp-editor__field">
-                                                <span>Timeout (ms)</span>
-                                                <input className="text-input" value={entry.timeoutText} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, timeoutText: e.target.value }))} placeholder="5000" onClick={(e) => e.stopPropagation()} />
-                                            </label>
-                                        </div>
-
-                                        {!remote ? (
-                                            <div className="asset-mcp-editor__grid">
-                                                <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                    <span>Environment</span>
-                                                    <textarea className="text-input asset-mcp-editor__textarea" value={entry.environmentText} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, environmentText: e.target.value }))} placeholder="GITHUB_TOKEN=..." />
-                                                </label>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <div className="asset-mcp-editor__grid">
-                                                    <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
-                                                        <span>Static Headers</span>
-                                                        <textarea className="text-input asset-mcp-editor__textarea" value={entry.headersText} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, headersText: e.target.value }))} placeholder="X-Workspace=demo" />
-                                                    </label>
-                                                </div>
-                                                <div className="asset-mcp-editor__grid">
-                                                    <label className="asset-mcp-editor__field">
-                                                        <span>OAuth</span>
-                                                        <select className="select" value={entry.oauthEnabled ? 'enabled' : 'disabled'} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, oauthEnabled: e.target.value === 'enabled' }))}>
-                                                            <option value="enabled">Auto / Configured</option>
-                                                            <option value="disabled">Disabled</option>
-                                                        </select>
-                                                    </label>
-                                                    <label className="asset-mcp-editor__field">
-                                                        <span>Client ID</span>
-                                                        <input className="text-input" value={entry.oauthClientId} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, oauthClientId: e.target.value }))} placeholder="client id" />
-                                                    </label>
-                                                    <label className="asset-mcp-editor__field">
-                                                        <span>Client Secret</span>
-                                                        <input className="text-input" value={entry.oauthClientSecret} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, oauthClientSecret: e.target.value }))} placeholder="client secret" />
-                                                    </label>
-                                                    <label className="asset-mcp-editor__field">
-                                                        <span>OAuth Scope</span>
-                                                        <input className="text-input" value={entry.oauthScope} onChange={(e) => updateMcpEntry(entry.key, (current: any) => ({ ...current, oauthScope: e.target.value }))} placeholder="repo read:org" />
-                                                    </label>
-                                                </div>
-                                            </>
-                                        )}
+                                        <McpEntryBody entry={entry} updateMcpEntry={updateMcpEntry} />
 
                                         <div className="asset-mcp-editor__actions">
                                             <button className="btn btn--primary" onClick={() => entry.name.trim() && void connectMcpServer(entry.name.trim())} disabled={!entry.name.trim() || !entry.enabled}>Connect</button>
@@ -172,7 +405,7 @@ export default function AssetLibraryMcpManager({
                                             ) : null}
                                             <button className="btn btn--danger" onClick={() => removeMcpEntry(entry.key)}>Remove</button>
                                         </div>
-                                    </div>
+                                    </>
                                 ) : null}
                             </div>
                         )

@@ -2,6 +2,10 @@ import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
 
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+    return error instanceof Error
+}
+
 function authStoreCandidates() {
     const home = os.homedir()
     const candidates = [
@@ -59,8 +63,8 @@ export async function clearStoredProviderAuth(providerId: string) {
     try {
         const raw = await fs.readFile(authPath, 'utf-8')
         current = JSON.parse(raw)
-    } catch (error: any) {
-        if (error?.code !== 'ENOENT') {
+    } catch (error: unknown) {
+        if (!isErrnoException(error) || error.code !== 'ENOENT') {
             throw error
         }
     }

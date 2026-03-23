@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react'
 import { ExternalLink, X } from 'lucide-react'
-import type { ProviderCard, OauthFlow } from './settings-utils'
+import type { ProviderAuthMethod, ProviderCard, OauthFlow } from './settings-utils'
 import { isPopularProvider, providerSupportsApiKey, labelForAuthMethod } from './settings-utils'
 import type { ConnectedModel, ModelPickerState } from './settings-utils'
 
@@ -17,7 +17,7 @@ interface SettingsProvidersProps {
     setModelPicker: React.Dispatch<React.SetStateAction<ModelPickerState | null>>
     visibleModelPickerModels: ConnectedModel[]
     openApiKeyFlow: (provider: ProviderCard) => void
-    handleAuthMethod: (provider: ProviderCard, methodIndex: number, method: any) => void
+    handleAuthMethod: (provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) => void
     handleOauthCallback: (providerId: string) => void
     handleApiAuthSave: (providerId: string) => void
     dismissOauthFlow: (providerId: string) => void

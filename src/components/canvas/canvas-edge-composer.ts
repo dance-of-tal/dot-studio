@@ -1,5 +1,5 @@
 import type { Edge } from '@xyflow/react'
-import type { StageAct } from '../../types'
+import type { WorkspaceAct } from '../../types'
 
 /**
  * Resolve participant key → performer node id by examining the Act's
@@ -7,7 +7,7 @@ import type { StageAct } from '../../types'
  * the performer node id).  Registry refs use the urn as fallback,
  * relying on React Flow ignoring edges whose source/target don't exist.
  */
-function resolvePerformerNodeId(act: StageAct, participantKey: string): string | null {
+function resolvePerformerNodeId(act: WorkspaceAct, participantKey: string): string | null {
     const binding = act.participants[participantKey]
     if (!binding) return null
     const ref = binding.performerRef
@@ -15,7 +15,7 @@ function resolvePerformerNodeId(act: StageAct, participantKey: string): string |
     return ref.urn || null
 }
 
-function buildRelationEdges(acts: StageAct[]): Edge[] {
+function buildRelationEdges(acts: WorkspaceAct[]): Edge[] {
     const edges: Edge[] = []
     for (const act of acts) {
         for (const relation of act.relations) {
@@ -41,7 +41,7 @@ function buildRelationEdges(acts: StageAct[]): Edge[] {
     return edges
 }
 
-export function composeCanvasEdges(acts: StageAct[], editingActId: string | null) {
+export function composeCanvasEdges(acts: WorkspaceAct[], editingActId: string | null) {
     if (!editingActId) {
         return []
     }

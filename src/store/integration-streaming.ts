@@ -195,7 +195,7 @@ export function removeStreamingPartStoreEntry(
 }
 
 export function applyTargetMessageUpdate(
-    set: (partial: any) => void,
+    set: (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void,
     target: SessionStreamTarget,
     updater: (messages: ChatMessage[]) => ChatMessage[],
 ) {
@@ -262,12 +262,16 @@ export function removeMessagePart(
     return next
 }
 
-export function extractEventErrorMessage(error: any): string {
-    if (typeof error?.data?.message === 'string' && error.data.message.trim()) {
-        return error.data.message.trim()
+export function extractEventErrorMessage(error: unknown): string {
+    const errorRecord = error && typeof error === 'object' ? error as Record<string, unknown> : null
+    const dataRecord = errorRecord?.data && typeof errorRecord.data === 'object'
+        ? errorRecord.data as Record<string, unknown>
+        : null
+    if (typeof dataRecord?.message === 'string' && dataRecord.message.trim()) {
+        return dataRecord.message.trim()
     }
-    if (typeof error?.message === 'string' && error.message.trim()) {
-        return error.message.trim()
+    if (typeof errorRecord?.message === 'string' && errorRecord.message.trim()) {
+        return errorRecord.message.trim()
     }
     try {
         return `OpenCode session failed: ${JSON.stringify(error)}`

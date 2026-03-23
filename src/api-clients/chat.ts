@@ -1,7 +1,8 @@
-import type { AssetRef, DanceDeliveryMode, ModelConfig } from '../types'
+import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import type { ChatSendRequest, ChatSessionCreateResponse } from '../../shared/chat-contracts'
 import type { ExecutionMode } from '../../shared/safe-mode'
 import { createApiEventSource, deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
+import type { SessionMessageLike } from '../lib/chat-messages'
 
 export const chatApi = {
     createSession: (performerId: string, performerName: string, configHash: string, executionMode: ExecutionMode, actId?: string) =>
@@ -11,30 +12,11 @@ export const chatApi = {
         deleteJSON<{ ok: boolean }>(`/api/chat/sessions/${id}`),
 
     updateSession: (id: string, title: string) =>
-        putJSON<any>(`/api/chat/sessions/${id}`, { title }),
+        putJSON<{ ok: boolean; title: string }>(`/api/chat/sessions/${id}`, { title }),
 
     send: (
         id: string,
-        payload: {
-            message: string
-            performer: {
-                performerId: string
-                performerName: string
-                talRef: AssetRef | null
-                danceRefs: AssetRef[]
-                extraDanceRefs?: AssetRef[]
-                model?: ModelConfig | null
-                modelVariant?: string | null
-                agentId?: string | null
-                mcpServerNames?: string[]
-                danceDeliveryMode?: DanceDeliveryMode
-                planMode?: boolean
-            }
-            attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
-            mentions?: Array<{ performerId: string }>
-            actId?: string
-            actThreadId?: string
-        },
+        payload: ChatSendRequest,
     ) =>
         postJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, payload satisfies ChatSendRequest),
 
@@ -42,13 +24,10 @@ export const chatApi = {
         postJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/abort`),
 
     messages: (id: string) =>
-        fetchJSON<any[]>(`/api/chat/sessions/${id}/messages`),
+        fetchJSON<SessionMessageLike[] | { messages: SessionMessageLike[] }>(`/api/chat/sessions/${id}/messages`),
 
     diff: (id: string) =>
-        fetchJSON<any[]>(`/api/chat/sessions/${id}/diff`),
-
-    todo: (id: string) =>
-        fetchJSON<Array<{ id: string; content: string; status: string; priority: string }>>(`/api/chat/sessions/${id}/todo`),
+        fetchJSON<Array<Record<string, unknown>>>(`/api/chat/sessions/${id}/diff`),
 
     share: (id: string) =>
         postJSON<{ url: string }>(`/api/chat/sessions/${id}/share`),
@@ -64,17 +43,17 @@ export const chatApi = {
         postJSON<boolean>(`/api/chat/sessions/${id}/summarize`, payload || {}),
 
     revert: (id: string, messageId: string, partId?: string) =>
-        postJSON<any>(`/api/chat/sessions/${id}/revert`, { messageId, partId }),
+        postJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/revert`, { messageId, partId }),
 
     list: () =>
-        fetchJSON<any[]>('/api/chat/sessions'),
+        fetchJSON<Array<{ id: string; title?: string; createdAt?: number }>>('/api/chat/sessions'),
 
     events: () => createApiEventSource('/api/chat/events'),
 
     respondPermission: (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') =>
         postJSON<{ ok: boolean }>(`/api/chat/sessions/${sessionId}/permission/${permissionId}/respond`, { response }),
 
-    respondQuestion: (questionId: string, answers: Record<string, string[]>) =>
+    respondQuestion: (questionId: string, answers: QuestionAnswer[]) =>
         postJSON<{ ok: boolean }>(`/api/chat/questions/${questionId}/respond`, { answers }),
 
     rejectQuestion: (questionId: string) =>

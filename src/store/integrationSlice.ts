@@ -5,6 +5,7 @@ import { api } from '../api'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers'
 import { formatStudioApiErrorComment } from '../lib/api-errors'
 import { mapSessionMessagesToChatMessages } from '../lib/chat-messages'
+import type { SessionMessageLike } from '../lib/chat-messages'
 import {
     clearIntegrationStreamingState,
     clearStreamingSession,
@@ -59,7 +60,8 @@ export const createIntegrationSlice: StateCreator<
 
         syncingSessions.add(sessionId)
         try {
-            const messages = await api.chat.messages(sessionId)
+            const response = await api.chat.messages(sessionId)
+            const messages: SessionMessageLike[] = Array.isArray(response) ? response : (response.messages || [])
             for (const message of messages) {
                 const messageId = message?.info?.id || message?.id
                 const role = message?.info?.role || message?.role
@@ -108,24 +110,25 @@ export const createIntegrationSlice: StateCreator<
             slot: chatSlot,
             resolveWorkingDir: () => get().workingDir || null,
             createEventSource: () => api.chat.events(),
-            onMessage: (data: any) => {
-                if (data.type === 'lsp.client.diagnostics') return handleLspDiagnostics(data, get, set)
-                if (data.type === 'lsp.updated') return handleLspUpdated(get)
-                if (data.type === 'mcp.tools.changed') return handleMcpToolsChanged(get)
-                if (data.type === 'mcp.browser.open.failed') return handleMcpBrowserOpenFailed(data)
-                if (data.type === 'message.updated') return handleMessageUpdated(data, get, set)
-                if (data.type === 'message.part.updated') return handleMessagePartUpdated(data, get, set)
-                if (data.type === 'message.part.delta') return handleMessagePartDelta(data, get, set)
-                if (data.type === 'message.part.removed') return handleMessagePartRemoved(data, get, set)
-                if (data.type === 'session.status') return handleSessionStatus(data, get, set)
-                if (data.type === 'session.idle') return handleSessionIdle(data, get, set, syncSessionMessages)
-                if (data.type === 'session.compacted') return handleSessionCompacted(data, get, set, syncSessionMessages)
-                if (data.type === 'session.error') return handleSessionError(data, get, set)
-                if (data.type === 'permission.asked') return handlePermissionAsked(data, get, set)
-                if (data.type === 'permission.replied') return handlePermissionReplied(data, get, set)
-                if (data.type === 'question.asked') return handleQuestionAsked(data, get, set)
-                if (data.type === 'question.replied') return handleQuestionReplied(data, get, set)
-                if (data.type === 'todo.updated') return handleTodoUpdated(data, get, set)
+            onMessage: (data: unknown) => {
+                const event = data as { type?: string }
+                if (event.type === 'lsp.client.diagnostics') return handleLspDiagnostics(event, get, set)
+                if (event.type === 'lsp.updated') return handleLspUpdated(get)
+                if (event.type === 'mcp.tools.changed') return handleMcpToolsChanged(get)
+                if (event.type === 'mcp.browser.open.failed') return handleMcpBrowserOpenFailed(event)
+                if (event.type === 'message.updated') return handleMessageUpdated(event, get, set)
+                if (event.type === 'message.part.updated') return handleMessagePartUpdated(event, get, set)
+                if (event.type === 'message.part.delta') return handleMessagePartDelta(event, get, set)
+                if (event.type === 'message.part.removed') return handleMessagePartRemoved(event, get, set)
+                if (event.type === 'session.status') return handleSessionStatus(event, get, set)
+                if (event.type === 'session.idle') return handleSessionIdle(event, get, set, syncSessionMessages)
+                if (event.type === 'session.compacted') return handleSessionCompacted(event, get, set, syncSessionMessages)
+                if (event.type === 'session.error') return handleSessionError(event, get, set)
+                if (event.type === 'permission.asked') return handlePermissionAsked(event, get, set)
+                if (event.type === 'permission.replied') return handlePermissionReplied(event, get, set)
+                if (event.type === 'question.asked') return handleQuestionAsked(event, get, set)
+                if (event.type === 'question.replied') return handleQuestionReplied(event, get, set)
+                if (event.type === 'todo.updated') return handleTodoUpdated(event, get, set)
             },
         })
     }
@@ -196,7 +199,7 @@ export const createIntegrationSlice: StateCreator<
         },
 
         compilePrompt: async (performerId) => {
-            const performer = get().performers.find((a: any) => a.id === performerId)
+            const performer = get().performers.find((entry) => entry.id === performerId)
             if (!performer) return '// No performer selected'
             const runtimeConfig = resolvePerformerRuntimeConfig(performer)
             if (!hasModelConfig(runtimeConfig.model)) {

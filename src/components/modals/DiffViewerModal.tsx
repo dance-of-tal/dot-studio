@@ -4,9 +4,15 @@ import { useStudioStore } from '../../store';
 import { X, Code, Loader2 } from 'lucide-react';
 import './DiffViewerModal.css';
 
+type DiffItem = {
+    diff?: string
+    post_name?: string
+    pre_name?: string
+}
+
 export default function DiffViewerModal({ performerId, onClose }: { performerId: string, onClose: () => void }) {
     const { getDiff, performers } = useStudioStore();
-    const [diffs, setDiffs] = useState<any[]>([]);
+    const [diffs, setDiffs] = useState<DiffItem[]>([]);
     const [loading, setLoading] = useState(true);
     const performerName = performers.find(a => a.id === performerId)?.name || "Performer";
 
@@ -14,7 +20,11 @@ export default function DiffViewerModal({ performerId, onClose }: { performerId:
         let active = true;
         getDiff(performerId).then((data) => {
             if (active) {
-                setDiffs(data || []);
+                setDiffs((data || []).map((entry) => ({
+                    diff: typeof entry.diff === 'string' ? entry.diff : undefined,
+                    post_name: typeof entry.post_name === 'string' ? entry.post_name : undefined,
+                    pre_name: typeof entry.pre_name === 'string' ? entry.pre_name : undefined,
+                })));
                 setLoading(false);
             }
         });
