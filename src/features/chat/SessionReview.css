@@ -1,0 +1,167 @@
+/* ═══════════════════════════════════════════
+   SessionReview — Diff review panel
+   ═══════════════════════════════════════════ */
+
+.session-review {
+    border: 1px solid var(--border-subtle, #30363d);
+    border-radius: 8px;
+    background: var(--bg-surface, #161b22);
+    overflow: hidden;
+}
+
+.session-review__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-subtle, #30363d);
+    background: var(--bg-base, #0d1117);
+}
+
+.session-review__title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary, #e6edf3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.session-review__count {
+    font-weight: 400;
+    color: var(--text-muted, #7d8590);
+    font-size: 11px;
+}
+
+.session-review__summary {
+    margin-left: auto;
+}
+
+.session-review__toggle-all {
+    border: none;
+    background: transparent;
+    color: var(--accent, #58a6ff);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.session-review__toggle-all:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+/* ── File accordion ── */
+
+.session-review__files {
+    display: flex;
+    flex-direction: column;
+}
+
+.session-review__file {
+    border-bottom: 1px solid var(--border-subtle, #30363d);
+}
+
+.session-review__file:last-child {
+    border-bottom: none;
+}
+
+.session-review__file-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary, #e6edf3);
+    cursor: pointer;
+    font-size: 12px;
+    text-align: left;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.session-review__file-header:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.session-review__file[data-open="true"] .session-review__file-header {
+    background: var(--bg-base, #0d1117);
+    border-bottom: 1px solid var(--border-subtle, #30363d);
+}
+
+.session-review__file-icon {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-muted, #7d8590);
+}
+
+.session-review__file-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.session-review__filename {
+    font-weight: 600;
+    color: var(--text-primary, #e6edf3);
+    font-size: 12px;
+}
+
+.session-review__directory {
+    font-size: 10px;
+    color: var(--text-muted, #7d8590);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.session-review__file-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.session-review__badge {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+}
+
+.session-review__badge--added {
+    color: #3fb950;
+    background: color-mix(in srgb, #3fb950 12%, transparent);
+}
+
+.session-review__badge--deleted {
+    color: #f85149;
+    background: color-mix(in srgb, #f85149 12%, transparent);
+}
+
+.session-review__chevron {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-muted, #7d8590);
+}
+
+.session-review__file-content {
+    background: var(--bg-base, #0d1117);
+}
+
+.session-review__empty-diff {
+    padding: 12px;
+    text-align: center;
+    color: var(--text-muted, #7d8590);
+    font-size: 11px;
+}

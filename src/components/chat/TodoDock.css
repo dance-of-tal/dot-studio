@@ -1,0 +1,153 @@
+/* ═══════════════════════════════════════════
+   TodoDock — above-composer todo progress
+   ═══════════════════════════════════════════ */
+
+[data-component="todo-dock"] {
+    border-top: 1px solid var(--border-subtle, #30363d);
+    background: var(--bg-surface, #161b22);
+}
+
+.todo-dock__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary, #e6edf3);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    text-align: left;
+}
+
+.todo-dock__header:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.todo-dock__progress {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    color: var(--text-primary, #e6edf3);
+    font-weight: 600;
+}
+
+.todo-dock__slash {
+    margin: 0 1px;
+    color: var(--text-muted, #7d8590);
+}
+
+.todo-dock__preview {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary, #8b949e);
+    font-weight: 400;
+    font-size: 12px;
+}
+
+.todo-dock__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-muted, #7d8590);
+    transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Body ── */
+
+.todo-dock__body-wrapper {
+    position: relative;
+}
+
+.todo-dock__body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 12px 12px;
+    max-height: 168px;
+    overflow-y: auto;
+    overflow-anchor: none;
+    scrollbar-width: none;
+}
+
+.todo-dock__body::-webkit-scrollbar {
+    display: none;
+}
+
+/* ── Todo Items ── */
+
+.todo-dock__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.todo-dock__item[data-state="pending"] {
+    opacity: 0.7;
+}
+
+.todo-dock__check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.todo-dock__text {
+    font-size: 13px;
+    line-height: 1.5;
+    word-break: break-word;
+    min-width: 0;
+    transition: color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+                opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.todo-dock__item[data-state="completed"] .todo-dock__text,
+.todo-dock__item[data-state="cancelled"] .todo-dock__text {
+    color: var(--text-muted, #7d8590);
+}
+
+.todo-dock__item[data-state="in_progress"] .todo-dock__text {
+    color: var(--text-primary, #e6edf3);
+}
+
+/* ── Pulsing dot ── */
+
+.todo-dock-pulse {
+    display: block;
+    color: var(--accent, #58a6ff);
+}
+
+.todo-dock-pulse circle {
+    animation: todo-pulse 1.5s ease-in-out infinite;
+    transform-origin: center;
+}
+
+@keyframes todo-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.25); opacity: 0.7; }
+}
+
+/* ── Top fade ── */
+
+.todo-dock__top-fade {
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 16px;
+    background: linear-gradient(to bottom, var(--bg-surface, #161b22), transparent);
+    transition: opacity 150ms ease;
+}

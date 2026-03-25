@@ -49,6 +49,7 @@ export function useCanvasTransformTarget(args: {
         )
 
         if (!exists) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTransformTarget(null)
         }
     }, [acts, performers, markdownEditors, canvasTerminals, trackingWindow, transformTarget])

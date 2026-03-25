@@ -1,0 +1,40 @@
+/* ═══════════════════════════════════════════
+   DiffChanges — +N/-M badge & 5-bar viz
+   ═══════════════════════════════════════════ */
+
+.diff-changes {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.diff-changes__add {
+    color: var(--color-diff-add, #22c55e);
+}
+
+.diff-changes__del {
+    color: var(--color-diff-del, #ef4444);
+}
+
+/* bars variant */
+.diff-changes--bars {
+    gap: 0;
+}
+
+.diff-bar--add {
+    fill: var(--color-diff-add, #22c55e);
+}
+
+.diff-bar--del {
+    fill: var(--color-diff-del, #ef4444);
+}
+
+.diff-bar--neutral {
+    fill: var(--text-muted, #6b7280);
+    opacity: 0.25;
+}

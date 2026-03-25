@@ -1,115 +1,832 @@
-import { useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, Wrench, Terminal, FileEdit, ListTodo, CheckCircle2, Circle, XCircle } from 'lucide-react'
+import { useState, useCallback, useMemo, type ReactNode } from 'react'
+import {
+    Check, ChevronDown, ChevronRight,
+    Loader2, Wrench, Terminal, FileEdit, ListTodo,
+    CheckCircle2, Circle, XCircle, Copy, Glasses,
+    Search, Globe, Brain, Ban,
+    Sparkles, ExternalLink,
+} from 'lucide-react'
 import type { Todo } from '@opencode-ai/sdk/v2'
 import type { ChatMessageToolInfo } from '../../types'
 import { useUISettings } from '../../store/settingsSlice'
 import { useStudioStore } from '../../store'
+import { TextShimmer } from '../../components/chat/TextShimmer'
+import { DiffChanges } from '../../components/chat/DiffChanges'
+import { SyntaxBlock, DiffBlock } from '../../components/chat/SyntaxBlock'
 import './ToolGroup.css'
 
+/* ═══════════════════════════════════════════════════════
+   Utilities
+   ═══════════════════════════════════════════════════════ */
+
 function formatToolDuration(time: ChatMessageToolInfo['time']) {
-    if (!time?.start) {
-        return null
-    }
+    if (!time?.start) return null
     const durationMs = Math.max(0, (time.end || Date.now()) - time.start)
-    if (durationMs < 1000) {
-        return `${durationMs}ms`
-    }
-    if (durationMs < 60_000) {
-        return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`
-    }
+    if (durationMs < 1000) return `${durationMs}ms`
+    if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`
     const minutes = Math.floor(durationMs / 60_000)
     const seconds = Math.round((durationMs % 60_000) / 1000)
     return `${minutes}m ${seconds}s`
 }
 
-function ToolStatusIcon({ status }: { status: ChatMessageToolInfo['status'] }) {
-    if (status === 'pending' || status === 'running') {
-        return <Loader2 size={12} className="spin-icon" />
-    }
-    if (status === 'completed') {
-        return <Check size={12} />
-    }
-    if (status === 'error') {
-        return <AlertTriangle size={12} />
-    }
-    return null
+function getFilename(path: string): string {
+    if (!path) return ''
+    const parts = path.split('/')
+    return parts[parts.length - 1] || path
 }
 
-const SHELL_NAMES = new Set([
-    'bash', 'shell', 'execute_command', 'execute_background_command',
-    'run_terminal_command', 'run_command',
-])
-
-const EDIT_NAMES = new Set([
-    'replace_in_file', 'multi_replace_file_content', 'write_to_file',
-    'str_replace_editor', 'apply_patch', 'create_file',
-])
-
-const TODO_NAMES = new Set(['todos', 'todowrite', 'todo', 'todoread'])
-
-type TodoListItem = {
-    content: string
-    status: string
-}
-
-function toTodoListItem(value: unknown): TodoListItem {
-    if (value && typeof value === 'object') {
-        const record = value as Record<string, unknown>
-        return {
-            content: typeof record.content === 'string'
-                ? record.content
-                : typeof record.title === 'string'
-                    ? record.title
-                    : String(value),
-            status: typeof record.status === 'string' ? record.status : 'pending',
-        }
-    }
-    return { content: String(value), status: 'pending' }
+function getDirectory(path: string): string {
+    if (!path.includes('/')) return ''
+    const parts = path.split('/')
+    return parts.slice(0, -1).join('/') + '/'
 }
 
 function extractShellCommand(input: Record<string, unknown> | undefined): string {
     if (!input) return ''
-    // OpenCode bash tool uses input.command; some providers use args array
     if (input.command) return String(input.command)
     if (input.CommandLine) return String(input.CommandLine)
     if (Array.isArray(input.args) && input.args.length > 0) return input.args.join(' ')
     return ''
 }
 
-function TodoInlineList({ input, output }: { input?: Record<string, unknown>; output?: string }) {
-    // Try to extract todos from the tool output or input
-    let items: TodoListItem[] = []
+function extractFilePath(input: Record<string, unknown> | undefined): string {
+    if (!input) return ''
+    return String(input.path || input.TargetFile || input.file || input.filePath || input.AbsolutePath || '')
+}
 
-    // Parse from output (JSON array of todos)
+function extractFileContent(input: Record<string, unknown> | undefined): string {
+    if (!input) return ''
+    return String(input.content || input.CodeContent || input.new_string || input.newString || '')
+}
+
+function extractOldContent(input: Record<string, unknown> | undefined): string {
+    if (!input) return ''
+    return String(input.old_string || input.oldString || input.TargetContent || '')
+}
+
+function extractNewContent(input: Record<string, unknown> | undefined): string {
+    if (!input) return ''
+    return String(input.new_string || input.newString || input.ReplacementContent || '')
+}
+
+function countDiffLines(oldStr: string, newStr: string): { additions: number; deletions: number } {
+    const oldLines = oldStr ? oldStr.split('\n').length : 0
+    const newLines = newStr ? newStr.split('\n').length : 0
+    return {
+        additions: Math.max(0, newLines - oldLines + (oldLines > 0 ? oldLines : 0)),
+        deletions: oldLines,
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Tool name sets
+   ═══════════════════════════════════════════════════════ */
+
+const CONTEXT_NAMES = new Set(['read', 'read_file', 'read_many', 'list', 'list_dir', 'glob', 'grep', 'grep_search', 'find_by_name', 'view_file'])
+const SHELL_NAMES = new Set(['bash', 'shell', 'execute_command', 'execute_background_command', 'run_terminal_command', 'run_command'])
+const EDIT_NAMES = new Set(['replace_in_file', 'multi_replace_file_content', 'str_replace_editor', 'replace_file_content', 'edit'])
+const WRITE_NAMES = new Set(['write_to_file', 'create_file', 'write'])
+const PATCH_NAMES = new Set(['apply_patch'])
+const TODO_NAMES = new Set(['todos', 'todowrite', 'todo', 'todoread'])
+const SEARCH_NAMES = new Set(['websearch', 'webfetch', 'search_web', 'read_url_content'])
+const CODESEARCH_NAMES = new Set(['codesearch'])
+const TASK_NAMES = new Set(['task', 'browser_subagent'])
+const SKILL_NAMES = new Set(['skill'])
+
+/* ═══════════════════════════════════════════════════════
+   BasicTool — collapsible wrapper (OpenCode pattern)
+   ═══════════════════════════════════════════════════════ */
+
+interface BasicToolProps {
+    icon: ReactNode
+    /** Two-line trigger: provides structured title/filename/directory/actions layout */
+    trigger?: ReactNode
+    /** Simple one-line trigger: title + subtitle text */
+    title?: string | ReactNode
+    subtitle?: string | ReactNode
+    status: ChatMessageToolInfo['status']
+    duration?: string | null
+    actions?: ReactNode
+    children?: ReactNode
+    hideDetails?: boolean
+    defaultOpen?: boolean
+    className?: string
+}
+
+function BasicTool({
+    icon,
+    trigger,
+    title,
+    subtitle,
+    status,
+    duration,
+    actions,
+    children,
+    hideDetails,
+    defaultOpen = false,
+    className = '',
+}: BasicToolProps) {
+    const pending = status === 'pending' || status === 'running'
+    const isError = status === 'error'
+    const [open, setOpen] = useState(defaultOpen)
+    const hasContent = !!children && !hideDetails
+    const canToggle = hasContent && !pending
+
+    const statusClass = `basic-tool--${status}`
+
+    return (
+        <div className={`basic-tool ${statusClass} ${className}`}>
+            <button
+                className="basic-tool__trigger"
+                onClick={() => canToggle && setOpen(!open)}
+                style={{ cursor: canToggle ? 'pointer' : 'default' }}
+            >
+                <span className={`basic-tool__icon${isError ? ' basic-tool__icon--error' : ''}`}>
+                    {pending ? <Loader2 size={12} className="spin-icon" /> : isError ? <Ban size={12} /> : icon}
+                </span>
+                {trigger ? (
+                    <span className="basic-tool__trigger-content">{trigger}</span>
+                ) : (
+                    <span className="basic-tool__info">
+                        <span className="basic-tool__title">
+                            {typeof title === 'string' ? (
+                                <TextShimmer text={title} active={pending} />
+                            ) : title}
+                        </span>
+                        {!pending && subtitle && (
+                            <span className="basic-tool__subtitle">{subtitle}</span>
+                        )}
+                    </span>
+                )}
+                {!pending && actions && <span className="basic-tool__actions">{actions}</span>}
+                {!pending && duration && <span className="basic-tool__duration">{duration}</span>}
+                {canToggle && !pending && (
+                    <span className="basic-tool__arrow">
+                        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                    </span>
+                )}
+            </button>
+            {open && hasContent && (
+                <div className="basic-tool__content">{children}</div>
+            )}
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════════
+   ToolErrorCard — dedicated error display
+   ═══════════════════════════════════════════════════════ */
+
+function ToolErrorCard({ error, toolName }: { error: string; toolName: string }) {
+    const [copied, setCopied] = useState(false)
+    const [expanded, setExpanded] = useState(false)
+    const handleCopy = useCallback(async () => {
+        await navigator.clipboard.writeText(error)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }, [error])
+
+    const preview = error.length > 120 ? error.slice(0, 120) + '…' : error
+
+    return (
+        <div className="tool-error-card">
+            <div className="tool-error-card__header">
+                <Ban size={12} className="tool-error-card__icon" />
+                <span className="tool-error-card__name">{toolName}</span>
+                <button
+                    className="tool-error-card__copy"
+                    onClick={(e) => { e.stopPropagation(); void handleCopy() }}
+                    title={copied ? 'Copied!' : 'Copy error'}
+                >
+                    {copied ? <Check size={10} /> : <Copy size={10} />}
+                </button>
+            </div>
+            <button
+                className="tool-error-card__body"
+                onClick={() => setExpanded(!expanded)}
+            >
+                <pre className="tool-error-card__text">{expanded ? error : preview}</pre>
+                {error.length > 120 && (
+                    <span className="tool-error-card__toggle">
+                        {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                    </span>
+                )}
+            </button>
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════════
+   EditWriteTrigger — shared two-line trigger for edit/write
+   ═══════════════════════════════════════════════════════ */
+
+function EditWriteTrigger({
+    label,
+    pending,
+    filename,
+    directory,
+    diffChanges,
+}: {
+    label: string
+    pending: boolean
+    filename: string
+    directory: string
+    diffChanges?: { additions: number; deletions: number } | null
+}) {
+    return (
+        <div className="edit-trigger">
+            <div className="edit-trigger__title-area">
+                <div className="edit-trigger__title">
+                    <span className="edit-trigger__title-text">
+                        <TextShimmer text={label} active={pending} />
+                    </span>
+                    {!pending && filename && (
+                        <span className="edit-trigger__filename">{filename}</span>
+                    )}
+                </div>
+                {!pending && directory && (
+                    <div className="edit-trigger__path">
+                        <span className="edit-trigger__directory">{directory}</span>
+                    </div>
+                )}
+            </div>
+            <div className="edit-trigger__actions">
+                {!pending && diffChanges && (diffChanges.additions > 0 || diffChanges.deletions > 0) && (
+                    <DiffChanges changes={diffChanges} />
+                )}
+            </div>
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════════
+   ToolFileAccordion — sticky file header + content
+   ═══════════════════════════════════════════════════════ */
+
+function ToolFileAccordion({
+    path,
+    badge,
+    children,
+}: {
+    path: string
+    badge?: ReactNode
+    children?: ReactNode
+}) {
+    const [open, setOpen] = useState(false)
+    const filename = getFilename(path)
+    const directory = getDirectory(path)
+
+    return (
+        <div className="tool-file-accordion">
+            <button className="tool-file-accordion__header" onClick={() => setOpen(!open)}>
+                <span className="tool-file-accordion__name">{filename}</span>
+                {directory && <span className="tool-file-accordion__dir">{directory}</span>}
+                {badge && <span className="tool-file-accordion__badge">{badge}</span>}
+                <span className="tool-file-accordion__arrow">
+                    {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                </span>
+            </button>
+            {open && children && (
+                <div className="tool-file-accordion__content">{children}</div>
+            )}
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════════
+   ToolCallRow — per-tool rendering using BasicTool
+   ═══════════════════════════════════════════════════════ */
+
+export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolInfo; compact?: boolean }) {
+    const { shellToolPartsExpanded, editToolPartsExpanded } = useUISettings()
+    const isShell = SHELL_NAMES.has(tool.name)
+    const isEdit = EDIT_NAMES.has(tool.name)
+    const isWrite = WRITE_NAMES.has(tool.name)
+    const isPatch = PATCH_NAMES.has(tool.name)
+    const isTodo = TODO_NAMES.has(tool.name)
+    const isContext = CONTEXT_NAMES.has(tool.name)
+    const isSearch = SEARCH_NAMES.has(tool.name)
+    const isCodeSearch = CODESEARCH_NAMES.has(tool.name)
+    const isTask = TASK_NAMES.has(tool.name)
+    const isSkill = SKILL_NAMES.has(tool.name)
+    const pending = tool.status === 'pending' || tool.status === 'running'
+    const isError = tool.status === 'error'
+
+    const [copied, setCopied] = useState(false)
+    const handleCopy = useCallback(async (text: string) => {
+        await navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }, [])
+
+    const durationLabel = formatToolDuration(tool.time)
+
+    /* ── Shell/Bash ── */
+    if (isShell) {
+        const cmd = extractShellCommand(tool.input)
+        const desc = tool.input?.description ? String(tool.input.description) : undefined
+        const output = tool.output || ''
+        const combined = `$ ${cmd}${output ? '\n\n' + output : ''}`
+
+        return (
+            <BasicTool
+                icon={<Terminal size={12} />}
+                trigger={
+                    <div className="shell-trigger">
+                        <span className="shell-trigger__title">
+                            <TextShimmer text="Shell" active={pending} />
+                        </span>
+                        {!pending && desc && (
+                            <span className="shell-trigger__desc">{desc}</span>
+                        )}
+                    </div>
+                }
+                status={tool.status}
+                duration={durationLabel}
+                defaultOpen={shellToolPartsExpanded}
+            >
+                <div className="tool-content-terminal" data-scrollable>
+                    <button
+                        className="tool-copy-btn"
+                        onClick={(e) => { e.stopPropagation(); void handleCopy(combined) }}
+                        title={copied ? 'Copied!' : 'Copy'}
+                    >
+                        {copied ? <Check size={10} /> : <Copy size={10} />}
+                    </button>
+                    <pre className="tool-pre"><code>{combined}</code></pre>
+                </div>
+                {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
+            </BasicTool>
+        )
+    }
+
+    /* ── Edit (str_replace, multi_replace, etc.) ── */
+    if (isEdit) {
+        const filePath = extractFilePath(tool.input)
+        const filename = getFilename(filePath)
+        const directory = getDirectory(filePath)
+        const oldContent = extractOldContent(tool.input)
+        const newContent = extractNewContent(tool.input)
+        const diff = oldContent || newContent ? countDiffLines(oldContent, newContent) : null
+
+        return (
+            <BasicTool
+                icon={<FileEdit size={12} />}
+                trigger={
+                    <EditWriteTrigger
+                        label="Edit"
+                        pending={pending}
+                        filename={filename}
+                        directory={directory}
+                        diffChanges={diff}
+                    />
+                }
+                status={tool.status}
+                duration={durationLabel}
+                defaultOpen={editToolPartsExpanded}
+            >
+                {filePath && (oldContent || newContent) && (
+                    <ToolFileAccordion
+                        path={filePath}
+                        badge={diff ? <DiffChanges changes={diff} /> : undefined}
+                    >
+                        <DiffBlock
+                            before={oldContent}
+                            after={newContent}
+                            filename={filename}
+                        />
+                    </ToolFileAccordion>
+                )}
+                {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
+            </BasicTool>
+        )
+    }
+
+    /* ── Write (write_to_file, create_file) ── */
+    if (isWrite) {
+        const filePath = extractFilePath(tool.input)
+        const filename = getFilename(filePath)
+        const directory = getDirectory(filePath)
+        const content = extractFileContent(tool.input)
+
+        return (
+            <BasicTool
+                icon={<FileEdit size={12} />}
+                trigger={
+                    <EditWriteTrigger
+                        label="Write"
+                        pending={pending}
+                        filename={filename}
+                        directory={directory}
+                    />
+                }
+                status={tool.status}
+                duration={durationLabel}
+                defaultOpen={editToolPartsExpanded}
+            >
+                {filePath && (
+                    <ToolFileAccordion path={filePath}>
+                        {content ? (
+                            <SyntaxBlock
+                                code={content.length > 3000 ? content.slice(0, 3000) + '\n\n… (truncated)' : content}
+                                filename={filename}
+                                maxHeight={400}
+                            />
+                        ) : tool.output ? (
+                            <pre className="tool-pre">{tool.output}</pre>
+                        ) : null}
+                    </ToolFileAccordion>
+                )}
+                {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
+            </BasicTool>
+        )
+    }
+
+    /* ── apply_patch (unified diff) ── */
+    if (isPatch) {
+        // apply_patch typically receives a unified diff in input.diff or input.patch
+        const patchText = useMemo(() => {
+            const input = tool.input
+            if (!input) return ''
+            if (typeof input.diff === 'string') return input.diff
+            if (typeof input.patch === 'string') return input.patch
+            // Some agents send the raw patch as a single string property
+            if (typeof input.content === 'string') return input.content
+            return ''
+        }, [tool.input])
+
+        // Parse filenames from unified diff headers
+        const patchFiles = useMemo(() => {
+            if (!patchText) return []
+            const fileBlocks: Array<{ filename: string; diff: string; type: 'add' | 'update' | 'delete' }> = []
+            const lines = patchText.split('\n')
+            let currentFile = ''
+            let currentDiff: string[] = []
+            let currentType: 'add' | 'update' | 'delete' = 'update'
+
+            for (const line of lines) {
+                // Match --- a/path or +++ b/path or diff --git a/path b/path
+                const diffHeader = line.match(/^diff --git a\/(.*?) b\/(.*?)$/)
+                const minusFile = line.match(/^--- (?:a\/)?(.+)$/)
+                const plusFile = line.match(/^\+\+\+ (?:b\/)?(.+)$/)
+
+                if (diffHeader) {
+                    if (currentFile && currentDiff.length) {
+                        fileBlocks.push({ filename: currentFile, diff: currentDiff.join('\n'), type: currentType })
+                    }
+                    currentFile = diffHeader[2] || diffHeader[1] || ''
+                    currentDiff = [line]
+                    currentType = 'update'
+                } else if (plusFile && plusFile[1] !== '/dev/null' && !currentFile) {
+                    currentFile = plusFile[1]
+                    currentDiff.push(line)
+                } else if (minusFile && minusFile[1] === '/dev/null') {
+                    currentType = 'add'
+                    currentDiff.push(line)
+                } else if (plusFile && plusFile[1] === '/dev/null') {
+                    currentType = 'delete'
+                    currentDiff.push(line)
+                } else {
+                    currentDiff.push(line)
+                }
+            }
+            if (currentFile && currentDiff.length) {
+                fileBlocks.push({ filename: currentFile, diff: currentDiff.join('\n'), type: currentType })
+            }
+
+            return fileBlocks
+        }, [patchText])
+
+        // Single file or unknown format — show whole diff
+        if (patchFiles.length <= 1) {
+            const singlePath = patchFiles[0]?.filename || extractFilePath(tool.input)
+            const singleFilename = singlePath ? getFilename(singlePath) : 'patch'
+            const singleDir = singlePath ? getDirectory(singlePath) : ''
+
+            return (
+                <BasicTool
+                    icon={<FileEdit size={12} />}
+                    trigger={
+                        <EditWriteTrigger
+                            label="Patch"
+                            pending={pending}
+                            filename={singleFilename}
+                            directory={singleDir}
+                        />
+                    }
+                    status={tool.status}
+                    duration={durationLabel}
+                    defaultOpen={editToolPartsExpanded}
+                >
+                    {patchText && (
+                        <SyntaxBlock code={patchText} language="diff" lineNumbers={false} maxHeight={500} />
+                    )}
+                    {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
+                </BasicTool>
+            )
+        }
+
+        // Multi-file patch — accordion per file
+        return (
+            <BasicTool
+                icon={<FileEdit size={12} />}
+                title="Patch"
+                subtitle={!pending ? `${patchFiles.length} files` : undefined}
+                status={tool.status}
+                duration={durationLabel}
+                defaultOpen={editToolPartsExpanded}
+            >
+                {patchFiles.map((file, idx) => (
+                    <ToolFileAccordion
+                        key={idx}
+                        path={file.filename}
+                        badge={
+                            file.type === 'add' ? <span className="patch-badge patch-badge--add">created</span>
+                            : file.type === 'delete' ? <span className="patch-badge patch-badge--del">deleted</span>
+                            : null
+                        }
+                    >
+                        <SyntaxBlock code={file.diff} language="diff" lineNumbers={false} maxHeight={400} />
+                    </ToolFileAccordion>
+                ))}
+                {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
+            </BasicTool>
+        )
+    }
+
+    /* ── Todo ── */
+    if (isTodo) {
+        return (
+            <BasicTool
+                icon={<ListTodo size={12} />}
+                title="Todos"
+                status={tool.status}
+                duration={durationLabel}
+                defaultOpen
+            >
+                <div style={{ padding: '6px 8px' }}>
+                    <TodoInlineList input={tool.input} output={tool.output} />
+                </div>
+                {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
+            </BasicTool>
+        )
+    }
+
+    /* ── Context tools (read/glob/grep/list) — compact in group ── */
+    if (isContext && compact) {
+        const label = tool.title || tool.name
+        const path = extractFilePath(tool.input) || (tool.input?.pattern ? String(tool.input.pattern) : '')
+        return (
+            <div className="context-tool-item">
+                <Glasses size={10} className="context-tool-icon" />
+                <span className="context-tool-name">{label}</span>
+                {path && <span className="context-tool-path">{getFilename(path) || path}</span>}
+                {isError && <span className="context-tool-error">✗</span>}
+            </div>
+        )
+    }
+
+    /* ── Context tool (standalone, not in group) ── */
+    if (isContext) {
+        const filePath = extractFilePath(tool.input)
+        const pattern = tool.input?.pattern ? String(tool.input.pattern) : ''
+        const args: string[] = []
+        if (tool.input?.offset) args.push(`offset=${tool.input.offset}`)
+        if (tool.input?.limit) args.push(`limit=${tool.input.limit}`)
+        if (pattern) args.push(`pattern=${pattern}`)
+
+        return (
+            <BasicTool
+                icon={<Glasses size={12} />}
+                title={tool.title || tool.name}
+                subtitle={!pending ? (filePath ? getFilename(filePath) : pattern) + (args.length ? ` (${args.join(', ')})` : '') : undefined}
+                status={tool.status}
+                duration={durationLabel}
+                hideDetails
+            />
+        )
+    }
+
+    /* ── Search tools ── */
+    if (isSearch) {
+        const query = tool.input?.query ? String(tool.input.query) : ''
+        const url = tool.input?.url ? String(tool.input.url) : tool.input?.Url ? String(tool.input.Url) : ''
+        const isWebFetch = tool.name === 'webfetch' || tool.name === 'read_url_content'
+
+        return (
+            <BasicTool
+                icon={<Globe size={12} />}
+                trigger={
+                    <div className="search-trigger">
+                        <span className="search-trigger__title">
+                            <TextShimmer text={isWebFetch ? 'Web Fetch' : 'Web Search'} active={pending} />
+                        </span>
+                        {!pending && (url || query) && (
+                            url ? (
+                                <a
+                                    className="search-trigger__link"
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    {url}
+                                </a>
+                            ) : (
+                                <span className="search-trigger__query">{query}</span>
+                            )
+                        )}
+                        {!pending && url && (
+                            <ExternalLink size={10} className="search-trigger__ext" />
+                        )}
+                    </div>
+                }
+                status={tool.status}
+                hideDetails
+            />
+        )
+    }
+
+    /* ── Code search ── */
+    if (isCodeSearch) {
+        const query = tool.input?.query ? String(tool.input.query) : ''
+        return (
+            <BasicTool
+                icon={<Search size={12} />}
+                title="Code Search"
+                subtitle={!pending ? query : undefined}
+                status={tool.status}
+                hideDetails
+            />
+        )
+    }
+
+    /* ── Task/Sub-agent ── */
+    if (isTask) {
+        const subagentType = tool.input?.subagent_type ? String(tool.input.subagent_type) : ''
+        const agentLabel = subagentType ? subagentType[0].toUpperCase() + subagentType.slice(1) : 'Agent'
+        const desc = tool.input?.description ? String(tool.input.description) : tool.input?.Task ? String(tool.input.Task) : tool.title || ''
+
+        return (
+            <BasicTool
+                icon={<Brain size={12} />}
+                trigger={
+                    <div className="agent-trigger">
+                        <span className="agent-trigger__title">
+                            <TextShimmer text={agentLabel} active={pending} />
+                        </span>
+                        {!pending && desc && (
+                            <span className="agent-trigger__desc">{desc}</span>
+                        )}
+                    </div>
+                }
+                status={tool.status}
+                hideDetails
+            />
+        )
+    }
+
+    /* ── Skill ── */
+    if (isSkill) {
+        const skillName = tool.input?.name ? String(tool.input.name) : tool.title || 'Skill'
+        return (
+            <BasicTool
+                icon={<Sparkles size={12} />}
+                trigger={
+                    <div className="skill-trigger">
+                        <span className="skill-trigger__title">
+                            <TextShimmer text={skillName} active={pending} />
+                        </span>
+                    </div>
+                }
+                status={tool.status}
+                hideDetails
+            />
+        )
+    }
+
+    /* ── Generic fallback ── */
+    const displayTitle = tool.title || tool.name
+    return (
+        <BasicTool
+            icon={<Wrench size={10} />}
+            title={displayTitle}
+            subtitle={!pending ? extractFilePath(tool.input) || undefined : undefined}
+            status={tool.status}
+            duration={durationLabel}
+        >
+            {tool.input && Object.keys(tool.input).length > 0 ? (
+                <div className="tool-content-generic">
+                    <span className="tool-section-label">Input</span>
+                    <pre className="tool-pre">{JSON.stringify(tool.input, null, 2)}</pre>
+                </div>
+            ) : null}
+            {tool.output ? (
+                <div className="tool-content-generic">
+                    <span className="tool-section-label">Output</span>
+                    <pre className="tool-pre">{tool.output.length > 500 ? `${tool.output.slice(0, 500)}…` : tool.output}</pre>
+                </div>
+            ) : null}
+            {isError && tool.error ? (
+                <ToolErrorCard error={tool.error} toolName={tool.name} />
+            ) : null}
+        </BasicTool>
+    )
+}
+
+/* ═══════════════════════════════════════════════════════
+   ContextToolGroup — batched read/glob/grep/list
+   ═══════════════════════════════════════════════════════ */
+
+function ContextToolGroup({ tools }: { tools: ChatMessageToolInfo[] }) {
+    const [open, setOpen] = useState(false)
+    const running = tools.some((t) => t.status === 'running' || t.status === 'pending')
+    const errorCount = tools.filter((t) => t.status === 'error').length
+
+    const summary = useMemo(() => {
+        const reads = tools.filter(t => t.name === 'read' || t.name === 'read_file' || t.name === 'view_file' || t.name === 'read_many').length
+        const searches = tools.filter(t => t.name === 'grep' || t.name === 'grep_search' || t.name === 'find_by_name').length
+        const lists = tools.filter(t => t.name === 'list' || t.name === 'list_dir' || t.name === 'glob').length
+        const parts: string[] = []
+        if (reads > 0) parts.push(`${reads} read${reads > 1 ? 's' : ''}`)
+        if (searches > 0) parts.push(`${searches} search${searches > 1 ? 'es' : ''}`)
+        if (lists > 0) parts.push(`${lists} list${lists > 1 ? 's' : ''}`)
+        return parts.join(', ') || `${tools.length} tool${tools.length > 1 ? 's' : ''}`
+    }, [tools])
+
+    return (
+        <div className="context-group">
+            <button className="context-group__trigger" onClick={() => setOpen(!open)}>
+                <span className="context-group__icon">
+                    {running ? <Loader2 size={12} className="spin-icon" /> : <Search size={12} />}
+                </span>
+                <span className="context-group__title">
+                    <TextShimmer
+                        text={running ? 'Gathering context' : 'Gathered context'}
+                        active={running}
+                    />
+                </span>
+                {!running && (
+                    <span className="context-group__summary">{summary}</span>
+                )}
+                {errorCount > 0 && (
+                    <span className="context-group__error-badge">{errorCount} error{errorCount > 1 ? 's' : ''}</span>
+                )}
+                <span className="context-group__arrow">
+                    {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                </span>
+            </button>
+            {open && (
+                <div className="context-group__list">
+                    {tools.map((tool) => (
+                        <ToolCallRow key={tool.callId} tool={tool} compact />
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════════
+   TodoInlineList
+   ═══════════════════════════════════════════════════════ */
+
+type TodoListItem = { content: string; status: string }
+
+function toTodoListItem(value: unknown): TodoListItem {
+    if (value && typeof value === 'object') {
+        const r = value as Record<string, unknown>
+        return {
+            content: typeof r.content === 'string' ? r.content : typeof r.title === 'string' ? r.title : String(value),
+            status: typeof r.status === 'string' ? r.status : 'pending',
+        }
+    }
+    return { content: String(value), status: 'pending' }
+}
+
+function TodoInlineList({ input, output }: { input?: Record<string, unknown>; output?: string }) {
+    let items: TodoListItem[] = []
     if (output) {
         try {
             const parsed = JSON.parse(output)
-            if (Array.isArray(parsed)) {
-                items = parsed.map(toTodoListItem)
-            }
+            if (Array.isArray(parsed)) items = parsed.map(toTodoListItem)
         } catch {
-            // Try line-based parse
             items = output.split('\n').filter(Boolean).map(line => ({ content: line, status: 'pending' }))
         }
     }
-
-    // Also check store todos for the current session
     const sessionTodos = useStudioStore.getState().todos
-    // Find the most recent session's todos if inline items are empty
     if (items.length === 0) {
         const allTodos: Todo[] = Object.values(sessionTodos).flat()
-        if (allTodos.length > 0) items = allTodos.map((todo) => ({ content: todo.content, status: todo.status }))
+        if (allTodos.length > 0) items = allTodos.map(t => ({ content: t.content, status: t.status }))
     }
-
     if (items.length === 0 && input) {
-        // Show input as fallback
-        return <pre className="tool-row__pre">{JSON.stringify(input, null, 2)}</pre>
+        return <pre className="tool-pre">{JSON.stringify(input, null, 2)}</pre>
     }
 
-    const iconFor = (status: string) => {
-        if (status === 'completed') return <CheckCircle2 size={13} style={{ color: '#10b981' }} />
-        if (status === 'in_progress') return <Loader2 size={13} className="spin-icon" style={{ color: 'var(--accent)' }} />
-        if (status === 'cancelled') return <XCircle size={13} style={{ color: 'var(--text-muted)' }} />
+    const iconFor = (s: string) => {
+        if (s === 'completed') return <CheckCircle2 size={13} style={{ color: '#10b981' }} />
+        if (s === 'in_progress') return <Loader2 size={13} className="spin-icon" style={{ color: 'var(--accent)' }} />
+        if (s === 'cancelled') return <XCircle size={13} style={{ color: 'var(--text-muted)' }} />
         return <Circle size={13} style={{ color: 'var(--text-muted)' }} />
     }
 
@@ -125,166 +842,45 @@ function TodoInlineList({ input, output }: { input?: Record<string, unknown>; ou
     )
 }
 
-export function ToolCallRow({ tool }: { tool: ChatMessageToolInfo }) {
-    const { shellToolPartsExpanded, editToolPartsExpanded } = useUISettings()
-    const isShell = SHELL_NAMES.has(tool.name)
-    const isEdit = EDIT_NAMES.has(tool.name)
-    const isTodo = TODO_NAMES.has(tool.name)
-
-    // Determine title block
-    let displayTitle = tool.title || tool.name
-    let displayDesc = ''
-    if (isShell) {
-        displayDesc = extractShellCommand(tool.input)
-        displayTitle = 'Run Command'
-    } else if (isEdit) {
-        displayDesc = String(tool.input?.path || tool.input?.TargetFile || tool.input?.file || '')
-        displayTitle = 'Edit File'
-    } else if (isTodo) {
-        const todoItems = tool.input?.todos
-        const todoCount = Array.isArray(todoItems) ? todoItems.length : 0
-        displayTitle = tool.title || `${todoCount} todos`
-    }
-
-    const initialState = isShell ? shellToolPartsExpanded : isEdit ? editToolPartsExpanded : false
-    const [expanded, setExpanded] = useState(initialState)
-
-    const statusClass = `tool-row--${tool.status}`
-    const durationLabel = formatToolDuration(tool.time)
-
-    return (
-        <div className={`tool-row ${statusClass}`}>
-            <button className="tool-row__header" onClick={() => setExpanded(!expanded)}>
-                <span className="tool-row__indicator">
-                    <ToolStatusIcon status={tool.status} />
-                </span>
-                {isShell ? (
-                    <Terminal size={10} className="tool-row__wrench" />
-                ) : isEdit ? (
-                    <FileEdit size={10} className="tool-row__wrench" />
-                ) : isTodo ? (
-                    <ListTodo size={10} className="tool-row__wrench" />
-                ) : (
-                    <Wrench size={10} className="tool-row__wrench" />
-                )}
-                <span className="tool-row__name">{displayTitle}</span>
-                {displayDesc && <span className="tool-row__desc">{displayDesc}</span>}
-                {durationLabel ? <span className="tool-row__duration">{durationLabel}</span> : null}
-                <span className="tool-row__chevron">
-                    {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                </span>
-            </button>
-            {expanded ? (
-                <div className="tool-row__detail">
-                    {isShell ? (
-                        <div className="tool-row__section tool-row__section--terminal">
-                            {tool.input && (
-                                <div className="terminal-command">
-                                    <span className="terminal-prompt">$</span>
-                                    {extractShellCommand(tool.input)}
-                                </div>
-                            )}
-                            {tool.output && (
-                                <div className="terminal-output">{tool.output}</div>
-                            )}
-                            {tool.error && (
-                                <div className="terminal-error">{tool.error}</div>
-                            )}
-                            {tool.status === 'running' && !tool.output && !tool.error && (
-                                <div className="terminal-output" style={{ opacity: 0.4 }}>...</div>
-                            )}
-                        </div>
-                    ) : isEdit ? (
-                        <div className="tool-row__section tool-row__section--edit">
-                            {tool.input?.path || tool.input?.TargetFile || tool.input?.file ? (
-                                <div className="edit-file-path">
-                                    {String(tool.input.path || tool.input.TargetFile || tool.input.file || '')}
-                                </div>
-                            ) : null}
-                            {tool.input && (
-                                <pre className="tool-row__pre" style={{ margin: 0, border: 'none' }}>
-                                    {JSON.stringify(tool.input, null, 2)}
-                                </pre>
-                            )}
-                            {tool.output && (
-                                <pre className="tool-row__pre">{tool.output}</pre>
-                            )}
-                            {tool.error && (
-                                <pre className="tool-row__pre tool-row__section--error">{tool.error}</pre>
-                            )}
-                        </div>
-                    ) : isTodo ? (
-                        <div className="tool-row__section" style={{ padding: '6px 8px' }}>
-                            <TodoInlineList input={tool.input} output={tool.output} />
-                        </div>
-                    ) : (
-                        <>
-                            {tool.input && Object.keys(tool.input).length > 0 ? (
-                                <div className="tool-row__section">
-                                    <span className="tool-row__section-label">Input</span>
-                                    <pre className="tool-row__pre">{JSON.stringify(tool.input, null, 2)}</pre>
-                                </div>
-                            ) : null}
-                            {tool.output ? (
-                                <div className="tool-row__section">
-                                    <span className="tool-row__section-label">Output</span>
-                                    <pre className="tool-row__pre">{tool.output.length > 500 ? `${tool.output.slice(0, 500)}...` : tool.output}</pre>
-                                </div>
-                            ) : null}
-                            {tool.error ? (
-                                <div className="tool-row__section tool-row__section--error">
-                                    <span className="tool-row__section-label">Error</span>
-                                    <pre className="tool-row__pre">{tool.error}</pre>
-                                </div>
-                            ) : null}
-                        </>
-                    )}
-                </div>
-            ) : null}
-        </div>
-    )
-}
+/* ═══════════════════════════════════════════════════════
+   ToolGroup — groups consecutive tools with context batching
+   ═══════════════════════════════════════════════════════ */
 
 export function ToolGroup({ tools }: { tools: ChatMessageToolInfo[] }) {
-    const [collapsed, setCollapsed] = useState(false)
+    // Partition tools into context groups and non-context tools
+    const segments = useMemo(() => {
+        const result: Array<{ kind: 'context'; tools: ChatMessageToolInfo[] } | { kind: 'tool'; tool: ChatMessageToolInfo }> = []
+        let contextBuffer: ChatMessageToolInfo[] = []
 
-    // Single tool: no group wrapper
-    if (tools.length === 1) {
-        return <ToolCallRow tool={tools[0]} />
-    }
+        for (const tool of tools) {
+            if (CONTEXT_NAMES.has(tool.name)) {
+                contextBuffer.push(tool)
+            } else {
+                if (contextBuffer.length > 0) {
+                    result.push({ kind: 'context', tools: [...contextBuffer] })
+                    contextBuffer = []
+                }
+                result.push({ kind: 'tool', tool })
+            }
+        }
+        if (contextBuffer.length > 0) {
+            result.push({ kind: 'context', tools: contextBuffer })
+        }
 
-    const completedCount = tools.filter((t) => t.status === 'completed').length
-    const runningCount = tools.filter((t) => t.status === 'running' || t.status === 'pending').length
-    const errorCount = tools.filter((t) => t.status === 'error').length
+        return result
+    }, [tools])
 
     return (
-        <div className="tool-group">
-            <button className="tool-group__header" onClick={() => setCollapsed(!collapsed)}>
-                <span className="tool-group__indicator">
-                    {runningCount > 0
-                        ? <Loader2 size={12} className="spin-icon" />
-                        : errorCount > 0
-                            ? <AlertTriangle size={12} />
-                            : <Check size={12} />}
-                </span>
-                <Wrench size={10} className="tool-group__wrench" />
-                <span className="tool-group__label">
-                    {runningCount > 0
-                        ? `${completedCount}/${tools.length} tools used`
-                        : `${tools.length} tools used`}
-                </span>
-                {errorCount > 0 ? <span className="tool-group__error-badge">{errorCount} error{errorCount > 1 ? 's' : ''}</span> : null}
-                <span className="tool-group__chevron">
-                    {collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
-                </span>
-            </button>
-            {!collapsed ? (
-                <div className="tool-group__list">
-                    {tools.map((tool) => (
-                        <ToolCallRow key={tool.callId} tool={tool} />
-                    ))}
-                </div>
-            ) : null}
+        <div className="tool-group-v2">
+            {segments.map((seg, idx) => {
+                if (seg.kind === 'context') {
+                    if (seg.tools.length === 1) {
+                        return <ToolCallRow key={`ctx-${idx}`} tool={seg.tools[0]} />
+                    }
+                    return <ContextToolGroup key={`ctxg-${idx}`} tools={seg.tools} />
+                }
+                return <ToolCallRow key={seg.tool.callId || `t-${idx}`} tool={seg.tool} />
+            })}
         </div>
     )
 }

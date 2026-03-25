@@ -1,0 +1,93 @@
+/* ═══════════════════════════════════════════
+   SYNTAX BLOCK — IDE-like code viewer
+   Uses github-dark theme from highlight.js
+   (already loaded by MarkdownRenderer)
+   ═══════════════════════════════════════════ */
+
+.syntax-block {
+    overflow: auto;
+    background: #0d1117;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.syntax-block--diff-old {
+    background: color-mix(in srgb, #ef4444 5%, #0d1117);
+}
+
+.syntax-block--diff-new {
+    background: color-mix(in srgb, #22c55e 5%, #0d1117);
+}
+
+.syntax-block__pre {
+    margin: 0;
+    display: flex;
+    padding: 0;
+}
+
+.syntax-block__gutter {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 0;
+    text-align: right;
+    user-select: none;
+    flex-shrink: 0;
+    border-right: 1px solid #30363d;
+    background: #161b22;
+}
+
+.syntax-block__line-num {
+    display: block;
+    padding: 0 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.5;
+    color: #484f58;
+    min-width: 32px;
+}
+
+.syntax-block__code {
+    flex: 1;
+    padding: 6px 10px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre;
+    background: transparent !important;
+}
+
+/* ── Diff Block ── */
+
+.diff-block {
+    overflow: auto;
+}
+
+.diff-block__section {
+    border-bottom: 1px solid #30363d;
+}
+
+.diff-block__section:last-child {
+    border-bottom: none;
+}
+
+.diff-block__section-label {
+    padding: 2px 8px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-family: var(--font-mono);
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+}
+
+.diff-block__section--old .diff-block__section-label {
+    color: #f85149;
+    background: color-mix(in srgb, #f85149 8%, #161b22);
+}
+
+.diff-block__section--new .diff-block__section-label {
+    color: #3fb950;
+    background: color-mix(in srgb, #3fb950 8%, #161b22);
+}

@@ -1,0 +1,78 @@
+/* ═══════════════════════════════════════════
+   AnimatedNumber — Odometer digit roller
+   ═══════════════════════════════════════════ */
+
+[data-component="animated-number"] {
+    display: inline-flex;
+    align-items: baseline;
+    vertical-align: baseline;
+    line-height: inherit;
+    font-variant-numeric: tabular-nums;
+}
+
+[data-component="animated-number"] [data-slot="animated-number-value"] {
+    display: inline-flex;
+    flex-direction: row-reverse;
+    align-items: baseline;
+    justify-content: flex-end;
+    line-height: inherit;
+    width: var(--animated-number-width, 1ch);
+    overflow: hidden;
+    transition: width 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-component="animated-number"] [data-slot="animated-number-digit"] {
+    display: inline-block;
+    width: 1ch;
+    height: 1em;
+    line-height: 1em;
+    overflow: hidden;
+    vertical-align: baseline;
+    -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        #000 18%,
+        #000 82%,
+        transparent 100%
+    );
+    mask-image: linear-gradient(
+        to bottom,
+        transparent 0%,
+        #000 18%,
+        #000 82%,
+        transparent 100%
+    );
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+}
+
+[data-component="animated-number"] [data-slot="animated-number-strip"] {
+    display: inline-flex;
+    flex-direction: column;
+    transform: translateY(calc(var(--animated-number-offset, 10) * -1em));
+    transition-property: transform;
+    transition-duration: var(--animated-number-duration, 600ms);
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-component="animated-number"] [data-slot="animated-number-strip"][data-animating="false"] {
+    transition-duration: 0ms;
+}
+
+[data-component="animated-number"] [data-slot="animated-number-cell"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1ch;
+    height: 1em;
+    line-height: 1em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-component="animated-number"] [data-slot="animated-number-value"] {
+        transition-duration: 0ms;
+    }
+    [data-component="animated-number"] [data-slot="animated-number-strip"] {
+        transition-duration: 0ms;
+    }
+}

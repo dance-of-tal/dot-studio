@@ -279,3 +279,34 @@
 .spin-icon {
     animation: spin 1s linear infinite;
 }
+
+/* ── Session Review Toggle ── */
+
+.session-review-toggle {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border-subtle, #30363d);
+    border-radius: 6px;
+    background: var(--bg-surface, #161b22);
+    color: var(--text-secondary, #8b949e);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+}
+
+.session-review-toggle:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+    color: var(--text-primary, #e6edf3);
+}
+
+.performer-session-review {
+    max-height: 300px;
+    overflow-y: auto;
+    margin: 0 8px 8px;
+}

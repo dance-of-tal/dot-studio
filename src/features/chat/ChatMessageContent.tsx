@@ -1,10 +1,36 @@
-import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import type { ChatMessage, ChatMessagePart, ChatMessageToolInfo } from '../../types'
 import { stripAssistantActionBlock } from '../assistant/assistant-protocol'
-
+import { TextShimmer } from '../../components/chat/TextShimmer'
 import { ToolGroup } from './ToolGroup'
+
+/** Throttle a rapidly changing value to update at most every `ms` milliseconds */
+function useThrottledValue<T>(value: T, ms = 100): T {
+    const [throttled, setThrottled] = useState(value)
+    const lastUpdate = useRef(Date.now())
+    const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+    useEffect(() => {
+        const now = Date.now()
+        const elapsed = now - lastUpdate.current
+        if (elapsed >= ms) {
+            lastUpdate.current = now
+            setThrottled(value)
+        } else {
+            if (timer.current) clearTimeout(timer.current)
+            timer.current = setTimeout(() => {
+                lastUpdate.current = Date.now()
+                setThrottled(value)
+                timer.current = undefined
+            }, ms - elapsed)
+        }
+        return () => { if (timer.current) clearTimeout(timer.current) }
+    }, [value, ms])
+
+    return throttled
+}
 
 function stripMarkdownMarkers(text: string) {
     return text
@@ -26,7 +52,9 @@ function ReasoningBlock({ content }: { content: string }) {
                 <span className="thinking-row__chevron">
                     {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                 </span>
-                <span className="thinking-row__label">Thinking</span>
+                <span className="thinking-row__label">
+                    <TextShimmer text="Thinking" active={false} />
+                </span>
                 {!expanded && preview ? (
                     <span className="thinking-row__preview">
                         {preview}{content.length > 200 ? '…' : ''}
@@ -98,6 +126,29 @@ function MessageParts({ parts }: { parts: ChatMessagePart[] }) {
     )
 }
 
+function CopyResponseButton({ content }: { content: string }) {
+    const [copied, setCopied] = useState(false)
+    const handleCopy = useCallback(async () => {
+        await navigator.clipboard.writeText(content)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }, [content])
+
+    if (!content.trim()) return null
+
+    return (
+        <div className="text-copy-wrapper">
+            <button
+                className="text-copy-btn"
+                onClick={handleCopy}
+                title={copied ? 'Copied!' : 'Copy response'}
+            >
+                {copied ? <Check size={11} /> : <Copy size={11} />}
+            </button>
+        </div>
+    )
+}
+
 export default function ChatMessageContent({
     message,
     className = 'assistant-body',
@@ -105,12 +156,19 @@ export default function ChatMessageContent({
     message: Pick<ChatMessage, 'content' | 'parts'>
     className?: string
 }) {
-    const displayContent = useMemo(() => stripAssistantActionBlock(message.content || ''), [message.content])
+    const rawContent = useMemo(() => stripAssistantActionBlock(message.content || ''), [message.content])
+    const displayContent = useThrottledValue(rawContent, 100)
 
     return (
         <div className={className}>
             {message.parts && message.parts.length > 0 ? <MessageParts parts={message.parts} /> : null}
-            {displayContent ? <MarkdownRenderer content={displayContent} /> : null}
+            {displayContent ? (
+                <>
+                    <MarkdownRenderer content={displayContent} />
+                    <CopyResponseButton content={rawContent} />
+                </>
+            ) : null}
         </div>
     )
 }
+
