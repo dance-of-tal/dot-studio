@@ -110,6 +110,97 @@ export function resolveSessionTarget(state: StudioState, sessionId: string): Ses
     return null
 }
 
+// ── Lazy session resolution for wake-cascade sessions ────────────
+// When SSE events arrive for sessions not in sessionMap (e.g., auto-created
+// by wake cascade), this resolves them asynchronously from the backend and
+// registers them so subsequent events are correctly routed to the UI.
+
+const pendingResolves = new Set<string>()
+const failedResolves = new Map<string, number>()
+const FAILED_RESOLVE_RETRY_MS = 2_000
+
+function parseActParticipantOwnerId(ownerId: string) {
+    const match = ownerId.match(/^act:([^:]+):thread:([^:]+):participant:(.+)$/)
+    if (!match) {
+        return null
+    }
+
+    const [, actId, threadId, participantKey] = match
+    return { actId, threadId, participantKey }
+}
+
+/**
+ * Attempt to lazily resolve and register an unknown session.
+ * Called when resolveSessionTarget returns null for an SSE event.
+ * Non-blocking: fires async API call, updates sessionMap on success.
+ * After registration, calls onResolved to sync existing messages.
+ */
+export function tryLazyResolveSession(
+    sessionId: string,
+    set: (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void,
+    get: () => StudioState,
+    onResolved?: (target: SessionStreamTarget, sessionId: string) => void,
+): void {
+    const failedAt = failedResolves.get(sessionId)
+    if (failedAt && (Date.now() - failedAt) < FAILED_RESOLVE_RETRY_MS) {
+        return
+    }
+    // Skip if already pending
+    if (pendingResolves.has(sessionId)) return
+    // Skip if already in sessionMap (race condition)
+    if (performerIdForSession(get().sessionMap, sessionId)) return
+
+    pendingResolves.add(sessionId)
+
+    import('../api').then(({ api }) => {
+        api.chat.resolveSession(sessionId).then((result) => {
+            pendingResolves.delete(sessionId)
+            if (result.found && result.ownerId) {
+                failedResolves.delete(sessionId)
+                const actOwner = parseActParticipantOwnerId(result.ownerId)
+                // Register in sessionMap so subsequent events are routed
+                set((state) => ({
+                    sessionMap: { ...state.sessionMap, [result.ownerId]: sessionId },
+                    ...(actOwner
+                        ? {
+                            actThreads: {
+                                ...state.actThreads,
+                                [actOwner.actId]: (state.actThreads[actOwner.actId] || []).map((thread) =>
+                                    thread.id !== actOwner.threadId
+                                        ? thread
+                                        : {
+                                            ...thread,
+                                            participantSessions: {
+                                                ...thread.participantSessions,
+                                                [actOwner.participantKey]: sessionId,
+                                            },
+                                        },
+                                ),
+                            },
+                        }
+                        : {}),
+                }))
+                console.log(`[lazy-resolve] Registered session ${sessionId} → ${result.ownerId}`)
+
+                // Immediately sync existing messages so content appears right away
+                // (SSE events before registration were lost)
+                const target = resolveSessionTarget(get(), sessionId)
+                if (target && onResolved) {
+                    onResolved(target, sessionId)
+                }
+            } else {
+                failedResolves.set(sessionId, Date.now())
+            }
+        }).catch(() => {
+            pendingResolves.delete(sessionId)
+            failedResolves.set(sessionId, Date.now())
+        })
+    }).catch(() => {
+        pendingResolves.delete(sessionId)
+    })
+}
+
+
 export function updateTargetMessages(
     state: StudioState,
     target: SessionStreamTarget,

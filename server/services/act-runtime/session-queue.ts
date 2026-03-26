@@ -6,15 +6,11 @@
  */
 
 import type { WakeUpTarget } from './event-router.js'
+import { payloadString } from './act-runtime-utils.js'
 
 interface QueueEntry {
     target: WakeUpTarget
     enqueuedAt: number
-}
-
-function payloadString(payload: Record<string, unknown>, key: string) {
-    const value = payload[key]
-    return typeof value === 'string' ? value : undefined
 }
 
 export class SessionQueue {
@@ -26,6 +22,13 @@ export class SessionQueue {
      */
     markRunning(participantKey: string): void {
         this.running.add(participantKey)
+    }
+
+    /**
+     * Clear running state without draining queued work.
+     */
+    clearRunning(participantKey: string): void {
+        this.running.delete(participantKey)
     }
 
     /**

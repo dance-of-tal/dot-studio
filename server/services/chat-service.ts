@@ -1,13 +1,14 @@
 import { getOpencode } from '../lib/opencode.js'
 import { buildStudioSessionTitle } from '../../shared/session-metadata.js'
 import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/chat-contracts.js'
+import { extractNonRetryableSessionError, waitForSessionToSettle } from '../lib/chat-session.js'
 import { describeUnavailableRuntimeTools } from '../lib/runtime-tools.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { getSafeOwnerExecutionDir } from '../lib/safe-mode.js'
 import { registerSessionExecutionContext } from '../lib/session-execution.js'
 import { ensurePerformerProjection } from './opencode-projection/stage-projection-service.js'
-import { projectActTools, writeActToolFiles } from './act-runtime/act-tool-projection.js'
-import { getActDefinitionForThread } from './act-runtime/act-runtime-service.js'
+import { projectActTools } from './act-runtime/act-tool-projection.js'
+import { getActDefinitionForThread, getActRuntimeService } from './act-runtime/act-runtime-service.js'
 
 export async function createStudioChatSession(
     cwd: string,
@@ -15,13 +16,17 @@ export async function createStudioChatSession(
 ) {
     const oc = await getOpencode()
     const ownerKind = request.actId ? 'act' as const : 'performer' as const
-    const ownerId = request.actId ?? request.performerId
+    // Use the full chatKey as both safe owner and session context owner so each
+    // Act participant session resolves back to the correct tab and execution scope.
+    const safeOwnerId = request.performerId
+    const contextOwnerId = request.performerId
     const executionDir = await getSafeOwnerExecutionDir(
         cwd,
         ownerKind,
-        ownerId,
+        safeOwnerId,
         request.executionMode || 'direct',
     )
+
     const session = unwrapOpencodeResult<{ id: string; title: string }>(await oc.session.create({
         directory: executionDir,
         title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash, request.executionMode),
@@ -29,11 +34,28 @@ export async function createStudioChatSession(
     await registerSessionExecutionContext({
         sessionId: session.id,
         ownerKind,
-        ownerId,
+        ownerId: contextOwnerId,
         mode: request.executionMode || 'direct',
         workingDir: cwd,
         executionDir,
     })
+
+    // Persist participant→session mapping to thread.json for Act participants
+    // ChatKey format: `act:{actId}:thread:{threadId}:participant:{participantKey}`
+    if (request.actId && request.performerId.startsWith('act:')) {
+        const threadMatch = request.performerId.match(/^act:[^:]+:thread:([^:]+):participant:(.+)$/)
+        if (threadMatch) {
+            const [, threadId, participantKey] = threadMatch
+            try {
+                const { getActRuntimeService } = await import('./act-runtime/act-runtime-service.js')
+                const service = getActRuntimeService(cwd)
+                await service.registerParticipantSession(threadId, participantKey, session.id)
+            } catch {
+                // Non-fatal: session still works, just won't persist for reload
+            }
+        }
+    }
+
     return {
         sessionId: session.id,
         title: session.title,
@@ -55,29 +77,35 @@ export async function sendStudioChatMessage(
     }
 
     // Extract raw performer key for Act-namespaced chatKeys
-    const rawPerformerId = request.actId && performer.performerId.startsWith('act:')
-        ? performer.performerId.split(':').slice(2).join(':')
-        : performer.performerId
+    // ChatKey format: `act:{actId}:thread:{threadId}:participant:{participantKey}`
+    // We need just the participantKey part for Act tool generation
+    let rawPerformerId = performer.performerId
+    if (request.actId && performer.performerId.startsWith('act:')) {
+        const participantPrefix = ':participant:'
+        const participantIdx = performer.performerId.indexOf(participantPrefix)
+        if (participantIdx !== -1) {
+            rawPerformerId = performer.performerId.slice(participantIdx + participantPrefix.length)
+        }
+    }
 
-    // ── Act tool projection ─────────────────────────────
-    // When running in Act context with a thread, project Act runtime tools
-    // (send_message, post_to_board, read_board, set_wake_condition) into the session.
+    // ── Collaboration tool projection ───────────────────
+    // When running in an Act thread, project stable collaboration context and
+    // collaboration tools into the participant session.
     let actExtraTools: Array<{ name: string; content: string }> = []
-    let actContextPrefix = ''
+    let collaborationPromptSection = ''
 
     if (request.actId && request.actThreadId) {
         try {
-            const actDef = getActDefinitionForThread(workingDir, request.actThreadId)
+            const actDef = await getActDefinitionForThread(workingDir, request.actThreadId)
             if (actDef) {
                 const projection = projectActTools(
                     rawPerformerId,
                     actDef,
                     request.actThreadId,
+                    workingDir,
                 )
-                // Write tool files to execution dir
-                await writeActToolFiles(executionDir, projection)
                 actExtraTools = projection.tools
-                actContextPrefix = projection.contextPrompt
+                collaborationPromptSection = projection.contextPrompt
             }
         } catch (err) {
             console.warn('[chat-service] Act tool projection failed:', err)
@@ -114,6 +142,7 @@ export async function sendStudioChatMessage(
             executionDir,
             workingDir,
             ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
+            ...(collaborationPromptSection ? { collaborationPromptSection } : {}),
             // Pass Act runtime tools as extraTools so they're included in projection
             ...(actExtraTools.length > 0 ? { extraTools: actExtraTools } : {}),
         })
@@ -129,7 +158,7 @@ export async function sendStudioChatMessage(
         )
     }
 
-    const promptSections = [assistantContextPrefix, actContextPrefix, request.message].filter(Boolean)
+    const promptSections = [assistantContextPrefix, request.message].filter(Boolean)
     const parts: Array<
         | { type: 'text'; text: string }
         | { type: 'file'; mime: string; url: string; filename?: string }
@@ -152,20 +181,70 @@ export async function sendStudioChatMessage(
     }
 
     const oc = await getOpencode()
-    unwrapOpencodeResult(await oc.session.promptAsync({
-        sessionID: sessionId,
-        directory: executionDir,
-        agent: isAssistant
-            ? (assistantAgentName || undefined)
-            : (ensured?.compiled.agentNames[performer.planMode ? 'plan' : 'build']),
-        // Pass model directly so OpenCode uses the user's selected model,
-        // not the (potentially stale) model cached from the agent file.
-        model: performer.model ? {
-            providerID: performer.model.provider,
-            modelID: performer.model.modelId,
-        } : undefined,
-        parts,
-    }))
+    const actRuntime = request.actId && request.actThreadId
+        ? getActRuntimeService(workingDir)
+        : null
+
+    if (actRuntime && rawPerformerId) {
+        await actRuntime.beginUserTurn(request.actThreadId!)
+        await actRuntime.markParticipantSessionBusy(request.actThreadId!, rawPerformerId)
+    }
+
+    try {
+        unwrapOpencodeResult(await oc.session.promptAsync({
+            sessionID: sessionId,
+            directory: executionDir,
+            agent: isAssistant
+                ? (assistantAgentName || undefined)
+                : (ensured?.compiled.agentNames[performer.planMode ? 'plan' : 'build']),
+            // Pass model directly so OpenCode uses the user's selected model,
+            // not the (potentially stale) model cached from the agent file.
+            model: performer.model ? {
+                providerID: performer.model.provider,
+                modelID: performer.model.modelId,
+            } : undefined,
+            parts,
+        }))
+    } catch (error) {
+        if (actRuntime && rawPerformerId) {
+            await actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId).catch(() => {})
+        }
+        throw error
+    }
+
+    if (actRuntime && rawPerformerId) {
+        void waitForSessionToSettle(
+            oc,
+            sessionId,
+            { directory: executionDir },
+            { timeoutMs: 30 * 60_000, pollMs: 250, requireObservedBusy: true },
+        ).then((settled) => {
+            if (!settled) {
+                void actRuntime.clearParticipantSessionBusy(request.actThreadId!, rawPerformerId)
+                console.warn(`[chat-service] Session ${sessionId} for "${rawPerformerId}" did not settle before timeout`)
+                return
+            }
+            return Promise.resolve(oc.session.messages({
+                sessionID: sessionId,
+                directory: executionDir,
+            })).then((response) => {
+                const messages = unwrapOpencodeResult(response) || []
+                const fatalError = extractNonRetryableSessionError(messages)
+                if (fatalError) {
+                    void actRuntime.clearParticipantSessionBusy(request.actThreadId!, rawPerformerId)
+                    void actRuntime.tripParticipantAutoWakeCircuit(request.actThreadId!, rawPerformerId, fatalError)
+                    console.warn(`[chat-service] Opened auto-wake circuit for "${rawPerformerId}": ${fatalError}`)
+                    return
+                }
+
+                void actRuntime.clearParticipantAutoWakeCircuit(request.actThreadId!, rawPerformerId)
+                return actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
+            })
+        }).catch((error) => {
+            console.error(`[chat-service] Failed waiting for act session ${sessionId} to settle:`, error)
+            void actRuntime.clearParticipantSessionBusy(request.actThreadId!, rawPerformerId)
+        })
+    }
 
     return { accepted: true as const }
 }

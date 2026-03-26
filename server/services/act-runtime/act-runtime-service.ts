@@ -2,7 +2,15 @@ import { nanoid } from 'nanoid'
 import type { ActDefinition, ConditionExpr, MailboxEvent } from '../../../shared/act-types.js'
 import { SafetyGuard } from './safety-guard.js'
 import { ThreadManager } from './thread-manager.js'
-import { processWakeCascade } from './wake-cascade.js'
+import {
+    clearParticipantCircuit,
+    clearParticipantQueueRunning,
+    drainParticipantQueueAfterSettlement,
+    markParticipantQueueRunning,
+    processWakeCascade,
+    tripParticipantCircuit,
+} from './wake-cascade.js'
+import { workspaceIdForDir } from '../../lib/config.js'
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unknown error'
@@ -33,10 +41,22 @@ type SetWakeConditionInput = {
 
 class ActRuntimeService {
     private readonly threadManager: ThreadManager
+    private readonly workingDir: string
     private readonly safetyGuards = new Map<string, SafetyGuard>()
+    private _threadsLoaded = false
 
-    constructor(workingDir: string) {
-        this.threadManager = new ThreadManager(workingDir)
+    constructor(workspaceId: string, workingDir: string) {
+        this.workingDir = workingDir
+        this.threadManager = new ThreadManager(workspaceId, workingDir)
+    }
+
+    /** Lazy-load persisted threads on first access */
+    private async ensureThreadsLoaded(): Promise<void> {
+        if (this._threadsLoaded) return
+        this._threadsLoaded = true
+        console.log(`[act-runtime] Loading persisted threads for workspace ${this.workingDir}`)
+        await this.threadManager.loadPersistedThreads()
+        console.log(`[act-runtime] Loaded ${this.threadManager.getActiveThreadCount()} threads`)
     }
 
     private getSafetyGuard(threadId: string): SafetyGuard {
@@ -48,12 +68,44 @@ class ActRuntimeService {
     }
 
     async sendMessage(threadId: string, body: SendMessageInput) {
+        await this.ensureThreadsLoaded()
         const runtime = this.threadManager.getThreadRuntime(threadId)
         if (!runtime) {
+            console.error(`[act-runtime] sendMessage: Thread ${threadId} not found. workingDir=${this.workingDir}`)
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
         }
 
         const guard = this.getSafetyGuard(threadId)
+
+        // Thread timeout check (PRD §16.3)
+        const timeoutCheck = guard.checkTimeout(runtime.thread)
+        if (!timeoutCheck.ok) {
+            return { ok: false as const, status: 429, error: timeoutCheck.reason }
+        }
+
+        // Event budget check BEFORE message is added (PRD §16.1)
+        const preEvent: MailboxEvent = {
+            id: nanoid(),
+            type: 'message.sent',
+            sourceType: 'performer',
+            source: body.from,
+            timestamp: Date.now(),
+            payload: { from: body.from, to: body.to, tag: body.tag, threadId },
+        }
+        const budgetCheck = guard.checkEventBudget(preEvent)
+        if (!budgetCheck.ok) {
+            return { ok: false as const, status: 429, error: budgetCheck.reason }
+        }
+
+        // Relation permission check (PRD §16.5)
+        const actDefinition = this.threadManager.getActDefinition(threadId)
+        if (actDefinition) {
+            const permCheck = guard.checkPermission(body.from, body.to, actDefinition.relations)
+            if (!permCheck.ok) {
+                return { ok: false as const, status: 403, error: permCheck.reason }
+            }
+        }
+
         const pairCheck = guard.checkPairBudget(body.from, body.to)
         if (!pairCheck.ok) {
             return { ok: false as const, status: 429, error: pairCheck.reason }
@@ -72,39 +124,47 @@ class ActRuntimeService {
             threadId,
         })
 
-        const event: MailboxEvent = {
-            id: nanoid(),
-            type: 'message.sent',
-            sourceType: 'performer',
-            source: body.from,
-            timestamp: Date.now(),
-            payload: { messageId: message.id, from: body.from, to: body.to, tag: body.tag, threadId },
-        }
-        await this.threadManager.logEvent(threadId, event)
+        // Update event with messageId and log
+        preEvent.payload = { messageId: message.id, from: body.from, to: body.to, tag: body.tag, threadId }
+        await this.threadManager.logEvent(threadId, preEvent)
 
-        const budgetCheck = guard.checkEventBudget(event)
-        if (!budgetCheck.ok) {
-            return { ok: true as const, warning: budgetCheck.reason }
+        // Fire-and-forget: don't block the tool call response
+        if (actDefinition) {
+            processWakeCascade(preEvent, actDefinition, runtime.mailbox, this.threadManager, threadId, this.workingDir)
+                .then((cascadeResult) => this.maybeEmitRuntimeIdle(threadId, cascadeResult, actDefinition, runtime.mailbox))
+                .catch((err) => console.error('[act-runtime] Wake cascade error (sendMessage):', err))
         }
 
-        const actDefinition = this.threadManager.getActDefinition(threadId)
-        const cascade = actDefinition
-            ? await processWakeCascade(event, actDefinition, runtime.mailbox, this.threadManager, threadId)
-            : null
-
-        return { ok: true as const, messageId: message.id, cascade }
+        return { ok: true as const, messageId: message.id }
     }
 
     async postToBoard(threadId: string, body: PostToBoardInput) {
+        await this.ensureThreadsLoaded()
         const runtime = this.threadManager.getThreadRuntime(threadId)
         if (!runtime) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
         }
 
         const guard = this.getSafetyGuard(threadId)
+
+        // Thread timeout check (PRD §16.3)
+        const timeoutCheck = guard.checkTimeout(runtime.thread)
+        if (!timeoutCheck.ok) {
+            return { ok: false as const, status: 429, error: timeoutCheck.reason }
+        }
+
         const boardCheck = guard.checkBoardUpdateBudget(body.key)
         if (!boardCheck.ok) {
             return { ok: false as const, status: 429, error: boardCheck.reason }
+        }
+
+        // Board writePolicy check (PRD §16.6)
+        const existingEntry = runtime.mailbox.readBoard(body.key)
+        if (existingEntry) {
+            const wpCheck = guard.checkBoardWritePolicy(existingEntry, body.author)
+            if (!wpCheck.ok) {
+                return { ok: false as const, status: 403, error: wpCheck.reason }
+            }
         }
 
         try {
@@ -134,17 +194,21 @@ class ActRuntimeService {
             await this.threadManager.logEvent(threadId, event)
 
             const actDefinition = this.threadManager.getActDefinition(threadId)
-            const cascade = actDefinition
-                ? await processWakeCascade(event, actDefinition, runtime.mailbox, this.threadManager, threadId)
-                : null
+            // Fire-and-forget: don't block the tool call response
+            if (actDefinition) {
+                processWakeCascade(event, actDefinition, runtime.mailbox, this.threadManager, threadId, this.workingDir)
+                    .then((cascadeResult) => this.maybeEmitRuntimeIdle(threadId, cascadeResult, actDefinition, runtime.mailbox))
+                    .catch((err) => console.error('[act-runtime] Wake cascade error (postToBoard):', err))
+            }
 
-            return { ok: true as const, entryId: entry.id, version: entry.version, cascade }
+            return { ok: true as const, entryId: entry.id, version: entry.version }
         } catch (error: unknown) {
             return { ok: false as const, status: 403, error: errorMessage(error) }
         }
     }
 
-    readBoard(threadId: string, key?: string) {
+    async readBoard(threadId: string, key?: string) {
+        await this.ensureThreadsLoaded()
         const runtime = this.threadManager.getThreadRuntime(threadId)
         if (!runtime) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
@@ -158,7 +222,8 @@ class ActRuntimeService {
         return { ok: true as const, entries: runtime.mailbox.getBoardSnapshot() }
     }
 
-    setWakeCondition(threadId: string, body: SetWakeConditionInput) {
+    async setWakeCondition(threadId: string, body: SetWakeConditionInput) {
+        await this.ensureThreadsLoaded()
         const runtime = this.threadManager.getThreadRuntime(threadId)
         if (!runtime) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
@@ -174,20 +239,31 @@ class ActRuntimeService {
         return { ok: true as const, conditionId: wakeCondition.id }
     }
 
-    createThread(actId: string, actDefinition?: ActDefinition) {
-        const thread = this.threadManager.createThread(actId, actDefinition)
+    async createThread(actId: string, actDefinition?: ActDefinition) {
+        const thread = await this.threadManager.createThread(actId, actDefinition)
         return { ok: true as const, thread }
     }
 
-    getActDefinition(threadId: string) {
+    async getActDefinition(threadId: string) {
+        await this.ensureThreadsLoaded()
         return this.threadManager.getActDefinition(threadId)
     }
 
-    listThreads(actId: string) {
+    async listThreads(actId: string) {
+        await this.ensureThreadsLoaded()
         return { ok: true as const, threads: this.threadManager.listThreads(actId) }
     }
 
-    getThread(threadId: string) {
+    async deleteThread(_actId: string, threadId: string) {
+        const deleted = await this.threadManager.deleteThread(threadId)
+        if (!deleted) {
+            return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
+        }
+        return { ok: true as const }
+    }
+
+    async getThread(threadId: string) {
+        await this.ensureThreadsLoaded()
         const thread = this.threadManager.getThread(threadId)
         if (!thread) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
@@ -196,22 +272,107 @@ class ActRuntimeService {
     }
 
     async getRecentEvents(threadId: string, count = 50) {
+        await this.ensureThreadsLoaded()
         const events = await this.threadManager.getRecentEvents(threadId, count)
         return { ok: true as const, events }
+    }
+
+    async registerParticipantSession(threadId: string, participantKey: string, sessionId: string) {
+        await this.ensureThreadsLoaded()
+        await this.threadManager.getOrCreateSession(threadId, participantKey, () => sessionId)
+    }
+
+    async beginUserTurn(threadId: string) {
+        await this.ensureThreadsLoaded()
+        this.getSafetyGuard(threadId).reset(Date.now())
+    }
+
+    async markParticipantSessionBusy(threadId: string, participantKey: string) {
+        await this.ensureThreadsLoaded()
+        markParticipantQueueRunning(threadId, participantKey)
+    }
+
+    async clearParticipantSessionBusy(threadId: string, participantKey: string) {
+        await this.ensureThreadsLoaded()
+        clearParticipantQueueRunning(threadId, participantKey)
+    }
+
+    async tripParticipantAutoWakeCircuit(threadId: string, participantKey: string, reason: string) {
+        await this.ensureThreadsLoaded()
+        tripParticipantCircuit(threadId, participantKey, reason)
+    }
+
+    async clearParticipantAutoWakeCircuit(threadId: string, participantKey: string) {
+        await this.ensureThreadsLoaded()
+        clearParticipantCircuit(threadId, participantKey)
+    }
+
+    async drainParticipantQueue(threadId: string, participantKey: string) {
+        await this.ensureThreadsLoaded()
+        const runtime = this.threadManager.getThreadRuntime(threadId)
+        const actDefinition = this.threadManager.getActDefinition(threadId)
+        if (!runtime || !actDefinition) {
+            return
+        }
+        await drainParticipantQueueAfterSettlement(
+            participantKey,
+            actDefinition,
+            runtime.mailbox,
+            this.threadManager,
+            threadId,
+            this.workingDir,
+        )
+    }
+
+    /**
+     * Emit runtime.idle event when a wake cascade completes with no errors
+     * and no queued targets remaining. Participants subscribed to 'runtime.idle'
+     * will be woken by this event.
+     */
+    private async maybeEmitRuntimeIdle(
+        threadId: string,
+        cascadeResult: import('./wake-cascade.js').WakeCascadeResult,
+        actDefinition: ActDefinition,
+        mailbox: import('./mailbox.js').Mailbox,
+    ): Promise<void> {
+        // Only emit if cascade had targets but no errors, and queue is empty
+        if (cascadeResult.errors.length > 0) return
+        if (cascadeResult.injected.length === 0 && cascadeResult.queued.length === 0) return
+
+        const idleEvent: MailboxEvent = {
+            id: nanoid(),
+            type: 'runtime.idle',
+            sourceType: 'system',
+            source: 'runtime',
+            timestamp: Date.now(),
+            payload: {
+                threadId,
+                injectedCount: cascadeResult.injected.length,
+            },
+        }
+        await this.threadManager.logEvent(threadId, idleEvent)
+
+        // Route the idle event — but don't recurse further to avoid infinite loops
+        const runtime = this.threadManager.getThreadRuntime(threadId)
+        if (runtime) {
+            processWakeCascade(idleEvent, actDefinition, mailbox, this.threadManager, threadId, this.workingDir)
+                .catch((err) => console.error('[act-runtime] Wake cascade error (runtime.idle):', err))
+        }
     }
 }
 
 const runtimeServices = new Map<string, ActRuntimeService>()
 
 export function getActRuntimeService(workingDir: string): ActRuntimeService {
-    let service = runtimeServices.get(workingDir)
+    const workspaceId = workspaceIdForDir(workingDir)
+    let service = runtimeServices.get(workspaceId)
     if (!service) {
-        service = new ActRuntimeService(workingDir)
-        runtimeServices.set(workingDir, service)
+        service = new ActRuntimeService(workspaceId, workingDir)
+        runtimeServices.set(workspaceId, service)
     }
     return service
 }
 
-export function getActDefinitionForThread(workingDir: string, threadId: string) {
+export async function getActDefinitionForThread(workingDir: string, threadId: string) {
     return getActRuntimeService(workingDir).getActDefinition(threadId)
 }

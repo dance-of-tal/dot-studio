@@ -14,6 +14,11 @@ type ToolPartLike = {
 } & Record<string, unknown>
 
 type MessageWithParts = {
+    info?: {
+        role?: string
+        error?: unknown
+    }
+    role?: string
     parts?: unknown[]
 } & Record<string, unknown>
 
@@ -65,18 +70,68 @@ export async function waitForSessionToSettle(
     oc: Awaited<ReturnType<typeof getOpencode>>,
     sessionId: string,
     directoryQuery: ReturnType<typeof requestDirectoryQuery>,
+    options?: {
+        timeoutMs?: number
+        pollMs?: number
+        requireObservedBusy?: boolean
+    },
 ) {
-    const deadline = Date.now() + 3_000
+    const deadline = Date.now() + (options?.timeoutMs ?? 3_000)
+    let observedBusy = false
     while (Date.now() < deadline) {
         const statuses = unwrapOpencodeResult<Record<string, { type: 'idle' | 'busy' | 'retry' }>>(await oc.session.status({
             ...directoryQuery,
         }))
         const status = statuses?.[sessionId]
-        if (!status || status.type === 'idle') {
-            return
+        if (status?.type === 'busy' || status?.type === 'retry') {
+            observedBusy = true
         }
-        await sleep(150)
+        if (status?.type === 'idle') {
+            return true
+        }
+        if (!status && (!options?.requireObservedBusy || observedBusy)) {
+            return true
+        }
+        await sleep(options?.pollMs ?? 150)
     }
+    return false
+}
+
+export function extractNonRetryableSessionError(messages: MessageWithParts[]): string | null {
+    const lastAssistant = [...messages]
+        .reverse()
+        .find((message) => (message.info?.role || message.role) === 'assistant')
+
+    const error = lastAssistant?.info?.error
+    if (!error || typeof error !== 'object') {
+        return null
+    }
+
+    const retryable = (
+        'data' in error
+        && error.data
+        && typeof error.data === 'object'
+        && 'isRetryable' in error.data
+        && typeof error.data.isRetryable === 'boolean'
+    )
+        ? error.data.isRetryable
+        : undefined
+
+    const message = (
+        'data' in error
+        && error.data
+        && typeof error.data === 'object'
+        && 'message' in error.data
+        && typeof error.data.message === 'string'
+    )
+        ? error.data.message
+        : ('message' in error && typeof error.message === 'string' ? error.message : null)
+
+    if (retryable === false) {
+        return message || 'Non-retryable session error.'
+    }
+
+    return null
 }
 
 export function uniqueAssetRefs(

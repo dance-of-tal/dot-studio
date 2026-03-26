@@ -21,8 +21,8 @@ export interface SafetyConfig {
     quietWindowMs: number
     /** Number of repeated A→B→A patterns to detect loops */
     loopDetectionThreshold: number
-    /** Thread timeout (ms) */
-    threadTimeoutMs: number
+    /** Thread timeout (ms). Undefined means disabled. */
+    threadTimeoutMs?: number
 }
 
 export const DEFAULT_SAFETY_CONFIG: SafetyConfig = {
@@ -31,7 +31,7 @@ export const DEFAULT_SAFETY_CONFIG: SafetyConfig = {
     maxBoardUpdatesPerKey: 100,
     quietWindowMs: 60_000,        // 1 minute
     loopDetectionThreshold: 5,
-    threadTimeoutMs: 30 * 60_000, // 30 minutes
+    threadTimeoutMs: 30 * 60_000, // 30 minutes, per user turn
 }
 
 // ── Safety Guard ────────────────────────────────────────
@@ -41,6 +41,7 @@ export class SafetyGuard {
     private pairMessageCounts: Map<string, number> = new Map()
     private boardUpdateCounts: Map<string, number> = new Map()
     private recentPairs: string[] = []  // for loop detection
+    private turnStartedAt?: number
 
     private readonly config: SafetyConfig
 
@@ -58,7 +59,9 @@ export class SafetyGuard {
             maxEventsPerAct: actSafety.maxEvents,
             maxMessagesPerPair: actSafety.maxMessagesPerPair,
             loopDetectionThreshold: actSafety.loopDetectionThreshold,
-            threadTimeoutMs: actSafety.threadTimeoutMs,
+            ...(typeof actSafety.threadTimeoutMs === 'number'
+                ? { threadTimeoutMs: actSafety.threadTimeoutMs }
+                : {}),
         })
     }
 
@@ -136,7 +139,11 @@ export class SafetyGuard {
      * Check thread timeout.
      */
     checkTimeout(thread: ActThread): { ok: boolean; reason?: string } {
-        const elapsed = Date.now() - thread.createdAt
+        if (typeof this.config.threadTimeoutMs !== 'number' || this.config.threadTimeoutMs <= 0) {
+            return { ok: true }
+        }
+        const startedAt = this.turnStartedAt ?? thread.createdAt
+        const elapsed = Date.now() - startedAt
         if (elapsed > this.config.threadTimeoutMs) {
             return { ok: false, reason: `Thread timeout exceeded (${Math.round(this.config.threadTimeoutMs / 60_000)} minutes max).` }
         }
@@ -185,10 +192,11 @@ export class SafetyGuard {
     /**
      * Reset all counters (for new thread).
      */
-    reset(): void {
+    reset(turnStartedAt?: number): void {
         this.eventCounts.clear()
         this.pairMessageCounts.clear()
         this.boardUpdateCounts.clear()
         this.recentPairs = []
+        this.turnStartedAt = turnStartedAt
     }
 }

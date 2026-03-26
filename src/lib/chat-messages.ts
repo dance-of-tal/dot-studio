@@ -44,6 +44,28 @@ export type SessionMessageLike = {
     created_at?: string
 }
 
+function readSessionString(value: unknown, ...keys: string[]): string | null {
+    let current: unknown = value
+    for (const key of keys) {
+        if (!current || typeof current !== 'object' || !(key in current)) {
+            return null
+        }
+        current = (current as Record<string, unknown>)[key]
+    }
+    return typeof current === 'string' && current.trim() ? current : null
+}
+
+function readSessionBoolean(value: unknown, ...keys: string[]): boolean | null {
+    let current: unknown = value
+    for (const key of keys) {
+        if (!current || typeof current !== 'object' || !(key in current)) {
+            return null
+        }
+        current = (current as Record<string, unknown>)[key]
+    }
+    return typeof current === 'boolean' ? current : null
+}
+
 function extractAssistantErrorMessage(message: SessionMessageLike): string | null {
     const error = message.info?.error
     if (!error) {
@@ -124,9 +146,9 @@ function mapPartToChatMessagePart(part: SessionPartLike): ChatMessagePart | null
 }
 
 // Context sections are joined by this separator in chat-service.ts:
-// const promptSections = [assistantContextPrefix, actContextPrefix, request.message].filter(Boolean)
+// const promptSections = [assistantContextPrefix, request.message].filter(Boolean)
 // They are joined as: promptSections.join('\n\n---\n\n')
-// When syncing from server, user messages contain the full composed prompt.
+// When syncing from server, user messages may contain the full composed prompt.
 // Strip the injected context sections to show only the user's original input.
 const PROMPT_SECTION_SEPARATOR = '\n\n---\n\n'
 
@@ -143,7 +165,7 @@ export function mapSessionMessageToChatMessage(message: SessionMessageLike): Cha
         ?.filter((part) => part.type === 'text')
         .map((part) => part.text || '')
         .join('\n') || message.text || ''
-    // Strip auto-injected context (Workspace Snapshot, Act context) from user messages.
+    // Strip auto-injected context prefixes from user messages.
     // The server joins context sections with '\n\n---\n\n', user text is always last.
     const strippedText = rawRole === 'user'
         ? stripInjectedContextFromUserMessage(rawTextContent)
@@ -186,6 +208,29 @@ export function mapSessionMessageToChatMessage(message: SessionMessageLike): Cha
 
 export function mapSessionMessagesToChatMessages(messages: SessionMessageLike[]): ChatMessage[] {
     return messages.map(mapSessionMessageToChatMessage)
+}
+
+export function extractLatestNonRetryableAssistantError(
+    sessionMessages: SessionMessageLike[],
+): { id: string; message: string } | null {
+    for (let i = sessionMessages.length - 1; i >= 0; i--) {
+        const message = sessionMessages[i]
+        const role = readSessionString(message, 'info', 'role') || readSessionString(message, 'role')
+        if (role !== 'assistant') {
+            continue
+        }
+
+        const retryable = readSessionBoolean(message, 'info', 'error', 'data', 'isRetryable')
+        const errorMessage = readSessionString(message, 'info', 'error', 'data', 'message')
+            || readSessionString(message, 'info', 'error', 'message')
+        const id = readSessionString(message, 'info', 'id') || readSessionString(message, 'id')
+
+        if (retryable === false && errorMessage && id) {
+            return { id, message: errorMessage }
+        }
+    }
+
+    return null
 }
 
 export function upsertAssistantStreamingMessage(
