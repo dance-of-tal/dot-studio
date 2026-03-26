@@ -13,6 +13,29 @@
     -webkit-user-select: text;
 }
 
+.thread-history-older {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0 12px;
+}
+
+.thread-history-older__button {
+    border: 1px solid var(--border-light);
+    background: var(--bg-panel);
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: var(--font-sm);
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.thread-history-older__button:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border-main);
+}
+
 /* Empty state */
 .chat-empty-state {
     flex: 1;

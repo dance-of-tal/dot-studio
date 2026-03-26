@@ -30,6 +30,10 @@ import './ActChatPanel.css'
 
 const EMPTY_TODOS: never[] = []
 const shownParticipantPauseToasts = new Set<string>()
+const ACTIVE_POLL_MS = 1500
+const IDLE_POLL_MS = 8000
+const BACKGROUND_POLL_MS = 15000
+const ACTIVE_POLL_WINDOW_MS = 15000
 
 interface ActChatPanelProps {
     actId: string
@@ -130,6 +134,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         }
 
         let cancelled = false
+        let timeoutId: number | undefined
+        let lastChangedAt = Date.now()
 
         const syncChatFromSession = async () => {
             const state = useStudioStore.getState()
@@ -180,6 +186,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                     return
                 }
 
+                lastChangedAt = Date.now()
+
                 useStudioStore.setState((state) => ({
                     chats: {
                         ...state.chats,
@@ -191,14 +199,32 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             }
         }
 
-        void syncChatFromSession()
-        const intervalId = window.setInterval(() => {
-            void syncChatFromSession()
-        }, 1500)
+        const scheduleNextSync = () => {
+            if (cancelled) {
+                return
+            }
+            const now = Date.now()
+            const loading = useStudioStore.getState().loadingPerformerId === chatKey
+            const recentlyChanged = now - lastChangedAt < ACTIVE_POLL_WINDOW_MS
+            const delay = document.visibilityState === 'hidden'
+                ? BACKGROUND_POLL_MS
+                : (loading || recentlyChanged ? ACTIVE_POLL_MS : IDLE_POLL_MS)
+
+            timeoutId = window.setTimeout(async () => {
+                await syncChatFromSession()
+                scheduleNextSync()
+            }, delay)
+        }
+
+        void syncChatFromSession().finally(() => {
+            scheduleNextSync()
+        })
 
         return () => {
             cancelled = true
-            window.clearInterval(intervalId)
+            if (timeoutId) {
+                window.clearTimeout(timeoutId)
+            }
         }
     }, [chatKey, sessionId, isCallboardView, activeParticipantKey, activeParticipantLabel])
 
