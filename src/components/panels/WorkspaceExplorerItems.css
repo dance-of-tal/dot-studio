@@ -27,14 +27,6 @@
     background: var(--bg-selected);
 }
 
-.thread-card--hidden .thread-card__name {
-    color: var(--text-muted);
-}
-
-.thread-card--hidden .thread-card__icon {
-    opacity: 0.4;
-}
-
 .thread-card.muted .thread-card__name {
     color: var(--text-muted);
 }
@@ -107,7 +99,7 @@
 .thread-card__actions {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: 0;
     flex-shrink: 0;
     opacity: 0.5;
     transition: opacity 0.1s ease;
@@ -119,6 +111,8 @@
 }
 
 .thread-card__actions .icon-btn {
+    width: 20px;
+    height: 20px;
     color: var(--text-muted);
     transition: color 0.1s ease;
 }

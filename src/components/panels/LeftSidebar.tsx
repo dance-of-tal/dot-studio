@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useCallback, useRef } from 'react';
+import { Suspense, lazy, useState, useCallback, useEffect, useRef } from 'react';
 import { ChevronRight, LayoutGrid } from 'lucide-react';
 import { useStudioStore } from '../../store';
 import WorkspaceExplorer from './WorkspaceExplorer';
@@ -11,7 +11,7 @@ const AssetLibrary = lazy(() =>
 export default function LeftSidebar() {
     const isAssetLibraryOpen = useStudioStore((s) => s.isAssetLibraryOpen);
     const setAssetLibraryOpen = useStudioStore((s) => s.setAssetLibraryOpen);
-    const focusedPerformerId = useStudioStore((s) => s.focusedPerformerId);
+    const focusSnapshot = useStudioStore((s) => s.focusSnapshot);
     const [sidebarWidth, setSidebarWidth] = useState(240);
     const [drawerWidth, setDrawerWidth] = useState(320);
 
@@ -51,37 +51,44 @@ export default function LeftSidebar() {
     const onSidebarResize = useResize(setSidebarWidth, 180, 400);
     const onDrawerResize = useResize(setDrawerWidth, 240, 480);
 
-    const isFocused = !!focusedPerformerId;
+    const isFocusActive = !!focusSnapshot;
+    const isAssetDrawerOpen = !isFocusActive && isAssetLibraryOpen;
+
+    useEffect(() => {
+        if (isFocusActive && isAssetLibraryOpen) {
+            setAssetLibraryOpen(false);
+        }
+    }, [isFocusActive, isAssetLibraryOpen, setAssetLibraryOpen]);
 
     return (
-        <div className={`sidebar-container ${isAssetLibraryOpen ? 'sidebar-container--drawer-open' : ''}`}>
+        <div className={`sidebar-container ${isAssetDrawerOpen ? 'sidebar-container--drawer-open' : ''}`}>
             <div className="sidebar" style={{ width: sidebarWidth }}>
                 <div className="sidebar-main-top" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <WorkspaceExplorer />
                 </div>
-                {!isFocused && (
+                {!isFocusActive && (
                     <div className="sidebar-main-bottom sidebar-main-bottom--asset-drawer">
                         <button
-                            className={`asset-library-btn ${isAssetLibraryOpen ? 'active' : ''}`}
+                            className={`asset-library-btn ${isAssetDrawerOpen ? 'active' : ''}`}
                             onClick={() => setAssetLibraryOpen(!isAssetLibraryOpen)}
                         >
                             <LayoutGrid size={14} />
                             <span>Asset Library</span>
-                            <ChevronRight size={12} className={`asset-library-arrow ${isAssetLibraryOpen ? 'rotated' : ''}`} />
+                            <ChevronRight size={12} className={`asset-library-arrow ${isAssetDrawerOpen ? 'rotated' : ''}`} />
                         </button>
                     </div>
                 )}
                 <div
-                    className={`sidebar-resize-handle ${isAssetLibraryOpen ? 'sidebar-resize-handle--occluded' : ''}`}
+                    className="sidebar-resize-handle"
                     onMouseDown={onSidebarResize}
                 />
             </div>
             <div
-                className={`sidebar-drawer left-drawer ${isAssetLibraryOpen ? 'open' : ''}`}
-                style={isAssetLibraryOpen ? { width: drawerWidth } : undefined}
+                className={`sidebar-drawer left-drawer ${isAssetDrawerOpen ? 'open' : ''}`}
+                style={isAssetDrawerOpen ? { width: drawerWidth } : undefined}
             >
                 <div className="sidebar-resize-handle sidebar-resize-handle--drawer" onMouseDown={onDrawerResize} />
-                {isAssetLibraryOpen ? (
+                {isAssetDrawerOpen ? (
                     <Suspense fallback={null}>
                         <AssetLibrary onClose={() => setAssetLibraryOpen(false)} />
                     </Suspense>

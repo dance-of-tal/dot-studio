@@ -3,13 +3,13 @@ import type { PermissionRequest, QuestionAnswer, QuestionRequest } from '@openco
 import { Send, Square } from 'lucide-react'
 import type { PerformerNode, SafeOwnerSummary } from '../../types'
 import type { FileMention } from '../../hooks/useFileMentions'
-import type { PerformerMention } from '../../hooks/usePerformerMention'
 import type { TurnDanceSelection, DanceSearchItem } from './agent-frame-utils'
 import ComposerPillBar from './ComposerPillBar'
 import ComposerMentionMenus from './ComposerMentionMenus'
 import ComposerRuntimeRow from './ComposerRuntimeRow'
 import PermissionDock from './PermissionDock'
 import QuestionWizard from './QuestionWizard'
+import { usePermissionInteraction } from '../../hooks/usePermissionInteraction'
 
 type Props = {
     performerId: string
@@ -25,12 +25,11 @@ type Props = {
     safeSummary: SafeOwnerSummary | null
     attachments: FileMention[]
     setAttachments: React.Dispatch<React.SetStateAction<FileMention[]>>
-    mentionedPerformers: PerformerMention[]
-    setMentionedPerformers: React.Dispatch<React.SetStateAction<PerformerMention[]>>
     turnDanceSelections: TurnDanceSelection[]
     setTurnDanceSelections: React.Dispatch<React.SetStateAction<TurnDanceSelection[]>>
     inputRef: RefObject<HTMLTextAreaElement | null>
     handleDrop: (e: React.DragEvent) => void
+    handlePaste: (e: React.ClipboardEvent) => void
     handleInputChange: (value: string) => void
     handleKeyDownWrapper: (e: React.KeyboardEvent) => void
     handleSend: () => void
@@ -45,24 +44,15 @@ type Props = {
     setShowSlashMenu: (value: boolean) => void
     slashIndex: number
     filteredCommands: Array<{ cmd: string; desc: string; mode: 'compose' | 'execute' }>
-    isPerformerMentioning: boolean
-    performerMentionResults: PerformerMention[]
-    performerMentionIndex: number
-    extractPerformerMentionText: () => string | null
-    setMentionedPerformerIndex: React.Dispatch<React.SetStateAction<number>>
-    setIsPerformerMentioning: (value: boolean) => void
     isFileMentioning: boolean
     fileMentionResults: FileMention[]
     fileMentionIndex: number
     extractFileMentionText: () => string | null
     setFileMentionIndex: React.Dispatch<React.SetStateAction<number>>
     setIsFileMentioning: (value: boolean) => void
-    checkPerformerMention: () => void
     checkFileMention: () => void
-    pendingPermissions: Record<string, PermissionRequest>
-    pendingQuestions: Record<string, QuestionRequest>
-    isRespondingToPermission: boolean
-    setIsRespondingToPermission: React.Dispatch<React.SetStateAction<boolean>>
+    permissionRequest: PermissionRequest | null
+    questionRequest: QuestionRequest | null
     respondToPermission: (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') => Promise<void>
     respondToQuestion: (sessionId: string, questionId: string, answers: QuestionAnswer[]) => Promise<void>
     rejectQuestion: (sessionId: string, questionId: string) => Promise<void>
@@ -86,12 +76,11 @@ export default function PerformerChatComposer(props: Props) {
         safeSummary,
         attachments,
         setAttachments,
-        mentionedPerformers,
-        setMentionedPerformers,
         turnDanceSelections,
         setTurnDanceSelections,
         inputRef,
         handleDrop,
+        handlePaste,
         handleInputChange,
         handleKeyDownWrapper,
         handleSend,
@@ -106,20 +95,13 @@ export default function PerformerChatComposer(props: Props) {
         setShowSlashMenu,
         slashIndex,
         filteredCommands,
-        isPerformerMentioning,
-        performerMentionResults,
-        performerMentionIndex,
-        extractPerformerMentionText,
         isFileMentioning,
         fileMentionResults,
         fileMentionIndex,
         extractFileMentionText,
-        checkPerformerMention,
         checkFileMention,
-        pendingPermissions,
-        pendingQuestions,
-        isRespondingToPermission,
-        setIsRespondingToPermission,
+        permissionRequest,
+        questionRequest,
         respondToPermission,
         respondToQuestion,
         rejectQuestion,
@@ -127,6 +109,22 @@ export default function PerformerChatComposer(props: Props) {
         onSetModelVariant,
         onSetExecutionMode,
     } = props
+
+    const {
+        isResponding: isRespondingToPermission,
+        permissionRequest: activePermissionRequest,
+        questionRequest: activeQuestionRequest,
+        handlePermissionDecide,
+        handleQuestionRespond,
+        handleQuestionReject,
+    } = usePermissionInteraction({
+        sessionId,
+        permissionRequest,
+        questionRequest,
+        respondToPermission,
+        respondToQuestion,
+        rejectQuestion,
+    })
 
     const isPlanAgent = selectedAgentId === 'plan'
 
@@ -137,16 +135,7 @@ export default function PerformerChatComposer(props: Props) {
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
         >
-            {mentionedPerformers.length > 0 ? (
-                <div className="chat-input__warning">
-                    <strong>Performer request</strong>
-                    <span>Mentioned performers use their own identity, but run in your current workspace.</span>
-                </div>
-            ) : null}
-
             <ComposerPillBar
-                mentionedPerformers={mentionedPerformers}
-                setMentionedPerformers={setMentionedPerformers}
                 turnDanceSelections={turnDanceSelections}
                 setTurnDanceSelections={setTurnDanceSelections}
                 attachments={attachments}
@@ -157,11 +146,6 @@ export default function PerformerChatComposer(props: Props) {
                 input={input}
                 setInput={setInput}
                 inputRef={inputRef}
-                isPerformerMentioning={isPerformerMentioning}
-                performerMentionResults={performerMentionResults}
-                performerMentionIndex={performerMentionIndex}
-                extractPerformerMentionText={extractPerformerMentionText}
-                setMentionedPerformers={setMentionedPerformers}
                 isFileMentioning={isFileMentioning}
                 fileMentionResults={fileMentionResults}
                 fileMentionIndex={fileMentionIndex}
@@ -180,33 +164,21 @@ export default function PerformerChatComposer(props: Props) {
                 executeSlashCommand={executeSlashCommand}
             />
 
-            {sessionId && pendingPermissions[sessionId] ? (
+            {activePermissionRequest ? (
                 <PermissionDock
-                    request={pendingPermissions[sessionId]}
+                    request={activePermissionRequest}
                     responding={isRespondingToPermission}
-                    onDecide={async (response) => {
-                        setIsRespondingToPermission(true)
-                        await respondToPermission(sessionId, pendingPermissions[sessionId].id, response)
-                        setIsRespondingToPermission(false)
-                    }}
+                    onDecide={handlePermissionDecide}
                 />
             ) : null}
 
-            {sessionId && pendingQuestions[sessionId] ? (
+            {activeQuestionRequest ? (
                 <QuestionWizard
-                    key={pendingQuestions[sessionId].id}
-                    request={pendingQuestions[sessionId]}
+                    key={activeQuestionRequest.id}
+                    request={activeQuestionRequest}
                     responding={isRespondingToPermission}
-                    onRespond={async (answers: QuestionAnswer[]) => {
-                        setIsRespondingToPermission(true)
-                        await respondToQuestion(sessionId, pendingQuestions[sessionId].id, answers)
-                        setIsRespondingToPermission(false)
-                    }}
-                    onReject={async () => {
-                        setIsRespondingToPermission(true)
-                        await rejectQuestion(sessionId, pendingQuestions[sessionId].id)
-                        setIsRespondingToPermission(false)
-                    }}
+                    onRespond={handleQuestionRespond}
+                    onReject={handleQuestionReject}
                 />
             ) : null}
 
@@ -220,14 +192,15 @@ export default function PerformerChatComposer(props: Props) {
                         e.target.style.height = `${e.target.scrollHeight}px`
                         e.target.style.overflowY = e.target.scrollHeight > 102 ? 'auto' : 'hidden'
                     }}
-                    onKeyUp={() => { checkPerformerMention(); checkFileMention() }}
-                    onMouseUp={() => { checkPerformerMention(); checkFileMention() }}
+                    onKeyUp={() => { checkFileMention() }}
+                    onMouseUp={() => { checkFileMention() }}
                     onKeyDown={handleKeyDownWrapper}
+                    onPaste={handlePaste}
                     placeholder={!modelConfigured
                         ? 'Select a model before chatting'
                         : isPlanAgent
                             ? 'Plan mode — ask for a plan...'
-                            : 'Message... (@ performers, # files, / to use dance for this turn)'}
+                            : 'Message... (# files, / to use dance for this turn)'}
                     disabled={isLoading}
                     rows={1}
                     className="text-input"

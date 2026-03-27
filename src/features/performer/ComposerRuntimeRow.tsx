@@ -58,6 +58,8 @@ export default function ComposerRuntimeRow({
                 titlePrefix="Performer variant"
             />
 
+            {/* [SAFE-MODE] Hidden from UI — DO NOT REMOVE during cleanup/refactoring.
+               Safe mode feature is preserved for future re-enablement.
             <div className="chat-input__safe-group">
                 <button
                     className={`mode-toggle mode-safe ${performer?.executionMode === 'safe' ? 'is-active' : ''}`}
@@ -79,6 +81,7 @@ export default function ComposerRuntimeRow({
                     </button>
                 ) : null}
             </div>
+            */}
         </div>
     )
 }

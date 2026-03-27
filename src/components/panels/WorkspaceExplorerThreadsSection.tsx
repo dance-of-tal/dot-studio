@@ -39,7 +39,11 @@ type Props = {
     onSaveActAsDraft: (id: string) => void
     onToggleActVisibility: (id: string) => void
     onRemoveAct: (id: string) => void
-    onSelectThread: (threadId: string) => void
+    onSelectThread: (actId: string, threadId: string) => void
+    onDeleteThread: (actId: string, threadId: string) => void
+    onRenameThread: (actId: string, threadId: string, name: string) => void
+    onStartNewSession: (performerId: string) => void
+    onOpenActEditor: (actId: string) => void
 }
 
 export default function WorkspaceExplorerThreadsSection({
@@ -77,6 +81,10 @@ export default function WorkspaceExplorerThreadsSection({
     onToggleActVisibility,
     onRemoveAct,
     onSelectThread,
+    onDeleteThread,
+    onRenameThread,
+    onStartNewSession,
+    onOpenActEditor,
 }: Props) {
     const hasPerformers = threadRows.length > 0
     const hasActs = acts.length > 0
@@ -158,6 +166,7 @@ export default function WorkspaceExplorerThreadsSection({
                                         onSetActiveChatPerformer={onSetActiveChatPerformer}
                                         onRemovePerformer={onRemovePerformer}
                                         onSavePerformerAsDraft={onSavePerformerAsDraft}
+                                        onStartNewSession={onStartNewSession}
                                     />
                                 )
                             })}
@@ -198,14 +207,18 @@ export default function WorkspaceExplorerThreadsSection({
                                         activeThreadId={activeThreadId}
                                         threads={threads}
                                         expanded={isExpanded}
+                                        pendingDelete={pendingDelete}
                                         onToggleExpanded={onToggleExpanded}
                                         onOpenAct={onOpenAct}
                                         onCreateThread={onCreateThread}
-
+                                        onSetPendingDelete={onSetPendingDelete}
                                         onSaveActAsDraft={onSaveActAsDraft}
                                         onToggleActVisibility={onToggleActVisibility}
                                         onRemoveAct={onRemoveAct}
                                         onSelectThread={onSelectThread}
+                                        onDeleteThread={onDeleteThread}
+                                        onRenameThread={onRenameThread}
+                                        onOpenActEditor={onOpenActEditor}
                                     />
                                 )
                             })}

@@ -4,6 +4,28 @@
     gap: 2px;
 }
 
+.act-frame__readiness-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 4px;
+    flex-shrink: 0;
+    background: var(--text-secondary, #888);
+    transition: background 0.2s;
+}
+
+.act-frame__readiness-dot--ok {
+    background: #34d399;
+}
+
+.act-frame__readiness-dot--warning {
+    background: #fbbf24;
+}
+
+.act-frame__readiness-dot--error {
+    background: #f87171;
+}
+
 .act-frame__focus-btn,
 .act-frame__edit-btn,
 .act-frame__close-btn {

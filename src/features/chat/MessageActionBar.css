@@ -58,14 +58,3 @@
     background: var(--bg-hover);
     border-color: var(--border-light);
 }
-
-.msg-action-btn--undo {
-    color: var(--text-secondary);
-    border-color: var(--border-light);
-}
-
-.msg-action-btn--undo:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-    border-color: var(--border-main);
-}

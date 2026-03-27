@@ -1,6 +1,7 @@
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
@@ -69,6 +70,9 @@ function mountProductionClient(app: Hono) {
 
 export function createServerApp() {
     const app = new Hono()
+
+    // HTTP request logger — prints method, path, status, duration
+    app.use('*', logger())
 
     if (!IS_PRODUCTION) {
         applyDevCors(app)

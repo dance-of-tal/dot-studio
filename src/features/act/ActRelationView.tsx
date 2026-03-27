@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
-import { ArrowRightLeft, Trash2, Hash } from 'lucide-react'
+import { ArrowRightLeft, ChevronLeft, Trash2, Hash } from 'lucide-react'
 import type { ActRelation } from '../../types'
 import { useStudioStore } from '../../store'
 import { resolveActParticipantLabel } from './participant-labels'
+import Tip from './Tip'
 
 type EditableRelationField = 'name' | 'description' | 'direction'
 
 export default function ActRelationView() {
     const {
-        acts, actEditorState,
+        acts, performers, actEditorState,
         updateRelation, removeRelation, openActEditor,
     } = useStudioStore()
 
@@ -39,9 +40,16 @@ export default function ActRelationView() {
     return (
         <div className="act-panel__content">
             <div className="act-panel__item-header">
+                <button
+                    className="icon-btn"
+                    title="Back to Act Config"
+                    onClick={() => openActEditor(activeActId, 'act')}
+                >
+                    <ChevronLeft size={12} />
+                </button>
                 <ArrowRightLeft size={14} className="act-panel__item-icon" />
                 <span className="act-panel__item-name act-panel__item-name--edge">
-                    {resolveActParticipantLabel(act, relation.between[0], useStudioStore.getState().performers)} ↔ {resolveActParticipantLabel(act, relation.between[1], useStudioStore.getState().performers)}
+                    {resolveActParticipantLabel(act, relation.between[0], performers)} ↔ {resolveActParticipantLabel(act, relation.between[1], performers)}
                 </span>
                 <button
                     className="icon-btn act-panel__danger-btn"
@@ -56,7 +64,10 @@ export default function ActRelationView() {
             </div>
 
             <div className="act-panel__section">
-                <label className="act-panel__label"><Hash size={11} /> Name</label>
+                <label className="act-panel__label">
+                    <Hash size={11} /> Name
+                    <Tip text="The relation name is used by agents to identify this communication channel. Use a clear, machine-readable name like 'code_review' or 'design_feedback'." />
+                </label>
                 <input
                     className="act-panel__input"
                     value={form.name || ''}
@@ -66,18 +77,24 @@ export default function ActRelationView() {
             </div>
 
             <div className="act-panel__section">
-                <label className="act-panel__label">Description</label>
+                <label className="act-panel__label">
+                    Description
+                    <Tip text="This description is injected into each participant's agent context. Write a clear purpose statement so agents understand when and how to use this communication channel." />
+                </label>
                 <textarea
                     className="act-panel__textarea"
                     value={form.description || ''}
                     onChange={(e) => update('description', e.target.value)}
-                    placeholder="이 관계의 목적을 기술하세요. Agent가 이 설명을 읽고 통신 목적을 판단합니다."
+                    placeholder="Describe the purpose of this relation so agents know when to use it."
                     rows={3}
                 />
             </div>
 
             <div className="act-panel__section">
-                <label className="act-panel__label"><ArrowRightLeft size={11} /> Direction</label>
+                <label className="act-panel__label">
+                    <ArrowRightLeft size={11} /> Direction
+                    <Tip text="'Both' allows messaging in either direction. 'One-way' restricts communication to the arrow direction only." />
+                </label>
                 <div className="act-panel__toggle-group">
                     <button
                         className={`act-panel__toggle ${form.direction === 'both' ? 'active' : ''}`}

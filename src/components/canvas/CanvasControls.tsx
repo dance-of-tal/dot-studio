@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import type { Viewport } from '@xyflow/react'
-import { Maximize, Maximize2, Minimize, Minimize2 } from 'lucide-react'
+import { Maximize, Maximize2, Minimize } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { scheduleFitView } from '../../lib/focus-utils'
 
@@ -31,13 +31,7 @@ export default function CanvasControls() {
         }
     }, [isFitted, fitView, getViewport, setViewport])
 
-    const toggleFocus = useCallback(() => {
-        if (isFocusActive) {
-            exitFocusMode()
-            scheduleFitView(fitView, 'exit')
-            return
-        }
-
+    const enterFocus = useCallback(() => {
         const nodeId = selectedPerformerId || selectedActId
         const nodeType = selectedPerformerId ? 'performer' as const : 'act' as const
         if (!nodeId) return
@@ -49,7 +43,7 @@ export default function CanvasControls() {
             height: rect?.height ?? 800,
         })
         scheduleFitView(fitView, 'enter')
-    }, [isFocusActive, selectedPerformerId, selectedActId, enterFocusMode, exitFocusMode, fitView])
+    }, [selectedPerformerId, selectedActId, enterFocusMode, fitView])
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -72,28 +66,26 @@ export default function CanvasControls() {
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [isFocusActive, exitFocusMode, focusSnapshot, exitActLayoutMode, fitView])
 
+    if (isFocusActive) {
+        return null
+    }
+
     return (
         <div className="canvas-controls">
-            {!isFocusActive && (
-                <>
-                    <button className="canvas-controls__btn" onClick={() => zoomIn({ duration: 200 })} title="Zoom In">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                    </button>
-                    <button className="canvas-controls__btn" onClick={() => zoomOut({ duration: 200 })} title="Zoom Out">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                    </button>
-                </>
-            )}
+            <button className="canvas-controls__btn" onClick={() => zoomIn({ duration: 200 })} title="Zoom In">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            </button>
+            <button className="canvas-controls__btn" onClick={() => zoomOut({ duration: 200 })} title="Zoom Out">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            </button>
             {(selectedPerformerId || selectedActId) && (
-                <button className="canvas-controls__btn" onClick={toggleFocus} title={isFocusActive ? 'Exit Focus Mode' : 'Focus Selected'}>
-                    {isFocusActive ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                <button className="canvas-controls__btn" onClick={enterFocus} title="Focus Selected">
+                    <Maximize2 size={14} />
                 </button>
             )}
-            {!isFocusActive && (
-                <button className="canvas-controls__btn" onClick={toggleFitView} title={isFitted ? 'Restore View' : 'Fit to Screen'}>
-                    {isFitted ? <Minimize size={14} /> : <Maximize size={14} />}
-                </button>
-            )}
+            <button className="canvas-controls__btn" onClick={toggleFitView} title={isFitted ? 'Restore View' : 'Fit to Screen'}>
+                {isFitted ? <Minimize size={14} /> : <Maximize size={14} />}
+            </button>
         </div>
     )
 }

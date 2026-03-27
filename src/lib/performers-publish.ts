@@ -183,10 +183,27 @@ export function buildActAssetPayload(
     act: import('../types').WorkspaceAct,
     options: { description?: string; tags?: string[] } = {},
 ) {
+    const displayNameByKey = Object.fromEntries(
+        Object.entries(act.participants).map(([key, binding]) => [key, binding.displayName?.trim() || key]),
+    )
+    const exportedKeys = Object.values(displayNameByKey)
+    if (new Set(exportedKeys).size !== exportedKeys.length) {
+        throw new Error('Participant display names must be unique before saving or publishing this act asset.')
+    }
+
     const participants = Object.entries(act.participants).map(([key, binding]) => ({
-        key,
+        key: displayNameByKey[key] || key,
         performerRef: binding.performerRef,
-        subscriptions: binding.subscriptions,
+        subscriptions: binding.subscriptions
+            ? {
+                ...binding.subscriptions,
+                ...(binding.subscriptions.messagesFrom
+                    ? {
+                        messagesFrom: binding.subscriptions.messagesFrom.map((entry) => displayNameByKey[entry] || entry),
+                    }
+                    : {}),
+            }
+            : undefined,
     }))
 
     const unresolvedParticipants = participants.filter((participant) => participant.performerRef.kind !== 'registry')
@@ -194,11 +211,16 @@ export function buildActAssetPayload(
         throw new Error('Save participant performer drafts as local assets before authoring this act asset.')
     }
 
+    const invalidRelation = act.relations.find((relation) => !relation.description || !relation.description.trim())
+    if (invalidRelation) {
+        throw new Error(`Relation "${invalidRelation.name}" requires a description before saving or publishing this act asset.`)
+    }
+
     const relations = act.relations.map((relation) => ({
-        between: relation.between,
+        between: relation.between.map((entry) => displayNameByKey[entry] || entry) as [string, string],
         direction: relation.direction,
         name: relation.name,
-        description: relation.description || relation.name,
+        description: relation.description,
     }))
 
     return {

@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { StudioState, WorkspaceSlice } from './types'
 import { api, setApiWorkingDirContext } from '../api'
+import { scheduleActRuntimeSync } from './act-slice-helpers'
 import {
     createPerformerNode,
     createPerformerNodeFromAsset,
@@ -91,6 +92,7 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         workspaceId: null,
         workingDir: '',
         performers: [],
+        acts: [],
         drafts: {},
         markdownEditors: [],
         canvasTerminals: [],
@@ -101,6 +103,11 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
+        selectedActId: null,
+        actEditorState: null,
+        activeThreadId: null,
+        activeThreadParticipantKey: null,
+        actThreads: {},
         focusedPerformerId: null,
         focusedNodeType: null,
         focusSnapshot: null,
@@ -108,6 +115,12 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         inspectorFocus: null,
         workspaceList: [],
         workspaceDirty: false,
+        chats: {},
+        chatPrefixes: {},
+        sessionMap: {},
+        sessions: [],
+        loadingPerformerId: null,
+        activeChatPerformerId: null,
     }
 }
 
@@ -273,29 +286,41 @@ export const createWorkspaceSlice: StateCreator<
         const state = get()
         const performer = state.performers.find(p => p.id === id)
         if (!performer) return
-        const oldName = performer.name
         const safeName = uniquePerformerName(name, state.performers.filter(p => p.id !== id).map(p => p.name))
-        set((s) => ({
-            performers: s.performers.map(a => a.id === id ? applyPerformerPatch(a, { name: safeName }) : a),
-            // Cascade rename: update Act participant keys and relation.between
-            acts: oldName !== safeName ? s.acts.map(act => {
-                const oldKey = Object.keys(act.participants).find(k => k === oldName)
-                if (!oldKey) return act
-                const { [oldKey]: binding, ...restParticipants } = act.participants
-                return {
-                    ...act,
-                    participants: { ...restParticipants, [safeName]: binding },
-                    relations: act.relations.map(r => {
-                        const relation = r as unknown as { between: [string, string] }
-                        return {
-                            ...r,
-                            between: relation.between.map((b: string) => b === oldName ? safeName : b) as [string, string],
+        const affectedActIds: string[] = []
+        set((s) => {
+            const nextActs = s.acts.map((act) => {
+                let changed = false
+                const nextParticipants = Object.fromEntries(
+                    Object.entries(act.participants).map(([participantKey, binding]) => {
+                        const matchesDraft = binding.performerRef.kind === 'draft' && binding.performerRef.draftId === id
+                        const matchesRegistry = binding.performerRef.kind === 'registry'
+                            && !!performer.meta?.derivedFrom
+                            && binding.performerRef.urn === performer.meta.derivedFrom
+                        if (!matchesDraft && !matchesRegistry) {
+                            return [participantKey, binding]
                         }
+                        changed = true
+                        return [participantKey, { ...binding, displayName: safeName }]
                     }),
+                )
+
+                if (changed) {
+                    affectedActIds.push(act.id)
+                    return { ...act, participants: nextParticipants }
                 }
-            }) : s.acts,
-            workspaceDirty: true,
-        }))
+
+                return act
+            })
+            return {
+                performers: s.performers.map(a => a.id === id ? applyPerformerPatch(a, { name: safeName }) : a),
+                acts: nextActs,
+                workspaceDirty: true,
+            }
+        })
+        for (const actId of affectedActIds) {
+            scheduleActRuntimeSync(get, set, actId)
+        }
     },
 
     selectPerformer: (id) => set((s) => ({
@@ -305,8 +330,11 @@ export const createWorkspaceSlice: StateCreator<
         // Clear act selection only when selecting a real performer (not when deselecting)
         selectedActId: id ? null : s.selectedActId,
         actEditorState: id ? null : s.actEditorState,
+        activeThreadId: id ? null : s.activeThreadId,
+        activeThreadParticipantKey: id ? null : s.activeThreadParticipantKey,
         // Preserve focus mode when switching performers in focus mode
         focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
+        focusedNodeType: s.focusSnapshot ? s.focusedNodeType : null,
         inspectorFocus: null,
     })),
 
@@ -317,7 +345,7 @@ export const createWorkspaceSlice: StateCreator<
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         selectedActId: id ? null : s.selectedActId,
-        actEditorState: null,
+        actEditorState: id ? null : s.actEditorState,
         focusedPerformerId: null,
         focusedNodeType: null,
         inspectorFocus: null,
@@ -341,17 +369,18 @@ export const createWorkspaceSlice: StateCreator<
 
     setInspectorFocus: (focus) => set({ inspectorFocus: focus }),
 
-    openPerformerEditor: (id, focus = null) => set({
+    openPerformerEditor: (id, focus = null) => set((s) => ({
         editingTarget: { type: 'performer', id },
         selectedPerformerId: id,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
         selectedActId: null,
         actEditorState: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
+        // Preserve focus mode — editor can open inside focus
+        focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
+        focusedNodeType: s.focusSnapshot ? s.focusedNodeType : null,
         inspectorFocus: focus,
-    }),
+    })),
 
     closeEditor: () => set({
         editingTarget: null,
@@ -402,31 +431,31 @@ export const createWorkspaceSlice: StateCreator<
         get().listWorkspaces()
     },
 
-    setPerformerTal: (performerId, tal) => setPerformerTalImpl(set, performerId, tal),
+    setPerformerTal: (performerId, tal) => setPerformerTalImpl(set, get, performerId, tal),
 
-    setPerformerTalRef: (performerId, talRef) => setPerformerTalRefImpl(set, performerId, talRef),
+    setPerformerTalRef: (performerId, talRef) => setPerformerTalRefImpl(set, get, performerId, talRef),
 
-    addPerformerDance: (performerId, dance) => addPerformerDanceImpl(set, performerId, dance),
+    addPerformerDance: (performerId, dance) => addPerformerDanceImpl(set, get, performerId, dance),
 
-    addPerformerDanceRef: (performerId, danceRef) => addPerformerDanceRefImpl(set, performerId, danceRef),
+    addPerformerDanceRef: (performerId, danceRef) => addPerformerDanceRefImpl(set, get, performerId, danceRef),
 
-    replacePerformerDanceRef: (performerId, currentRef, nextRef) => replacePerformerDanceRefImpl(set, performerId, currentRef, nextRef),
+    replacePerformerDanceRef: (performerId, currentRef, nextRef) => replacePerformerDanceRefImpl(set, get, performerId, currentRef, nextRef),
 
-    removePerformerDance: (performerId, danceUrn) => removePerformerDanceImpl(set, performerId, danceUrn),
+    removePerformerDance: (performerId, danceUrn) => removePerformerDanceImpl(set, get, performerId, danceUrn),
 
-    setPerformerModel: (performerId, model) => setPerformerModelImpl(set, performerId, model),
+    setPerformerModel: (performerId, model) => setPerformerModelImpl(set, get, performerId, model),
 
-    setPerformerModelVariant: (performerId, modelVariant) => setPerformerModelVariantImpl(set, performerId, modelVariant),
+    setPerformerModelVariant: (performerId, modelVariant) => setPerformerModelVariantImpl(set, get, performerId, modelVariant),
 
-    setPerformerAgentId: (performerId, agentId) => setPerformerAgentIdImpl(set, performerId, agentId),
+    setPerformerAgentId: (performerId, agentId) => setPerformerAgentIdImpl(set, get, performerId, agentId),
 
-    setPerformerDanceDeliveryMode: (performerId, danceDeliveryMode) => setPerformerDanceDeliveryModeImpl(set, performerId, danceDeliveryMode),
+    setPerformerDanceDeliveryMode: (performerId, danceDeliveryMode) => setPerformerDanceDeliveryModeImpl(set, get, performerId, danceDeliveryMode),
 
-    addPerformerMcp: (performerId, mcp) => addPerformerMcpImpl(set, performerId, mcp),
+    addPerformerMcp: (performerId, mcp) => addPerformerMcpImpl(set, get, performerId, mcp),
 
-    removePerformerMcp: (performerId, mcpName) => removePerformerMcpImpl(set, performerId, mcpName),
+    removePerformerMcp: (performerId, mcpName) => removePerformerMcpImpl(set, get, performerId, mcpName),
 
-    setPerformerMcpBinding: (performerId, placeholderName, serverName) => setPerformerMcpBindingImpl(set, performerId, placeholderName, serverName),
+    setPerformerMcpBinding: (performerId, placeholderName, serverName) => setPerformerMcpBindingImpl(set, get, performerId, placeholderName, serverName),
 
     updatePerformerAuthoringMeta: (performerId, patch) => updatePerformerAuthoringMetaImpl(set, performerId, patch),
 

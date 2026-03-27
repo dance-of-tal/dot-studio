@@ -1,0 +1,353 @@
+/* ── ActBoardView — Shared Board Viewer ── */
+
+.act-board {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-panel);
+}
+
+.act-board__header {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--border-main);
+    flex-shrink: 0;
+    background: var(--bg-panel);
+}
+
+.act-board__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
+    padding: 0 var(--space-2);
+}
+
+.act-board__tab {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 3px;
+    justify-content: center;
+    padding: 8px 10px 7px;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.12s ease;
+}
+
+.act-board__tab:hover {
+    color: var(--text-primary);
+}
+
+.act-board__tab--active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+.act-board__tab-count {
+    font-size: 8px;
+    min-width: 14px;
+    opacity: 0.72;
+    flex-shrink: 0;
+}
+
+.act-board__toolbar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    padding: 6px var(--space-3);
+    flex-shrink: 0;
+    white-space: nowrap;
+    border-top: 1px solid var(--border-light);
+}
+
+.act-board__refresh-btn {
+    width: 22px;
+    height: 22px;
+}
+
+.act-board__freshness {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    opacity: 0.8;
+    white-space: nowrap;
+}
+
+.act-board__cards {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-height: 0;
+}
+
+.act-board__card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    transition: border-color 0.15s ease, background 0.15s ease;
+    cursor: default;
+}
+
+.act-board__card:hover {
+    border-color: var(--border-main);
+    background: color-mix(in srgb, var(--bg-hover) 38%, var(--bg-card));
+}
+
+.act-board__card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-bottom: var(--space-1);
+}
+
+.act-board__card-title {
+    font-size: var(--font-base);
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.act-board__card-author {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.act-board__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 6px;
+    font-size: 8px;
+    font-weight: 600;
+    border-radius: 999px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+}
+
+.act-board__badge--artifact {
+    background: var(--model-bg);
+    color: var(--model-color);
+    border-color: color-mix(in srgb, var(--model-color) 20%, transparent);
+}
+
+.act-board__badge--fact {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.act-board__badge--task {
+    background: var(--status-warning-bg);
+    color: var(--status-warning);
+    border-color: color-mix(in srgb, var(--status-warning) 20%, transparent);
+}
+
+.act-board__badge--note {
+    background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+    color: var(--text-secondary);
+    border-color: color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+
+.act-board__task-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 8px;
+    font-weight: 500;
+}
+
+.act-board__task-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+}
+
+.act-board__task-dot--open {
+    background: var(--text-muted);
+}
+
+.act-board__task-dot--in_progress {
+    background: var(--accent);
+}
+
+.act-board__task-dot--done {
+    background: #22c55e;
+}
+
+.act-board__task-label--open {
+    color: var(--text-muted);
+}
+
+.act-board__task-label--in_progress {
+    color: var(--accent);
+}
+
+.act-board__task-label--done {
+    color: #22c55e;
+}
+
+.act-board__card-content {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    line-height: 1.5;
+    overflow: hidden;
+    display: -webkit-box;
+    line-clamp: 3;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+.act-board__card-content--expanded {
+    line-clamp: unset;
+    -webkit-line-clamp: unset;
+    display: block;
+    white-space: pre-wrap;
+}
+
+.act-board__expand-btn {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    font-size: var(--font-xs);
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin-top: 2px;
+}
+
+.act-board__expand-btn:hover {
+    text-decoration: underline;
+}
+
+.act-board__card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+    font-size: 8px;
+    color: var(--text-muted);
+}
+
+.act-board__card-footer span {
+    opacity: 0.7;
+}
+
+.act-board__pin {
+    color: var(--status-warning);
+    opacity: 0.8;
+}
+
+.act-board__activity {
+    border-top: 1px solid var(--border-main);
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--bg-hover) 32%, var(--bg-panel));
+}
+
+.act-board__activity-list {
+    max-height: 124px;
+    overflow-y: auto;
+}
+
+.act-board__activity-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 6px var(--space-3);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.act-board__activity-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 5px var(--space-3);
+    font-size: var(--font-xs);
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.act-board__activity-item:hover {
+    background: var(--bg-hover);
+}
+
+.act-board__activity-icon {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.act-board__activity-copy {
+    min-width: 0;
+    flex: 1;
+}
+
+.act-board__activity-time {
+    margin-left: auto;
+    font-size: 8px;
+    color: var(--text-muted);
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.act-board__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: var(--space-2);
+    padding: 32px var(--space-6);
+    color: var(--text-muted);
+    font-size: var(--font-base);
+    text-align: center;
+}
+
+.act-board__empty-icon {
+    opacity: 0.3;
+}
+
+.act-board__empty-hint {
+    font-size: var(--font-xs);
+    max-width: 200px;
+    line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+    .act-board__toolbar {
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+
+    .act-board__card-header {
+        flex-wrap: wrap;
+    }
+}

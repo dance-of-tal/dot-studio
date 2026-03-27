@@ -1,6 +1,8 @@
 import { useCallback } from 'react'
 import type { Connection, Node, NodeChange, ReactFlowInstance } from '@xyflow/react'
 import type { WorkspaceSlice } from '../../store/types'
+import type { WorkspaceActParticipantBinding, PerformerNode } from '../../types'
+import { useStudioStore } from '../../store'
 import { routeActConnection } from './act-connect-router'
 import {
     resolveCanvasDragStop,
@@ -120,13 +122,19 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         switch (result.kind) {
             case 'markdownEditor':
                 closeEditor()
-                closeActEditor()
+                // Don't exit Act edit mode when clicking other canvas elements
+                if (!editingActId) {
+                    closeActEditor()
+                }
                 selectMarkdownEditor(result.id)
                 return
             case 'canvasTerminal':
             case 'stageTracking':
                 closeEditor()
-                closeActEditor()
+                // Don't exit Act edit mode when clicking other canvas elements
+                if (!editingActId) {
+                    closeActEditor()
+                }
                 selectPerformer(null)
                 selectMarkdownEditor(null)
                 return
@@ -138,6 +146,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
                 return
             case 'performer':
                 if (editingActId) {
+                    // Stay in Act edit mode — just re-focus the Act
                     closeEditor()
                     selectAct(editingActId)
                     return
@@ -165,13 +174,17 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     const onPaneClick = useCallback(() => {
         clearTransformTarget()
         closeEditor()
-        closeActEditor()
+        // Don't exit Act edit mode on canvas click — only exit via explicit action
+        if (!editingActId) {
+            closeActEditor()
+            selectAct(null)
+        }
         selectPerformer(null)
         selectMarkdownEditor(null)
-        selectAct(null)
     }, [
         clearTransformTarget,
         closeEditor,
+        editingActId,
         closeActEditor,
         selectPerformer,
         selectMarkdownEditor,
@@ -184,12 +197,33 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
             connection,
             nodes,
             onConnectPerformersInAct: (actId, performerIds) => {
+                // Check if at least one performer is already bound, unless Act has no participants
+                const state = useStudioStore.getState()
+                const act = state.acts.find((a) => a.id === actId)
+                const participantCount = act ? Object.keys(act.participants).length : 0
+
+                if (participantCount > 0) {
+                    const isPerformerBound = (performerId: string) => {
+                        const performer = state.performers.find((p: PerformerNode) => p.id === performerId)
+                        const derivedFrom = performer?.meta?.derivedFrom?.trim()
+                        return act && Object.values(act.participants).some((binding: WorkspaceActParticipantBinding) => {
+                            const ref = binding.performerRef
+                            return (ref.kind === 'draft' && ref.draftId === performerId)
+                                || (ref.kind === 'registry' && !!derivedFrom && ref.urn === derivedFrom)
+                        })
+                    }
+                    if (!isPerformerBound(performerIds[0]) && !isPerformerBound(performerIds[1])) {
+                        // Both performers are unbound — block the connection
+                        return
+                    }
+                }
+
                 const sourceKey = attachPerformerToAct(actId, performerIds[0])
                 const targetKey = attachPerformerToAct(actId, performerIds[1])
                 if (!sourceKey || !targetKey || sourceKey === targetKey) {
                     return
                 }
-                addRelation(actId, [sourceKey, targetKey], 'both')
+                addRelation(actId, [sourceKey, targetKey], 'one-way')
                 openActEditor(actId, 'act')
             },
         })

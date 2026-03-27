@@ -14,6 +14,7 @@ import {
     Workflow,
     Trash2,
     Pencil,
+    Loader2,
 } from 'lucide-react';
 import {
     normalizeAuthor,
@@ -307,7 +308,7 @@ export function RegistryResult({
                                     disabled={installing || localInstalled}
                                     title={localInstalled ? 'Already installed' : `Install ${urn}`}
                                 >
-                                    {localInstalled ? 'Installed' : installing ? '...' : <Download size={11} />}
+                                    {localInstalled ? 'Installed' : installing ? <Loader2 size={11} className="spin-icon" /> : <Download size={11} />}
                                 </button>
                                 {showScope && (
                                     <div className="install-scope-menu">

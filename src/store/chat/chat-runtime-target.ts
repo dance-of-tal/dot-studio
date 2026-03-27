@@ -25,7 +25,10 @@ function performerByRegistryUrn(performers: PerformerNode[], urn: string): Perfo
 }
 
 function performerByDraftId(performers: PerformerNode[], draftId: string): PerformerNode | null {
-    return performers.find((performer) => performer.id === draftId || performer.meta?.derivedFrom === draftId) || null
+    return performers.find((performer) =>
+        performer.id === draftId
+        || performer.meta?.derivedFrom === `draft:${draftId}`,
+    ) || null
 }
 
 function resolveParticipantSummary(
@@ -42,7 +45,7 @@ function resolveParticipantSummary(
 
     return {
         key: participantKey,
-        performerName: performer?.name || (binding?.performerRef?.kind === 'registry'
+        performerName: performer?.name || binding?.displayName || (binding?.performerRef?.kind === 'registry'
             ? binding.performerRef.urn
             : binding?.performerRef?.draftId || participantKey),
         performerId: performer?.id || null,
@@ -97,7 +100,9 @@ export function buildAssistantStageContext(get: ChatGet): AssistantStageContext 
         })),
         acts: state.acts.map((act) => resolveActSummary(get, act)),
         drafts: Object.values(state.drafts)
-            .filter((draft) => draft.kind === 'tal' || draft.kind === 'dance')
+            .filter((draft): draft is typeof draft & { kind: 'tal' | 'dance' } =>
+                draft.kind === 'tal' || draft.kind === 'dance',
+            )
             .map((draft) => ({
                 id: draft.id,
                 kind: draft.kind,

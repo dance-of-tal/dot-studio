@@ -43,6 +43,19 @@ function stripMarkdownMarkers(text: string) {
         .trim()
 }
 
+export function hasVisibleAssistantMessageContent(message: Pick<ChatMessage, 'content' | 'parts'>): boolean {
+    const visibleText = stripAssistantActionBlock(message.content || '').trim()
+    if (visibleText) {
+        return true
+    }
+
+    return !!message.parts?.some((part) =>
+        part.type === 'tool'
+        || part.type === 'compaction'
+        || (part.type === 'reasoning' && !!part.content?.trim()),
+    )
+}
+
 function ReasoningBlock({ content }: { content: string }) {
     const [expanded, setExpanded] = useState(false)
     const preview = stripMarkdownMarkers(content).slice(0, 200)
@@ -171,4 +184,3 @@ export default function ChatMessageContent({
         </div>
     )
 }
-

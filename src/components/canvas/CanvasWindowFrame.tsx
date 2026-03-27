@@ -6,10 +6,12 @@ import './CanvasWindowFrame.css'
 
 type CanvasWindowFrameProps = {
     className?: string
-    width: number | string
-    height: number | string
+    width?: number | string
+    height?: number | string
     /** If true (default), the frame is resizable via NodeResizer handles. */
     resizable?: boolean
+    /** When true, hides drag handle, resizer, and applies immersive styling. */
+    focused?: boolean
     minWidth?: number
     minHeight?: number
     /** True when the parent canvas has entered transform mode for this node. */
@@ -30,9 +32,8 @@ type CanvasWindowFrameProps = {
 
 export default function CanvasWindowFrame({
     className = '',
-    width,
-    height,
     resizable = true,
+    focused = false,
     minWidth = 280,
     minHeight = 220,
     transformActive = false,
@@ -87,32 +88,35 @@ export default function CanvasWindowFrame({
         onResizeStart?.()
     }
 
+    const effectiveResizable = resizable && !focused
+
     return (
         <div
             ref={frameRef}
-            className={`canvas-frame ${hasFrameChrome ? 'canvas-frame--active' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''} ${className}`.trim()}
-            style={{ width, height, touchAction: 'none' }}
+            className={`canvas-frame ${hasFrameChrome ? 'canvas-frame--active' : ''} ${hasFrameChrome && !showResizeChrome ? 'canvas-frame--content-active' : ''} ${focused ? 'canvas-frame--focused-fullscreen' : ''} ${className}`.trim()}
+            style={{ width: '100%', height: '100%', touchAction: 'none' }}
             onPointerDownCapture={handleFramePointerDownCapture}
         >
-            {resizable && (
-                <NodeResizer
-                    color="var(--text-muted)"
-                    lineStyle={{ borderWidth: 0 }}
+            {effectiveResizable && (
+            <NodeResizer
+                    color="#3b82f6"
+                    lineStyle={{ borderWidth: 1.5, borderColor: '#3b82f6' }}
                     isVisible={showResizeChrome}
                     minWidth={minWidth}
                     minHeight={minHeight}
                     handleStyle={{
                         width: 8,
                         height: 8,
-                        background: 'var(--bg-panel)',
-                        border: '1px solid var(--border-strong)',
+                        background: '#3b82f6',
+                        border: '1.5px solid #2563eb',
+                        borderRadius: 2,
                     }}
                     onResizeStart={handleResizeStartCombined}
                     onResizeEnd={handleResizeEndCombined}
                 />
             )}
             <div className="canvas-frame__header">
-                <CanvasDragHandle active={isTransformChromeActive} onToggle={toggleTransformChrome} />
+                {!focused && <CanvasDragHandle active={isTransformChromeActive} onToggle={toggleTransformChrome} />}
                 <div className="canvas-frame__header-start">
                     {headerStart}
                 </div>

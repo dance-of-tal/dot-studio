@@ -1,4 +1,6 @@
-import { Globe, Search } from 'lucide-react'
+import { useState } from 'react'
+import { GitBranch, Globe, FolderOpen, Loader2, Search } from 'lucide-react'
+import { useAddDance } from '../../hooks/queries'
 import { PinnedDetailPanel, RegistryResult } from './AssetCards'
 import type { RegistryKind } from './asset-library-utils'
 import { getAssetSelectionKey, getAssetUrn } from './asset-library-utils'
@@ -72,6 +74,8 @@ export default function AssetLibraryRegistryView(props: Props) {
                     </button>
                 </div>
             </div>
+
+            <GitHubImportRow />
 
             <div className="registry-filters">
                 <select
@@ -147,5 +151,66 @@ export default function AssetLibraryRegistryView(props: Props) {
                 />
             </div>
         </>
+    )
+}
+
+function GitHubImportRow() {
+    const [source, setSource] = useState('')
+    const [status, setStatus] = useState<string | null>(null)
+    const [showScope, setShowScope] = useState(false)
+    const addMutation = useAddDance()
+
+    const handleImport = async (scope: 'global' | 'stage') => {
+        if (!source.trim() || addMutation.isPending) return
+        setShowScope(false)
+        setStatus(null)
+        try {
+            const result = await addMutation.mutateAsync({ source: source.trim(), scope })
+            setSource('')
+            setStatus(`✔ Imported ${result.installed.length} skill(s) as Dance (${scope === 'global' ? 'Global' : 'Workspace'})`)
+            setTimeout(() => setStatus(null), 4000)
+        } catch (err: unknown) {
+            setStatus(`✗ ${err instanceof Error ? err.message : 'Import failed'}`)
+        }
+    }
+
+    return (
+        <div className="github-import-row">
+            <div className="github-import-input">
+                <GitBranch size={11} className="icon-muted" />
+                <input
+                    className="text-input"
+                    value={source}
+                    onChange={(e) => setSource(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && source.trim() && setShowScope(true)}
+                    placeholder="owner/repo or GitHub URL"
+                    disabled={addMutation.isPending}
+                />
+                <div style={{ position: 'relative' }}>
+                    <button
+                        className="btn btn-sm"
+                        onClick={() => setShowScope(!showScope)}
+                        disabled={!source.trim() || addMutation.isPending}
+                    >
+                        {addMutation.isPending ? <Loader2 size={10} className="spin" /> : 'Import as Dance'}
+                    </button>
+                    {showScope && (
+                        <div className="install-scope-menu">
+                            <button className="install-scope-opt" onClick={() => handleImport('stage')}>
+                                <FolderOpen size={11} /> Workspace
+                            </button>
+                            <button className="install-scope-opt" onClick={() => handleImport('global')}>
+                                <Globe size={11} /> Global
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+            {status && (
+                <div className={`github-import-status ${status.startsWith('✗') ? 'error' : 'success'}`}>
+                    {status}
+                </div>
+            )}
+        </div>
     )
 }

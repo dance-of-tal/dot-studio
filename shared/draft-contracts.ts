@@ -54,6 +54,8 @@ export interface PerformerDraftContent {
     danceDeliveryMode?: 'auto' | 'tool' | 'inline'
     planMode?: boolean
     agentId?: string | null
+    /** Standalone performer execution mode. Act runtime ignores this value. */
+    executionMode?: 'direct' | 'safe'
 }
 
 /**
@@ -65,6 +67,22 @@ export interface ActDraftContent {
     actRules?: string[]
     participants: Record<string, ActDraftParticipantBinding>
     relations: ActDraftRelation[]
+    /** Authoring state — preserved across draft save/load round-trip */
+    position?: { x: number; y: number }
+    width?: number
+    height?: number
+    hidden?: boolean
+    safety?: {
+        maxEvents?: number
+        maxMessagesPerPair?: number
+        maxBoardUpdatesPerKey?: number
+        quietWindowMs?: number
+        threadTimeoutMs?: number
+        loopDetectionThreshold?: number
+        confirmModeEnabled?: boolean
+        cooldownMs?: number
+    }
+    meta?: Record<string, unknown>
 }
 
 export interface ActDraftParticipantBinding {
@@ -75,6 +93,8 @@ export interface ActDraftParticipantBinding {
         callboardKeys?: string[]
         eventTypes?: string[]
     }
+    /** Participant canvas position — preserved across draft save/load round-trip */
+    position?: { x: number; y: number }
 }
 
 /** Communication contract relation (between pair, not from/to) */

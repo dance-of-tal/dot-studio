@@ -3,6 +3,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import os from 'os'
+import { createHash } from 'crypto'
 
 function resolvePort(value: string | undefined, fallback: number) {
     const parsed = Number.parseInt(value || '', 10)
@@ -68,7 +69,19 @@ export async function writeStudioConfig(partial: Partial<StudioConfig>): Promise
     return merged
 }
 
-// ── Stages Dir ──────────────────────────────────────────
+// ── Workspaces Dir ──────────────────────────────────────
 export function workspacesDir(): string {
-    return path.join(STUDIO_DIR, 'stages')
+    return path.join(STUDIO_DIR, 'workspaces')
+}
+
+export function workspaceDir(workspaceId: string): string {
+    return path.join(STUDIO_DIR, 'workspaces', workspaceId)
+}
+
+export function workspaceActRuntimeDir(workspaceId: string, actId: string, threadId: string): string {
+    return path.join(STUDIO_DIR, 'workspaces', workspaceId, 'act-runtime', actId, threadId)
+}
+
+export function workspaceIdForDir(workingDir: string): string {
+    return createHash('sha1').update(workingDir).digest('hex').slice(0, 16)
 }

@@ -181,6 +181,19 @@ export function useInstallAsset() {
     })
 }
 
+export function useAddDance() {
+    const queryClient = useQueryClient()
+    const workingDir = useStudioStore((s) => s.workingDir)
+    return useMutation({
+        mutationFn: ({ source, scope }: { source: string; scope?: 'global' | 'stage' }) => api.dot.addFromGitHub(source, scope),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.assets(workingDir) })
+            queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(workingDir) })
+            queryClient.invalidateQueries({ queryKey: queryKeys.dotStatus(workingDir) })
+        },
+    })
+}
+
 export function useCompilePrompt() {
     return useMutation({
         mutationFn: ({
@@ -194,7 +207,7 @@ export function useCompilePrompt() {
             mcpServerNames,
             planMode,
             danceDeliveryMode,
-            relatedPerformers,
+            requestTargets,
         }: {
             performerId: string | null
             performerName: string | null
@@ -206,7 +219,7 @@ export function useCompilePrompt() {
             mcpServerNames: string[]
             planMode?: boolean
             danceDeliveryMode?: 'auto' | 'tool' | 'inline'
-            relatedPerformers?: Array<{ performerId: string; performerName: string }>
-        }) => api.compile(performerId, performerName, talRef, danceRefs, model, modelVariant, agentId, mcpServerNames, planMode || false, danceDeliveryMode || 'auto', relatedPerformers),
+            requestTargets?: Array<{ performerId: string; performerName: string }>
+        }) => api.compile(performerId, performerName, talRef, danceRefs, model, modelVariant, agentId, mcpServerNames, planMode || false, danceDeliveryMode || 'auto', requestTargets),
     })
 }

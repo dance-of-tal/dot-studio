@@ -537,3 +537,47 @@
     padding: 12px 16px;
     border-top: 1px solid var(--border-main);
 }
+
+/* ── Dance GitHub Add ────────────────────────────────── */
+.dance-github-add {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.dance-github-add .text-input {
+    flex: 1;
+    min-width: 60px;
+    font-size: var(--font-xs);
+    padding: 3px 6px;
+}
+
+.dance-github-add .btn-sm {
+    padding: 3px 8px;
+    font-size: var(--font-xs);
+    flex-shrink: 0;
+}
+
+.dance-github-status {
+    padding: 2px 12px 4px;
+    font-size: var(--font-xs);
+}
+
+.dance-github-status.success {
+    color: #14ae5c;
+}
+
+.dance-github-status.error {
+    color: var(--danger, #ef4444);
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

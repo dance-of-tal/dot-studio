@@ -20,7 +20,7 @@ import { hasModelConfig, resolvePerformerAgentId } from '../../lib/performers'
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
 import { api } from '../../api'
 import { showToast } from '../../lib/toast'
-import { scheduleFitView } from '../../lib/focus-utils'
+import { resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
 import { assetUrnAuthor, assetUrnDisplayName, assetUrnPath } from '../../lib/asset-urn'
 import type { AssetListItem } from '../../../shared/asset-contracts'
 import type { AssetRef, ModelConfig } from '../../types'
@@ -31,6 +31,7 @@ import PerformerEditPanel from './PerformerEditPanel'
 import PerformerChatPanel from './PerformerChatPanel'
 import PerformerFrameHeaderMeta from './PerformerFrameHeaderMeta'
 import { usePerformerSafeReview } from './usePerformerSafeReview'
+import { selectMessagesForChatKey, selectChatKeyIsLoading } from '../../store/session'
 
 import { Pencil, EyeOff, Maximize2, Minimize2, Shield } from 'lucide-react'
 import './AgentFrame.css'
@@ -69,7 +70,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
     // ─── Store ────────────────────────────────────────
     const {
         selectedPerformerId, focusedPerformerId, editingTarget,
-        chats, chatPrefixes, loadingPerformerId, setPerformerAgentId,
+        chatPrefixes, setPerformerAgentId,
         togglePerformerVisibility, closeEditor,
         performers, drafts,
         openDraftEditor,
@@ -83,6 +84,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         discardAllSafeOwner, undoLastSafeApply,
         detachPerformerSession,
         enterFocusMode, exitFocusMode,
+        focusSnapshot,
     } = useStudioStore()
 
     // ─── Local State ──────────────────────────────────
@@ -92,9 +94,11 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
 
     // ─── Derived ──────────────────────────────────────
     const isSelected = selectedPerformerId === id
-    const isFocused = focusedPerformerId === id
-    const isLoading = loadingPerformerId === id
-    const messages = useMemo(() => chats[id] || [], [chats, id])
+    const focusNodeId = resolveFocusNodeId(focusSnapshot, focusedPerformerId)
+    const isFocused = focusSnapshot?.type === 'performer' && focusNodeId === id
+    // Messages and loading from entity store with legacy fallback
+    const messages = useStudioStore((state) => selectMessagesForChatKey(state, id))
+    const isLoading = useStudioStore((state) => selectChatKeyIsLoading(state, id))
     const prefixCount = useMemo(() => (chatPrefixes[id] || []).length, [chatPrefixes, id])
     const modelConfigured = hasModelConfig(data.model)
     const isEditMode = editingTarget?.type === 'performer' && editingTarget.id === id
@@ -239,8 +243,10 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         <div className={`performer-node-shell ${data.actEditParticipant ? 'performer-node-shell--act-participant' : ''} ${data.actEditDimmed ? 'performer-node-shell--act-dimmed' : ''}`}>
             {data.actEditConnectVisible ? (
                 <>
-                    <Handle type="target" position={Position.Left} className="performer-node-shell__handle" />
-                    <Handle type="source" position={Position.Right} className="performer-node-shell__handle" />
+                    <Handle id="top" type="source" position={Position.Top} className="performer-node-shell__handle" isConnectable />
+                    <Handle id="right" type="source" position={Position.Right} className="performer-node-shell__handle" isConnectable />
+                    <Handle id="bottom" type="source" position={Position.Bottom} className="performer-node-shell__handle" isConnectable />
+                    <Handle id="left" type="source" position={Position.Left} className="performer-node-shell__handle" isConnectable />
                 </>
             ) : null}
             <CanvasWindowFrame
@@ -251,20 +257,23 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                 onActivateTransform={data.onActivateTransform as (() => void) | undefined}
                 onDeactivateTransform={data.onDeactivateTransform as (() => void) | undefined}
                 selected={isSelected}
+                focused={isFocused}
                 minWidth={280}
                 minHeight={320}
                 headerStart={<span className="canvas-frame__name">{data.name}</span>}
                 headerEnd={(
                     <div className="canvas-frame__header-actions">
-                        <PerformerFrameHeaderMeta
-                            modelLabel={data.modelLabel || null}
-                            modelTitle={data.modelTitle || null}
-                            talLabel={data.talLabel || null}
-                            danceSummary={data.danceSummary || null}
-                            executionMode={performer?.executionMode === 'safe' ? 'safe' : 'direct'}
-                            pendingCount={safeSummary?.pendingCount || 0}
-                            conflictCount={safeSummary?.conflictCount || 0}
-                        />
+                        {!isFocused && (
+                            <PerformerFrameHeaderMeta
+                                modelLabel={data.modelLabel || null}
+                                modelTitle={data.modelTitle || null}
+                                talLabel={data.talLabel || null}
+                                danceSummary={data.danceSummary || null}
+                                executionMode={performer?.executionMode === 'safe' ? 'safe' : 'direct'}
+                                pendingCount={safeSummary?.pendingCount || 0}
+                                conflictCount={safeSummary?.conflictCount || 0}
+                            />
+                        )}
                         <button
                             className={`icon-btn ${isFocused ? 'icon-btn--active' : ''}`}
                             onClick={(e) => {
@@ -287,7 +296,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                         >
                             {isFocused ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
                         </button>
-                        {!shouldShowEditPanel && (
+                        {!isFocused && !shouldShowEditPanel && (
                             <button
                                 className="icon-btn"
                                 onClick={(e) => { e.stopPropagation(); useStudioStore.getState().openPerformerEditor(id) }}
@@ -297,14 +306,16 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                                 <Pencil size={11} />
                             </button>
                         )}
-                        <button
-                            className="icon-btn"
-                            onClick={(e) => { e.stopPropagation(); togglePerformerVisibility(id) }}
-                            title="Hide from Canvas"
-                            style={{ padding: '0 4px', opacity: 0.7 }}
-                        >
-                            <EyeOff size={11} />
-                        </button>
+                        {!isFocused && (
+                            <button
+                                className="icon-btn"
+                                onClick={(e) => { e.stopPropagation(); togglePerformerVisibility(id) }}
+                                title="Hide from Canvas"
+                                style={{ padding: '0 4px', opacity: 0.7 }}
+                            >
+                                <EyeOff size={11} />
+                            </button>
+                        )}
                     </div>
                 )}
                 bodyClassName="nowheel nodrag"
@@ -314,6 +325,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                     <PerformerEditPanel
                         performerId={id}
                         performer={performer}
+                        hideBackButton={isActEditMode}
                         presentation={performerPresentation}
                         runtimeTools={runtimeTools || null}
                         requestRelations={requestRelations}
@@ -362,6 +374,8 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                     />
                 )}
             </CanvasWindowFrame>
+            {/* [SAFE-MODE] Hidden from UI — DO NOT REMOVE during cleanup/refactoring.
+               Safe mode feature (SafeReviewModal + SafeModeConfirm) is preserved for future re-enablement.
             {showSafeReview ? (
                 <SafeReviewModal
                     title={pendingModeSwitch === 'direct' ? `${data.name} · Review before switching to Direct` : `${data.name} · Safe Mode Review`}
@@ -414,6 +428,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                     </div>
                 </div>
             ) : null}
+            */}
         </div>
     )
 }

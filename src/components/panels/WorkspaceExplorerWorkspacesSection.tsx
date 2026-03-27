@@ -16,14 +16,14 @@ export default function WorkspaceExplorerWorkspacesSection({
     onOpenWorkspace,
 }: Props) {
     return (
-        <section className="explorer-section explorer-section--stages" style={{ flex: `0 0 ${workspacesHeight}px` }}>
+        <section className="explorer-section explorer-section--stages explorer-section--workspaces" style={{ flex: `0 0 ${workspacesHeight}px` }}>
             <div className="explorer__subheader">
                 <span className="explorer__title">Workspaces</span>
                 <button className="icon-btn" onClick={onOpenWorkspace} title="Open workspace directory">
                     <Plus size={12} />
                 </button>
             </div>
-            <div className="explorer__context">
+            <div className="explorer__context explorer__context--workspaces">
                 <span className="explorer__context-label">Current</span>
                 <strong>{workingDir ? workspaceLabel(workingDir) : 'No workspace open'}</strong>
                 {workingDir ? (
@@ -32,7 +32,7 @@ export default function WorkspaceExplorerWorkspacesSection({
                     </span>
                 ) : null}
             </div>
-            <div className="explorer__tree scroll-area">
+            <div className="explorer__tree explorer__tree--workspaces scroll-area">
                 {workspaceRows.length > 0 ? workspaceRows : <div className="empty-state">No saved workspaces</div>}
             </div>
         </section>

@@ -1,0 +1,127 @@
+/* ═══════════════════════════════════════════════════════
+   ProviderConnectModal — overlay inside Settings
+   ═══════════════════════════════════════════════════════ */
+
+.provider-connect-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    border-radius: var(--radius-lg);
+}
+
+.provider-connect-modal {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-window);
+    width: 440px;
+    max-width: calc(100% - 32px);
+    max-height: 80%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.provider-connect-modal__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+}
+
+.provider-connect-modal__title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.provider-connect-modal__body {
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Auth method selector buttons */
+.provider-connect-modal__methods {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.provider-connect-modal__method-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md, 6px);
+    background: var(--bg-canvas);
+    color: var(--text-primary);
+    font-size: var(--font-base);
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.provider-connect-modal__method-btn:hover {
+    border-color: var(--accent, #635bff);
+    background: var(--bg-panel);
+}
+
+.provider-connect-modal__method-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.provider-connect-modal__method-label {
+    flex: 1;
+    text-align: left;
+}
+
+/* API key input section */
+.provider-connect-modal__api-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.provider-connect-modal__api-label {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.provider-connect-modal__api-row {
+    display: flex;
+    gap: 8px;
+}
+
+.provider-connect-modal__api-row .input {
+    flex: 1;
+}
+
+/* OAuth waiting section */
+.provider-connect-modal__oauth-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.provider-connect-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-light);
+}

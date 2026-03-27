@@ -175,6 +175,7 @@ async function parseInstalledAssetFile(filePath: string): Promise<ParsedInstalle
 
 async function scanAssetDir(
     baseDir: string,
+    cwd: string,
     kind: ParsedInstalledAsset['kind'],
     source: 'global' | 'stage',
     resultsMap: Map<string, AssetListItem>,
@@ -202,7 +203,7 @@ async function scanAssetDir(
                         const exists = await fs.access(skillMd).then(() => true).catch(() => false)
                         if (!exists) continue
                         const urn = `dance/${author}/${stage}/${name}`
-                        const parsed = await readAsset(baseDir, urn)
+                        const parsed = await readAsset(cwd, urn)
                         if (!parsed) continue
                         try {
                             const asset = parseDotAsset(parsed) as ParsedInstalledAsset
@@ -231,8 +232,8 @@ async function scanAssetDir(
 async function collectAllInstalledAssets(cwd: string): Promise<InstalledAssetEntry[]> {
     const entries: InstalledAssetEntry[] = []
     const scopes = [
-        { dir: getGlobalDotDir(), source: 'global' as const },
-        { dir: getDotDir(cwd), source: 'stage' as const },
+        { dir: getGlobalDotDir(), cwd: getGlobalCwd(), source: 'global' as const },
+        { dir: getDotDir(cwd), cwd, source: 'stage' as const },
     ]
 
     for (const scope of scopes) {
@@ -259,7 +260,7 @@ async function collectAllInstalledAssets(cwd: string): Promise<InstalledAssetEnt
                                 const exists = await fs.access(skillMd).then(() => true).catch(() => false)
                                 if (!exists) continue
                                 const urn = `dance/${author}/${stage}/${name}`
-                                const parsed = await readAsset(scope.dir, urn)
+                                const parsed = await readAsset(scope.cwd, urn)
                                 if (!parsed) continue
                                 try {
                                     const asset = parseDotAsset(parsed) as ParsedInstalledAsset
@@ -295,8 +296,8 @@ export async function listStudioAssets(
 ): Promise<AssetListItem[]> {
     const resultsMap = new Map<string, AssetListItem>()
     const projectMcpServerNames = Object.keys(await readProjectMcpCatalog(cwd))
-    await scanAssetDir(getGlobalDotDir(), kind, 'global', resultsMap, projectMcpServerNames)
-    await scanAssetDir(getDotDir(cwd), kind, 'stage', resultsMap, projectMcpServerNames)
+    await scanAssetDir(getGlobalDotDir(), getGlobalCwd(), kind, 'global', resultsMap, projectMcpServerNames)
+    await scanAssetDir(getDotDir(cwd), cwd, kind, 'stage', resultsMap, projectMcpServerNames)
     return Array.from(resultsMap.values())
 }
 

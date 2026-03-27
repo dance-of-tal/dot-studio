@@ -6,6 +6,7 @@ import {
     loginToDot,
     logoutFromDot,
 } from '../services/dot-service.js'
+import { addDanceFromGitHub } from '../services/dot-add-service.js'
 import { jsonError, requestWorkingDir } from './route-errors.js'
 
 const dotCore = new Hono()
@@ -53,6 +54,19 @@ dotCore.post('/api/dot/logout', async (c) => {
         return c.json(await logoutFromDot())
     } catch (error: unknown) {
         return jsonError(c, errorMessage(error, 'Failed to sign out.'), 500)
+    }
+})
+
+dotCore.post('/api/dot/add', async (c) => {
+    const { source, scope } = await c.req.json<{ source: string; scope?: 'global' | 'stage' }>()
+    if (!source?.trim()) {
+        return jsonError(c, 'Missing source (e.g. owner/repo)', 400)
+    }
+    try {
+        const result = await addDanceFromGitHub(requestWorkingDir(c), source.trim(), scope)
+        return c.json(result)
+    } catch (error: unknown) {
+        return jsonError(c, errorMessage(error, 'Failed to add dance from GitHub.'), 500)
     }
 })
 

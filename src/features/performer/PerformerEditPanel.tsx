@@ -110,6 +110,7 @@ export default function PerformerEditPanel({
     return (
         <>
             {/* ── Header ── */}
+            {(detailView || !hideBackButton) && (
             <div className="edit-workbench__header">
                 {detailView ? (
                     <button
@@ -122,7 +123,7 @@ export default function PerformerEditPanel({
                     >
                         <ChevronLeft size={12} />
                     </button>
-                ) : !hideBackButton ? (
+                ) : (
                     <button
                         className="edit-workbench__back"
                         onClick={(event) => {
@@ -133,15 +134,14 @@ export default function PerformerEditPanel({
                     >
                         <ArrowLeft size={12} />
                     </button>
-                ) : null}
+                )}
                 <span className="section-title">
                     {detailView
                         ? detailTitles[detailView]
-                        : hideBackButton
-                            ? performer?.name || 'Performer'
-                            : 'Edit'}
+                        : 'Back to Chat'}
                 </span>
             </div>
+            )}
 
             {/* ── Name (always visible in both views) ── */}
             {!detailView && (

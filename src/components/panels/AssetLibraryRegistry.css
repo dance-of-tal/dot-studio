@@ -165,3 +165,42 @@
 .asset-card.has-error {
     border-color: rgba(242, 72, 34, 0.3);
 }
+
+/* ── GitHub Import ───────────────────────────────────── */
+.github-import-row {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.github-import-input {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.github-import-input .text-input {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--font-sm);
+    padding: 4px 6px;
+}
+
+.github-import-input .btn-sm {
+    padding: 4px 8px;
+    font-size: var(--font-xs);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.github-import-status {
+    padding: 3px 0 0;
+    font-size: var(--font-xs);
+}
+
+.github-import-status.success {
+    color: #14ae5c;
+}
+
+.github-import-status.error {
+    color: var(--danger, #ef4444);
+}

@@ -1,45 +1,126 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { ChevronDown, CheckCircle2, Circle, XCircle } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import type { Todo } from '@opencode-ai/sdk/v2'
 import { AnimatedNumber } from './AnimatedNumber'
-import { TextStrikethrough } from './TextStrikethrough'
 import './TodoDock.css'
 
-function PulsingDot() {
+/* ── Icon SVGs ── */
+
+function TodoIcon({ status }: { status: string }) {
+    if (status === 'completed') {
+        return (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="todo-dock-icon todo-dock-icon--done">
+                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" fill="currentColor" fillOpacity="0.15" />
+                <path d="M4.5 7.2L6.2 8.8L9.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        )
+    }
+    if (status === 'in_progress') {
+        return (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="todo-dock-icon todo-dock-icon--active">
+                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" className="todo-dock-icon__ring" />
+                <circle cx="7" cy="7" r="2.5" fill="currentColor" />
+            </svg>
+        )
+    }
+    if (status === 'cancelled') {
+        return (
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="todo-dock-icon todo-dock-icon--cancelled">
+                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M5 5L9 9M9 5L5 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+        )
+    }
     return (
-        <svg viewBox="0 0 12 12" width={12} height={12} fill="currentColor" className="todo-dock-pulse">
-            <circle cx="6" cy="6" r="3" />
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="todo-dock-icon todo-dock-icon--pending">
+            <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" />
         </svg>
     )
 }
 
-function TodoCheckIcon({ status }: { status: string }) {
-    if (status === 'completed') return <CheckCircle2 size={14} style={{ color: '#10b981' }} />
-    if (status === 'in_progress') return <PulsingDot />
-    if (status === 'cancelled') return <XCircle size={14} style={{ color: 'var(--text-muted)' }} />
-    return <Circle size={14} style={{ color: 'var(--text-muted)' }} />
+/* ── Lifecycle state machine (matches OpenCode's todoState) ── */
+
+type DockVisibility = 'hide' | 'clear' | 'open' | 'close'
+
+function computeDockState(count: number, allDone: boolean, isLive: boolean): DockVisibility {
+    if (count === 0) return 'hide'
+    if (!isLive) return 'clear'    // session idle → clear stale todos
+    if (!allDone) return 'open'    // still in progress → show
+    return 'close'                 // all done → auto-close after delay
 }
+
+/* ── Main component ── */
 
 interface TodoDockProps {
     todos: Todo[]
+    /** Whether the session is currently active (busy/streaming). Dock auto-clears on idle. */
+    isLive?: boolean
+    /** Called when the dock wants to clear stale todos from the store */
+    onClear?: () => void
 }
+
+const CLOSE_DELAY_MS = 400
 
 /**
  * TodoDock — collapsible todo progress panel above the composer.
  *
- * Header: done/total with AnimatedNumber + active todo preview (collapsed)
- * Body: scrollable list with Checkbox + TextStrikethrough per item
- * Auto-scrolls to the current in_progress item.
- *
- * Ported from OpenCode's SessionTodoDock.
+ * Lifecycle (mirrors OpenCode behavior):
+ *   - `count=0` → hidden
+ *   - `!isLive` (session idle) → stale todos cleared via `onClear` callback
+ *   - `!allDone` → auto-open
+ *   - `allDone` → auto-close after 400ms delay
  */
-export function TodoDock({ todos }: TodoDockProps) {
+export function TodoDock({ todos, isLive = false, onClear }: TodoDockProps) {
+    const [dockVisible, setDockVisible] = useState(false)
     const [collapsed, setCollapsed] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const [stuck, setStuck] = useState(false)
+    const closeTimerRef = useRef<number | undefined>(undefined)
 
     const total = todos.length
     const done = useMemo(() => todos.filter(t => t.status === 'completed').length, [todos])
+    const allDone = useMemo(
+        () => total > 0 && todos.every(t => t.status === 'completed' || t.status === 'cancelled'),
+        [todos, total],
+    )
+
+    // Lifecycle state machine
+    const visibility = computeDockState(total, allDone, isLive)
+
+    useEffect(() => {
+        // Clear any pending timer
+        if (closeTimerRef.current) {
+            window.clearTimeout(closeTimerRef.current)
+            closeTimerRef.current = undefined
+        }
+
+        switch (visibility) {
+            case 'hide':
+                setDockVisible(false)
+                break
+            case 'clear':
+                setDockVisible(false)
+                onClear?.()
+                break
+            case 'open':
+                setDockVisible(true)
+                setCollapsed(false)
+                break
+            case 'close':
+                // All done → close after delay
+                closeTimerRef.current = window.setTimeout(() => {
+                    setDockVisible(false)
+                    closeTimerRef.current = undefined
+                }, CLOSE_DELAY_MS)
+                break
+        }
+
+        return () => {
+            if (closeTimerRef.current) {
+                window.clearTimeout(closeTimerRef.current)
+            }
+        }
+    }, [visibility, onClear])
 
     const active = useMemo(() =>
         todos.find(t => t.status === 'in_progress')
@@ -83,7 +164,7 @@ export function TodoDock({ todos }: TodoDockProps) {
         setStuck(e.currentTarget.scrollTop > 0)
     }, [])
 
-    if (todos.length === 0) return null
+    if (!dockVisible || todos.length === 0) return null
 
     return (
         <div data-component="todo-dock" data-collapsed={collapsed ? 'true' : 'false'}>
@@ -120,22 +201,17 @@ export function TodoDock({ todos }: TodoDockProps) {
                         {todos.map((todo, i) => (
                             <div
                                 key={i}
-                                className="todo-dock__item"
+                                className={`todo-dock__item ${todo.status === 'in_progress' ? 'todo-dock__item--active' : ''} ${todo.status === 'completed' || todo.status === 'cancelled' ? 'todo-dock__item--done' : ''}`}
                                 data-state={todo.status}
                                 data-in-progress={todo.status === 'in_progress' ? '' : undefined}
                             >
                                 <span className="todo-dock__check">
-                                    <TodoCheckIcon status={todo.status} />
+                                    <TodoIcon status={todo.status} />
                                 </span>
-                                <TextStrikethrough
-                                    active={todo.status === 'completed' || todo.status === 'cancelled'}
-                                    text={todo.content}
-                                    className="todo-dock__text"
-                                />
+                                <span className="todo-dock__text">{todo.content}</span>
                             </div>
                         ))}
                     </div>
-                    {/* Top fade when scrolled */}
                     <div
                         className="todo-dock__top-fade"
                         style={{ opacity: stuck ? 1 : 0 }}

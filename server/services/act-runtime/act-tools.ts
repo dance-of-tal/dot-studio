@@ -1,184 +1,182 @@
 /**
  * act-tools.ts — Act runtime custom tool definitions
  *
- * PRD §13: Tools exposed to participants in Act context.
- * - send_message (fire-and-forget)
- * - post_to_board
- * - read_board
- * - set_wake_condition
+ * PRD §13: Collaboration tools exposed to participants.
+ * - message_teammate
+ * - update_shared_board
+ * - read_shared_board
+ * - wait_until
  *
- * These are generated as OpenCode custom tool .ts files and placed in
- * the participant's .opencode/tools/ directory during Act context projection.
+ * These are 4 generic static tool files placed in .opencode/tools/.
+ * The model only provides high-level collaboration inputs.
+ * Act/thread/participant identity is resolved from the current session.
  */
 
-import type { ConditionExpr } from '../../../shared/act-types.js'
 import { PORT } from '../../lib/config.js'
 
 // ── Tool parameter interfaces ───────────────────────────
 
 export interface SendMessageParams {
-    to: string
-    content: string
+    recipient: string
+    message: string
     tag?: string
 }
 
 export interface PostToBoardParams {
-    key: string
-    kind: 'artifact' | 'fact' | 'task'
+    entryKey: string
+    entryType: 'artifact' | 'fact' | 'task'
     content: string
-    updateMode?: 'replace' | 'append'
+    mode?: 'replace' | 'append'
     metadata?: Record<string, unknown>
 }
 
 export interface ReadBoardParams {
-    key?: string
+    entryKey?: string
 }
 
 export interface SetWakeConditionParams {
-    target: 'self'
-    onSatisfiedMessage: string
-    condition: ConditionExpr
+    resumeWith: string
+    conditionJson: string
 }
 
-// ── Tool file content generators ────────────────────────
+export const COLLABORATION_TOOL_NAMES = [
+    'message_teammate',
+    'update_shared_board',
+    'read_shared_board',
+    'wait_until',
+] as const
 
-function sanitizeToolName(name: string): string {
-    return name.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase()
-}
+export const LEGACY_COLLABORATION_TOOL_NAMES = [
+    'act_send_message',
+    'act_post_to_board',
+    'act_read_board',
+    'act_set_wake_condition',
+] as const
 
-export function generateSendMessageTool(actId: string, threadId: string, participantKey: string): { name: string; content: string } {
-    const name = `act_send_message_${sanitizeToolName(actId)}`
-    const content = `import { tool } from "@opencode-ai/plugin"
+// ── Static tool definitions ─────────────────────────────
+
+/**
+ * The 4 generic Act runtime tools.
+ * These are static and session-bound.
+ * The workingDir is baked in at write time (changes per workspace, not per thread).
+ */
+export function getStaticActTools(workingDir: string): Array<{ name: string; content: string }> {
+    const wd = encodeURIComponent(workingDir)
+    const base = `http://localhost:${PORT}`
+
+    return [
+        {
+            name: 'message_teammate',
+            content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Send a message to another participant in this Act. Fire-and-forget: you will not receive a direct response.",
+    description: "Send a direct message to a teammate. Use this for targeted coordination when only one teammate needs the update.",
     args: {
-        to: tool.schema.string().describe("Target participant key to send the message to"),
-        content: tool.schema.string().describe("Message content"),
-        tag: tool.schema.string().optional().describe("Optional tag for the message (e.g. review-request, clarification)"),
+        recipient: tool.schema.string().describe("Teammate name to message directly"),
+        message: tool.schema.string().describe("Message to send"),
+        tag: tool.schema.string().optional().describe("Optional short label for the message"),
     },
-    async execute(args) {
-        const res = await fetch("http://localhost:${PORT}/api/act/${actId}/thread/${threadId}/send-message", {
+    async execute(args, context) {
+        const sessionID = context.sessionID
+        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/message-teammate?workingDir=${wd}\`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                from: ${JSON.stringify(participantKey)},
-                to: args.to,
-                content: args.content,
+                recipient: args.recipient,
+                message: args.message,
                 tag: args.tag,
             }),
         })
         const data = await res.json()
         if (!data.ok) return data.error
-        return "Message sent successfully."
+        return "Direct message sent."
     },
 })
-`
-    return { name, content }
-}
-
-export function generatePostToBoardTool(actId: string, threadId: string, participantKey: string): { name: string; content: string } {
-    const name = `act_post_to_board_${sanitizeToolName(actId)}`
-    const content = `import { tool } from "@opencode-ai/plugin"
+`,
+        },
+        {
+            name: 'update_shared_board',
+            content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Post or update an entry on the shared board. Board entries are durable and visible to all participants.",
+    description: "Create or update a shared note for the whole team. Use this for durable context, decisions, findings, and handoffs.",
     args: {
-        key: tool.schema.string().describe("Board entry key (e.g. api-spec, review-report)"),
-        kind: tool.schema.enum(["artifact", "fact", "task"]).describe("Entry kind"),
+        entryKey: tool.schema.string().describe("Stable key for the shared note, such as api-spec or review-report"),
+        entryType: tool.schema.enum(["artifact", "fact", "task"]).describe("Type of shared note"),
         content: tool.schema.string().describe("Entry content"),
-        updateMode: tool.schema.enum(["replace", "append"]).optional().describe("How to update existing entries"),
+        mode: tool.schema.enum(["replace", "append"]).optional().describe("Whether to replace or append to an existing shared note"),
     },
-    async execute(args) {
-        const res = await fetch("http://localhost:${PORT}/api/act/${actId}/thread/${threadId}/post-to-board", {
+    async execute(args, context) {
+        const sessionID = context.sessionID
+        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/update-shared-board?workingDir=${wd}\`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                author: ${JSON.stringify(participantKey)},
-                key: args.key,
-                kind: args.kind,
+                entryKey: args.entryKey,
+                entryType: args.entryType,
                 content: args.content,
-                updateMode: args.updateMode || "replace",
+                mode: args.mode,
             }),
         })
         const data = await res.json()
         if (!data.ok) return data.error
-        return "Board entry posted successfully."
+        return "Shared note updated."
     },
 })
-`
-    return { name, content }
-}
-
-export function generateReadBoardTool(actId: string, threadId: string): { name: string; content: string } {
-    const name = `act_read_board_${sanitizeToolName(actId)}`
-    const content = `import { tool } from "@opencode-ai/plugin"
+`,
+        },
+        {
+            name: 'read_shared_board',
+            content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Read entries from the shared board. Returns board entries as JSON.",
+    description: "Read shared notes created by the team. Returns matching entries as JSON.",
     args: {
-        key: tool.schema.string().optional().describe("Specific board key to read. Omit to get all entries."),
+        entryKey: tool.schema.string().optional().describe("Optional shared note key. Omit to read all shared notes."),
     },
-    async execute(args) {
-        const params = args.key ? "?key=" + encodeURIComponent(args.key) : ""
-        const res = await fetch("http://localhost:${PORT}/api/act/${actId}/thread/${threadId}/read-board" + params)
+    async execute(args, context) {
+        const sessionID = context.sessionID
+        const params = args.entryKey ? "&key=" + encodeURIComponent(args.entryKey) : ""
+        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/read-shared-board?workingDir=${wd}\` + params)
         const data = await res.json()
         if (!data.ok) return data.error
         return JSON.stringify(data.entries, null, 2)
     },
 })
-`
-    return { name, content }
-}
-
-export function generateSetWakeConditionTool(actId: string, threadId: string, participantKey: string): { name: string; content: string } {
-    const name = `act_set_wake_condition_${sanitizeToolName(actId)}`
-    const content = `import { tool } from "@opencode-ai/plugin"
+`,
+        },
+        {
+            name: 'wait_until',
+            content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Set a wake condition: you will be woken up when the condition is satisfied. Use this to wait for multiple results before proceeding.",
+    description: "Pause until a condition is met, then resume with the provided instruction. Use this when you are waiting for more input or a shared update.",
     args: {
-        onSatisfiedMessage: tool.schema.string().describe("Message to receive when the condition is satisfied"),
-        conditionJson: tool.schema.string().describe("JSON string of the condition expression. Supported types: all_of, any_of, board_key_exists, message_received, timeout"),
+        resumeWith: tool.schema.string().describe("Instruction to receive when the wait is over"),
+        conditionJson: tool.schema.string().describe("JSON condition expression. Supported types: all_of, any_of, board_key_exists, message_received, timeout"),
     },
-    async execute(args) {
+    async execute(args, context) {
         let condition
         try {
             condition = JSON.parse(args.conditionJson)
         } catch {
             return "Error: conditionJson must be valid JSON"
         }
-        const res = await fetch("http://localhost:${PORT}/api/act/${actId}/thread/${threadId}/set-wake-condition", {
+        const sessionID = context.sessionID
+        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/wait-until?workingDir=${wd}\`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                createdBy: ${JSON.stringify(participantKey)},
-                target: "self",
-                onSatisfiedMessage: args.onSatisfiedMessage,
+                resumeWith: args.resumeWith,
                 condition,
             }),
         })
         const data = await res.json()
         if (!data.ok) return data.error
-        return "Wake condition set. You will be woken up when the condition is satisfied."
+        return "Wait condition saved. You will resume when it is satisfied."
     },
 })
-`
-    return { name, content }
-}
-
-/**
- * Get all Act runtime tools for a participant in a thread.
- */
-export function getActToolsForParticipant(
-    actId: string,
-    threadId: string,
-    participantKey: string,
-): Array<{ name: string; content: string }> {
-    return [
-        generateSendMessageTool(actId, threadId, participantKey),
-        generatePostToBoardTool(actId, threadId, participantKey),
-        generateReadBoardTool(actId, threadId),
-        generateSetWakeConditionTool(actId, threadId, participantKey),
+`,
+        },
     ]
 }

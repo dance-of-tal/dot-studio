@@ -1,16 +1,14 @@
-// Integration test: Performer → Act creation with name-based participant keys
+// Integration test: Performer → Act creation with Act-local participant keys
 //
 // Verifies the full flow:
 // 1. Performer creation with unique names
 // 2. Act creation
-// 3. Binding performers to Act (participant key = performer name)
-// 4. Relation creation uses name-based keys
-// 5. Cascade rename on performer name change
+// 3. Binding performers to Act
+// 4. Relation creation uses internal participant keys
+// 5. Performer rename does not rewrite participant identity
 // 6. Duplicate name prevention
 
-import { describe, it, expect, beforeEach } from 'vitest'
-import { createStore } from 'zustand/vanilla'
-import type { StudioState } from '../store/types'
+import { describe, it, expect } from 'vitest'
 
 // We need to test the actual store slices, but they require complex wiring.
 // Instead, test the core logic functions directly.
@@ -53,23 +51,24 @@ function makeAct(overrides: Partial<WorkspaceAct> = {}): WorkspaceAct {
     }
 }
 
-describe('Participant Name-Based Keys', () => {
+describe('Participant Keys And Labels', () => {
     describe('resolveActParticipantLabel', () => {
         const performers = [
             makePerformer('performer-1', 'Coder'),
             makePerformer('performer-2', 'Reviewer', 'performer/@studio/reviewer'),
         ]
 
-        it('returns participant key as label (key = performer name)', () => {
+        it('returns participant key as label when it is already human-readable', () => {
             const act = makeAct({
                 participants: {
-                    'Coder': {
+                    'participant-1': {
                         performerRef: { kind: 'draft', draftId: 'performer-1' },
+                        displayName: 'Coder',
                         position: { x: 0, y: 0 },
                     },
                 },
             })
-            expect(resolveActParticipantLabel(act, 'Coder', performers)).toBe('Coder')
+            expect(resolveActParticipantLabel(act, 'participant-1', performers)).toBe('Coder')
         })
 
         it('returns key directly when no act is provided', () => {
@@ -82,37 +81,39 @@ describe('Participant Name-Based Keys', () => {
         })
 
         it('returns updated performer name if cascade rename missed', () => {
-            // Simulate: key is "OldName" but performer was renamed to "Coder"
             const act = makeAct({
                 participants: {
-                    'OldName': {
+                    'participant-1': {
                         performerRef: { kind: 'draft', draftId: 'performer-1' },
+                        displayName: 'OldName',
                         position: { x: 0, y: 0 },
                     },
                 },
             })
-            expect(resolveActParticipantLabel(act, 'OldName', performers)).toBe('Coder')
+            expect(resolveActParticipantLabel(act, 'participant-1', performers)).toBe('Coder')
         })
     })
 
     describe('buildActAssetPayload', () => {
-        it('outputs key (not id) in participant payload', () => {
+        it('exports display names while keeping internal ids inside the workspace', () => {
             const act = makeAct({
                 name: 'Review Pipeline',
                 participants: {
-                    'Coder': {
+                    'participant-1': {
                         performerRef: { kind: 'registry', urn: 'performer/@studio/coder' },
+                        displayName: 'Coder',
                         position: { x: 0, y: 0 },
                     },
-                    'Reviewer': {
+                    'participant-2': {
                         performerRef: { kind: 'registry', urn: 'performer/@studio/reviewer' },
+                        displayName: 'Reviewer',
                         position: { x: 300, y: 0 },
                     },
                 },
                 relations: [
                     {
                         id: 'rel-1',
-                        between: ['Coder', 'Reviewer'] as [string, string],
+                        between: ['participant-1', 'participant-2'] as [string, string],
                         direction: 'one-way' as const,
                         name: 'Code Review',
                         description: 'Request code review',
@@ -122,20 +123,19 @@ describe('Participant Name-Based Keys', () => {
 
             const payload = buildActAssetPayload(act)
 
-            // Verify participant uses 'key' not 'id'
             expect(payload.payload.participants[0]).toHaveProperty('key', 'Coder')
             expect(payload.payload.participants[1]).toHaveProperty('key', 'Reviewer')
             expect(payload.payload.participants[0]).not.toHaveProperty('id')
 
-            // Verify relations use name-based keys
             expect(payload.payload.relations[0].between).toEqual(['Coder', 'Reviewer'])
         })
 
         it('rejects draft performers in asset payload', () => {
             const act = makeAct({
                 participants: {
-                    'Coder': {
+                    'participant-1': {
                         performerRef: { kind: 'draft', draftId: 'performer-1' },
+                        displayName: 'Coder',
                         position: { x: 0, y: 0 },
                     },
                 },
@@ -171,24 +171,25 @@ describe('Participant Name-Based Keys', () => {
         })
     })
 
-    describe('cascade rename', () => {
-        it('updates Act participant key and relation.between on performer rename', () => {
-            // Simulate what workspaceSlice.updatePerformerName does
+    describe('performer rename', () => {
+        it('does not rewrite Act participant keys or relation endpoints', () => {
             const act = makeAct({
                 participants: {
-                    'OldName': {
+                    'participant-1': {
                         performerRef: { kind: 'draft', draftId: 'p-1' },
+                        displayName: 'OldName',
                         position: { x: 0, y: 0 },
                     },
-                    'Reviewer': {
+                    'participant-2': {
                         performerRef: { kind: 'registry', urn: 'performer/@studio/reviewer' },
+                        displayName: 'Reviewer',
                         position: { x: 300, y: 0 },
                     },
                 },
                 relations: [
                     {
                         id: 'r1',
-                        between: ['OldName', 'Reviewer'] as [string, string],
+                        between: ['participant-1', 'participant-2'] as [string, string],
                         direction: 'both' as const,
                         name: 'Collaboration',
                         description: 'Work together',
@@ -196,28 +197,14 @@ describe('Participant Name-Based Keys', () => {
                 ],
             })
 
-            const oldName = 'OldName'
-            const newName = 'Coder'
+            const performers = [
+                makePerformer('p-1', 'Coder'),
+                makePerformer('p-2', 'Reviewer'),
+            ]
 
-            // Apply cascade rename (matching workspaceSlice logic)
-            const oldKey = Object.keys(act.participants).find(k => k === oldName)
-            expect(oldKey).toBe('OldName')
-
-            const { [oldKey!]: binding, ...restParticipants } = act.participants
-            const updatedAct = {
-                ...act,
-                participants: { ...restParticipants, [newName]: binding },
-                relations: act.relations.map(r => ({
-                    ...r,
-                    between: r.between.map(b => b === oldName ? newName : b) as [string, string],
-                })),
-            }
-
-            // Verify cascade
-            expect(Object.keys(updatedAct.participants)).toEqual(['Reviewer', 'Coder'])
-            expect(updatedAct.relations[0].between).toEqual(['Coder', 'Reviewer'])
-            expect(updatedAct.participants['OldName']).toBeUndefined()
-            expect(updatedAct.participants['Coder']).toBeDefined()
+            expect(Object.keys(act.participants)).toEqual(['participant-1', 'participant-2'])
+            expect(act.relations[0].between).toEqual(['participant-1', 'participant-2'])
+            expect(resolveActParticipantLabel(act, 'participant-1', performers)).toBe('Coder')
         })
     })
 })

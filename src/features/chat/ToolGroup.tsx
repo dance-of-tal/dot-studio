@@ -825,7 +825,12 @@ function TodoInlineList({ input, output }: { input?: Record<string, unknown>; ou
 
     const iconFor = (s: string) => {
         if (s === 'completed') return <CheckCircle2 size={13} style={{ color: '#10b981' }} />
-        if (s === 'in_progress') return <Loader2 size={13} className="spin-icon" style={{ color: 'var(--accent)' }} />
+        if (s === 'in_progress') return (
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{ color: 'var(--accent)' }}>
+                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
+                <circle cx="7" cy="7" r="2.5" fill="currentColor" className="todo-inline-pulse" />
+            </svg>
+        )
         if (s === 'cancelled') return <XCircle size={13} style={{ color: 'var(--text-muted)' }} />
         return <Circle size={13} style={{ color: 'var(--text-muted)' }} />
     }

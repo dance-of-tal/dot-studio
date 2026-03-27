@@ -16,6 +16,7 @@ import type {
 } from '../../../shared/act-types.js'
 import { Mailbox } from './mailbox.js'
 import { evaluateWakeCondition } from './wake-evaluator.js'
+import { payloadString } from './act-runtime-utils.js'
 
 // ── Types ───────────────────────────────────────────────
 
@@ -26,14 +27,10 @@ export interface WakeUpTarget {
     reason: 'subscription' | 'wake-condition'
 }
 
-function payloadString(payload: Record<string, unknown>, key: string) {
-    const value = payload[key]
-    return typeof value === 'string' ? value : undefined
-}
-
 // ── Subscription matching ───────────────────────────────
 
 function matchSubscription(
+    participantKey: string,
     subscriptions: ParticipantSubscriptions | undefined,
     event: MailboxEvent,
 ): boolean {
@@ -44,6 +41,10 @@ function matchSubscription(
     switch (event.type) {
         case 'message.sent':
         case 'message.delivered': {
+            const to = payloadString(payload, 'to')
+            if (to !== participantKey) {
+                return false
+            }
             const from = payloadString(payload, 'from')
             const tag = payloadString(payload, 'tag')
             const fromMatch = subscriptions.messagesFrom?.includes(from || '') ?? false
@@ -107,10 +108,16 @@ export function routeEvent(
     for (const [key, binding] of Object.entries(actDefinition.participants)) {
         if (key === event.source) continue  // Don't wake the source
 
-        const subMatch = matchSubscription(binding.subscriptions, event)
+        const subMatch = matchSubscription(key, binding.subscriptions, event)
         const relMatch = hasRelationPermission(key, event, actDefinition.relations)
 
-        if (subMatch && relMatch) {
+        // Direct message: always wake the recipient if relation allows it.
+        // 1:1 messages don't need explicit subscription — the `to` field is the routing key.
+        const isDirectMessageTarget =
+            (event.type === 'message.sent' || event.type === 'message.delivered') &&
+            payloadString(event.payload, 'to') === key
+
+        if ((subMatch && relMatch) || (isDirectMessageTarget && relMatch)) {
             targets.push({
                 participantKey: key,
                 triggerEvent: event,

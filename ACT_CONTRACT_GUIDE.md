@@ -40,9 +40,10 @@ Studio currently works with four related but different representations:
    - Adds relation ids, canvas position, size, visibility, and authoring metadata
 
 3. **Studio runtime Act definition**
-   - Snapshot sent to `/api/act/:actId/threads`
+   - Initial definition sent to `/api/act/:actId/threads`
    - Uses participant records with `performerRef`
-   - Used only for thread creation and runtime execution
+   - May be replaced for active or idle threads through runtime-definition sync
+   - Used only for runtime execution, never for canonical asset serialization
 
 4. **Act thread runtime state**
    - Mailbox, callboard, wake conditions, per-participant sessions, and event log
@@ -179,6 +180,13 @@ type ActDefinition = {
 }
 ```
 
+Runtime sync uses the same `ActDefinition` shape:
+
+- Studio builds the full current runtime definition from workspace state
+- Studio sends it to the runtime sync boundary for the target Act
+- Runtime replaces the active or idle thread definition in place
+- Completed and interrupted threads remain historical snapshots
+
 Thread runtime state includes:
 
 - mailbox messages
@@ -189,6 +197,7 @@ Thread runtime state includes:
 - thread status
 
 These runtime fields must never be written into installed or published Act assets.
+Within runtime persistence, `board.json` is the only durable source of truth for board entries.
 
 ## Boundary Rules
 
@@ -224,6 +233,16 @@ Workspace Act
 → send to `/api/act/:actId/threads`
 → create or select participant sessions lazily during chat
 
+### Sync thread runtime definition
+
+Workspace Act
+→ build full runtime `ActDefinition`
+→ send to `/api/act/:actId/runtime-definition`
+→ runtime reconciles active and idle threads only
+→ relation, subscription, rule, and safety changes apply immediately
+→ participant performer changes retire the old participant session and lazily create a new one on next use
+→ participant key renames are treated as remove + add
+
 ## Ownership Rules
 
 - `dot` owns the canonical asset schema
@@ -240,3 +259,4 @@ Workspace Act
 5. Allow opposite-direction one-way relations in Studio.
 6. Treat subscriptions as wake-up filters, not relation permission metadata.
 7. Studio uses `workspace` terminology for local state, but canonical URNs still use `stage` as the third segment.
+8. Runtime thread persistence is a full-rewrite boundary. Incompatible persisted runtime snapshots must be discarded, not compatibility-loaded.

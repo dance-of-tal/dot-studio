@@ -5,6 +5,7 @@ import type { StudioConfig } from '../lib/config.js'
 import {
     activateStudioProject,
     getStudioConfig,
+    openStudioPath,
     pickWorkingDirectory,
     updateStudioConfig,
 } from '../services/studio-service.js'
@@ -37,6 +38,15 @@ health.put('/api/studio/config', async (c) => {
 health.post('/api/studio/activate', async (c) => {
     const { workingDir } = await c.req.json<{ workingDir: string }>()
     const result = await activateStudioProject(workingDir)
+    if (!result.ok) {
+        return jsonServiceFailure(c, result)
+    }
+    return c.json(result)
+})
+
+health.post('/api/studio/open-path', async (c) => {
+    const { path } = await c.req.json<{ path: string }>()
+    const result = await openStudioPath(path)
     if (!result.ok) {
         return jsonServiceFailure(c, result)
     }

@@ -14,6 +14,7 @@ import {
 import { compileDance, type CompiledSkill } from './dance-compiler.js'
 import { compilePerformer, type CompiledPerformer, type PerformerCompileInput, type Posture } from './performer-compiler.js'
 import type { ModelSelection } from '../../../shared/model-types.js'
+import { COLLABORATION_TOOL_NAMES, LEGACY_COLLABORATION_TOOL_NAMES } from '../act-runtime/act-tools.js'
 
 // ── @mention relation support (inlined from deleted relation-compiler.ts) ──
 
@@ -83,6 +84,7 @@ export interface PerformerProjectionInput {
     }>
     scope?: 'workspace' | 'act'
     actId?: string
+    collaborationPromptSection?: string | null
     extraTools?: Array<{
         name: string
         content: string
@@ -201,6 +203,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             skillNames: skills.map((skill) => skill.logicalName),
             toolMap,
             taskAllowlist: requestProjection.taskAllowlist,
+            collaborationPromptSection: input.collaborationPromptSection || null,
             relationPromptSection: requestProjection.promptSection,
         } satisfies PerformerCompileInput,
         skills,
@@ -208,6 +211,29 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
 
     let changed = false
     if (input.extraTools) {
+        // Clean stale act tool files that don't belong to the current extra tools set.
+        // This prevents zombie tools from deleted/renamed acts lingering in OpenCode's cache.
+        const currentToolNames = new Set<string>(input.extraTools.map((t) => t.name))
+        const collaborationToolNames = new Set<string>([
+            ...COLLABORATION_TOOL_NAMES,
+            ...LEGACY_COLLABORATION_TOOL_NAMES,
+        ])
+        const toolsDir = path.join(input.executionDir, '.opencode', 'tools')
+        try {
+            const existing = await fs.readdir(toolsDir)
+            for (const file of existing) {
+                if (file.endsWith('.ts')) {
+                    const toolName = file.replace(/\.ts$/, '')
+                    if (collaborationToolNames.has(toolName) && !currentToolNames.has(toolName)) {
+                        await fs.rm(path.join(toolsDir, file), { force: true }).catch(() => {})
+                        changed = true
+                    }
+                }
+            }
+        } catch {
+            // tools dir may not exist yet
+        }
+
         for (const tool of input.extraTools) {
             const toolPath = path.join(input.executionDir, '.opencode', 'tools', `${tool.name}.ts`)
             compiled.allFiles.push(toolPath)

@@ -210,6 +210,26 @@ export function mapSessionMessagesToChatMessages(messages: SessionMessageLike[])
     return messages.map(mapSessionMessageToChatMessage)
 }
 
+export function mergeSystemPrefixMessages(
+    prefixes: ChatMessage[] | undefined,
+    messages: ChatMessage[],
+): ChatMessage[] {
+    if (!prefixes?.length) {
+        return messages
+    }
+
+    const serverIds = new Set(messages.map((message) => message.id))
+    const systemPrefixes = prefixes.filter(
+        (prefix) => prefix.role === 'system' && !serverIds.has(prefix.id),
+    )
+
+    if (systemPrefixes.length === 0) {
+        return messages
+    }
+
+    return [...systemPrefixes, ...messages]
+}
+
 export function extractLatestNonRetryableAssistantError(
     sessionMessages: SessionMessageLike[],
 ): { id: string; message: string } | null {

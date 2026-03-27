@@ -145,6 +145,14 @@ export function useAssetLibraryController() {
     }
 
     const handleRegistryInstall = async (urn: string, targetScope: 'global' | 'stage') => {
+        // Check if this is a skills.sh result — route through GitHub import
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const item = (registryResults as any[]).find((r: any) => getAssetUrn(r) === urn)
+        if (item?.tags?.includes('skills.sh') && item.kind === 'dance') {
+            // owner contains "owner/repo", name is the skill name → "owner/repo@name"
+            const source = `${item.owner}@${item.name}`
+            return api.dot.addFromGitHub(source)
+        }
         return installMutation.mutateAsync({ urn, scope: targetScope })
     }
 

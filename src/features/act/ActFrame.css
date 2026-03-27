@@ -21,6 +21,7 @@
     gap: 6px;
     cursor: pointer;
     user-select: none;
+    min-width: 0;
 }
 .act-frame__icon {
     color: var(--act-accent);
@@ -33,7 +34,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 180px;
+    /* allow it to shrink below its content size */
+    min-width: 30px;
 }
 
 .act-frame__thread-chip {
@@ -45,6 +47,9 @@
     color: var(--act-accent);
     white-space: nowrap;
     flex-shrink: 0;
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ── Meta badges (collapsed) ── */

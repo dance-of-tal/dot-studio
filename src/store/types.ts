@@ -22,10 +22,12 @@ import type {
 } from '../types'
 import type { AdapterViewProjection } from '../../shared/adapter-view'
 import type { PermissionRequest, QuestionAnswer, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
+import type { SessionSlice } from './session/types'
 
 export type PerformerRelationSlice = Record<never, never>
 
 export interface FocusSnapshot {
+    nodeId: string
     type: 'performer' | 'act'
     actId?: string
     hiddenPerformerIds: string[]
@@ -192,7 +194,6 @@ export interface ChatSlice {
         message: string,
         attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
         extraDanceRefs?: AssetRef[],
-        mentionedPerformers?: Array<{ performerId: string; name: string }>,
     ) => Promise<void>
     sendActMessage: (
         actId: string,
@@ -207,6 +208,7 @@ export interface ChatSlice {
     undoLastTurn: (performerId: string) => Promise<void>
     rehydrateSessions: () => Promise<void>
     revertSession: (performerId: string, messageId: string) => Promise<void>
+    restoreRevertedMessage: (performerId: string, messageId: string) => Promise<void>
     getDiff: (performerId: string) => Promise<Array<Record<string, unknown>>>
     listSessions: () => Promise<void>
     deleteSession: (sessionId: string) => Promise<void>
@@ -250,6 +252,7 @@ export interface SafeModeSlice {
 export interface ActThreadState {
     id: string
     actId: string
+    name?: string  // client-side display name
     status: 'active' | 'idle' | 'completed' | 'interrupted'
     participantSessions: Record<string, string>  // participantKey → sessionId
     createdAt: number
@@ -278,6 +281,7 @@ export interface ActSlice {
     renameAct: (id: string, name: string) => void
     updateActDescription: (id: string, description: string) => void
     updateActRules: (id: string, rules: string[]) => void
+    updateActSafety: (id: string, safety: WorkspaceAct['safety']) => void
     selectAct: (id: string | null) => void
     toggleActVisibility: (id: string) => void
 
@@ -313,9 +317,11 @@ export interface ActSlice {
 
     // ── Thread management ───────────────────────
     createThread: (actId: string) => Promise<string>
-    selectThread: (threadId: string | null) => void
+    selectThread: (actId: string, threadId: string | null) => void
     selectThreadParticipant: (participantKey: string | null) => void
     loadThreads: (actId: string) => Promise<void>
+    deleteThread: (actId: string, threadId: string) => Promise<void>
+    renameThread: (actId: string, threadId: string, name: string) => void
 }
 
 
@@ -334,4 +340,4 @@ export interface AssistantSlice {
     resetAssistantRuntimeState: () => void
 }
 
-export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice & ActSlice & AssistantSlice
+export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice & ActSlice & AssistantSlice & SessionSlice

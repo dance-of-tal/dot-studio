@@ -222,6 +222,35 @@ class ActRuntimeService {
         return { ok: true as const, entries: runtime.mailbox.getBoardSnapshot() }
     }
 
+    async syncActDefinition(actId: string, actDefinition: ActDefinition) {
+        await this.ensureThreadsLoaded()
+        const threadIds = this.threadManager.listThreadIds(actId, ['active', 'idle'])
+
+        for (const threadId of threadIds) {
+            const synced = await this.threadManager.syncThreadActDefinition(threadId, actDefinition)
+            if (!synced) continue
+
+            this.safetyGuards.delete(threadId)
+
+            const event: MailboxEvent = {
+                id: nanoid(),
+                type: 'runtime.reconfigured',
+                sourceType: 'system',
+                source: 'studio',
+                timestamp: Date.now(),
+                payload: {
+                    actId,
+                    threadId,
+                    participantCount: Object.keys(actDefinition.participants || {}).length,
+                    relationCount: actDefinition.relations.length,
+                },
+            }
+            await this.threadManager.logEvent(threadId, event)
+        }
+
+        return { ok: true as const, threads: this.threadManager.listThreads(actId) }
+    }
+
     async setWakeCondition(threadId: string, body: SetWakeConditionInput) {
         await this.ensureThreadsLoaded()
         const runtime = this.threadManager.getThreadRuntime(threadId)

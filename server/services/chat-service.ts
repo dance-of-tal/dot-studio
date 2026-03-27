@@ -6,6 +6,7 @@ import { describeUnavailableRuntimeTools } from '../lib/runtime-tools.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { getSafeOwnerExecutionDir } from '../lib/safe-mode.js'
 import { registerSessionExecutionContext } from '../lib/session-execution.js'
+import { resolveActSessionPolicy, ACT_AGENT_POSTURE } from '../lib/act-session-policy.js'
 import { ensurePerformerProjection } from './opencode-projection/stage-projection-service.js'
 import { projectActTools } from './act-runtime/act-tool-projection.js'
 import { getActDefinitionForThread, getActRuntimeService } from './act-runtime/act-runtime-service.js'
@@ -15,27 +16,31 @@ export async function createStudioChatSession(
     request: ChatSessionCreateRequest,
 ) {
     const oc = await getOpencode()
-    const ownerKind = request.actId ? 'act' as const : 'performer' as const
+    const isAct = !!request.actId
+    const actPolicy = isAct ? resolveActSessionPolicy(request.actId!) : null
+    const ownerKind = isAct ? actPolicy!.ownerKind : 'performer' as const
     // Use the full chatKey as both safe owner and session context owner so each
     // Act participant session resolves back to the correct tab and execution scope.
     const safeOwnerId = request.performerId
     const contextOwnerId = request.performerId
+    // Act sessions are always direct — never inherit executionMode from request
+    const effectiveMode = isAct ? actPolicy!.executionMode : (request.executionMode || 'direct')
     const executionDir = await getSafeOwnerExecutionDir(
         cwd,
         ownerKind,
         safeOwnerId,
-        request.executionMode || 'direct',
+        effectiveMode,
     )
 
     const session = unwrapOpencodeResult<{ id: string; title: string }>(await oc.session.create({
         directory: executionDir,
-        title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash, request.executionMode),
+        title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash, effectiveMode),
     }))
     await registerSessionExecutionContext({
         sessionId: session.id,
         ownerKind,
         ownerId: contextOwnerId,
-        mode: request.executionMode || 'direct',
+        mode: effectiveMode,
         workingDir: cwd,
         executionDir,
     })
@@ -196,7 +201,10 @@ export async function sendStudioChatMessage(
             directory: executionDir,
             agent: isAssistant
                 ? (assistantAgentName || undefined)
-                : (ensured?.compiled.agentNames[performer.planMode ? 'plan' : 'build']),
+                // Act scope always uses build agent, ignoring performer planMode
+                : (ensured?.compiled.agentNames[
+                    request.actId ? ACT_AGENT_POSTURE : (performer.planMode ? 'plan' : 'build')
+                  ]),
             // Pass model directly so OpenCode uses the user's selected model,
             // not the (potentially stale) model cached from the agent file.
             model: performer.model ? {

@@ -5,50 +5,55 @@
  * Wake prompts are informational summaries injected into participant sessions.
  */
 
-import type { MailboxMessage } from '../../../shared/act-types.js'
+import type { ActDefinition, MailboxMessage } from '../../../shared/act-types.js'
 import type { WakeUpTarget } from './event-router.js'
 import type { Mailbox } from './mailbox.js'
-
-function payloadString(payload: Record<string, unknown>, key: string) {
-    const value = payload[key]
-    return typeof value === 'string' ? value : undefined
-}
+import { payloadString } from './act-runtime-utils.js'
 
 /**
  * Build a wake-up prompt for a participant being woken by an event.
- * The prompt describes what happened and includes pending messages.
+ * The prompt describes only what happened right now and any pending messages.
+ * Stable collaboration rules and tool guidance are injected at the agent/system level.
  */
-export function buildWakePrompt(target: WakeUpTarget, mailbox: Mailbox): string {
+export function buildWakePrompt(
+    target: WakeUpTarget,
+    mailbox: Mailbox,
+    actDefinition?: ActDefinition,
+): string {
     const parts: string[] = []
     const event = target.triggerEvent
     const payload = event.payload
+    const participantName = (key: string | null | undefined) => {
+        if (!key) return 'Someone'
+        return actDefinition?.participants[key]?.displayName || key
+    }
 
     // ── Event summary ───────────────────────────────
     if (target.reason === 'wake-condition' && target.wakeCondition) {
-        parts.push(`[Wake Condition Satisfied]`)
+        parts.push(`[Resume]`)
         parts.push(target.wakeCondition.onSatisfiedMessage)
         parts.push('')
     } else {
         switch (event.type) {
             case 'message.sent':
-                parts.push(`[메시지 알림]`)
-                parts.push(`${event.source}이(가) 메시지를 보냈습니다.${payloadString(payload, 'tag') ? ` tag: ${payloadString(payload, 'tag')}` : ''}`)
+                parts.push(`[Direct Message]`)
+                parts.push(`${participantName(event.source)} sent you a direct message.${payloadString(payload, 'tag') ? ` label: ${payloadString(payload, 'tag')}` : ''}`)
                 break
             case 'board.posted':
-                parts.push(`[Board 알림]`)
-                parts.push(`${event.source}이(가) key="${payloadString(payload, 'key') || ''}" 항목을 게시했습니다.`)
-                if (payloadString(payload, 'kind')) parts.push(`kind: ${payloadString(payload, 'kind')}`)
+                parts.push(`[Shared Note Added]`)
+                parts.push(`${participantName(event.source)} added a shared note with key "${payloadString(payload, 'key') || ''}".`)
+                if (payloadString(payload, 'kind')) parts.push(`type: ${payloadString(payload, 'kind')}`)
                 break
             case 'board.updated':
-                parts.push(`[Board 업데이트]`)
-                parts.push(`${event.source}이(가) key="${payloadString(payload, 'key') || ''}" 항목을 업데이트했습니다.`)
+                parts.push(`[Shared Note Updated]`)
+                parts.push(`${participantName(event.source)} updated the shared note with key "${payloadString(payload, 'key') || ''}".`)
                 break
             case 'runtime.idle':
-                parts.push(`[Runtime 알림]`)
-                parts.push(`Act runtime이 idle 상태입니다.`)
+                parts.push(`[System Update]`)
+                parts.push(`The collaboration runtime is idle.`)
                 break
             default:
-                parts.push(`[알림] ${event.type} event from ${event.source}`)
+                parts.push(`[Update] ${event.type} from ${event.source}`)
         }
         parts.push('')
     }
@@ -56,16 +61,16 @@ export function buildWakePrompt(target: WakeUpTarget, mailbox: Mailbox): string 
     // ── Pending messages ────────────────────────────
     const pending = mailbox.getMessagesFor(target.participantKey)
     if (pending.length > 0) {
-        parts.push(`--- 대기 중인 메시지 (${pending.length}건) ---`)
+        parts.push(`--- Pending Direct Messages (${pending.length}) ---`)
         for (const msg of pending) {
-            parts.push(`From: ${msg.from}${msg.tag ? ` [${msg.tag}]` : ''}`)
+            parts.push(`From: ${participantName(msg.from)}${msg.tag ? ` [${msg.tag}]` : ''}`)
             parts.push(msg.content)
             parts.push('')
         }
     }
 
     // ── Instruction ─────────────────────────────────
-    parts.push('관련 board entry를 확인하고, 네 Tal과 active dances에 따라 필요한 행동을 판단하라.')
+    parts.push('Review the latest shared context and decide your next step using the available coordination tools when helpful.')
 
     return parts.join('\n')
 }

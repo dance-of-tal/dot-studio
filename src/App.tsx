@@ -37,9 +37,8 @@ export default function App() {
   const workspaceDirty = useStudioStore(s => s.workspaceDirty);
   const isTerminalOpen = useStudioStore(s => s.isTerminalOpen);
   const setTerminalOpen = useStudioStore(s => s.setTerminalOpen);
-  const focusedPerformerId = useStudioStore(s => s.focusedPerformerId);
   const focusSnapshot = useStudioStore(s => s.focusSnapshot);
-  const isAnyFocusActive = !!(focusedPerformerId || (focusSnapshot?.type === 'act'));
+  const isAnyFocusActive = !!focusSnapshot;
 
   const isInitialMount = useRef(true);
 

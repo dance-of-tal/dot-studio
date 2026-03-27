@@ -14,7 +14,8 @@ import {
 } from '../../lib/act-layout'
 import ActHeaderActions from './ActHeaderActions'
 import ActSurfacePanel from './ActSurfacePanel'
-import { scheduleFitView } from '../../lib/focus-utils'
+import { resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
+import { evaluateActReadiness } from './act-readiness'
 import './ActFrame.css'
 
 type ActFrameData = {
@@ -27,6 +28,7 @@ type ActFrameData = {
 export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
     const {
         acts,
+        performers,
         selectedActId,
         actEditorState,
         selectAct,
@@ -35,16 +37,22 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
         toggleActVisibility,
         activeThreadId,
         actThreads,
-        focusedPerformerId, focusedNodeType,
+        focusedPerformerId,
+        focusSnapshot,
         enterFocusMode,
         exitFocusMode,
     } = useStudioStore()
 
     const act = useMemo(() => acts.find((a) => a.id === id), [acts, id])
+    const readiness = useMemo(
+        () => act ? evaluateActReadiness(act, performers) : { runnable: false, issues: [] },
+        [act, performers],
+    )
 
     const isSelected = selectedActId === id
     const isEditing = actEditorState?.actId === id
-    const isFocused = focusedPerformerId === id && focusedNodeType === 'act'
+    const focusNodeId = resolveFocusNodeId(focusSnapshot, focusedPerformerId)
+    const isFocused = focusSnapshot?.type === 'act' && focusNodeId === id
     const rfWidth = useStore((state) => state.width)
     const rfHeight = useStore((state) => state.height)
     const width = data.width || act?.width || ACT_DEFAULT_WIDTH
@@ -85,6 +93,7 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
                 width={width}
                 height={height}
                 resizable={isSelected}
+                focused={isFocused}
                 minWidth={ACT_DEFAULT_WIDTH}
                 minHeight={ACT_MIN_EXPANDED_HEIGHT}
                 transformActive={isSelected ? data.transformActive || false : false}
@@ -113,6 +122,7 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
                     <ActHeaderActions
                         focused={isFocused}
                         editing={isEditing}
+                        readiness={readiness}
                         onToggleFocus={handleToggleFocus}
                         onToggleEdit={handleToggleEdit}
                         onHide={() => toggleActVisibility(id)}

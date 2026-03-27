@@ -1,12 +1,59 @@
 import { Hono } from 'hono'
 import type { ConditionExpr } from '../../shared/act-types.js'
-import { getActRuntimeService } from '../services/act-runtime/act-runtime-service.js'
+import { parseActSessionOwnerId, resolveSessionExecutionContext } from '../lib/session-execution.js'
+import { getActDefinitionForThread, getActRuntimeService } from '../services/act-runtime/act-runtime-service.js'
 import { requestWorkingDir } from './route-errors.js'
 
 const actRuntimeTools = new Hono()
 
+async function resolveActSessionTarget(sessionId: string) {
+    const context = await resolveSessionExecutionContext(sessionId)
+    if (!context || context.ownerKind !== 'act') {
+        return null
+    }
+
+    const parsed = parseActSessionOwnerId(context.ownerId)
+    if (!parsed) {
+        return null
+    }
+
+    return {
+        workingDir: context.workingDir,
+        threadId: parsed.threadId,
+        participantKey: parsed.participantKey,
+    }
+}
+
+async function resolveParticipantKeyByName(workingDir: string, threadId: string, recipient: string) {
+    const actDefinition = await getActDefinitionForThread(workingDir, threadId)
+    if (!actDefinition) {
+        return recipient
+    }
+
+    const normalizedRecipient = recipient.trim().toLowerCase()
+    for (const [participantKey, binding] of Object.entries(actDefinition.participants || {})) {
+        const displayName = (binding.displayName || participantKey).trim().toLowerCase()
+        if (displayName === normalizedRecipient || participantKey.toLowerCase() === normalizedRecipient) {
+            return participantKey
+        }
+    }
+
+    return null
+}
+
+// ── Debug logging middleware for Act tool routes ────
+actRuntimeTools.use('/api/act/*', async (c, next) => {
+    const url = c.req.url
+    const method = c.req.method
+    const workingDir = c.req.query('workingDir') || c.req.header('x-dot-working-dir') || 'NONE'
+    console.log(`[act-tool-req] ${method} ${url.replace(/\?.*/, '')} workingDir=${decodeURIComponent(workingDir).slice(-40)}`)
+    await next()
+})
+
 actRuntimeTools.post('/api/act/:actId/thread/:threadId/send-message', async (c) => {
     const threadId = c.req.param('threadId')
+    const workingDir = requestWorkingDir(c)
+    console.log(`[act-tool] send-message: threadId=${threadId}, workingDir=${workingDir}`)
     const body = await c.req.json<{
         from: string
         to: string
@@ -14,15 +61,62 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/send-message', async (c) 
         tag?: string
     }>()
 
-    const result = await getActRuntimeService(requestWorkingDir(c)).sendMessage(threadId, body)
+    const service = getActRuntimeService(workingDir)
+    const result = await service.sendMessage(threadId, body)
+    console.log(`[act-tool] send-message result: ok=${result.ok}${!result.ok ? `, error=${result.error}` : ''}`)
     if (!result.ok) {
         return c.json(result, result.status as 404 | 429)
     }
     return c.json(result)
 })
 
+actRuntimeTools.get('/api/act/session/:sessionId/read-shared-board', async (c) => {
+    const target = await resolveActSessionTarget(c.req.param('sessionId'))
+    if (!target) {
+        return c.json({ ok: false, error: 'Act session not found' }, 404)
+    }
+
+    const key = c.req.query('key')
+    const result = await getActRuntimeService(target.workingDir).readBoard(target.threadId, key)
+    if (!result.ok) {
+        return c.json(result, result.status as 404)
+    }
+    return c.json(result)
+})
+
+actRuntimeTools.post('/api/act/session/:sessionId/message-teammate', async (c) => {
+    const target = await resolveActSessionTarget(c.req.param('sessionId'))
+    if (!target) {
+        return c.json({ ok: false, error: 'Act session not found' }, 404)
+    }
+
+    const body = await c.req.json<{
+        recipient: string
+        message: string
+        tag?: string
+    }>()
+
+    const recipientKey = await resolveParticipantKeyByName(target.workingDir, target.threadId, body.recipient)
+    if (!recipientKey) {
+        return c.json({ ok: false, error: `Unknown teammate "${body.recipient}"` }, 400)
+    }
+
+    const result = await getActRuntimeService(target.workingDir).sendMessage(target.threadId, {
+        from: target.participantKey,
+        to: recipientKey,
+        content: body.message,
+        tag: body.tag,
+    })
+    if (!result.ok) {
+        return c.json(result, result.status as 400 | 403 | 404 | 429)
+    }
+    return c.json(result)
+})
+
 actRuntimeTools.post('/api/act/:actId/thread/:threadId/post-to-board', async (c) => {
     const threadId = c.req.param('threadId')
+    const workingDir = requestWorkingDir(c)
+    console.log(`[act-tool] post-to-board: threadId=${threadId}, workingDir=${workingDir}`)
     const body = await c.req.json<{
         author: string
         key: string
@@ -32,7 +126,34 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/post-to-board', async (c)
         metadata?: Record<string, unknown>
     }>()
 
-    const result = await getActRuntimeService(requestWorkingDir(c)).postToBoard(threadId, body)
+    const result = await getActRuntimeService(workingDir).postToBoard(threadId, body)
+    console.log(`[act-tool] post-to-board result: ok=${result.ok}${!result.ok ? `, error=${result.error}` : ''}`)
+    if (!result.ok) {
+        return c.json(result, result.status as 403 | 404 | 429)
+    }
+    return c.json(result)
+})
+
+actRuntimeTools.post('/api/act/session/:sessionId/update-shared-board', async (c) => {
+    const target = await resolveActSessionTarget(c.req.param('sessionId'))
+    if (!target) {
+        return c.json({ ok: false, error: 'Act session not found' }, 404)
+    }
+
+    const body = await c.req.json<{
+        entryKey: string
+        entryType: 'artifact' | 'fact' | 'task'
+        content: string
+        mode?: 'replace' | 'append'
+    }>()
+
+    const result = await getActRuntimeService(target.workingDir).postToBoard(target.threadId, {
+        author: target.participantKey,
+        key: body.entryKey,
+        kind: body.entryType,
+        content: body.content,
+        updateMode: body.mode,
+    })
     if (!result.ok) {
         return c.json(result, result.status as 403 | 404 | 429)
     }
@@ -41,8 +162,11 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/post-to-board', async (c)
 
 actRuntimeTools.get('/api/act/:actId/thread/:threadId/read-board', async (c) => {
     const threadId = c.req.param('threadId')
+    const workingDir = requestWorkingDir(c)
+    console.log(`[act-tool] read-board: threadId=${threadId}, workingDir=${workingDir}`)
     const key = c.req.query('key')
-    const result = getActRuntimeService(requestWorkingDir(c)).readBoard(threadId, key)
+    const result = await getActRuntimeService(workingDir).readBoard(threadId, key)
+    console.log(`[act-tool] read-board result: ok=${result.ok}${!result.ok ? `, error=${result.error}` : ''}`)
     if (!result.ok) {
         return c.json(result, result.status as 404)
     }
@@ -58,7 +182,30 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/set-wake-condition', asyn
         condition: ConditionExpr
     }>()
 
-    const result = getActRuntimeService(requestWorkingDir(c)).setWakeCondition(threadId, body)
+    const result = await getActRuntimeService(requestWorkingDir(c)).setWakeCondition(threadId, body)
+    if (!result.ok) {
+        return c.json(result, result.status as 404)
+    }
+    return c.json(result)
+})
+
+actRuntimeTools.post('/api/act/session/:sessionId/wait-until', async (c) => {
+    const target = await resolveActSessionTarget(c.req.param('sessionId'))
+    if (!target) {
+        return c.json({ ok: false, error: 'Act session not found' }, 404)
+    }
+
+    const body = await c.req.json<{
+        resumeWith: string
+        condition: ConditionExpr
+    }>()
+
+    const result = await getActRuntimeService(target.workingDir).setWakeCondition(target.threadId, {
+        createdBy: target.participantKey,
+        target: 'self',
+        onSatisfiedMessage: body.resumeWith,
+        condition: body.condition,
+    })
     if (!result.ok) {
         return c.json(result, result.status as 404)
     }

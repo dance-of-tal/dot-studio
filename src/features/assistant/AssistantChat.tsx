@@ -8,10 +8,14 @@ import { ASSISTANT_PERFORMER_ID } from '../../store/assistantSlice'
 import { applyAssistantActions } from './assistant-actions'
 import { getAssistantMessageActions } from './assistant-protocol'
 import { showToast } from '../../lib/toast'
+import { selectMessagesForChatKey, selectChatKeyIsLoading } from '../../store/session'
 
 // Reuse performer chat rendering components
 import ThreadBody from '../chat/ThreadBody'
-import ChatMessageContent from '../chat/ChatMessageContent'
+import ChatMessageContent, {
+    hasVisibleAssistantMessageContent,
+} from '../chat/ChatMessageContent'
+import { hasVisibleUserMessageContent } from '../chat/chat-message-visibility'
 
 import './AssistantChat.css'
 
@@ -21,8 +25,6 @@ export function AssistantChat() {
         assistantModel,
         appliedAssistantActionMessageIds,
         assistantActionResults,
-        chats,
-        loadingPerformerId,
         sendMessage,
         startNewSession,
         setAssistantModel,
@@ -32,9 +34,9 @@ export function AssistantChat() {
         initRealtimeEvents,
     } = useStudioStore()
 
-    const assistantMessages = chats[ASSISTANT_PERFORMER_ID]
-    const messages = useMemo(() => assistantMessages || [], [assistantMessages])
-    const isLoading = loadingPerformerId === ASSISTANT_PERFORMER_ID
+    // Read from entity store with legacy fallback
+    const messages = useStudioStore((state) => selectMessagesForChatKey(state, ASSISTANT_PERFORMER_ID))
+    const isLoading = useStudioStore((state) => selectChatKeyIsLoading(state, ASSISTANT_PERFORMER_ID))
 
     const { data: models } = useModels()
     const connectedModels = useMemo(
@@ -240,22 +242,30 @@ export function AssistantChat() {
                             </p>
                         </div>
                     )}
-                    renderMessage={(msg) => (
-                        <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`}>
-                            {msg.role === 'user' ? (
-                                <div className="user-input-box">
-                                    <span className="user-input-text">{msg.content}</span>
-                                </div>
-                            ) : (
-                                <>
-                                    <ChatMessageContent message={msg} />
-                                    {renderAssistantActionStatus(msg.id)}
-                                </>
-                            )}
-                        </div>
-                    )}
+                    renderMessage={(msg) => {
+                        if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
+                            return null
+                        }
+                        if (msg.role === 'assistant' && !hasVisibleAssistantMessageContent(msg)) {
+                            return null
+                        }
+                        return (
+                            <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`} data-scrollable>
+                                {msg.role === 'user' ? (
+                                    <div className="user-input-box">
+                                        <span className="user-input-text">{msg.content}</span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <ChatMessageContent message={msg} />
+                                        {renderAssistantActionStatus(msg.id)}
+                                    </>
+                                )}
+                            </div>
+                        )
+                    }}
                     renderLoading={() => (
-                        <div className="thread-msg thread-msg--assistant">
+                        <div className="thread-msg thread-msg--assistant" data-scrollable>
                             <div className="assistant-body">
                                 <div className="loading-dots">
                                     <span /><span /><span />

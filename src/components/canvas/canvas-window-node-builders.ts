@@ -145,6 +145,7 @@ export function buildPerformerCanvasNodes(args: {
             actEditParticipant: isPerformerInEditingAct(performer),
             actEditDimmed: !!editingAct && !isPerformerInEditingAct(performer),
         } as Record<string, unknown>,
+        style: { width: performer.width || 400, height: performer.height || 500 },
     })) satisfies Node[]
 }
 
@@ -189,6 +190,7 @@ export function buildMarkdownEditorCanvasNodes(args: {
             onDeactivateTransform: () => onDeactivateTransform('markdownEditor', editor.id),
             workingDir,
         } as Record<string, unknown>,
+        style: { width: editor.width || 560, height: editor.height || 420 },
     })) satisfies Node[]
 }
 
@@ -231,6 +233,7 @@ export function buildCanvasTerminalWindowNodes(args: {
             onResize: (width: number, height: number) => onResizeTerminal(terminal.id, width, height),
             onSessionChange: (sessionId: string | null, connected: boolean) => onSessionChange(terminal.id, sessionId, connected),
         } as Record<string, unknown>,
+        style: { width: terminal.width || 600, height: terminal.height || 400 },
     })) satisfies Node[]
 }
 
@@ -269,6 +272,7 @@ export function buildTrackingWindowNodes(args: {
             onClose: () => onCloseTrackingWindow(),
             onResize: (width: number, height: number) => onResizeTrackingWindow(width, height),
         } as Record<string, unknown>,
+        style: { width: trackingWindow.width || 420, height: trackingWindow.height || 360 },
     }] satisfies Node[] : []
 }
 
@@ -308,5 +312,6 @@ export function buildActCanvasNodes(args: {
             onActivateTransform: () => onActivateTransform('act', act.id),
             onDeactivateTransform: () => onDeactivateTransform('act', act.id),
         } as Record<string, unknown>,
+        style: { width: act.width || ACT_DEFAULT_WIDTH, height: resolveActExpandedHeight(act.height) },
     })) satisfies Node[]
 }

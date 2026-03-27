@@ -8,31 +8,17 @@
 
 import type { StudioState } from './types'
 import type { LspDiagnostic } from '../types'
-import {
-    diagnosticMatchesWorkingDir,
-    invalidateRuntimeQueries,
-} from './integration-streaming'
+import { diagnosticMatchesWorkingDir } from './integration-streaming'
+import { queryClient } from '../lib/query-client'
 import { showToast } from '../lib/toast'
-export {
-    handleMessageUpdated,
-    handleMessagePartUpdated,
-    handleMessagePartDelta,
-    handleMessagePartRemoved,
-} from './integration-message-handlers'
-export {
-    handleSessionStatus,
-    handleSessionIdle,
-    handleSessionCompacted,
-    handleSessionError,
-    handlePermissionAsked,
-    handlePermissionReplied,
-    handleQuestionAsked,
-    handleQuestionReplied,
-    handleTodoUpdated,
-} from './integration-session-handlers'
 
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
+
+function invalidateRuntimeQueries(workingDir: string) {
+    queryClient.invalidateQueries({ queryKey: ['mcp-servers', workingDir] })
+    queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
+}
 
 // ── lsp.client.diagnostics ──
 
@@ -87,4 +73,4 @@ export function handleMcpBrowserOpenFailed(data: { type?: string; properties?: {
     })
 }
 
-// ── message.updated ──
+// Chat/session event reducers are handled by `session/event-ingest.ts`.

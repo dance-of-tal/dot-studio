@@ -2,13 +2,13 @@
  * event-logger.ts — Append-only event log for Act Thread
  *
  * PRD §6.3: Events are stored as append-only .jsonl files.
- * Path: ~/.dot-studio/act-runtime/<actId>/<threadId>/events.jsonl
+ * Path: ~/.dot-studio/workspaces/<workspaceId>/act-runtime/<actId>/<threadId>/events.jsonl
  */
 
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'
 import type { MailboxEvent } from '../../../shared/act-types.js'
-import { STUDIO_DIR } from '../../lib/config.js'
+import { workspaceActRuntimeDir } from '../../lib/config.js'
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
     return error instanceof Error
@@ -18,19 +18,16 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
 
 export class EventLogger {
     private readonly logPath: string
-    private readonly _workingDir: string
+    private readonly _workspaceId: string
     private readonly _actId: string
     private readonly _threadId: string
 
-    constructor(workingDir: string, actId: string, threadId: string) {
-        this._workingDir = workingDir
+    constructor(workspaceId: string, actId: string, threadId: string) {
+        this._workspaceId = workspaceId
         this._actId = actId
         this._threadId = threadId
         this.logPath = join(
-            STUDIO_DIR,
-            'act-runtime',
-            actId,
-            threadId,
+            workspaceActRuntimeDir(workspaceId, actId, threadId),
             'events.jsonl',
         )
     }
@@ -80,7 +77,7 @@ export class EventLogger {
         return this.logPath
     }
 
-    get workingDir() { return this._workingDir }
+    get workspaceId() { return this._workspaceId }
     get actId() { return this._actId }
     get threadId() { return this._threadId }
 }

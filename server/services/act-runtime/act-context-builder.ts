@@ -1,11 +1,15 @@
 /**
- * act-context-builder.ts — Act context injection
+ * act-context-builder.ts — Collaboration context injection
  *
- * PRD §9: Act context is injected as runtime prompt, not as Dance.
- * Includes: goal, participants, collaboration runtime, relations, subscriptions, rules.
+ * PRD §9: Stable collaboration context is injected at the agent/system level.
+ * Includes: goal, participants, collaboration tools, relations, subscriptions, and rules.
  */
 
 import type { ActDefinition } from '../../../shared/act-types.js'
+
+function participantDisplayName(actDefinition: ActDefinition, participantKey: string) {
+    return actDefinition.participants[participantKey]?.displayName || participantKey
+}
 
 /**
  * Build markdown Act context for a participant's agent prompt.
@@ -15,28 +19,30 @@ export function buildActContext(
     participantKey: string,
 ): string {
     const lines: string[] = []
+    const selfName = participantDisplayName(actDefinition, participantKey)
 
     // ── Header ──────────────────────────────────────
-    lines.push('# Act Context')
+    lines.push('# Collaboration Context')
     if (actDefinition.description) {
-        lines.push(`- 목표: ${actDefinition.description}`)
+        lines.push(`- Goal: ${actDefinition.description}`)
     }
-    lines.push(`- Act: ${actDefinition.name}`)
+    lines.push(`- Team: ${actDefinition.name}`)
+    lines.push(`- Your role: ${selfName}`)
 
     // ── Participants ─────────────────────────────────
-    lines.push('- 참여자:')
-    for (const [key, binding] of Object.entries(actDefinition.participants)) {
+    lines.push('- Team members:')
+    for (const key of Object.keys(actDefinition.participants)) {
         const isSelf = key === participantKey
-        lines.push(`  - ${key}${isSelf ? ' (너)' : ''}: ref=${binding.performerRef.kind}`)
+        lines.push(`  - ${participantDisplayName(actDefinition, key)}${isSelf ? ' (you)' : ''}`)
     }
     lines.push('')
 
     // ── Collaboration Runtime ────────────────────────
-    lines.push('# Collaboration Runtime')
-    lines.push('- 이 Act에는 mailbox가 존재한다.')
-    lines.push('- messages는 participant 간 1:1 통신이다. send_message tool을 사용하라.')
-    lines.push('- board는 공유 knowledge 공간이다. post_to_board, read_board tool을 사용하라.')
-    lines.push('- set_wake_condition으로 여러 결과를 기다린 후 다시 깨어날 수 있다.')
+    lines.push('# Coordination Tools')
+    lines.push('- Use `message_teammate` for direct coordination with one teammate.')
+    lines.push('- Use `update_shared_board` to publish durable notes, findings, tasks, and handoffs for the whole team.')
+    lines.push('- Use `read_shared_board` to review current shared context before acting.')
+    lines.push('- Use `wait_until` when you need to pause until future messages or shared updates arrive.')
     lines.push('')
 
     // ── Available Relations ─────────────────────────
@@ -44,13 +50,14 @@ export function buildActContext(
         (rel) => rel.between.includes(participantKey),
     )
     if (myRelations.length > 0) {
-        lines.push('# Available Relations')
+        lines.push('# Team Connections')
         for (const rel of myRelations) {
             const partner = rel.between[0] === participantKey ? rel.between[1] : rel.between[0]
+            const partnerName = participantDisplayName(actDefinition, partner)
             const dirLabel = rel.direction === 'one-way'
                 ? (rel.between[0] === participantKey ? '→' : '←')
                 : '↔'
-            lines.push(`- ${participantKey} ${dirLabel} ${partner}: ${rel.name}${rel.description ? ` — ${rel.description}` : ''}`)
+            lines.push(`- ${selfName} ${dirLabel} ${partnerName}: ${rel.name}${rel.description ? ` — ${rel.description}` : ''}`)
         }
         lines.push('')
     }
@@ -59,18 +66,18 @@ export function buildActContext(
     const binding = actDefinition.participants[participantKey]
     if (binding?.subscriptions) {
         const subs = binding.subscriptions
-        lines.push('# Your Subscriptions')
+        lines.push('# Notifications You Receive')
         if (subs.messagesFrom?.length) {
-            lines.push(`- messages from: ${subs.messagesFrom.join(', ')}`)
+            lines.push(`- Direct messages from: ${subs.messagesFrom.map((key) => participantDisplayName(actDefinition, key)).join(', ')}`)
         }
         if (subs.messageTags?.length) {
-            lines.push(`- message tags: ${subs.messageTags.join(', ')}`)
+            lines.push(`- Message labels: ${subs.messageTags.join(', ')}`)
         }
         if (subs.callboardKeys?.length) {
-            lines.push(`- callboard keys: ${subs.callboardKeys.join(', ')}`)
+            lines.push(`- Shared note keys: ${subs.callboardKeys.join(', ')}`)
         }
         if (subs.eventTypes?.length) {
-            lines.push(`- event types: ${subs.eventTypes.join(', ')}`)
+            lines.push(`- System updates: ${subs.eventTypes.join(', ')}`)
         }
         lines.push('')
     }
@@ -80,7 +87,7 @@ export function buildActContext(
 
     // ── Act Rules ───────────────────────────────────
     if (actDefinition.actRules && actDefinition.actRules.length > 0) {
-        lines.push('# Rules')
+        lines.push('# Working Rules')
         for (const rule of actDefinition.actRules) {
             lines.push(`- ${rule}`)
         }

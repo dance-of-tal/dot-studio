@@ -7,6 +7,7 @@ import {
     EyeOff,
     MessageSquare,
     Pencil,
+    Plus,
     Trash2,
     X,
 } from 'lucide-react'
@@ -41,6 +42,7 @@ type Props = {
     onSetActiveChatPerformer: (id: string | null) => void
     onRemovePerformer: (id: string) => void
     onSavePerformerAsDraft: (id: string) => void
+    onStartNewSession: (performerId: string) => void
 }
 
 export default function WorkspaceExplorerPerformerGroup({
@@ -64,6 +66,7 @@ export default function WorkspaceExplorerPerformerGroup({
     onSetActiveChatPerformer,
     onRemovePerformer,
     onSavePerformerAsDraft,
+    onStartNewSession,
 }: Props) {
     const rowKey = `performer-${row.id}`
     const [showAll, setShowAll] = useState(false)
@@ -134,6 +137,13 @@ export default function WorkspaceExplorerPerformerGroup({
                                 title={row.hidden ? 'Show performer' : 'Hide performer'}
                             >
                                 {row.hidden ? <EyeOff size={11} /> : <Eye size={11} />}
+                            </button>
+                            <button
+                                className="icon-btn"
+                                onClick={() => onStartNewSession(row.id)}
+                                title="New session"
+                            >
+                                <Plus size={11} />
                             </button>
                             <button
                                 className={`icon-btn ${(editingTarget?.type === 'performer' && editingTarget.id === row.id) ? 'icon-btn--active' : ''}`}

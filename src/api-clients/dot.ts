@@ -72,4 +72,10 @@ export const dotApi = {
             target: { urn: string; kind: string; name: string; source: string; reason: string }
             dependents: Array<{ urn: string; kind: string; name: string; source: string; reason: string }>
         }>('/api/dot/assets/uninstall-preview', { kind, urn }),
+
+    addFromGitHub: (source: string, scope?: 'global' | 'stage') =>
+        postJSON<{
+            installed: Array<{ urn: string; name: string; description: string }>
+            source: string
+        }>('/api/dot/add', { source, scope }),
 }

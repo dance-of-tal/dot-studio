@@ -1,4 +1,4 @@
-import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
+import type { QuestionAnswer, PermissionRequest } from '@opencode-ai/sdk/v2'
 import type { ChatSendRequest, ChatSessionCreateResponse } from '../../shared/chat-contracts'
 import type { ExecutionMode } from '../../shared/safe-mode'
 import { createApiEventSource, deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
@@ -23,8 +23,17 @@ export const chatApi = {
     abort: (id: string) =>
         postJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/abort`),
 
-    messages: (id: string) =>
-        fetchJSON<SessionMessageLike[] | { messages: SessionMessageLike[] }>(`/api/chat/sessions/${id}/messages`),
+    messages: (id: string, options?: { limit?: number; before?: string }) => {
+        const params = new URLSearchParams()
+        if (typeof options?.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0) {
+            params.set('limit', String(options.limit))
+        }
+        if (typeof options?.before === 'string' && options.before.trim()) {
+            params.set('before', options.before.trim())
+        }
+        const query = params.toString()
+        return fetchJSON<SessionMessageLike[] | { messages: SessionMessageLike[] }>(`/api/chat/sessions/${id}/messages${query ? `?${query}` : ''}`)
+    },
 
     diff: (id: string) =>
         fetchJSON<Array<Record<string, unknown>>>(`/api/chat/sessions/${id}/diff`),
@@ -43,15 +52,31 @@ export const chatApi = {
         postJSON<boolean>(`/api/chat/sessions/${id}/summarize`, payload || {}),
 
     revert: (id: string, messageId: string, partId?: string) =>
-        postJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/revert`, { messageId, partId }),
+        postJSON<Record<string, unknown>>(`/api/chat/sessions/${id}/revert`, { messageId, partId }),
+
+    unrevert: (id: string) =>
+        postJSON<Record<string, unknown>>(`/api/chat/sessions/${id}/unrevert`),
 
     list: () =>
-        fetchJSON<Array<{ id: string; title?: string; createdAt?: number }>>('/api/chat/sessions'),
+        fetchJSON<Array<{
+            id: string
+            title?: string
+            createdAt?: number
+            updatedAt?: number
+            parentId?: string | null
+            status?: 'idle' | 'busy' | 'retry' | 'error'
+        }>>('/api/chat/sessions'),
 
     events: () => createApiEventSource('/api/chat/events'),
 
+    resolveSession: (id: string) =>
+        fetchJSON<{ found: boolean; sessionId: string; ownerId: string; ownerKind: string }>(`/api/chat/sessions/${id}/resolve`),
+
     respondPermission: (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') =>
         postJSON<{ ok: boolean }>(`/api/chat/sessions/${sessionId}/permission/${permissionId}/respond`, { response }),
+
+    listPendingPermissions: () =>
+        fetchJSON<PermissionRequest[]>('/api/chat/permissions'),
 
     respondQuestion: (questionId: string, answers: QuestionAnswer[]) =>
         postJSON<{ ok: boolean }>(`/api/chat/questions/${questionId}/respond`, { answers }),

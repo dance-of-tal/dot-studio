@@ -232,7 +232,7 @@ export async function completeProviderOauth(directory: string, providerId: strin
     return data
 }
 
-export async function updateProviderAuth(providerId: string, auth: unknown) {
+export async function updateProviderAuth(_directory: string, providerId: string, auth: unknown) {
     if (!isProviderAuthInput(auth)) {
         throw new StudioValidationError('Invalid provider auth payload.')
     }
@@ -246,7 +246,7 @@ export async function updateProviderAuth(providerId: string, auth: unknown) {
     return data
 }
 
-export async function deleteProviderAuth(providerId: string) {
+export async function deleteProviderAuth(_directory: string, providerId: string) {
     const oc = await getOpencode()
     await clearStoredProviderAuth(providerId)
     await oc.global.dispose()

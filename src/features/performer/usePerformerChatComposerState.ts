@@ -2,7 +2,6 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useStudioStore } from '../../store'
 import { useSlashCommands } from '../../hooks/useSlashCommands'
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions'
-import { usePerformerMention, type PerformerMention } from '../../hooks/usePerformerMention'
 import { assetRefKey } from '../../lib/performers'
 import { showToast } from '../../lib/toast'
 import type { AssetCard, DraftAsset, PerformerNode } from '../../types'
@@ -36,7 +35,6 @@ export function usePerformerChatComposerState({
 
     const [input, setInput] = useState('')
     const [attachments, setAttachments] = useState<FileMention[]>([])
-    const [mentionedPerformers, setMentionedPerformers] = useState<PerformerMention[]>([])
     const [turnDanceSelections, setTurnDanceSelections] = useState<TurnDanceSelection[]>([])
     const [danceSearchIndex, setDanceSearchIndex] = useState(0)
     const composerInputRef = useRef<HTMLTextAreaElement>(null)
@@ -60,16 +58,6 @@ export function usePerformerChatComposerState({
         extractMentionText: extractFileMentionText,
         setIsMentioning: setIsFileMentioning,
     } = useFileMentions(composerInputRef)
-
-    const {
-        isMentioning: isPerformerMentioning,
-        mentionResults: performerMentionResults,
-        mentionIndex: performerMentionIndex,
-        setMentionIndex: setPerformerMentionIndex,
-        checkMention: checkPerformerMention,
-        extractMentionText: extractPerformerMentionText,
-        setIsMentioning: setIsPerformerMentioning,
-    } = usePerformerMention(performerId, composerInputRef)
 
     const danceSlashMatch = useMemo(() => {
         const trimmed = input.trimStart()
@@ -105,7 +93,6 @@ export function usePerformerChatComposerState({
         setInput('')
         setShowSlashMenu(false)
         setIsFileMentioning(false)
-        setIsPerformerMentioning(false)
 
         if (text === '/undo' || text === '/redo') {
             showToast('Use the Undo Last Turn button for performer undo.', 'info', {
@@ -144,10 +131,8 @@ export function usePerformerChatComposerState({
             text,
             formattedAttachments,
             turnDanceSelections.map((selection) => selection.ref),
-            mentionedPerformers,
         )
         setAttachments([])
-        setMentionedPerformers([])
         setTurnDanceSelections([])
     }, [
         attachments,
@@ -155,13 +140,11 @@ export function usePerformerChatComposerState({
         executeSlashCommand,
         input,
         isLoading,
-        mentionedPerformers,
         modelConfigured,
         performerId,
         runtimeTools,
         sendMessage,
         setIsFileMentioning,
-        setIsPerformerMentioning,
         setShowSlashMenu,
         turnDanceSelections,
     ])
@@ -169,7 +152,6 @@ export function usePerformerChatComposerState({
     const handleInputChange = (value: string) => {
         setDanceSearchIndex(0)
         onSlashInputChange(value)
-        checkPerformerMention(value, inputRef.current?.selectionStart ?? value.length)
         checkFileMention(value, inputRef.current?.selectionStart ?? value.length)
     }
 
@@ -183,26 +165,6 @@ export function usePerformerChatComposerState({
                 if (e.key === 'Enter') { e.preventDefault(); addTurnDanceSelection(danceSearchResults[danceSearchIndex]); return }
             }
             if (e.key === 'Escape') { e.preventDefault(); setInput(''); setShowSlashMenu(false); setDanceSearchIndex(0); return }
-        }
-
-        if (isPerformerMentioning && performerMentionResults.length > 0) {
-            if (e.key === 'ArrowDown') { e.preventDefault(); setPerformerMentionIndex((i) => (i < performerMentionResults.length - 1 ? i + 1 : i)); return }
-            if (e.key === 'ArrowUp') { e.preventDefault(); setPerformerMentionIndex((i) => (i > 0 ? i - 1 : i)); return }
-            if (e.key === 'Enter') {
-                e.preventDefault()
-                const selectedPerformer = performerMentionResults[performerMentionIndex]
-                const newText = extractPerformerMentionText()
-                if (newText !== null) {
-                    setInput(newText)
-                    setMentionedPerformers((current) => (
-                        current.some((item) => item.performerId === selectedPerformer.performerId)
-                            ? current
-                            : [...current, selectedPerformer]
-                    ))
-                }
-                return
-            }
-            if (e.key === 'Escape') { setIsPerformerMentioning(false); return }
         }
 
         if (isFileMentioning && fileMentionResults.length > 0) {
@@ -223,8 +185,8 @@ export function usePerformerChatComposerState({
 
         const handled = onSlashKeyDown(e, (text) => {
             if (!modelConfigured) return
-            sendMessage(performerId, text, [], turnDanceSelections.map((selection) => selection.ref), mentionedPerformers)
-            setMentionedPerformers([])
+            sendMessage(performerId, text, formatChatAttachments(attachments), turnDanceSelections.map((selection) => selection.ref))
+            setAttachments([])
             setTurnDanceSelections([])
         })
         if (!handled && e.key === 'Enter' && !e.shiftKey) {
@@ -233,35 +195,51 @@ export function usePerformerChatComposerState({
         }
     }
 
+    const addFileAttachment = useCallback((file: File) => {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+            const target = event.target
+            if (target?.result) {
+                setAttachments((current) => [...current, {
+                    name: file.name,
+                    path: file.name,
+                    absolute: target.result as string,
+                    type: file.type,
+                }])
+            }
+        }
+        reader.readAsDataURL(file)
+    }, [])
+
     const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault()
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            Array.from(e.dataTransfer.files).forEach((file) => {
-                const reader = new FileReader()
-                reader.onload = (event) => {
-                    const target = event.target
-                    if (target?.result) {
-                        setAttachments((current) => [...current, {
-                            name: file.name,
-                            path: file.name,
-                            absolute: target.result as string,
-                            type: file.type,
-                        }])
-                    }
-                }
-                reader.readAsDataURL(file)
-            })
+            Array.from(e.dataTransfer.files).forEach(addFileAttachment)
         }
         e.dataTransfer.clearData()
     }
+
+    const handlePaste = useCallback((e: React.ClipboardEvent) => {
+        const items = e.clipboardData?.items
+        if (!items) return
+        const files: File[] = []
+        for (const item of Array.from(items)) {
+            if (item.kind === 'file') {
+                const file = item.getAsFile()
+                if (file) files.push(file)
+            }
+        }
+        if (files.length > 0) {
+            e.preventDefault()
+            files.forEach(addFileAttachment)
+        }
+    }, [addFileAttachment])
 
     return {
         input,
         setInput,
         attachments,
         setAttachments,
-        mentionedPerformers,
-        setMentionedPerformers,
         turnDanceSelections,
         setTurnDanceSelections,
         danceSearchIndex,
@@ -279,13 +257,6 @@ export function usePerformerChatComposerState({
         checkFileMention,
         extractFileMentionText,
         setIsFileMentioning,
-        isPerformerMentioning,
-        performerMentionResults,
-        performerMentionIndex,
-        setPerformerMentionIndex,
-        checkPerformerMention,
-        extractPerformerMentionText,
-        setIsPerformerMentioning,
         danceSlashMatch,
         danceSearchSections,
         danceSearchResults,
@@ -294,5 +265,6 @@ export function usePerformerChatComposerState({
         handleInputChange,
         handleKeyDownWrapper,
         handleDrop,
+        handlePaste,
     }
 }

@@ -29,6 +29,7 @@ export interface PerformerCompileInput {
     skillNames: string[]
     toolMap: Record<string, boolean>
     taskAllowlist?: string[]
+    collaborationPromptSection?: string | null
     relationPromptSection?: string | null
 }
 
@@ -88,10 +89,12 @@ function buildTalSection(talContent: string | null) {
 
 function buildBody(input: {
     talContent: string | null
+    collaborationPromptSection?: string | null
     relationPromptSection?: string | null
 }) {
     return [
         buildTalSection(input.talContent),
+        input.collaborationPromptSection || null,
         input.relationPromptSection || null,
     ].filter(Boolean).join('\n\n')
 }
@@ -145,7 +148,10 @@ function buildFrontmatter(input: {
     lines.push(`description: ${JSON.stringify(`Agent: ${input.performerName}`)}`)
     lines.push('mode: primary')
     if (input.model) {
-        lines.push(`model: ${JSON.stringify(`${input.model.provider}/${input.model.modelId}`)}`)
+        const modelStr = input.model.modelId.startsWith(`${input.model.provider}/`)
+            ? input.model.modelId
+            : `${input.model.provider}/${input.model.modelId}`
+        lines.push(`model: ${JSON.stringify(modelStr)}`)
     }
     if (input.variantId) {
         lines.push(`variant: ${JSON.stringify(input.variantId)}`)
@@ -223,6 +229,7 @@ export async function compilePerformer(
 
     const body = buildBody({
         talContent,
+        collaborationPromptSection: input.collaborationPromptSection || null,
         relationPromptSection: input.relationPromptSection || null,
     })
     const projectionScope = input.scope === 'stage' ? 'workspace' : (input.scope || 'workspace')

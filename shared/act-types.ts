@@ -63,6 +63,7 @@ export type MailboxEventType =
     | 'message.delivered'
     | 'board.posted'
     | 'board.updated'
+    | 'runtime.reconfigured'
     | 'runtime.idle'
 
 export interface MailboxEvent {
@@ -110,6 +111,7 @@ export interface ActRelation extends ActRelationV1 {
 
 export interface ActParticipantBinding {
     performerRef: SharedAssetRef
+    displayName?: string
     subscriptions?: ParticipantSubscriptions
 }
 
@@ -118,6 +120,8 @@ export interface ActParticipantBinding {
 export interface ActSafetyConfig {
     maxEvents?: number                   // Act Thread total event cap. Default 500
     maxMessagesPerPair?: number          // per performer-pair message cap. Default 50
+    maxBoardUpdatesPerKey?: number       // per board key update cap. Default 100
+    quietWindowMs?: number               // idle quiet window. Default 60s
     threadTimeoutMs?: number             // Thread timeout. Default 30 min
     loopDetectionThreshold?: number      // ping-pong detection threshold. Default 5
 }

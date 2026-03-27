@@ -24,7 +24,7 @@ import WorkspaceExplorerThreadsSection from './WorkspaceExplorerThreadsSection';
 
 
 export default function WorkspaceExplorer() {
-    const [workspacesHeight, setWorkspacesHeight] = useState(190);
+    const [workspacesHeight, setWorkspacesHeight] = useState(208);
     const dividerDragging = useRef(false);
 
     const onDividerMouseDown = useCallback((e: React.MouseEvent) => {
@@ -89,10 +89,26 @@ export default function WorkspaceExplorer() {
     const activeThreadId = useStudioStore((s) => s.activeThreadId);
     const createThread = useStudioStore((s) => s.createThread);
     const selectThread = useStudioStore((s) => s.selectThread);
+    const deleteThread = useStudioStore((s) => s.deleteThread);
+    const renameThread = useStudioStore((s) => s.renameThread);
+    const startNewSession = useStudioStore((s) => s.startNewSession);
+    const openActEditor = useStudioStore((s) => s.openActEditor);
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
     const [renamingSession, setRenamingSession] = useState<ExplorerRenamingSession>(null);
+
+    const openWorkspacePath = useCallback(async (targetPath: string) => {
+        try {
+            await api.studio.openPath(targetPath);
+        } catch (error) {
+            console.error('Failed to open workspace path', error);
+            showToast('Studio could not open that workspace path.', 'error', {
+                title: 'Open failed',
+                dedupeKey: `workspace:open:${targetPath}`,
+            });
+        }
+    }, []);
 
     useEffect(() => {
         listWorkspaces();
@@ -142,6 +158,13 @@ export default function WorkspaceExplorer() {
                             </button>
                         )}
                         items={[
+                            {
+                                label: 'Open',
+                                onClick: () => {
+                                    void openWorkspacePath(entry.workingDir);
+                                },
+                            },
+                            'separator',
                             {
                                 label: 'Close workspace',
                                 onClick: () => closeWorkspace(),
@@ -222,9 +245,21 @@ export default function WorkspaceExplorer() {
             focusSnapshot: currentFocusSnapshot,
             focusedPerformerId: currentFocusedId,
             focusedNodeType: currentFocusedNodeType,
+            performers: currentPerformers,
+            unregisterBinding,
         } = useStudioStore.getState();
+
+        // Auto-unhide performer when clicking it in the sidebar
+        const perf = currentPerformers.find((p) => p.id === performerId);
+        if (perf?.hidden) {
+            useStudioStore.setState((s) => ({
+                performers: s.performers.map((p) => (p.id === performerId ? { ...p, hidden: false } : p)),
+            }));
+        }
+
         closeEditor();
         selectPerformerSession(null);
+        unregisterBinding(performerId);
         // Clear existing session binding so canvas shows an empty chat
         useStudioStore.setState((state) => ({
             sessionMap: { ...state.sessionMap, [performerId]: '' },
@@ -244,18 +279,28 @@ export default function WorkspaceExplorer() {
     };
 
     const openPerformerSession = async (performerId: string, session: { id: string; title?: string }) => {
+        useStudioStore.getState().registerBinding(performerId, session.id);
         useStudioStore.setState((state) => ({
             sessionMap: { ...state.sessionMap, [performerId]: session.id },
         }));
         try {
             const response = await api.chat.messages(session.id);
             const messages = Array.isArray(response) ? response : (response.messages || []);
+            const mapped = mapSessionMessagesToChatMessages(messages);
             useStudioStore.setState((state) => ({
                 chats: {
                     ...state.chats,
-                    [performerId]: mapSessionMessagesToChatMessages(messages),
+                    [performerId]: mapped,
                 },
             }));
+            useStudioStore.getState().setSessionMessages(session.id, mapped);
+            if (!useStudioStore.getState().seEntities[session.id]) {
+                useStudioStore.getState().upsertSession({
+                    id: session.id,
+                    title: session.title,
+                    status: { type: 'idle' },
+                });
+            }
         } catch (error) {
             console.error('Failed to load session messages', error);
             showToast('Studio could not load messages for that thread.', 'error', {
@@ -292,7 +337,17 @@ export default function WorkspaceExplorer() {
             focusSnapshot: currentFocusSnapshot,
             focusedPerformerId: currentFocusedId,
             focusedNodeType: currentFocusedNodeType,
+            acts: currentActs,
         } = useStudioStore.getState();
+
+        // Auto-unhide act when clicking it in the sidebar
+        const actEntry = currentActs.find((a) => a.id === actId);
+        if (actEntry?.hidden) {
+            useStudioStore.setState((s) => ({
+                acts: s.acts.map((a) => (a.id === actId ? { ...a, hidden: false } : a)),
+            }));
+        }
+
         closeEditor();
         const shouldSwitchFocus = currentFocusSnapshot && (
             currentFocusedId !== actId
@@ -354,6 +409,10 @@ export default function WorkspaceExplorer() {
                 onToggleActVisibility={toggleActVisibility}
                 onRemoveAct={removeAct}
                 onSelectThread={selectThread}
+                onDeleteThread={deleteThread}
+                onRenameThread={renameThread}
+                onStartNewSession={(performerId) => void startNewSession(performerId)}
+                onOpenActEditor={(actId) => openActEditor(actId)}
             />
         </div>
     );

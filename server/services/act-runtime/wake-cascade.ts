@@ -14,6 +14,7 @@ import { buildWakePrompt, markMessagesDelivered } from './wake-prompt-builder.js
 import { SessionQueue } from './session-queue.js'
 import type { Mailbox } from './mailbox.js'
 import type { ThreadManager } from './thread-manager.js'
+import { ACT_EXECUTION_MODE, ACT_AGENT_POSTURE } from '../../lib/act-session-policy.js'
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unknown error'
@@ -211,7 +212,7 @@ export async function processWakeCascade(
         }
 
         // Build wake-up prompt
-        const prompt = buildWakePrompt(target, mailbox)
+        const prompt = buildWakePrompt(target, mailbox, actDefinition)
 
         // Mark messages as delivered
         markMessagesDelivered(mailbox, participantKey)
@@ -225,6 +226,7 @@ export async function processWakeCascade(
             const { getOpencode } = await import('../../lib/opencode.js')
             const oc = await getOpencode()
             const { getSafeOwnerExecutionDir } = await import('../../lib/safe-mode.js')
+            const { resolveSessionExecutionContext } = await import('../../lib/session-execution.js')
 
             // Resolve performer config from workspace (model, TAL, Dance, MCP)
             const { resolvePerformerForWake } = await import('./wake-performer-resolver.js')
@@ -234,20 +236,15 @@ export async function processWakeCascade(
                 participantKey,
             )
 
-            const execMode = performerConfig?.executionMode || 'direct'
-            const executionDir = await getSafeOwnerExecutionDir(
-                threadManager.workingDir,
-                'act',
-                actDefinition.id,
-                execMode,
-            )
+            // Act sessions are always direct — never inherit performer executionMode
+            const execMode = ACT_EXECUTION_MODE
+            const chatKey = `act:${actDefinition.id}:thread:${threadId}:participant:${participantKey}`
 
             // Auto-create session if participant doesn't have one yet
             let sessionId = threadManager.getPerformerSession(threadId, participantKey)
             if (!sessionId) {
                 try {
                     const { createStudioChatSession } = await import('../chat-service.js')
-                    const chatKey = `act:${actDefinition.id}:thread:${threadId}:participant:${participantKey}`
                     const created = await createStudioChatSession(threadManager.workingDir, {
                         performerId: chatKey,
                         performerName: performerConfig?.performerName || participantKey,
@@ -265,6 +262,16 @@ export async function processWakeCascade(
                     continue
                 }
             }
+
+            const sessionContext = sessionId
+                ? await resolveSessionExecutionContext(sessionId)
+                : null
+            const executionDir = sessionContext?.executionDir || await getSafeOwnerExecutionDir(
+                threadManager.workingDir,
+                'act',
+                chatKey,
+                execMode,
+            )
 
             // ── Performer projection (TAL, Dance, MCP, model) ──────────
             // Project Act tools for this participant
@@ -303,9 +310,8 @@ export async function processWakeCascade(
                         collaborationPromptSection,
                         extraTools: actExtraTools,
                     })
-                    const buildAgent = ensured.compiled.agentNames[
-                        performerConfig.planMode ? 'plan' : 'build'
-                    ]
+                    // Act scope always uses build agent, ignoring performer planMode
+                    const buildAgent = ensured.compiled.agentNames[ACT_AGENT_POSTURE]
                     if (buildAgent) agentName = buildAgent
                     modelOverride = {
                         providerID: performerConfig.model.provider,

@@ -1,4 +1,4 @@
-import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
+import type { QuestionAnswer, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import { getOpencode } from '../lib/opencode.js'
 import {
     listSessionExecutionContextsForWorkingDir,
@@ -7,16 +7,64 @@ import {
 } from '../lib/session-execution.js'
 import { normalizeIncompleteToolParts, waitForSessionToSettle } from '../lib/chat-session.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
+import { responseData } from './opencode-service.js'
 
 type OpenCodeSessionSummary = {
     id: string
     title?: string
     createdAt?: number
+    updatedAt?: number
+    parentId?: string | null
+    status?: 'idle' | 'busy' | 'retry' | 'error'
+} & Record<string, unknown>
+
+type OpenCodeRawSessionSummary = {
+    id: string
+    title?: string
+    createdAt?: number
+    updatedAt?: number
+    parentID?: string | null
+    time?: {
+        created?: number
+        updated?: number
+    }
+} & Record<string, unknown>
+
+type OpenCodeSessionStatus = {
+    type: 'idle' | 'busy' | 'retry' | 'error'
 } & Record<string, unknown>
 
 type SessionMessageLike = {
     parts?: unknown[]
 } & Record<string, unknown>
+
+type ListSessionMessagesOptions = {
+    limit?: number
+    before?: string
+}
+
+type ListSessionMessagesResult = {
+    messages: SessionMessageLike[]
+    nextCursor: string | null
+}
+
+function readResponseHeader(result: unknown, name: string): string | null {
+    if (!result || typeof result !== 'object') {
+        return null
+    }
+
+    const response = (result as { response?: { headers?: { get?: (name: string) => string | null } } }).response
+    if (!response?.headers || typeof response.headers.get !== 'function') {
+        return null
+    }
+
+    const value = response.headers.get(name)
+    if (!value) {
+        return null
+    }
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+}
 
 export async function directoryQueryForSession(workingDir: string, sessionId: string): Promise<{ directory: string }> {
     const context = await resolveSessionExecutionContext(sessionId)
@@ -86,20 +134,49 @@ export async function rejectQuestion(questionId: string) {
     return { ok: true as const }
 }
 
-export async function listStudioSessionMessages(workingDir: string, sessionId: string) {
+export async function listPendingPermissions(workingDir: string) {
+    const oc = await getOpencode()
+    const res = await oc.permission.list({ directory: workingDir })
+    return responseData<PermissionRequest[]>(res, [])
+}
+
+export async function listPendingQuestions(workingDir: string) {
+    const oc = await getOpencode()
+    const res = await oc.question.list({ directory: workingDir })
+    return responseData<QuestionRequest[]>(res, [])
+}
+
+export async function listStudioSessionMessages(
+    workingDir: string,
+    sessionId: string,
+    options: ListSessionMessagesOptions = {},
+): Promise<ListSessionMessagesResult> {
     const oc = await getOpencode()
     const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
-    const data = unwrapOpencodeResult<SessionMessageLike[]>(await oc.session.messages({
+    const params: Record<string, unknown> = {
         sessionID: sessionId,
         ...directoryQuery,
-    }))
-    const statuses = unwrapOpencodeResult<Record<string, { type: 'idle' | 'busy' | 'retry' }>>(await oc.session.status({
+    }
+    if (typeof options.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0) {
+        params.limit = options.limit
+    }
+    if (typeof options.before === 'string' && options.before.trim()) {
+        params.$query_before = options.before.trim()
+    }
+
+    const messageResult = await oc.session.messages(params as { sessionID: string; directory?: string; limit?: number })
+    const data = unwrapOpencodeResult<SessionMessageLike[]>(messageResult)
+    const statuses = unwrapOpencodeResult<Record<string, OpenCodeSessionStatus>>(await oc.session.status({
         ...directoryQuery,
     }))
     const status = statuses?.[sessionId]
-    return !status || status.type === 'idle'
+    const messages = !status || status.type === 'idle'
         ? normalizeIncompleteToolParts(data || [], Date.now())
         : (data || [])
+    return {
+        messages,
+        nextCursor: readResponseHeader(messageResult, 'x-next-cursor'),
+    }
 }
 
 export async function listStudioSessionDiff(workingDir: string, sessionId: string) {
@@ -150,6 +227,15 @@ export async function revertStudioChatSession(
     }))
 }
 
+export async function unrevertStudioChatSession(workingDir: string, sessionId: string) {
+    const oc = await getOpencode()
+    const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
+    return unwrapOpencodeResult<Record<string, unknown>>(await oc.session.unrevert({
+        sessionID: sessionId,
+        ...directoryQuery,
+    }))
+}
+
 export async function listStudioChatSessions(workingDir: string) {
     const oc = await getOpencode()
     const performerContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
@@ -159,14 +245,35 @@ export async function listStudioChatSessions(workingDir: string) {
         ...performerContexts.map((context) => context.executionDir),
         ...actContexts.map((context) => context.executionDir),
     ]))
-    const lists = await Promise.all(
-        directories.map(async (directory) => unwrapOpencodeResult<OpenCodeSessionSummary[]>(await oc.session.list({ directory }))),
+    const directoryData = await Promise.all(
+        directories.map(async (directory) => {
+            const [sessions, statuses] = await Promise.all([
+                unwrapOpencodeResult<OpenCodeRawSessionSummary[]>(await oc.session.list({ directory })),
+                unwrapOpencodeResult<Record<string, OpenCodeSessionStatus>>(await oc.session.status({ directory })),
+            ])
+            return {
+                sessions: sessions || [],
+                statuses: statuses || {},
+            }
+        }),
     )
     const sessions = new Map<string, OpenCodeSessionSummary>()
-    for (const list of lists) {
-        for (const session of list || []) {
+    for (const entry of directoryData) {
+        for (const session of entry.sessions) {
             if (!session?.id) continue
-            sessions.set(session.id, session)
+            const normalized: OpenCodeSessionSummary = {
+                ...session,
+                createdAt: typeof session.createdAt === 'number' ? session.createdAt : session.time?.created,
+                updatedAt: typeof session.updatedAt === 'number' ? session.updatedAt : session.time?.updated,
+                parentId: typeof session.parentID === 'string' ? session.parentID : null,
+                status: entry.statuses[session.id]?.type,
+            }
+            const existing = sessions.get(session.id)
+            const existingUpdatedAt = existing?.updatedAt || 0
+            const nextUpdatedAt = normalized.updatedAt || 0
+            if (!existing || nextUpdatedAt >= existingUpdatedAt) {
+                sessions.set(session.id, normalized)
+            }
         }
     }
     return Array.from(sessions.values())

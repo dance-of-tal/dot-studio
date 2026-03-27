@@ -1,6 +1,10 @@
 import type { CompilePromptRequest } from '../../../shared/chat-contracts.js'
 import { ensurePerformerProjection } from './stage-projection-service.js'
 
+export function getCompileRequestTargets(request: CompilePromptRequest) {
+    return request.requestTargets || request.relatedPerformers || []
+}
+
 export async function compileProjectionPreview(
     cwd: string,
     request: CompilePromptRequest,
@@ -16,7 +20,7 @@ export async function compileProjectionPreview(
         mcpServerNames: request.mcpServerNames || [],
         executionDir: cwd,
         workingDir: cwd,
-        requestTargets: request.relatedPerformers || [],
+        requestTargets: getCompileRequestTargets(request),
     })
 
     return {

@@ -214,3 +214,58 @@
     font-size: var(--font-sm);
     color: var(--text-muted);
 }
+
+/* ── Copy response button ── */
+.text-copy-wrapper {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.assistant-body:hover .text-copy-wrapper {
+    opacity: 1;
+}
+
+.text-copy-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.text-copy-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* ── Compaction divider ── */
+.compaction-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.compaction-divider__line {
+    flex: 1;
+    height: 1px;
+    background: var(--border-light);
+}
+
+.compaction-divider__label {
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+

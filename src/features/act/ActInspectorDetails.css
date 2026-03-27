@@ -7,7 +7,7 @@
     align-items: center;
     gap: 6px;
     padding: 10px 14px;
-    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border-main) 50%, transparent);
 }
 
 .act-panel__item-icon {
@@ -19,7 +19,7 @@
     flex: 1;
     font-size: 13px;
     font-weight: 600;
-    color: var(--text);
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -36,7 +36,7 @@
 }
 
 .act-panel__item-name--edge:hover {
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .act-panel__inline-edit {
@@ -46,8 +46,8 @@
     padding: 2px 4px;
     border: 1px solid var(--accent);
     border-radius: 4px;
-    background: var(--bg-inset);
-    color: var(--text);
+    background: var(--bg-hover);
+    color: var(--text-primary);
     outline: none;
     min-width: 0;
 }
@@ -59,7 +59,7 @@
 }
 .act-panel__danger-btn:hover {
     opacity: 1;
-    color: var(--error, #ef4444) !important;
+    color: var(--status-danger, #ef4444) !important;
 }
 
 /* Config button (like model selector) */
@@ -67,10 +67,10 @@
     width: 100%;
     padding: 6px 8px;
     font-size: 11px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-main);
     border-radius: 6px;
-    background: var(--bg-inset);
-    color: var(--text);
+    background: var(--bg-hover);
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
     transition: border-color 0.15s;
@@ -107,10 +107,10 @@
     align-items: center;
     gap: 4px;
     padding: 4px 6px;
-    background: var(--bg-inset);
+    background: var(--bg-hover);
     border-radius: 5px;
     font-size: 11px;
-    color: var(--text);
+    color: var(--text-primary);
 }
 .act-panel__list-item span {
     flex: 1;
@@ -125,14 +125,14 @@
     align-items: center;
     gap: 4px;
     padding: 5px 6px;
-    background: var(--bg-inset);
+    background: var(--bg-hover);
     border-radius: 5px;
     font-size: 11px;
     cursor: pointer;
     transition: background 0.15s;
 }
 .act-panel__edge-link:hover {
-    background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-hover));
 }
 
 .act-panel__edge-dir {
@@ -143,7 +143,7 @@
 
 .act-panel__edge-target {
     flex: 1;
-    color: var(--text);
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -173,7 +173,7 @@
 .act-panel__toggle-group {
     display: flex;
     gap: 2px;
-    background: var(--bg-inset);
+    background: var(--bg-hover);
     border-radius: 6px;
     padding: 2px;
 }
@@ -196,7 +196,7 @@
 }
 
 .act-panel__toggle:hover {
-    color: var(--text);
+    color: var(--text-primary);
 }
 
 .act-panel__toggle.active {
@@ -219,7 +219,7 @@
     font-size: 11px;
     color: var(--text-muted);
     padding: 4px 8px;
-    background: var(--bg-inset);
+    background: var(--bg-hover);
     border-radius: 5px;
 }
 
@@ -295,20 +295,20 @@
     padding: 5px 6px;
     font-size: 11px;
     color: var(--text-muted);
-    background: var(--bg-inset);
+    background: var(--bg-hover);
     border-radius: 5px;
     cursor: pointer;
     transition: all 0.12s ease;
 }
 
 .act-panel__dance-toggle:hover {
-    background: color-mix(in srgb, var(--accent) 8%, var(--bg-inset));
-    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-hover));
+    color: var(--text-primary);
 }
 
 .act-panel__dance-toggle.active {
     color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, var(--bg-inset));
+    background: color-mix(in srgb, var(--accent) 12%, var(--bg-hover));
 }
 
 .act-panel__dance-toggle input[type="checkbox"] {

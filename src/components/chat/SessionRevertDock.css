@@ -1,0 +1,80 @@
+[data-component="session-revert-dock"] {
+    border-top: 1px solid var(--border-main);
+    background: color-mix(in srgb, var(--status-warning-bg) 72%, var(--bg-card));
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.session-revert-dock__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+}
+
+.session-revert-dock__header:hover {
+    background: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+}
+
+.session-revert-dock__summary {
+    flex-shrink: 0;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.session-revert-dock__preview {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+}
+
+.session-revert-dock__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: auto;
+    color: var(--text-muted);
+    transition: transform 200ms ease;
+}
+
+.session-revert-dock__collapsed-spacer {
+    height: 16px;
+}
+
+.session-revert-dock__body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 12px 12px;
+    max-height: 176px;
+    overflow-y: auto;
+}
+
+.session-revert-dock__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 2px 0;
+}
+
+.session-revert-dock__text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+}

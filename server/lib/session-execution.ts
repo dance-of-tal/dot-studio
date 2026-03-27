@@ -21,6 +21,20 @@ type RegistryPayload = {
 const SESSION_EXECUTION_PATH = path.join(STUDIO_DIR, 'safe-mode', 'session-execution.json')
 let sessionExecutionCache: RegistryPayload | null = null
 
+export function parseActSessionOwnerId(ownerId: string) {
+    const match = ownerId.match(/^act:([^:]+):thread:([^:]+):participant:(.+)$/)
+    if (!match) {
+        return null
+    }
+
+    const [, actId, threadId, participantKey] = match
+    return {
+        actId,
+        threadId,
+        participantKey,
+    }
+}
+
 async function readRegistry(): Promise<RegistryPayload> {
     if (sessionExecutionCache) {
         return sessionExecutionCache

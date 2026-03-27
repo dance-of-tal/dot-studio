@@ -38,6 +38,16 @@ export default function PermissionDock({ request, onDecide, responding }: Permis
                     )}
                 </div>
             </div>
+            {request.always && request.always.length > 0 && (
+                <div className="permission-dock__always-hint">
+                    <span className="permission-dock__always-label">Allow Always will auto-approve:</span>
+                    <div className="permission-dock__always-patterns">
+                        {request.always.map((p, i) => (
+                            <span key={i} className="permission-dock__pattern">{p}</span>
+                        ))}
+                    </div>
+                </div>
+            )}
             <div className="permission-dock__actions">
                 <button
                     className="btn btn--sm"

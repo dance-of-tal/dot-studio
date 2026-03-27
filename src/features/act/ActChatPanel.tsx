@@ -8,15 +8,20 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Send, Square, Workflow, Users, User, Circle, Pencil, Plus, AlertCircle, Clipboard } from 'lucide-react'
 import { useStudioStore } from '../../store'
-import { api } from '../../api'
-import {
-    extractLatestNonRetryableAssistantError,
-    mapSessionMessagesToChatMessages,
-} from '../../lib/chat-messages'
 import { hasModelConfig } from '../../lib/performers'
-import { showToast } from '../../lib/toast'
+import {
+    selectMessagesForChatKey,
+    selectChatKeyIsLoading,
+    selectPendingPermission,
+    selectPendingQuestion,
+    selectSessionIdForChatKey,
+    selectTodos,
+} from '../../store/session'
 import ThreadBody from '../chat/ThreadBody'
-import ChatMessageContent from '../chat/ChatMessageContent'
+import ChatMessageContent, {
+    hasVisibleAssistantMessageContent,
+} from '../chat/ChatMessageContent'
+import { hasVisibleUserMessageContent } from '../chat/chat-message-visibility'
 import type { ChatMessage } from '../../types'
 import { resolveActParticipantLabel } from './participant-labels'
 import ActBoardView from './ActBoardView'
@@ -28,12 +33,9 @@ import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
 import './ActChatPanel.css'
 
+const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_TODOS: never[] = []
-const shownParticipantPauseToasts = new Set<string>()
-const ACTIVE_POLL_MS = 1500
-const IDLE_POLL_MS = 8000
-const BACKGROUND_POLL_MS = 15000
-const ACTIVE_POLL_WINDOW_MS = 15000
+
 
 interface ActChatPanelProps {
     actId: string
@@ -43,17 +45,13 @@ function buildActParticipantChatKey(actId: string, threadId: string, participant
     return `act:${actId}:thread:${threadId}:participant:${participantKey}`
 }
 
-function extractFirstUrl(text: string): string | null {
-    const match = text.match(/https?:\/\/\S+/)
-    return match ? match[0] : null
-}
+
 
 export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const {
-        acts, performers, chats, loadingPerformerId, sendActMessage, abortChat,
+        acts, performers, sendActMessage, abortChat,
         actThreads, activeThreadId, activeThreadParticipantKey,
-        selectThreadParticipant, openActEditor, createThread, selectThread,
-        sessionMap, pendingPermissions, pendingQuestions,
+        selectThreadParticipant, openActEditor, createThread, selectThread, loadThreads,
         respondToPermission, respondToQuestion, rejectQuestion,
     } = useStudioStore()
 
@@ -73,6 +71,19 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const threads = actThreads[actId] || []
     const currentThread = threads.find((t) => t.id === activeThreadId) || null
 
+    useEffect(() => {
+        void loadThreads(actId)
+        if (!currentThread) return
+
+        const intervalId = window.setInterval(() => {
+            void loadThreads(actId)
+        }, 1000)
+
+        return () => {
+            window.clearInterval(intervalId)
+        }
+    }, [actId, currentThread, loadThreads])
+
     // Active participant in thread
     const participantKeys = act ? Object.keys(act.participants) : []
     const isCallboardView = !!currentThread && activeThreadParticipantKey === null
@@ -83,29 +94,41 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         ? buildActParticipantChatKey(actId, currentThread.id, activeParticipantKey)
         : null
 
-    // Messages
-    const messages: ChatMessage[] = useMemo(() => {
-        if (!chatKey) return []
-        return chats[chatKey] || []
-    }, [chats, chatKey])
+    // Messages from entity store (falls back to legacy chats[chatKey])
+    const messages: ChatMessage[] = useStudioStore((state) => {
+        if (!chatKey) return EMPTY_MESSAGES
+        return selectMessagesForChatKey(state, chatKey)
+    })
 
-    const isLoading = chatKey ? loadingPerformerId === chatKey : false
-    const sessionId = chatKey ? sessionMap[chatKey] ?? null : null
-    const actTodos = useStudioStore((s) => sessionId ? s.todos[sessionId] : undefined) ?? EMPTY_TODOS
-    const hasPendingPermission = useStudioStore((s) => sessionId ? !!s.pendingPermissions[sessionId] : false)
+    const isLoading = useStudioStore((state) => {
+        if (!chatKey) return false
+        return selectChatKeyIsLoading(state, chatKey)
+    })
+    const sessionId = useStudioStore((state) => chatKey ? selectSessionIdForChatKey(state, chatKey) : null)
+    const actTodos = useStudioStore((state) => {
+        if (!sessionId) return EMPTY_TODOS
+        return selectTodos(state, sessionId)
+    })
+    const permissionRequest = useStudioStore((state) => (
+        sessionId ? selectPendingPermission(state, sessionId) : null
+    ))
+    const questionRequest = useStudioStore((state) => (
+        sessionId ? selectPendingQuestion(state, sessionId) : null
+    ))
+    const hasPendingPermission = !!permissionRequest
     const isTodoLive = isLoading || hasPendingPermission
 
     const {
         isResponding: isRespondingToPermission,
-        permissionRequest,
-        questionRequest,
+        permissionRequest: activePermissionRequest,
+        questionRequest: activeQuestionRequest,
         handlePermissionDecide,
         handleQuestionRespond,
         handleQuestionReject,
     } = usePermissionInteraction({
         sessionId,
-        pendingPermissions,
-        pendingQuestions,
+        permissionRequest,
+        questionRequest,
         respondToPermission,
         respondToQuestion,
         rejectQuestion,
@@ -115,9 +138,14 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         if (!sessionId) return
         useStudioStore.setState((state) => {
             const next = { ...state.todos }
+            const nextEntity = { ...state.seTodos }
             delete next[sessionId]
             if (chatKey) delete next[chatKey]
-            return { todos: next }
+            delete nextEntity[sessionId]
+            return {
+                todos: next,
+                seTodos: nextEntity,
+            }
         })
     }, [sessionId, chatKey])
 
@@ -128,105 +156,9 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         [act, activeParticipantKey, performers],
     )
 
-    useEffect(() => {
-        if (!chatKey || !sessionId || isCallboardView) {
-            return
-        }
-
-        let cancelled = false
-        let timeoutId: number | undefined
-        let lastChangedAt = Date.now()
-
-        const syncChatFromSession = async () => {
-            const state = useStudioStore.getState()
-            if (state.loadingPerformerId === chatKey) {
-                return
-            }
-
-            try {
-                const response = await api.chat.messages(sessionId)
-                if (cancelled) {
-                    return
-                }
-
-                const sessionMessages = Array.isArray(response) ? response : (response.messages || [])
-                const fatalError = extractLatestNonRetryableAssistantError(sessionMessages)
-                if (fatalError) {
-                    const actionUrl = extractFirstUrl(fatalError.message)
-                    const toastKey = `act-circuit:${chatKey}:${fatalError.id}`
-                    if (!shownParticipantPauseToasts.has(toastKey)) {
-                        shownParticipantPauseToasts.add(toastKey)
-                        showToast(
-                            `${activeParticipantLabel || activeParticipantKey || 'This participant'} hit a non-retryable error, so automatic wake-ups are paused for a few minutes.`,
-                            'warning',
-                            {
-                                title: 'Participant Paused',
-                                dedupeKey: toastKey,
-                                durationMs: 7000,
-                                actionLabel: actionUrl
-                                    ? 'Open link'
-                                    : undefined,
-                                onAction: actionUrl
-                                    ? () => window.open(actionUrl, '_blank')
-                                    : undefined,
-                            },
-                        )
-                    }
-                }
-                const mapped = mapSessionMessagesToChatMessages(sessionMessages)
-                const currentMessages = useStudioStore.getState().chats[chatKey] || []
-                const currentLast = currentMessages[currentMessages.length - 1]
-                const nextLast = mapped[mapped.length - 1]
-                const changed = currentMessages.length !== mapped.length
-                    || currentLast?.id !== nextLast?.id
-                    || currentLast?.content !== nextLast?.content
-                    || currentLast?.parts?.length !== nextLast?.parts?.length
-
-                if (!changed) {
-                    return
-                }
-
-                lastChangedAt = Date.now()
-
-                useStudioStore.setState((state) => ({
-                    chats: {
-                        ...state.chats,
-                        [chatKey]: mapped,
-                    },
-                }))
-            } catch {
-                // Best-effort sync only; keep current UI if background refresh fails.
-            }
-        }
-
-        const scheduleNextSync = () => {
-            if (cancelled) {
-                return
-            }
-            const now = Date.now()
-            const loading = useStudioStore.getState().loadingPerformerId === chatKey
-            const recentlyChanged = now - lastChangedAt < ACTIVE_POLL_WINDOW_MS
-            const delay = document.visibilityState === 'hidden'
-                ? BACKGROUND_POLL_MS
-                : (loading || recentlyChanged ? ACTIVE_POLL_MS : IDLE_POLL_MS)
-
-            timeoutId = window.setTimeout(async () => {
-                await syncChatFromSession()
-                scheduleNextSync()
-            }, delay)
-        }
-
-        void syncChatFromSession().finally(() => {
-            scheduleNextSync()
-        })
-
-        return () => {
-            cancelled = true
-            if (timeoutId) {
-                window.clearTimeout(timeoutId)
-            }
-        }
-    }, [chatKey, sessionId, isCallboardView, activeParticipantKey, activeParticipantLabel])
+    // Polling removed — entity store is event-driven via dual-write in integrationSlice.
+    // SSE events flow through event-ingest → event-reducer → seMessages,
+    // and selectMessagesForChatKey reads from seMessages with legacy fallback.
 
     // Auto-scroll is now handled by ThreadBody's useAutoScroll hook
 
@@ -252,7 +184,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         setIsCreatingThread(true)
         try {
             const threadId = await createThread(actId)
-            selectThread(threadId)
+            selectThread(actId, threadId)
         } finally {
             setIsCreatingThread(false)
         }
@@ -303,7 +235,11 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                     const participantChatKey = currentThread
                         ? buildActParticipantChatKey(actId, currentThread.id, key)
                         : null
-                    const isKeyLoading = participantChatKey ? loadingPerformerId === participantChatKey : false
+                    const isKeyLoading = participantChatKey
+                        ? useStudioStore.getState().chatKeyToSession[participantChatKey]
+                            ? selectChatKeyIsLoading(useStudioStore.getState(), participantChatKey)
+                            : false
+                        : false
                     return (
                         <button
                             key={key}
@@ -325,7 +261,14 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             <ThreadBody
                 messages={messages}
                 loading={isLoading}
-                renderMessage={(msg, index) => (
+                renderMessage={(msg, index) => {
+                    if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
+                        return null
+                    }
+                    if (msg.role === 'assistant' && !hasVisibleAssistantMessageContent(msg)) {
+                        return null
+                    }
+                    return (
                     <div key={msg.id || index} className={`thread-msg thread-msg--${msg.role}`} data-scrollable>
                         {msg.role === 'user' ? (
                             <div className="user-input-box">
@@ -340,7 +283,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                             <ChatMessageContent message={msg} />
                         )}
                     </div>
-                )}
+                    )
+                }}
                 renderEmpty={() => (
                     <div className="act-chat__empty">
                         {noParticipants ? (
@@ -452,18 +396,18 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                             )}
                         </div>
 
-                        {permissionRequest ? (
+                        {activePermissionRequest ? (
                             <PermissionDock
-                                request={permissionRequest}
+                                request={activePermissionRequest}
                                 responding={isRespondingToPermission}
                                 onDecide={handlePermissionDecide}
                             />
                         ) : null}
 
-                        {questionRequest ? (
+                        {activeQuestionRequest ? (
                             <QuestionWizard
-                                key={questionRequest.id}
-                                request={questionRequest}
+                                key={activeQuestionRequest.id}
+                                request={activeQuestionRequest}
                                 responding={isRespondingToPermission}
                                 onRespond={handleQuestionRespond}
                                 onReject={handleQuestionReject}

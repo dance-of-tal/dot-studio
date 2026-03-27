@@ -185,8 +185,8 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
     ])
 
     const edges = useMemo(
-        () => composeCanvasEdges(acts, editingActId),
-        [acts, editingActId],
+        () => composeCanvasEdges(acts, editingActId, performers),
+        [acts, editingActId, performers],
     )
 
     return {

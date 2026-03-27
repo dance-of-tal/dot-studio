@@ -1,26 +1,29 @@
 import { useEffect } from 'react'
 import type { Node, ReactFlowInstance } from '@xyflow/react'
-import type { CanvasRevealTarget } from '../../store/types'
+import { resolveFocusNodeId } from '../../lib/focus-utils'
+import type { CanvasRevealTarget, FocusSnapshot } from '../../store/types'
 
 export function useCanvasFocusFit(args: {
     focusedPerformerId: string | null
+    focusSnapshot: FocusSnapshot | null
     canvasRevealTarget: CanvasRevealTarget | null
     reactFlowInstance: ReactFlowInstance<Node> | null
     nodeCount: number
 }) {
-    const { focusedPerformerId, canvasRevealTarget, reactFlowInstance, nodeCount } = args
+    const { focusedPerformerId, focusSnapshot, canvasRevealTarget, reactFlowInstance, nodeCount } = args
 
     useEffect(() => {
-        const focusNodeId = canvasRevealTarget?.id || focusedPerformerId || null
+        const focusNodeId = canvasRevealTarget?.id || resolveFocusNodeId(focusSnapshot, focusedPerformerId)
 
         if (!reactFlowInstance || !focusNodeId) {
             return
         }
 
+        const isFocusMode = !!focusSnapshot && focusNodeId === resolveFocusNodeId(focusSnapshot, focusedPerformerId)
         const timer = window.setTimeout(() => {
             reactFlowInstance.fitView({
                 duration: 250,
-                padding: 0.15,
+                padding: isFocusMode ? 0 : 0.15,
                 minZoom: 1,
                 maxZoom: 1,
                 nodes: [{ id: focusNodeId }],
@@ -30,5 +33,5 @@ export function useCanvasFocusFit(args: {
         return () => {
             window.clearTimeout(timer)
         }
-    }, [focusedPerformerId, canvasRevealTarget?.id, canvasRevealTarget?.nonce, reactFlowInstance, nodeCount])
+    }, [focusedPerformerId, focusSnapshot, canvasRevealTarget?.id, canvasRevealTarget?.nonce, reactFlowInstance, nodeCount])
 }

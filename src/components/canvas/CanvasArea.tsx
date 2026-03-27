@@ -1,6 +1,6 @@
-import { Suspense, lazy, useCallback, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
-import { ReactFlow, Background } from '@xyflow/react';
+import { ReactFlow, Background, ConnectionMode } from '@xyflow/react';
 import type { Node, ReactFlowInstance } from '@xyflow/react';
 import { useDroppable } from '@dnd-kit/core';
 import '@xyflow/react/dist/style.css';
@@ -14,6 +14,8 @@ import { useCanvasFlowHandlers } from './useCanvasFlowHandlers';
 import { useCanvasTransformTarget } from './useCanvasTransformTarget';
 import { useCanvasFocusFit } from './useCanvasFocusFit';
 import { useCanvasPresentation } from './useCanvasPresentation';
+import { resolveFocusNodeId } from '../../lib/focus-utils';
+import OffsetBezierEdge from './OffsetBezierEdge';
 
 const ActInspectorPanel = lazy(() => import('../../features/act/ActInspectorPanel'));
 
@@ -40,7 +42,9 @@ const nodeTypes = {
     act: withCanvasNodeSuspense(ActFrame),
 };
 
-const edgeTypes = {};
+const edgeTypes = {
+    offsetBezier: OffsetBezierEdge,
+};
 
 export default function CanvasArea() {
     const {
@@ -52,6 +56,7 @@ export default function CanvasArea() {
         drafts,
         workingDir,
         focusedPerformerId,
+        focusSnapshot,
         canvasRevealTarget,
         selectedMarkdownEditorId,
         editingTarget,
@@ -150,10 +155,94 @@ export default function CanvasArea() {
 
     useCanvasFocusFit({
         focusedPerformerId,
+        focusSnapshot,
         canvasRevealTarget,
         reactFlowInstance,
         nodeCount: nodes.length,
     })
+
+    useEffect(() => {
+        if (!focusSnapshot || !canvasAreaRef.current) {
+            return
+        }
+
+        const focusNodeId = resolveFocusNodeId(focusSnapshot, focusedPerformerId)
+        if (!focusNodeId) {
+            return
+        }
+
+        const canvasElement = canvasAreaRef.current
+        let frameId = 0
+
+        const syncFocusedNodeSize = () => {
+            frameId = 0
+            const width = Math.round(canvasElement.clientWidth)
+            const height = Math.round(canvasElement.clientHeight)
+
+            if (!width || !height) {
+                return
+            }
+
+            useStudioStore.setState((state) => {
+                if (!state.focusSnapshot) {
+                    return {}
+                }
+
+                if (state.focusSnapshot.type === 'performer') {
+                    const performer = state.performers.find((entry) => entry.id === focusNodeId)
+                    if (!performer || (performer.width === width && performer.height === height)) {
+                        return {}
+                    }
+                    return {
+                        performers: state.performers.map((entry) => (
+                            entry.id === focusNodeId
+                                ? { ...entry, width, height }
+                                : entry
+                        )),
+                    }
+                }
+
+                const act = state.acts.find((entry) => entry.id === focusNodeId)
+                if (!act || (act.width === width && act.height === height)) {
+                    return {}
+                }
+
+                return {
+                    acts: state.acts.map((entry) => (
+                        entry.id === focusNodeId
+                            ? { ...entry, width, height }
+                            : entry
+                    )),
+                }
+            })
+
+            reactFlowInstance?.fitView({
+                duration: 200,
+                padding: 0,
+                minZoom: 1,
+                maxZoom: 1,
+                nodes: [{ id: focusNodeId }],
+            })
+        }
+
+        const scheduleSync = () => {
+            if (frameId) {
+                window.cancelAnimationFrame(frameId)
+            }
+            frameId = window.requestAnimationFrame(syncFocusedNodeSize)
+        }
+
+        scheduleSync()
+        const observer = new ResizeObserver(scheduleSync)
+        observer.observe(canvasElement)
+
+        return () => {
+            if (frameId) {
+                window.cancelAnimationFrame(frameId)
+            }
+            observer.disconnect()
+        }
+    }, [focusSnapshot, focusedPerformerId, reactFlowInstance])
 
     const {
         onEdgeClick,
@@ -196,13 +285,17 @@ export default function CanvasArea() {
 
     const canvasDropLabel = getCanvasDropLabel(active?.data?.current?.kind)
 
+    const isFocusActive = !!focusSnapshot
+
     return (
-        <div className={`canvas-area ${focusedPerformerId ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
+        <div className={`canvas-area ${isFocusActive ? 'canvas-area--focus' : ''}`} ref={setCanvasRefs}>
             <div className="canvas-top-right-bar">
                 <CanvasControls />
-                <Suspense fallback={null}>
-                    <WorkspaceToolbar />
-                </Suspense>
+                {!isFocusActive && (
+                    <Suspense fallback={null}>
+                        <WorkspaceToolbar />
+                    </Suspense>
+                )}
             </div>
 
             <CanvasDropOverlay active={isCanvasDropOver} label={canvasDropLabel} />
@@ -214,6 +307,8 @@ export default function CanvasArea() {
                 onNodeDragStop={onNodeDragStop}
                 onNodeClick={onNodeClick}
                 onConnect={onConnect}
+                isValidConnection={() => true}
+                connectionMode={ConnectionMode.Loose}
                 onEdgeClick={onEdgeClick}
                 onPaneClick={onPaneClick}
                 onMoveEnd={onMoveEnd}
@@ -224,13 +319,13 @@ export default function CanvasArea() {
                 proOptions={{ hideAttribution: true }}
                 fitView
                 fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
-                panOnDrag={!focusedPerformerId}
-                zoomOnScroll={!focusedPerformerId}
-                zoomOnPinch={!focusedPerformerId}
-                zoomOnDoubleClick={!focusedPerformerId}
-                nodesDraggable={!focusedPerformerId}
+                panOnDrag={!isFocusActive}
+                zoomOnScroll={!isFocusActive}
+                zoomOnPinch={!isFocusActive}
+                zoomOnDoubleClick={!isFocusActive}
+                nodesDraggable={!isFocusActive}
             >
-                <Background color={focusedPerformerId ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
+                <Background color={isFocusActive ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>
             {actEditorState ? (
                 <Suspense fallback={null}>

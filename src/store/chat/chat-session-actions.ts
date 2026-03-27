@@ -14,6 +14,7 @@ export function createChatSessionActions(set: ChatSet, get: ChatGet) {
         undoLastTurn: sessionManagement.undoLastTurn,
         rehydrateSessions: sessionManagement.rehydrateSessions,
         revertSession: sessionManagement.revertSession,
+        restoreRevertedMessage: sessionManagement.restoreRevertedMessage,
         getDiff: sessionManagement.getDiff,
         listSessions: sessionManagement.listSessions,
         deleteSession: sessionManagement.deleteSession,

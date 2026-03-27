@@ -9,7 +9,6 @@
 import { Settings, User, ArrowRightLeft, X } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import ActMetaView from './ActMetaView'
-import ActParticipantBindingView from './ActParticipantBindingView'
 import ActRelationView from './ActRelationView'
 import './ActInspectorPanel.css'
 import './ActInspectorDetails.css'
@@ -47,7 +46,7 @@ export default function ActInspectorPanel() {
                 </button>
             </div>
             {mode === 'act' && <ActMetaView />}
-            {mode === 'participant' && <ActParticipantBindingView />}
+            {mode === 'participant' && <ActMetaView />}
             {mode === 'relation' && <ActRelationView />}
         </div>
     )

@@ -1,22 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import {
-    User, ArrowRightLeft, AlertTriangle,
+    User, ArrowRightLeft, AlertTriangle, AlertCircle, CheckCircle2,
 } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { resolveActParticipantLabel } from './participant-labels'
+import { evaluateActReadiness } from './act-readiness'
+import ActSafetyEditor from './ActSafetyEditor'
+import Tip from './Tip'
 
 export default function ActMetaView() {
     const {
-        acts,
+        acts, performers,
         actEditorState,
         renameAct,
         updateActAuthoringMeta,
         updateActDescription,
-        autoLayoutActParticipants,
-        openActParticipantEditor,
         openActRelationEditor,
-        setAssetLibraryOpen,
-        addRelation,
     } = useStudioStore()
     const updateActRules = useStudioStore((s) => s.updateActRules)
     const activeActId = actEditorState?.actId || null
@@ -28,31 +27,12 @@ export default function ActMetaView() {
     const [localDesc, setLocalDesc] = useState(act.description || meta.description || '')
     const [ruleInput, setRuleInput] = useState('')
 
-
     const participantKeys = Object.keys(act.participants)
-    const [relationDraft, setRelationDraft] = useState<{
-        source: string
-        target: string
-        direction: 'both' | 'one-way'
-    }>({ source: '', target: '', direction: 'both' })
-
-
 
     useEffect(() => {
         setLocalName(act.name)
         setLocalDesc(act.description || act.meta?.authoring?.description || '')
     }, [act.name, act.description, act.meta?.authoring?.description])
-
-    useEffect(() => {
-        const [first = '', second = ''] = participantKeys
-        setRelationDraft((current) => ({
-            source: participantKeys.includes(current.source) ? current.source : first,
-            target: participantKeys.includes(current.target) && current.target !== current.source
-                ? current.target
-                : second || first,
-            direction: current.direction,
-        }))
-    }, [act.id, participantKeys.join('|')])
 
     const commitName = () => {
         if (localName.trim() && localName !== act.name) {
@@ -68,26 +48,18 @@ export default function ActMetaView() {
         })
     }
 
-    const connectedKeys = new Set<string>()
-    for (const relation of act.relations) {
-        connectedKeys.add(relation.between[0])
-        connectedKeys.add(relation.between[1])
-    }
-    const warnings: Array<{ type: 'error' | 'warning'; msg: string }> = []
-
-    if (participantKeys.length === 0) {
-        warnings.push({ type: 'warning', msg: 'No participants bound' })
-    }
-    for (const key of participantKeys) {
-        if (!connectedKeys.has(key) && participantKeys.length > 1) {
-            warnings.push({ type: 'warning', msg: `"${key}" is disconnected` })
-        }
-    }
+    const readiness = useMemo(
+        () => evaluateActReadiness(act, performers),
+        [act, performers],
+    )
 
     return (
         <div className="act-panel__content">
             <div className="act-panel__section">
-                <label className="act-panel__label">Name</label>
+                <label className="act-panel__label">
+                    Name
+                    <Tip text="The Act name is visible to all participant agents. Use a clear, descriptive name so agents can understand the workflow context." />
+                </label>
                 <input
                     className="act-panel__input"
                     value={localName}
@@ -98,7 +70,10 @@ export default function ActMetaView() {
             </div>
 
             <div className="act-panel__section">
-                <label className="act-panel__label">Description</label>
+                <label className="act-panel__label">
+                    Description
+                    <Tip text="This description is injected into each participant agent's context. Write a clear purpose statement so agents understand what this workflow does and how they should collaborate." />
+                </label>
                 <textarea
                     className="act-panel__textarea"
                     value={localDesc}
@@ -124,57 +99,34 @@ export default function ActMetaView() {
             </div>
 
             <div className="act-panel__section">
-                <label className="act-panel__label">Participants</label>
+                <label className="act-panel__label">
+                    Participants
+                    <Tip text="Each participant is an agent in this workflow. Participant names are visible to other agents for messaging and collaboration." />
+                </label>
                 {participantKeys.length > 0 ? (
                     <div className="act-panel__list">
                         {participantKeys.map((key) => (
-                            <button
+                            <div
                                 key={key}
                                 className="act-panel__edge-link"
-                                onClick={() => openActParticipantEditor(activeActId, key)}
-                                title="Open participant binding"
                             >
                                 <span className="act-panel__edge-dir">●</span>
-                                <span className="act-panel__edge-target">{resolveActParticipantLabel(act, key, useStudioStore.getState().performers)}</span>
-                                <span className="act-panel__edge-badge">binding</span>
-                            </button>
+                                <span className="act-panel__edge-target">{resolveActParticipantLabel(act, key, performers)}</span>
+                            </div>
                         ))}
                     </div>
                 ) : (
                     <div className="act-panel__list">
                         <span className="act-panel__empty">No participants bound yet</span>
-                        <button
-                            className="act-panel__toggle"
-                            onClick={() => {
-                                setAssetLibraryOpen(true)
-                            }}
-                        >
-                            Open Asset Library
-                        </button>
                     </div>
                 )}
-                {participantKeys.length > 1 && (
-                    <button
-                        className="act-panel__toggle"
-                        onClick={() => autoLayoutActParticipants(activeActId)}
-                    >
-                        Auto Layout
-                    </button>
-                )}
             </div>
 
             <div className="act-panel__section">
-                <label className="act-panel__label">Add Participant</label>
-                <button
-                    className="act-panel__toggle"
-                    onClick={() => setAssetLibraryOpen(true)}
-                >
-                    Open Asset Library
-                </button>
-            </div>
-
-            <div className="act-panel__section">
-                <label className="act-panel__label">Relations</label>
+                <label className="act-panel__label">
+                    Relations
+                    <Tip text="Relations define communication channels between participants. Agents use relation names and descriptions to decide how and when to send messages." />
+                </label>
                 {act.relations.length > 0 ? (
                     <div className="act-panel__list">
                         {act.relations.map((rel) => (
@@ -182,15 +134,15 @@ export default function ActMetaView() {
                                 key={rel.id}
                                 className="act-panel__edge-link"
                                 onClick={() => openActRelationEditor(activeActId, rel.id)}
-                                title="Open relation"
+                                title="Edit relation"
                             >
                                 <span className="act-panel__edge-dir">
                                     {rel.direction === 'both' ? '↔' : '→'}
                                 </span>
                                 <span className="act-panel__edge-target">
-                                    {resolveActParticipantLabel(act, rel.between[0], useStudioStore.getState().performers)}
+                                    {resolveActParticipantLabel(act, rel.between[0], performers)}
                                     {' · '}
-                                    {resolveActParticipantLabel(act, rel.between[1], useStudioStore.getState().performers)}
+                                    {resolveActParticipantLabel(act, rel.between[1], performers)}
                                 </span>
                                 <span className="act-panel__edge-badge">
                                     {rel.name || 'relation'}
@@ -203,68 +155,11 @@ export default function ActMetaView() {
                 )}
             </div>
 
-            {participantKeys.length >= 2 && (
-                <div className="act-panel__section">
-                    <label className="act-panel__label">Quick Relation</label>
-                    <div className="act-panel__row">
-                        <div className="act-panel__section act-panel__section--half">
-                            <label className="act-panel__label">From</label>
-                            <select
-                                className="act-panel__input"
-                                value={relationDraft.source}
-                                onChange={(e) => setRelationDraft((current) => ({ ...current, source: e.target.value }))}
-                            >
-                                {participantKeys.map((key) => (
-                                    <option key={key} value={key}>{resolveActParticipantLabel(act, key, useStudioStore.getState().performers)}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="act-panel__section act-panel__section--half">
-                            <label className="act-panel__label">To</label>
-                            <select
-                                className="act-panel__input"
-                                value={relationDraft.target}
-                                onChange={(e) => setRelationDraft((current) => ({ ...current, target: e.target.value }))}
-                            >
-                                {participantKeys.map((key) => (
-                                    <option key={key} value={key}>{resolveActParticipantLabel(act, key, useStudioStore.getState().performers)}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                    <div className="act-panel__toggle-group">
-                        <button
-                            className={`act-panel__toggle ${relationDraft.direction === 'both' ? 'active' : ''}`}
-                            onClick={() => setRelationDraft((current) => ({ ...current, direction: 'both' }))}
-                        >
-                            Both
-                        </button>
-                        <button
-                            className={`act-panel__toggle ${relationDraft.direction === 'one-way' ? 'active' : ''}`}
-                            onClick={() => setRelationDraft((current) => ({ ...current, direction: 'one-way' }))}
-                        >
-                            One-way
-                        </button>
-                    </div>
-                    <button
-                        className="act-panel__toggle"
-                        onClick={() => {
-                            if (!relationDraft.source || !relationDraft.target || relationDraft.source === relationDraft.target) {
-                                return
-                            }
-                            const relationId = addRelation(activeActId, [relationDraft.source, relationDraft.target], relationDraft.direction)
-                            if (relationId) {
-                                openActRelationEditor(activeActId, relationId)
-                            }
-                        }}
-                    >
-                        Add Relation
-                    </button>
-                </div>
-            )}
-
             <div className="act-panel__section">
-                <label className="act-panel__label">Act Rules</label>
+                <label className="act-panel__label">
+                    Act Rules
+                    <Tip text="Global rules injected into every participant agent's context. Use these for cross-cutting constraints like 'All code must have tests' or 'Communicate in Korean'." />
+                </label>
                 <div className="act-panel__tags">
                     {(act.actRules || []).map((rule, index) => (
                         <span key={index} className="act-panel__tag" onClick={() => {
@@ -291,19 +186,36 @@ export default function ActMetaView() {
                 </div>
             </div>
 
-            {warnings.length > 0 && (
+            {readiness.issues.length > 0 && (
                 <div className="act-panel__section">
-                    <label className="act-panel__label"><AlertTriangle size={11} /> Validation</label>
+                    <label className="act-panel__label">
+                        {readiness.runnable
+                            ? <><CheckCircle2 size={11} /> Readiness</>
+                            : <><AlertTriangle size={11} /> Readiness</>}
+                    </label>
                     <div className="act-panel__validation">
-                        {warnings.map((warning, index) => (
-                            <div key={index} className={`act-panel__validation-item act-panel__validation-item--${warning.type}`}>
-                                <span className="act-panel__validation-dot" />
-                                {warning.msg}
+                        {readiness.issues.map((issue, index) => (
+                            <div
+                                key={index}
+                                className={`act-panel__validation-item act-panel__validation-item--${issue.severity}`}
+                                onClick={() => {
+                                    if (issue.focus?.mode === 'relation' && issue.focus.relationId) {
+                                        openActRelationEditor(activeActId, issue.focus.relationId)
+                                    }
+                                }}
+                                style={{ cursor: issue.focus ? 'pointer' : undefined }}
+                            >
+                                {issue.severity === 'error'
+                                    ? <AlertCircle size={10} style={{ flexShrink: 0 }} />
+                                    : <span className="act-panel__validation-dot" />}
+                                {issue.message}
                             </div>
                         ))}
                     </div>
                 </div>
             )}
+
+            <ActSafetyEditor actId={activeActId} />
 
             {meta.tags && meta.tags.length > 0 && (
                 <div className="act-panel__section">

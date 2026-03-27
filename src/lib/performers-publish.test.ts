@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPerformerAssetPayload, normalizePerformerAssetInput } from './performers-publish'
+import { buildActAssetPayload, buildPerformerAssetPayload, normalizePerformerAssetInput } from './performers-publish'
 
 describe('buildPerformerAssetPayload', () => {
     it('keeps portable declared MCP config when exporting performer assets', () => {
@@ -68,5 +68,39 @@ describe('normalizePerformerAssetInput', () => {
             derivedFrom: 'performer/@user/imported',
             publishBindingUrn: 'performer/@user/imported',
         })
+    })
+})
+
+describe('buildActAssetPayload', () => {
+    it('requires relation descriptions at the canonical asset boundary', () => {
+        expect(() => buildActAssetPayload({
+            id: 'act-1',
+            name: 'Review Flow',
+            position: { x: 0, y: 0 },
+            width: 400,
+            height: 300,
+            participants: {
+                'participant-lead': {
+                    performerRef: { kind: 'registry', urn: 'performer/@studio/main/lead' },
+                    displayName: 'Lead',
+                    position: { x: 0, y: 0 },
+                },
+                'participant-reviewer': {
+                    performerRef: { kind: 'registry', urn: 'performer/@studio/main/reviewer' },
+                    displayName: 'Reviewer',
+                    position: { x: 100, y: 0 },
+                },
+            },
+            relations: [
+                {
+                    id: 'rel-1',
+                    between: ['participant-lead', 'participant-reviewer'],
+                    direction: 'both',
+                    name: 'Review Loop',
+                    description: '',
+                },
+            ],
+            createdAt: Date.now(),
+        })).toThrow('requires a description')
     })
 })

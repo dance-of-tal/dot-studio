@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { displayUrn, getAssetUrn, normalizeAuthor } from './asset-library-utils'
 import type { AssetPanelAsset, McpPanelAsset } from './asset-panel-types'
+import { ActCascadePreview, PerformerCascadePreview } from './AssetCascadePreview'
 
 export default function AssetDetailBody({
     asset,
@@ -88,17 +89,18 @@ export default function AssetDetailBody({
 
             {asset.kind === 'performer' && (
                 <>
-                    {asset.talUrn && (
+                    <div className="asset-popover__section">
+                        <div className="section-title">Cascade</div>
+                        <PerformerCascadePreview asset={asset} />
+                    </div>
+                    {(asset.talUrn || (Array.isArray(asset.danceUrns) && asset.danceUrns.length > 0)) && (
                         <div className="asset-popover__section">
-                            <div className="section-title">Tal</div>
-                            <div className="asset-popover__section-item">{displayUrn(asset.talUrn)}</div>
-                        </div>
-                    )}
-                    {Array.isArray(asset.danceUrns) && asset.danceUrns.length > 0 && (
-                        <div className="asset-popover__section">
-                            <div className="section-title">Dances ({asset.danceUrns.length})</div>
-                            {asset.danceUrns.map((danceUrn: string) => (
-                                <div key={danceUrn} className="asset-popover__section-item">{displayUrn(danceUrn)}</div>
+                            <div className="section-title">References</div>
+                            {asset.talUrn ? (
+                                <div className="asset-popover__section-item">Tal: {displayUrn(asset.talUrn)}</div>
+                            ) : null}
+                            {Array.isArray(asset.danceUrns) && asset.danceUrns.map((danceUrn: string) => (
+                                <div key={danceUrn} className="asset-popover__section-item">Dance: {displayUrn(danceUrn)}</div>
                             ))}
                         </div>
                     )}
@@ -140,11 +142,17 @@ export default function AssetDetailBody({
             )}
 
             {asset.kind === 'act' && (
-                <div className="asset-popover__section">
-                    <div className="section-title">Act Summary</div>
-                    <div className="asset-popover__section-item">Participants: {participantCount}</div>
-                    <div className="asset-popover__section-item">Relations: {relationCount}</div>
-                </div>
+                <>
+                    <div className="asset-popover__section">
+                        <div className="section-title">Act Summary</div>
+                        <div className="asset-popover__section-item">Participants: {participantCount}</div>
+                        <div className="asset-popover__section-item">Relations: {relationCount}</div>
+                    </div>
+                    <div className="asset-popover__section">
+                        <div className="section-title">Cascade</div>
+                        <ActCascadePreview asset={asset} />
+                    </div>
+                </>
             )}
 
             {asset.kind === 'model' && (

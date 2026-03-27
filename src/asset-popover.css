@@ -151,6 +151,151 @@
     padding: 2px 0;
 }
 
+.asset-cascade {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.asset-cascade__group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.asset-cascade__group-title {
+    font-size: var(--font-xs);
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.asset-cascade__node {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--bg-primary) 84%, var(--bg-panel) 16%);
+}
+
+.asset-cascade__node[data-level="1"],
+.asset-cascade__node[data-level="2"] {
+    background: color-mix(in srgb, var(--bg-primary) 72%, var(--bg-hover) 28%);
+}
+
+.asset-cascade__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.asset-cascade__kind {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--bg-hover);
+    color: var(--text-muted);
+}
+
+.asset-cascade__kind--tal {
+    background: rgba(139, 92, 246, 0.12);
+    color: #8b5cf6;
+}
+
+.asset-cascade__kind--dance {
+    background: rgba(245, 158, 11, 0.14);
+    color: #d97706;
+}
+
+.asset-cascade__kind--performer {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+}
+
+.asset-cascade__kind--act {
+    background: rgba(59, 130, 246, 0.12);
+    color: #2563eb;
+}
+
+.asset-cascade__title {
+    font-size: var(--font-sm);
+    font-weight: 700;
+    color: var(--text-primary);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.asset-cascade__meta,
+.asset-cascade__relation-desc,
+.asset-cascade__rule,
+.asset-cascade__empty {
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+
+.asset-cascade__excerpt {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+}
+
+.asset-cascade__children {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 2px;
+    padding-left: 10px;
+    border-left: 1px solid var(--border-light);
+}
+
+.asset-cascade__relations,
+.asset-cascade__rules {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.asset-cascade__relation {
+    padding: 8px 10px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--bg-primary) 80%, var(--bg-hover) 20%);
+}
+
+.asset-cascade__relation-title {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--font-sm);
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.asset-cascade__relation-path {
+    font-size: var(--font-xs);
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
 /* ── Scope Selector ──────────────────────────────── */
 .scope-selector {
     display: flex;

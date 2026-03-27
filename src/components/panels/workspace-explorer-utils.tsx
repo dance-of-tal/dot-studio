@@ -107,8 +107,7 @@ export function buildThreadRows(args: {
         label: performer.name,
         meta: performer.model?.modelId || 'No model selected',
         hidden: !!performer.hidden,
-        active: ((args.selectedPerformerId === performer.id) || (args.editingTarget?.type === 'performer' && args.editingTarget.id === performer.id))
-            && !args.selectedPerformerSessionId,
+        active: (args.selectedPerformerId === performer.id) || (args.editingTarget?.type === 'performer' && args.editingTarget.id === performer.id),
         children: args.performerSessionsById.get(performer.id) || [],
     }))
 }

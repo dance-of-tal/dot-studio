@@ -6,14 +6,14 @@
  * - host composer state hook
  * - manage revert confirmation modal
  */
-import { useState, useMemo, useEffect, type RefObject } from 'react'
-import { api } from '../../api'
+import { useState, type RefObject } from 'react'
 import { useStudioStore } from '../../store'
 import type { ChatMessage, AssetCard, DraftAsset, PerformerNode, SafeOwnerSummary } from '../../types'
 import RevertConfirmModal from '../../components/chat/RevertConfirmModal'
 import PerformerChatComposer from './PerformerChatComposer'
 import PerformerThreadView from './PerformerThreadView'
 import { usePerformerChatComposerState } from './usePerformerChatComposerState'
+import { selectPendingPermission, selectPendingQuestion } from '../../store/session'
 
 type PerformerChatPanelProps = {
     performerId: string
@@ -65,39 +65,13 @@ export default function PerformerChatPanel({
     const {
         abortChat,
         executeSlashCommand,
-        undoLastTurn,
         revertSession,
-        pendingPermissions,
-        pendingQuestions,
         respondToPermission,
         respondToQuestion,
         rejectQuestion,
     } = useStudioStore()
 
-    const [isRespondingToPermission, setIsRespondingToPermission] = useState(false)
     const [revertTarget, setRevertTarget] = useState<{ performerId: string; messageId: string; messageContent: string } | null>(null)
-    const [hasGit, setHasGit] = useState<boolean | null>(null)
-
-    useEffect(() => {
-        let active = true
-        api.vcs.get()
-            .then((result: unknown) => {
-                if (!active) return
-                setHasGit(!!result)
-            })
-            .catch(() => {
-                if (!active) return
-                setHasGit(false)
-            })
-        return () => { active = false }
-    }, [])
-
-    const lastMessageId = messages[messages.length - 1]?.id || null
-    const canUndoLastTurn = useMemo(
-        () => hasActiveSession && messages.some((message) => message.role === 'user') && !isLoading,
-        [hasActiveSession, isLoading, messages],
-    )
-
     const composerState = usePerformerChatComposerState({
         performerId,
         performer,
@@ -107,6 +81,12 @@ export default function PerformerChatPanel({
         danceAssets,
         drafts,
     })
+    const permissionRequest = useStudioStore((state) => (
+        sessionId ? selectPendingPermission(state, sessionId) : null
+    ))
+    const questionRequest = useStudioStore((state) => (
+        sessionId ? selectPendingQuestion(state, sessionId) : null
+    ))
 
     return (
         <>
@@ -116,10 +96,7 @@ export default function PerformerChatPanel({
                 prefixCount={prefixCount}
                 isLoading={isLoading}
                 hasActiveSession={hasActiveSession}
-                canUndoLastTurn={canUndoLastTurn}
-                lastMessageId={lastMessageId}
                 chatEndRef={chatEndRef}
-                undoLastTurn={undoLastTurn}
                 onOpenRevert={(pid, mid, content) => setRevertTarget({ performerId: pid, messageId: mid, messageContent: content })}
                 composer={(
                     <PerformerChatComposer
@@ -136,12 +113,11 @@ export default function PerformerChatPanel({
                         safeSummary={safeSummary}
                         attachments={composerState.attachments}
                         setAttachments={composerState.setAttachments}
-                        mentionedPerformers={composerState.mentionedPerformers}
-                        setMentionedPerformers={composerState.setMentionedPerformers}
                         turnDanceSelections={composerState.turnDanceSelections}
                         setTurnDanceSelections={composerState.setTurnDanceSelections}
                         inputRef={composerState.inputRef}
                         handleDrop={composerState.handleDrop}
+                        handlePaste={composerState.handlePaste}
                         handleInputChange={composerState.handleInputChange}
                         handleKeyDownWrapper={composerState.handleKeyDownWrapper}
                         handleSend={composerState.handleSend}
@@ -156,24 +132,15 @@ export default function PerformerChatPanel({
                         setShowSlashMenu={composerState.setShowSlashMenu}
                         slashIndex={composerState.slashIndex}
                         filteredCommands={composerState.filteredCommands}
-                        isPerformerMentioning={composerState.isPerformerMentioning}
-                        performerMentionResults={composerState.performerMentionResults}
-                        performerMentionIndex={composerState.performerMentionIndex}
-                        extractPerformerMentionText={composerState.extractPerformerMentionText}
-                        setMentionedPerformerIndex={composerState.setPerformerMentionIndex}
-                        setIsPerformerMentioning={composerState.setIsPerformerMentioning}
                         isFileMentioning={composerState.isFileMentioning}
                         fileMentionResults={composerState.fileMentionResults}
                         fileMentionIndex={composerState.fileMentionIndex}
                         extractFileMentionText={composerState.extractFileMentionText}
                         setFileMentionIndex={composerState.setFileMentionIndex}
                         setIsFileMentioning={composerState.setIsFileMentioning}
-                        checkPerformerMention={composerState.checkPerformerMention}
                         checkFileMention={composerState.checkFileMention}
-                        pendingPermissions={pendingPermissions}
-                        pendingQuestions={pendingQuestions}
-                        isRespondingToPermission={isRespondingToPermission}
-                        setIsRespondingToPermission={setIsRespondingToPermission}
+                        permissionRequest={permissionRequest}
+                        questionRequest={questionRequest}
                         respondToPermission={respondToPermission}
                         respondToQuestion={respondToQuestion}
                         rejectQuestion={rejectQuestion}
@@ -186,7 +153,6 @@ export default function PerformerChatPanel({
             {revertTarget ? (
                 <RevertConfirmModal
                     messagePreview={revertTarget.messageContent}
-                    hasGit={hasGit}
                     onConfirm={async () => {
                         const content = revertTarget.messageContent
                         await revertSession(revertTarget.performerId, revertTarget.messageId)

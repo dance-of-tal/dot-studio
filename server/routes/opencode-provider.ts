@@ -31,7 +31,7 @@ opencodeProvider.post('/api/provider/:id/oauth/callback', async (c) => {
 opencodeProvider.put('/api/provider/:id/auth', async (c) => {
     const auth = await c.req.json()
     try {
-        return c.json(await updateProviderAuth(c.req.param('id'), auth))
+        return c.json(await updateProviderAuth(requestWorkingDir(c), c.req.param('id'), auth))
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
     }
@@ -39,7 +39,7 @@ opencodeProvider.put('/api/provider/:id/auth', async (c) => {
 
 opencodeProvider.delete('/api/provider/:id/auth', async (c) => {
     try {
-        return c.json(await deleteProviderAuth(c.req.param('id')))
+        return c.json(await deleteProviderAuth(requestWorkingDir(c), c.req.param('id')))
     } catch (err) {
         return jsonOpencodeError(c, err, { providerId: c.req.param('id'), defaultStatus: 500 })
     }

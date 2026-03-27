@@ -67,6 +67,13 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         }
         set(() => nextState)
 
+        // Dual-write: register binding in entity store
+        get().registerBinding(performerId, sessionId)
+        get().upsertSession({ id: sessionId, title: name, createdAt: Date.now(), status: { type: 'idle' } })
+        if (options?.resetMessages) {
+            get().setSessionMessages(sessionId, options.resetMessages)
+        }
+
         if (target?.executionMode === 'safe') {
             get().forceReconnectRealtimeEvents()
         }
@@ -78,7 +85,8 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         }
     }
 
-    const detachPerformerSessionInternal = (performerId: string, notice?: string) => {
+        const detachPerformerSessionInternal = (performerId: string, notice?: string) => {
+            const oldSessionId = get().sessionMap[performerId]
         set((state) => {
             const nextSessionMap = { ...state.sessionMap }
             delete nextSessionMap[performerId]
@@ -110,27 +118,41 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                 ),
             }
         })
+        // Dual-write: clean entity store
+        if (oldSessionId) {
+            get().unregisterBinding(performerId)
+            get().clearSessionRevert(oldSessionId)
+        }
     }
 
     return {
         createFreshSession,
-        clearSession: (performerId: string) => set((state) => {
-            const nextChats = { ...state.chats }
-            delete nextChats[performerId]
-            const nextChatPrefixes = { ...state.chatPrefixes }
-            delete nextChatPrefixes[performerId]
-            const nextSessionMap = { ...state.sessionMap }
-            delete nextSessionMap[performerId]
-            return {
-                chats: nextChats,
-                chatPrefixes: nextChatPrefixes,
-                sessionMap: nextSessionMap,
-                selectedPerformerSessionId: state.selectedPerformerId === performerId ? null : state.selectedPerformerSessionId,
-                performers: state.performers.map((performer) =>
-                    performer.id === performerId ? { ...performer, activeSessionId: undefined } : performer,
-                ),
+        clearSession: (performerId: string) => {
+            const sessionId = get().sessionMap[performerId]
+            set((state) => {
+                const nextChats = { ...state.chats }
+                delete nextChats[performerId]
+                const nextChatPrefixes = { ...state.chatPrefixes }
+                delete nextChatPrefixes[performerId]
+                const nextSessionMap = { ...state.sessionMap }
+                delete nextSessionMap[performerId]
+                return {
+                    chats: nextChats,
+                    chatPrefixes: nextChatPrefixes,
+                    sessionMap: nextSessionMap,
+                    selectedPerformerSessionId: state.selectedPerformerId === performerId ? null : state.selectedPerformerSessionId,
+                    performers: state.performers.map((performer) =>
+                        performer.id === performerId ? { ...performer, activeSessionId: undefined } : performer,
+                    ),
+                }
+            })
+            // Dual-write: entity store cleanup
+            if (sessionId) {
+                get().clearSessionData(sessionId)
+                get().unregisterBinding(performerId)
+                get().clearSessionRevert(sessionId)
             }
-        }),
+        },
 
         startNewSession: async (performerId: string) => {
             const target = resolveChatRuntimeTarget(get, performerId)
@@ -160,6 +182,10 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                 }
             }
             set({ loadingPerformerId: null })
+            // Dual-write: entity store
+            if (sessionId) {
+                get().setSessionLoading(sessionId, false)
+            }
         },
 
         undoLastTurn: async (performerId: string) => {
@@ -174,14 +200,19 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             }
 
             set({ loadingPerformerId: performerId })
+            get().setSessionLoading(sessionId, true)
             try {
-                await api.chat.revert(sessionId, lastUser.id)
+                const result = await api.chat.revert(sessionId, lastUser.id)
+                const revert = readSessionRevert(result)
+                if (revert) {
+                    get().setSessionRevert(sessionId, revert)
+                }
                 await syncPerformerMessages(set, get, performerId, sessionId)
-                appendPerformerSystemMessage(set, get, performerId, 'Undid the last turn.')
             } catch (error) {
                 appendPerformerSystemMessage(set, get, performerId, formatStudioApiErrorMessage(error))
             } finally {
                 set({ loadingPerformerId: null })
+                get().setSessionLoading(sessionId, false)
             }
         },
 
@@ -222,15 +253,60 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             if (!sessionId) return
 
             set({ loadingPerformerId: performerId })
+            get().setSessionLoading(sessionId, true)
             try {
-                await api.chat.revert(sessionId, messageId)
+                const result = await api.chat.revert(sessionId, messageId)
+                const revert = readSessionRevert(result)
+                if (revert) {
+                    get().setSessionRevert(sessionId, revert)
+                }
                 await syncPerformerMessages(set, get, performerId, sessionId)
-                appendPerformerSystemMessage(set, get, performerId, 'Reverted to the selected message.')
             } catch (error) {
                 console.error('Failed to revert session', error)
                 appendPerformerSystemMessage(set, get, performerId, formatStudioApiErrorMessage(error))
             } finally {
                 set({ loadingPerformerId: null })
+                get().setSessionLoading(sessionId, false)
+            }
+        },
+
+        restoreRevertedMessage: async (performerId: string, messageId: string) => {
+            const state = get()
+            const sessionId = state.sessionMap[performerId]
+            if (!sessionId) return
+
+            const revert = state.sessionReverts[sessionId]
+            if (!revert?.messageId) return
+
+            const messages = state.seMessages[sessionId] || state.chats[performerId] || []
+            const nextUserMessage = messages.find((message) => message.role === 'user' && message.id > messageId)
+
+            set({ loadingPerformerId: performerId })
+            get().setSessionLoading(sessionId, true)
+            try {
+                if (state.seStatuses[sessionId]?.type && state.seStatuses[sessionId].type !== 'idle') {
+                    await api.chat.abort(sessionId).catch(() => {})
+                }
+
+                if (!nextUserMessage) {
+                    await api.chat.unrevert(sessionId)
+                    get().clearSessionRevert(sessionId)
+                } else {
+                    const result = await api.chat.revert(sessionId, nextUserMessage.id)
+                    const nextRevert = readSessionRevert(result)
+                    if (nextRevert) {
+                        get().setSessionRevert(sessionId, nextRevert)
+                    } else {
+                        get().clearSessionRevert(sessionId)
+                    }
+                }
+                await syncPerformerMessages(set, get, performerId, sessionId)
+            } catch (error) {
+                console.error('Failed to restore reverted message', error)
+                appendPerformerSystemMessage(set, get, performerId, formatStudioApiErrorMessage(error))
+            } finally {
+                set({ loadingPerformerId: null })
+                get().setSessionLoading(sessionId, false)
             }
         },
 
@@ -281,6 +357,11 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                         : state.performers,
                 }))
                 get().listSessions()
+                // Dual-write: entity store cleanup
+                for (const performerId of affectedPerformerIds) {
+                    get().unregisterBinding(performerId)
+                }
+                get().removeSession(sessionId)
             } catch (error) {
                 console.error('Failed to delete session', error)
                 showToast('Failed to delete session', 'error', {
@@ -291,5 +372,19 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         },
 
         detachPerformerSession: detachPerformerSessionInternal,
+    }
+}
+
+function readSessionRevert(result: unknown): { messageId: string; partId?: string } | null {
+    if (!result || typeof result !== 'object') {
+        return null
+    }
+    const revert = (result as { revert?: { messageID?: string; partID?: string } | null }).revert
+    if (!revert?.messageID) {
+        return null
+    }
+    return {
+        messageId: revert.messageID,
+        ...(revert.partID ? { partId: revert.partID } : {}),
     }
 }

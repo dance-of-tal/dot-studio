@@ -71,12 +71,46 @@ export function buildAuthoringPayloadFromAsset(asset: AuthorableAsset) {
     }
 
     if (asset.kind === 'act') {
+        // CONTRACT BOUNDARY: Convert workspace/draft Act data to canonical shape.
+        // Workspace participants are Record<key, {performerRef, subscriptions, position}>
+        // Canonical participants are Array<{key, performer: URN, subscriptions?}>
+        // Relations may carry workspace `id` which is forbidden in canonical assets.
+        const rawParticipants = Array.isArray(asset.participants)
+            ? asset.participants
+            : []
+        const canonicalParticipants = rawParticipants.map((p) => {
+            const entry = p as Record<string, unknown>
+            // Already canonical (has key + performer string)
+            if (typeof entry.key === 'string' && typeof entry.performer === 'string') {
+                return {
+                    key: entry.key,
+                    performer: entry.performer,
+                    ...(entry.subscriptions ? { subscriptions: entry.subscriptions } : {}),
+                }
+            }
+            // Workspace format — should not normally reach here from installed assets,
+            // but guard defensively anyway
+            return entry
+        })
+
+        const rawRelations = Array.isArray(asset.relations) ? asset.relations : []
+        const canonicalRelations = rawRelations.map((r) => {
+            const rel = r as Record<string, unknown>
+            // Strip forbidden `id` field, keep only canonical fields
+            return {
+                between: rel.between,
+                direction: rel.direction,
+                name: rel.name,
+                description: rel.description,
+            }
+        })
+
         return {
             description: asset.description || asset.name,
             tags: Array.isArray(asset.tags) ? asset.tags : [],
             actRules: Array.isArray(asset.actRules) ? asset.actRules : [],
-            participants: Array.isArray(asset.participants) ? asset.participants : [],
-            relations: Array.isArray(asset.relations) ? asset.relations : [],
+            participants: canonicalParticipants,
+            relations: canonicalRelations,
         }
     }
 

@@ -1,5 +1,5 @@
 /**
- * ActActivityView — Real-time event timeline for Act threads.
+ * ActActivityView — Polled event timeline for Act threads (5s interval).
  * Shows callboard/runtime activity for the selected thread.
  *
  * PRD §17.2: Shows participant collaboration flow, callboard artifacts, and active participants.
@@ -50,6 +50,7 @@ function toActivityEvent(value: Record<string, unknown>, index: number): Activit
 export default function ActActivityView({ actId, threadId, mode = 'activity' }: ActActivityViewProps) {
     const [events, setEvents] = useState<ActivityEvent[]>([])
     const [loading, setLoading] = useState(false)
+    const [lastUpdated, setLastUpdated] = useState<number | null>(null)
 
     const loadEvents = useCallback(async () => {
         if (!threadId) return
@@ -59,6 +60,7 @@ export default function ActActivityView({ actId, threadId, mode = 'activity' }: 
             setEvents((result.events || [])
                 .map((event, index) => toActivityEvent(event, index))
                 .filter((event): event is ActivityEvent => event !== null))
+            setLastUpdated(Date.now())
         } catch (err) {
             console.error('Failed to load act events', err)
         } finally {
@@ -96,15 +98,15 @@ export default function ActActivityView({ actId, threadId, mode = 'activity' }: 
         const { type, source, payload } = event
         switch (type) {
             case 'message.sent':
-                return `${source} → send_message(to: ${payload.to}${payload.tag ? `, tag: ${payload.tag}` : ''})`
+                return `${source} → message_teammate(${payload.to}${payload.tag ? `, label: ${payload.tag}` : ''})`
             case 'message.delivered':
                 return `${payload.to} ← message delivered from ${source}`
             case 'board.posted':
-                return `${source} → post_to_callboard("${payload.key}")`
+                return `${source} → update_shared_board("${payload.key}")`
             case 'board.updated':
-                return `${source} → update_callboard("${payload.key}")`
+                return `${source} → update_shared_board("${payload.key}")`
             case 'runtime.idle':
-                return 'Runtime idle'
+                return 'Collaboration idle'
             default:
                 return `${source}: ${type}`
         }
@@ -131,6 +133,11 @@ export default function ActActivityView({ actId, threadId, mode = 'activity' }: 
             <div className="act-activity-view__header">
                 <Activity size={12} />
                 <span>{mode === 'callboard' ? 'Callboard' : 'Activity'}</span>
+                {lastUpdated && (
+                    <span className="act-activity-view__freshness" title="Auto-refreshes every 5 seconds">
+                        {new Date(lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                )}
                 <button
                     className="icon-btn"
                     onClick={loadEvents}

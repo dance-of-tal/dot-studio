@@ -56,9 +56,6 @@
     opacity: 0.5;
 }
 
-.sidebar-resize-handle--occluded {
-    pointer-events: none;
-}
 
 /* ── Asset Drawer ─────────────────────────────────────── */
 .sidebar-drawer {

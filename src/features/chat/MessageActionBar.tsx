@@ -1,16 +1,12 @@
 import { useState } from 'react'
-import { Copy, Check, CornerDownLeft, ArrowLeft } from 'lucide-react'
+import { Copy, Check, CornerDownLeft } from 'lucide-react'
 import type { ChatMessage } from '../../types'
 import './MessageActionBar.css'
 
 type MessageActionBarProps = {
     message: ChatMessage
     performerId: string
-    isLastMessage: boolean
-    canUndo: boolean
     canRevert: boolean
-    isLoading: boolean
-    onUndo: (performerId: string) => void
     onRevert: (performerId: string, messageId: string) => void
 }
 
@@ -45,11 +41,7 @@ function MetadataBadge({ metadata }: { metadata: NonNullable<ChatMessage['metada
 export default function MessageActionBar({
     message,
     performerId,
-    isLastMessage,
-    canUndo,
     canRevert,
-    isLoading,
-    onUndo,
     onRevert,
 }: MessageActionBarProps) {
     const [copied, setCopied] = useState(false)
@@ -72,8 +64,7 @@ export default function MessageActionBar({
         }
     }
 
-    const showUndo = isLastMessage && canUndo && !isLoading
-    const showRevert = canRevert && !isLastMessage && !isLoading && message.role === 'user'
+    const showRevert = canRevert && message.role === 'user'
 
     return (
         <div className="msg-action-bar">
@@ -93,15 +84,6 @@ export default function MessageActionBar({
                         title="Revert to this message"
                     >
                         <CornerDownLeft size={12} />
-                    </button>
-                ) : null}
-                {showUndo ? (
-                    <button
-                        className="msg-action-btn msg-action-btn--undo"
-                        onClick={() => onUndo(performerId)}
-                        title="Undo last turn"
-                    >
-                        <ArrowLeft size={12} />
                     </button>
                 ) : null}
             </div>

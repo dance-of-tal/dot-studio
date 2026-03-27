@@ -8,7 +8,10 @@
     flex-direction: column;
     box-shadow: var(--shadow-window);
     transition: box-shadow 0.2s, border-color 0.2s;
-    overflow: hidden;
+    overflow: visible;
+    /* Keep canvas content in the normal paint pipeline so browser zoom/React Flow zoom
+       preserves text and UI sharpness instead of scaling a rasterized layer. */
+    contain: layout style;
 }
 
 .canvas-frame--active {
@@ -31,6 +34,18 @@
 
 .canvas-frame .react-flow__resize-control {
     z-index: 5;
+}
+
+/* Position corner handles flush at the exact corners */
+.canvas-frame .react-flow__resize-control.handle {
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 2px !important;
+}
+
+/* Resize outline styling */
+.canvas-frame .react-flow__resize-control.line {
+    border-color: #3b82f6 !important;
 }
 
 .canvas-frame__header {
@@ -127,4 +142,18 @@
     background: var(--bg-panel);
     cursor: text;
     user-select: text;
+    /* Avoid paint containment here: it can encourage subtree rasterization while zooming. */
+    contain: layout style;
+}
+
+/* ── Focus Mode: immersive fullscreen ── */
+.canvas-frame--focused-fullscreen {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+}
+
+.canvas-frame--focused-fullscreen .canvas-frame__header {
+    cursor: default;
+    border-radius: 0;
 }

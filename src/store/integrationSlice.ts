@@ -1,38 +1,17 @@
 import type { StateCreator } from 'zustand'
 import type { StudioState, IntegrationSlice } from './types'
 import type { AdapterViewEvent } from '../../shared/adapter-view'
+import type { ChatMessage } from '../types'
 import { api } from '../api'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers'
 import { formatStudioApiErrorComment } from '../lib/api-errors'
-import { mapSessionMessagesToChatMessages } from '../lib/chat-messages'
+import { mapSessionMessagesToChatMessages, mergeSystemPrefixMessages } from '../lib/chat-messages'
 import type { SessionMessageLike } from '../lib/chat-messages'
-import {
-    clearIntegrationStreamingState,
-    clearStreamingSession,
-    streamingMessageKey,
-    streamingMessageRoles,
-    syncingSessions,
-    updateTargetMessages,
-} from './integration-streaming'
-import type { SessionStreamTarget } from './integration-streaming'
 import {
     handleLspDiagnostics,
     handleLspUpdated,
     handleMcpToolsChanged,
     handleMcpBrowserOpenFailed,
-    handleMessageUpdated,
-    handleMessagePartUpdated,
-    handleMessagePartDelta,
-    handleMessagePartRemoved,
-    handleSessionStatus,
-    handleSessionIdle,
-    handleSessionCompacted,
-    handleSessionError,
-    handlePermissionAsked,
-    handlePermissionReplied,
-    handleQuestionAsked,
-    handleQuestionReplied,
-    handleTodoUpdated,
 } from './integration-event-handlers'
 import {
     reconnectManagedEventSource,
@@ -40,12 +19,124 @@ import {
     resetManagedEventSource,
 } from './integration-eventsource'
 import type { EventSourceSlot } from './integration-eventsource'
-import {
-    eventSourceInstance, setEventSourceInstance,
-    eventSourceWorkingDir, setEventSourceWorkingDir,
-    adapterEventSourceInstance, setAdapterEventSourceInstance,
-    adapterEventSourceWorkingDir, setAdapterEventSourceWorkingDir,
-} from './integration-streaming'
+import { createEventIngest } from './session/event-ingest'
+import { selectStreamTarget } from './session/session-selectors'
+import type { SessionStreamTarget } from './session/session-selectors'
+
+type ChatEvent = {
+    type?: string
+    properties?: Record<string, unknown>
+}
+
+type SliceSet = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
+type SliceGet = () => StudioState
+
+const CHAT_EVENT_TYPES = new Set([
+    'message.updated', 'message.removed',
+    'message.part.updated', 'message.part.delta', 'message.part.removed',
+    'session.status', 'session.idle', 'session.compacted', 'session.error',
+    'permission.asked', 'permission.replied',
+    'question.asked', 'question.replied', 'question.rejected',
+    'todo.updated',
+])
+
+const FAILED_RESOLVE_RETRY_MS = 2_000
+
+function resolveSessionTarget(state: StudioState, sessionId: string): SessionStreamTarget | null {
+    const entityTarget = selectStreamTarget(state, sessionId)
+    if (entityTarget) {
+        return entityTarget
+    }
+
+    for (const [chatKey, mappedSessionId] of Object.entries(state.sessionMap)) {
+        if (mappedSessionId !== sessionId) {
+            continue
+        }
+        if (chatKey.startsWith('act:')) {
+            return { kind: 'act-participant', chatKey }
+        }
+        return { kind: 'performer', performerId: chatKey }
+    }
+
+    return null
+}
+
+function updateTargetMessages(
+    state: StudioState,
+    target: SessionStreamTarget,
+    updater: (messages: ChatMessage[]) => ChatMessage[],
+) {
+    if (target.kind === 'performer') {
+        return {
+            chats: {
+                ...state.chats,
+                [target.performerId]: updater(state.chats[target.performerId] || []),
+            },
+        }
+    }
+
+    return {
+        chats: {
+            ...state.chats,
+            [target.chatKey]: updater(state.chats[target.chatKey] || []),
+        },
+    }
+}
+
+function parseActParticipantOwnerId(ownerId: string) {
+    const match = ownerId.match(/^act:([^:]+):thread:([^:]+):participant:(.+)$/)
+    if (!match) {
+        return null
+    }
+
+    const [, actId, threadId, participantKey] = match
+    return {
+        actId,
+        threadId,
+        participantKey,
+    }
+}
+
+function streamTargetToChatKey(target: SessionStreamTarget): string {
+    return target.kind === 'performer' ? target.performerId : target.chatKey
+}
+
+function registerResolvedSessionBinding(
+    set: SliceSet,
+    get: SliceGet,
+    sessionId: string,
+    ownerId: string,
+) {
+    const actOwner = parseActParticipantOwnerId(ownerId)
+
+    set((state) => ({
+        sessionMap: { ...state.sessionMap, [ownerId]: sessionId },
+        chatKeyToSession: { ...state.chatKeyToSession, [ownerId]: sessionId },
+        sessionToChatKey: { ...state.sessionToChatKey, [sessionId]: ownerId },
+        ...(actOwner
+            ? {
+                actThreads: {
+                    ...state.actThreads,
+                    [actOwner.actId]: (state.actThreads[actOwner.actId] || []).map((thread) =>
+                        thread.id !== actOwner.threadId
+                            ? thread
+                            : {
+                                ...thread,
+                                participantSessions: {
+                                    ...thread.participantSessions,
+                                    [actOwner.participantKey]: sessionId,
+                                },
+                            },
+                    ),
+                },
+            }
+            : {}),
+    }))
+
+    if (!get().seEntities[sessionId]) {
+        get().upsertSession({ id: sessionId, status: { type: 'idle' } })
+    }
+}
 
 export const createIntegrationSlice: StateCreator<
     StudioState,
@@ -53,7 +144,38 @@ export const createIntegrationSlice: StateCreator<
     [],
     IntegrationSlice
 > = (set, get) => {
-    const syncSessionMessages = async (target: SessionStreamTarget, sessionId: string) => {
+    const syncingSessions = new Set<string>()
+    const pendingResolves = new Set<string>()
+    const failedResolves = new Map<string, number>()
+
+    let eventSourceInstance: EventSource | null = null
+    let eventSourceWorkingDir: string | null = null
+    let adapterEventSourceInstance: EventSource | null = null
+    let adapterEventSourceWorkingDir: string | null = null
+
+    const chatSlot: EventSourceSlot = {
+        getInstance: () => eventSourceInstance,
+        setInstance: (next) => {
+            eventSourceInstance = next
+        },
+        getWorkingDir: () => eventSourceWorkingDir,
+        setWorkingDir: (next) => {
+            eventSourceWorkingDir = next
+        },
+    }
+
+    const adapterSlot: EventSourceSlot = {
+        getInstance: () => adapterEventSourceInstance,
+        setInstance: (next) => {
+            adapterEventSourceInstance = next
+        },
+        getWorkingDir: () => adapterEventSourceWorkingDir,
+        setWorkingDir: (next) => {
+            adapterEventSourceWorkingDir = next
+        },
+    }
+
+    async function syncSessionMessages(target: SessionStreamTarget, sessionId: string) {
         if (syncingSessions.has(sessionId)) {
             return
         }
@@ -62,78 +184,157 @@ export const createIntegrationSlice: StateCreator<
         try {
             const response = await api.chat.messages(sessionId)
             const messages: SessionMessageLike[] = Array.isArray(response) ? response : (response.messages || [])
-            for (const message of messages) {
-                const messageId = message?.info?.id || message?.id
-                const role = message?.info?.role || message?.role
-                if (!messageId || typeof role !== 'string') {
-                    continue
-                }
-                if (role === 'user' || role === 'assistant' || role === 'system') {
-                    streamingMessageRoles.set(streamingMessageKey(sessionId, messageId), role)
-                }
-            }
             const mapped = mapSessionMessagesToChatMessages(messages)
+            const chatKey = streamTargetToChatKey(target)
             set((state) => updateTargetMessages(
                 state,
                 target,
-                () => mapped,
+                () => mergeSystemPrefixMessages(state.chatPrefixes[chatKey], mapped),
             ))
+            get().setSessionMessages(sessionId, mapped)
         } catch {
-            // Ignore background sync failures and keep the streamed content.
+            // Ignore background sync failures and keep streamed content.
         } finally {
-            clearStreamingSession(sessionId)
             syncingSessions.delete(sessionId)
         }
     }
 
-    // ── EventSource Slots ────────────────────────────────
+    function tryLazyResolveSession(sessionId: string) {
+        const failedAt = failedResolves.get(sessionId)
+        if (failedAt && (Date.now() - failedAt) < FAILED_RESOLVE_RETRY_MS) {
+            return
+        }
+        if (pendingResolves.has(sessionId)) {
+            return
+        }
+        if (resolveSessionTarget(get(), sessionId)) {
+            return
+        }
 
-    const chatSlot: EventSourceSlot = {
-        getInstance: () => eventSourceInstance,
-        setInstance: setEventSourceInstance,
-        getWorkingDir: () => eventSourceWorkingDir,
-        setWorkingDir: setEventSourceWorkingDir,
+        pendingResolves.add(sessionId)
+
+        api.chat.resolveSession(sessionId)
+            .then((result) => {
+                pendingResolves.delete(sessionId)
+                if (!result.found || !result.ownerId) {
+                    failedResolves.set(sessionId, Date.now())
+                    return
+                }
+
+                failedResolves.delete(sessionId)
+                registerResolvedSessionBinding(set, get, sessionId, result.ownerId)
+
+                const target = resolveSessionTarget(get(), sessionId)
+                if (target) {
+                    void syncSessionMessages(target, sessionId)
+                }
+            })
+            .catch(() => {
+                pendingResolves.delete(sessionId)
+                failedResolves.set(sessionId, Date.now())
+            })
     }
 
-
-    const adapterSlot: EventSourceSlot = {
-        getInstance: () => adapterEventSourceInstance,
-        setInstance: setAdapterEventSourceInstance,
-        getWorkingDir: () => adapterEventSourceWorkingDir,
-        setWorkingDir: setAdapterEventSourceWorkingDir,
-    }
-
-    // ── Reconnect wrappers ───────────────────────────────
-
-    const reconnectEventSource = () => {
+    function reconnectEventSource() {
         reconnectManagedEventSource({
             slot: chatSlot,
             resolveWorkingDir: () => get().workingDir || null,
             createEventSource: () => api.chat.events(),
+            onDisconnect: () => {
+                if (get().loadingPerformerId) {
+                    set({ loadingPerformerId: null })
+                }
+                eventIngest.flushSync()
+            },
             onMessage: (data: unknown) => {
-                const event = data as { type?: string }
+                const event = data as ChatEvent
+
+                if (event.type === 'server.instance.disposed') {
+                    resetManagedEventSource(chatSlot)
+                    reconnectEventSource()
+                    return
+                }
+
+                if (event.type === 'server.connected') {
+                    get().fetchLspStatus()
+                    const knownSessionIds = new Set<string>()
+                    for (const sessionId of Object.values(get().sessionMap)) {
+                        if (sessionId) {
+                            knownSessionIds.add(sessionId)
+                        }
+                    }
+                    for (const sessionId of Object.keys(get().sessionToChatKey)) {
+                        knownSessionIds.add(sessionId)
+                    }
+                    for (const sessionId of knownSessionIds) {
+                        const target = resolveSessionTarget(get(), sessionId)
+                        if (target) {
+                            void syncSessionMessages(target, sessionId)
+                        }
+                    }
+                    return
+                }
+
+                if (event.type === 'server.heartbeat') {
+                    return
+                }
+
+                const rawProps = event.properties as {
+                    sessionID?: string
+                    ownerId?: string
+                    info?: { sessionID?: string }
+                    part?: { sessionID?: string }
+                } | undefined
+                const sessionID = rawProps?.sessionID || rawProps?.info?.sessionID || rawProps?.part?.sessionID
+                if (sessionID) {
+                    if (rawProps?.ownerId && !get().sessionToChatKey[sessionID]) {
+                        registerResolvedSessionBinding(set, get, sessionID, rawProps.ownerId)
+                    }
+                    const knownTarget = resolveSessionTarget(get(), sessionID)
+                    if (!knownTarget) {
+                        tryLazyResolveSession(sessionID)
+                    } else if (!get().sessionToChatKey[sessionID]) {
+                        const chatKey = streamTargetToChatKey(knownTarget)
+                        get().registerBinding(chatKey, sessionID)
+                        if (!get().seEntities[sessionID]) {
+                            get().upsertSession({ id: sessionID, status: { type: 'idle' } })
+                        }
+                    }
+                }
+
+                if (event.type && CHAT_EVENT_TYPES.has(event.type)) {
+                    eventIngest.enqueue(event)
+                    return
+                }
+
                 if (event.type === 'lsp.client.diagnostics') return handleLspDiagnostics(event, get, set)
                 if (event.type === 'lsp.updated') return handleLspUpdated(get)
                 if (event.type === 'mcp.tools.changed') return handleMcpToolsChanged(get)
                 if (event.type === 'mcp.browser.open.failed') return handleMcpBrowserOpenFailed(event)
-                if (event.type === 'message.updated') return handleMessageUpdated(event, get, set)
-                if (event.type === 'message.part.updated') return handleMessagePartUpdated(event, get, set)
-                if (event.type === 'message.part.delta') return handleMessagePartDelta(event, get, set)
-                if (event.type === 'message.part.removed') return handleMessagePartRemoved(event, get, set)
-                if (event.type === 'session.status') return handleSessionStatus(event, get, set)
-                if (event.type === 'session.idle') return handleSessionIdle(event, get, set, syncSessionMessages)
-                if (event.type === 'session.compacted') return handleSessionCompacted(event, get, set, syncSessionMessages)
-                if (event.type === 'session.error') return handleSessionError(event, get, set)
-                if (event.type === 'permission.asked') return handlePermissionAsked(event, get, set)
-                if (event.type === 'permission.replied') return handlePermissionReplied(event, get, set)
-                if (event.type === 'question.asked') return handleQuestionAsked(event, get, set)
-                if (event.type === 'question.replied') return handleQuestionReplied(event, get, set)
-                if (event.type === 'todo.updated') return handleTodoUpdated(event, get, set)
             },
         })
     }
 
-    // Act runtime events use polling (ActActivityView) — no SSE needed
+    const eventIngest = createEventIngest({
+        get,
+        set,
+        onHeartbeatTimeout: () => {
+            resetManagedEventSource(chatSlot)
+            reconnectEventSource()
+        },
+        onSessionIdle: (sessionId: string) => {
+            const target = resolveSessionTarget(get(), sessionId)
+            if (target) {
+                void syncSessionMessages(target, sessionId)
+            }
+        },
+        onSessionCompacted: (sessionId: string) => {
+            const target = resolveSessionTarget(get(), sessionId)
+            if (target) {
+                void syncSessionMessages(target, sessionId)
+            }
+        },
+    })
 
     const reconnectAdapterEventSource = () => {
         reconnectManagedEventSource({
@@ -177,15 +378,29 @@ export const createIntegrationSlice: StateCreator<
         initRealtimeEvents: () => {
             reconnectEventSource()
             reconnectAdapterEventSource()
+            api.chat.listPendingPermissions().then((permissions) => {
+                if (permissions.length === 0) {
+                    return
+                }
+
+                set((state) => {
+                    const legacy = { ...state.pendingPermissions }
+                    const entity = { ...state.sePermissions }
+                    for (const permission of permissions) {
+                        legacy[permission.sessionID] = permission
+                        entity[permission.sessionID] = permission
+                    }
+                    return {
+                        pendingPermissions: legacy,
+                        sePermissions: entity,
+                    }
+                })
+            }).catch(() => { /* ignore rehydration failures */ })
         },
 
         forceReconnectRealtimeEvents: () => {
-            // Reset the chat SSE slot so that the next reconnect picks up
-            // any new execution directories (e.g. newly created safe-mode
-            // participant sessions) that weren't subscribed to before.
             resetManagedEventSource(chatSlot)
             reconnectEventSource()
-            // Adapter stream also depends on directory scope.
             resetManagedEventSource(adapterSlot)
             reconnectAdapterEventSource()
         },
@@ -195,7 +410,10 @@ export const createIntegrationSlice: StateCreator<
             closeManagedEventSource(adapterSlot)
             chatSlot.setWorkingDir(null)
             adapterSlot.setWorkingDir(null)
-            clearIntegrationStreamingState()
+            eventIngest.dispose()
+            syncingSessions.clear()
+            pendingResolves.clear()
+            failedResolves.clear()
         },
 
         compilePrompt: async (performerId) => {
@@ -206,8 +424,8 @@ export const createIntegrationSlice: StateCreator<
                 return '// Prompt preview unavailable.'
             }
             try {
-                // Standalone performers pass empty relatedPerformers (Act uses callboard tools instead)
-                const relatedPerformers: Array<{ performerId: string; performerName: string; description: string }> = []
+                // Standalone performers pass no extra request targets by default.
+                const requestTargets: Array<{ performerId: string; performerName: string; description: string }> = []
                 const res = await api.compile(
                     performer.id,
                     performer.name,
@@ -219,7 +437,7 @@ export const createIntegrationSlice: StateCreator<
                     runtimeConfig.mcpServerNames,
                     runtimeConfig.planMode,
                     runtimeConfig.danceDeliveryMode,
-                    relatedPerformers,
+                    requestTargets,
                 )
                 const lines = [
                     `// OpenCode Agent: ${res.agent}`,

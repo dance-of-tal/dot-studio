@@ -12,7 +12,7 @@ import { jsonServiceFailure } from './route-errors.js'
 
 const workspaces = new Hono()
 
-function registerWorkspaceRoutes(basePath: '/api/workspaces' | '/api/stages') {
+function registerWorkspaceRoutes(basePath: '/api/workspaces') {
     workspaces.get(basePath, async (c) => {
         try {
             return c.json(await listSavedWorkspaces(c.req.query('includeHidden') === '1'))
@@ -57,6 +57,5 @@ function registerWorkspaceRoutes(basePath: '/api/workspaces' | '/api/stages') {
 }
 
 registerWorkspaceRoutes('/api/workspaces')
-registerWorkspaceRoutes('/api/stages')
 
 export default workspaces

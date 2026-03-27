@@ -8,7 +8,7 @@ import {
     listSessionExecutionContextsForWorkingDir,
     unregisterSessionExecutionContext,
 } from '../lib/session-execution.js'
-import { STUDIO_DIR, workspacesDir } from '../lib/config.js'
+import { workspacesDir, workspaceDir } from '../lib/config.js'
 
 type WorkspaceSessionSummary = { id?: string }
 type WorkspaceLinkedSnapshot = {
@@ -50,7 +50,7 @@ function workspaceIdForWorkingDir(workingDir: string): string {
 }
 
 function workspacePathForId(id: string): string {
-    return path.join(workspacesDir(), `${id}.json`)
+    return path.join(workspaceDir(id), 'workspace.json')
 }
 
 async function purgeLinkedOpencodeData(workspace: WorkspaceLinkedSnapshot) {
@@ -113,7 +113,7 @@ async function purgeLinkedOpencodeData(workspace: WorkspaceLinkedSnapshot) {
     for (const act of Array.isArray(workspace?.acts) ? workspace.acts : []) {
         if (typeof act?.id === 'string' && act.id) {
             ownerTargets.set(`act:${act.id}`, { ownerKind: 'act', ownerId: act.id })
-            await fs.rm(path.join(STUDIO_DIR, 'act-runtime', act.id), { recursive: true, force: true }).catch(() => {})
+            await fs.rm(path.join(workspaceDir(workspaceIdForWorkingDir(workingDir)), 'act-runtime', act.id), { recursive: true, force: true }).catch(() => {})
         }
     }
 
@@ -125,43 +125,43 @@ async function purgeLinkedOpencodeData(workspace: WorkspaceLinkedSnapshot) {
 export async function listSavedWorkspaces(includeHidden = false) {
     const dir = workspacesDir()
     await fs.mkdir(dir, { recursive: true })
-    const files = await fs.readdir(dir)
-    const entries = await Promise.all(
-        files
-            .filter((file) => file.endsWith('.json'))
-            .map(async (file) => {
-                const filePath = path.join(dir, file)
-                try {
-                    const [raw, stat] = await Promise.all([
-                        fs.readFile(filePath, 'utf-8'),
-                        fs.stat(filePath),
-                    ])
-                    const parsed = JSON.parse(raw)
-                    const workingDir = normalizeWorkingDir(parsed.workingDir || '') || ''
-                    if (!workingDir) {
-                        return null
-                    }
-                    return {
-                        id: file.replace('.json', ''),
-                        workingDir,
-                        updatedAt: stat.mtimeMs,
-                        hiddenFromList: parsed.hiddenFromList === true,
-                    }
-                } catch {
-                    return null
-                }
-            }),
+    const entries: Array<{ id: string; workingDir: string; updatedAt: number }> = []
+
+    let items: string[]
+    try {
+        items = await fs.readdir(dir)
+    } catch {
+        return []
+    }
+
+    await Promise.all(
+        items.map(async (item) => {
+            const itemDir = path.join(dir, item)
+            try {
+                const itemStat = await fs.stat(itemDir)
+                if (!itemStat.isDirectory()) return
+
+                const filePath = path.join(itemDir, 'workspace.json')
+                const raw = await fs.readFile(filePath, 'utf-8')
+                const parsed = JSON.parse(raw)
+                const wd = normalizeWorkingDir(parsed.workingDir || '') || ''
+                if (!wd) return
+
+                if (!includeHidden && parsed.hiddenFromList === true) return
+
+                const stat = await fs.stat(filePath)
+                entries.push({
+                    id: item,
+                    workingDir: wd,
+                    updatedAt: stat.mtimeMs,
+                })
+            } catch {
+                // skip invalid entries
+            }
+        }),
     )
 
-    return entries
-        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-        .filter((entry) => includeHidden || entry.hiddenFromList !== true)
-        .map((entry) => ({
-            id: entry.id,
-            workingDir: entry.workingDir,
-            updatedAt: entry.updatedAt,
-        }))
-        .sort((a, b) => b.updatedAt - a.updatedAt)
+    return entries.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 export async function getSavedWorkspace(rawId: string) {
@@ -195,11 +195,11 @@ export async function saveWorkspaceSnapshot(body: WorkspaceLinkedSnapshot) {
         workingDir,
         hiddenFromList: body.hiddenFromList === true,
     }
-    const dir = workspacesDir()
-    await fs.mkdir(dir, { recursive: true })
+    const wsDir = workspaceDir(id)
+    await fs.mkdir(wsDir, { recursive: true })
 
     const filePath = workspacePathForId(id)
-    if (!filePath.startsWith(dir)) {
+    if (!filePath.startsWith(workspacesDir())) {
         return { ok: false as const, status: 400, error: 'Invalid workspace id' }
     }
 
@@ -246,16 +246,13 @@ export async function deleteSavedWorkspace(rawId: string) {
         return { ok: false as const, status: 400, error: 'Invalid workspace id' }
     }
 
-    const filePath = workspacePathForId(id)
-    if (!filePath.startsWith(workspacesDir())) {
-        return { ok: false as const, status: 400, error: 'Invalid workspace id' }
-    }
-
     try {
+        const filePath = workspacePathForId(id)
         const raw = await fs.readFile(filePath, 'utf-8')
         const workspace = JSON.parse(raw)
         await purgeLinkedOpencodeData(workspace)
-        await fs.unlink(filePath)
+        // Delete entire workspace directory (includes act-runtime data)
+        await fs.rm(workspaceDir(id), { recursive: true, force: true })
         return { ok: true as const }
     } catch {
         return { ok: false as const, status: 404, error: 'Workspace not found' }

@@ -1,7 +1,8 @@
 import { api } from '../api'
-import type { AssetRef, DanceDeliveryMode, DraftAsset, MarkdownEditorNode, WorkspaceActParticipantBinding, ActRelation } from '../types'
+import type { AssetRef, DanceDeliveryMode, DraftAsset, ExecutionMode, MarkdownEditorNode, WorkspaceActParticipantBinding, ActRelation } from '../types'
 import { ACT_DEFAULT_EXPANDED_HEIGHT, ACT_DEFAULT_WIDTH } from '../lib/act-layout'
 import { createPerformerNode } from '../lib/performers'
+import { createActParticipantKey } from './act-slice-helpers'
 import { defaultMarkdownContent } from './workspace-helpers'
 import type { StudioState } from './types'
 
@@ -17,10 +18,12 @@ type PerformerDraftContent = {
     mcpBindingMap?: Record<string, string>
     danceDeliveryMode?: DanceDeliveryMode
     planMode?: boolean
+    executionMode?: ExecutionMode
 }
 
 type ActDraftParticipant = {
     performerRef?: AssetRef
+    displayName?: string
     subscriptions?: WorkspaceActParticipantBinding['subscriptions']
     position?: { x: number; y: number }
 }
@@ -30,6 +33,16 @@ type ActDraftContent = {
     actRules?: string[]
     participants?: Record<string, ActDraftParticipant>
     relations?: ActRelation[]
+    /** Authoring state — preserved across draft round-trip */
+    position?: { x: number; y: number }
+    width?: number
+    height?: number
+    hidden?: boolean
+    safety?: {
+        confirmModeEnabled?: boolean
+        cooldownMs?: number
+    }
+    meta?: Record<string, unknown>
 }
 
 export function upsertDraftImpl(
@@ -87,6 +100,7 @@ export async function savePerformerAsDraftImpl(get: GetState, set: SetState, per
         danceDeliveryMode: performer.danceDeliveryMode || 'auto',
         planMode: performer.planMode || false,
         agentId: performer.agentId || null,
+        executionMode: performer.executionMode || 'direct',
     }
 
     try {
@@ -149,7 +163,9 @@ export async function saveActAsDraftImpl(get: GetState, set: SetState, actId: st
         participants: Object.fromEntries(
             Object.entries(act.participants).map(([key, participant]) => [key, {
                 performerRef: participant.performerRef,
+                displayName: participant.displayName,
                 subscriptions: participant.subscriptions,
+                position: participant.position,
             }]),
         ),
         relations: act.relations.map((relation) => ({
@@ -159,6 +175,13 @@ export async function saveActAsDraftImpl(get: GetState, set: SetState, actId: st
             name: relation.name,
             description: relation.description,
         })),
+        safety: act.safety,
+        // Authoring state for round-trip
+        position: act.position,
+        width: act.width,
+        height: act.height,
+        hidden: act.hidden,
+        meta: act.meta,
     }
 
     try {
@@ -213,6 +236,7 @@ export function addPerformerFromDraftImpl(
         mcpBindingMap: draftContent.mcpBindingMap || {},
         danceDeliveryMode: draftContent.danceDeliveryMode || 'auto',
         planMode: draftContent.planMode || false,
+        executionMode: ((draftContent as Record<string, unknown>)?.executionMode as ExecutionMode) || 'direct',
     })
 
     set((state: StudioState) => ({
@@ -239,12 +263,29 @@ export function importActFromDraftImpl(
     const centerY = get().canvasCenter?.y ?? 200
 
     const participants: Record<string, WorkspaceActParticipantBinding> = {}
+    const keyMapping: Record<string, string> = {}
     if (draftContent.participants && typeof draftContent.participants === 'object') {
+        for (const originalKey of Object.keys(draftContent.participants)) {
+            keyMapping[originalKey] = originalKey.startsWith('participant-')
+                ? originalKey
+                : createActParticipantKey()
+        }
         let index = 0
         for (const [key, participant] of Object.entries(draftContent.participants)) {
-            participants[key] = {
+            const internalKey = keyMapping[key]
+            participants[internalKey] = {
                 performerRef: participant.performerRef || { kind: 'draft', draftId: '' },
-                subscriptions: participant.subscriptions,
+                displayName: participant.displayName || key,
+                subscriptions: participant.subscriptions
+                    ? {
+                        ...participant.subscriptions,
+                        ...(participant.subscriptions.messagesFrom
+                            ? {
+                                messagesFrom: participant.subscriptions.messagesFrom.map((entry) => keyMapping[entry] || entry),
+                            }
+                            : {}),
+                    }
+                    : undefined,
                 position: participant.position || { x: centerX + index * 300, y: centerY },
             }
             index++
@@ -256,16 +297,74 @@ export function importActFromDraftImpl(
         name,
         description: draftContent.description,
         actRules: draftContent.actRules,
-        position: { x: centerX, y: centerY },
-        width: ACT_DEFAULT_WIDTH,
-        height: ACT_DEFAULT_EXPANDED_HEIGHT,
+        position: (draftContent as Record<string, unknown>).position as { x: number; y: number } || { x: centerX, y: centerY },
+        width: (draftContent as Record<string, unknown>).width as number || ACT_DEFAULT_WIDTH,
+        height: (draftContent as Record<string, unknown>).height as number || ACT_DEFAULT_EXPANDED_HEIGHT,
         participants,
-        relations: Array.isArray(draftContent.relations) ? draftContent.relations : [],
+        relations: Array.isArray(draftContent.relations)
+            ? draftContent.relations.map((relation) => ({
+                ...relation,
+                between: relation.between.map((entry) => keyMapping[entry] || entry) as [string, string],
+            }))
+            : [],
         createdAt: Date.now(),
+        safety: (draftContent as Record<string, unknown>).safety as import('../types').WorkspaceAct['safety'],
+        hidden: (draftContent as Record<string, unknown>).hidden as boolean || undefined,
+        meta: (draftContent as Record<string, unknown>).meta as import('../types').WorkspaceAct['meta'],
+    }
+
+    // ── Auto-materialize performer nodes for draft-bound participants ──
+    // When an Act draft references performer drafts, create visible performer
+    // nodes on canvas so participants are immediately runnable.
+    const existingPerformers = get().performers
+    const loadedDrafts = get().drafts
+    const materializedPerformers: import('../types').PerformerNode[] = []
+    const materializedDraftIds = new Set<string>()
+
+    for (const [key, binding] of Object.entries(participants)) {
+        if (binding.performerRef.kind !== 'draft' || !binding.performerRef.draftId) continue
+
+        const draftId = binding.performerRef.draftId
+        const derivedTag = `draft:${draftId}`
+
+        // Skip if performer already on canvas for this draft
+        const alreadyOnCanvas = existingPerformers.some(
+            (p) => p.meta?.derivedFrom === derivedTag,
+        )
+        if (alreadyOnCanvas) continue
+
+        // Skip if we already materialized one for this same draftId in this import
+        if (materializedDraftIds.has(draftId)) continue
+
+        const perfDraft = loadedDrafts[draftId]
+        const perfContent = (perfDraft?.content && typeof perfDraft.content === 'object')
+            ? perfDraft.content as PerformerDraftContent
+            : null
+
+        const node = createPerformerNode({
+            id: makeId('performer'),
+            name: perfDraft?.name || key,
+            x: centerX + materializedPerformers.length * 340,
+            y: centerY + 400,
+            talRef: perfContent?.talRef || null,
+            danceRefs: perfContent?.danceRefs || [],
+            model: perfContent?.model || null,
+            modelVariant: perfContent?.modelVariant || null,
+            mcpServerNames: perfContent?.mcpServerNames || [],
+            mcpBindingMap: perfContent?.mcpBindingMap || {},
+            danceDeliveryMode: perfContent?.danceDeliveryMode || 'auto',
+            planMode: perfContent?.planMode || false,
+            executionMode: ((perfContent as Record<string, unknown> | null)?.executionMode as ExecutionMode) || 'direct',
+            meta: { derivedFrom: derivedTag },
+        })
+
+        materializedPerformers.push(node)
+        materializedDraftIds.add(draftId)
     }
 
     set((state: StudioState) => ({
         acts: [...state.acts, nextAct],
+        performers: [...state.performers, ...materializedPerformers],
         selectedActId: actId,
         workspaceDirty: true,
     }))

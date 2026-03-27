@@ -16,12 +16,36 @@ import {
     applyPerformerPatch,
     mapPerformers,
 } from './workspace-helpers'
+import { isPerformerAttachedToAct } from '../features/act/act-inspector-helpers'
+import { scheduleActRuntimeSync } from './act-slice-helpers'
 
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
+type GetFn = () => StudioState
+
+/**
+ * After a runtime-affecting performer mutation, if the performer participates
+ * in a live Act, persist workspace immediately so auto-wake reads the latest
+ * performer config from workspace.json (instead of stale autosave data).
+ */
+function scheduleActWorkspacePersist(get: GetFn, set: SetFn, performerId: string) {
+    const state = get()
+    const performer = state.performers.find((p) => p.id === performerId)
+    if (!performer) return
+    for (const act of state.acts) {
+        if (!isPerformerAttachedToAct(act, performer)) continue
+        const hasLiveThread = (state.actThreads[act.id] || []).some(
+            (thread) => thread.status === 'active' || thread.status === 'idle',
+        )
+        if (hasLiveThread) {
+            scheduleActRuntimeSync(get, set, act.id)
+            return // One sync is enough — it saves workspace as part of its flow
+        }
+    }
+}
 
 // ── Tal ─────────────────────────────────────────────────
 
-export function setPerformerTal(set: SetFn, performerId: string, tal: { urn?: string } | null) {
+export function setPerformerTal(set: SetFn, get: GetFn, performerId: string, tal: { urn?: string } | null) {
     set((s) => ({
         performers: s.performers.map(a => {
             if (a.id !== performerId) return a
@@ -31,18 +55,20 @@ export function setPerformerTal(set: SetFn, performerId: string, tal: { urn?: st
         }),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
-export function setPerformerTalRef(set: SetFn, performerId: string, talRef: AssetRef | null) {
+export function setPerformerTalRef(set: SetFn, get: GetFn, performerId: string, talRef: AssetRef | null) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { talRef })),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
 // ── Dance ───────────────────────────────────────────────
 
-export function addPerformerDance(set: SetFn, performerId: string, dance: { urn: string }) {
+export function addPerformerDance(set: SetFn, get: GetFn, performerId: string, dance: { urn: string }) {
     set((s) => ({
         performers: s.performers.map(a =>
             a.id === performerId && !a.danceRefs.some((ref) => ref.kind === 'registry' && ref.urn === dance.urn)
@@ -53,9 +79,10 @@ export function addPerformerDance(set: SetFn, performerId: string, dance: { urn:
         ),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
-export function addPerformerDanceRef(set: SetFn, performerId: string, danceRef: AssetRef) {
+export function addPerformerDanceRef(set: SetFn, get: GetFn, performerId: string, danceRef: AssetRef) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => (
             !performer.danceRefs.some((ref) => isSameAssetRef(ref, danceRef))
@@ -66,18 +93,20 @@ export function addPerformerDanceRef(set: SetFn, performerId: string, danceRef: 
         )),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
-export function replacePerformerDanceRef(set: SetFn, performerId: string, currentRef: AssetRef, nextRef: AssetRef) {
+export function replacePerformerDanceRef(set: SetFn, get: GetFn, performerId: string, currentRef: AssetRef, nextRef: AssetRef) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, {
             danceRefs: performer.danceRefs.map((ref) => (isSameAssetRef(ref, currentRef) ? nextRef : ref)),
         })),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
-export function removePerformerDance(set: SetFn, performerId: string, danceUrn: string) {
+export function removePerformerDance(set: SetFn, get: GetFn, performerId: string, danceUrn: string) {
     set((s) => ({
         performers: s.performers.map(a =>
             a.id === performerId
@@ -89,11 +118,12 @@ export function removePerformerDance(set: SetFn, performerId: string, danceUrn: 
         ),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
 // ── Model ───────────────────────────────────────────────
 
-export function setPerformerModel(set: SetFn, performerId: string, model: { provider: string; modelId: string } | null) {
+export function setPerformerModel(set: SetFn, get: GetFn, performerId: string, model: { provider: string; modelId: string } | null) {
     set((s) => ({
         performers: s.performers.map(a => {
             if (a.id !== performerId) return a
@@ -109,18 +139,20 @@ export function setPerformerModel(set: SetFn, performerId: string, model: { prov
         }),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
-export function setPerformerModelVariant(set: SetFn, performerId: string, modelVariant: string | null) {
+export function setPerformerModelVariant(set: SetFn, get: GetFn, performerId: string, modelVariant: string | null) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { modelVariant: modelVariant || null })),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
 // ── Agent ───────────────────────────────────────────────
 
-export function setPerformerAgentId(set: SetFn, performerId: string, agentId: string | null) {
+export function setPerformerAgentId(set: SetFn, get: GetFn, performerId: string, agentId: string | null) {
     set((s) => ({
         performers: s.performers.map(a => {
             if (a.id !== performerId) return a
@@ -131,18 +163,20 @@ export function setPerformerAgentId(set: SetFn, performerId: string, agentId: st
         }),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
-export function setPerformerDanceDeliveryMode(set: SetFn, performerId: string, danceDeliveryMode: DanceDeliveryMode) {
+export function setPerformerDanceDeliveryMode(set: SetFn, get: GetFn, performerId: string, danceDeliveryMode: DanceDeliveryMode) {
     set((s) => ({
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { danceDeliveryMode })),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
 // ── MCP ─────────────────────────────────────────────────
 
-export function addPerformerMcp(set: SetFn, performerId: string, mcp: { name: string }) {
+export function addPerformerMcp(set: SetFn, get: GetFn, performerId: string, mcp: { name: string }) {
     set((s) => ({
         performers: s.performers.map(a =>
             a.id === performerId && !a.mcpServerNames.includes(mcp.name)
@@ -153,9 +187,10 @@ export function addPerformerMcp(set: SetFn, performerId: string, mcp: { name: st
         ),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
-export function removePerformerMcp(set: SetFn, performerId: string, mcpName: string) {
+export function removePerformerMcp(set: SetFn, get: GetFn, performerId: string, mcpName: string) {
     set((s) => ({
         performers: s.performers.map(a =>
             a.id === performerId
@@ -170,9 +205,10 @@ export function removePerformerMcp(set: SetFn, performerId: string, mcpName: str
         ),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
-export function setPerformerMcpBinding(set: SetFn, performerId: string, placeholderName: string, serverName: string | null) {
+export function setPerformerMcpBinding(set: SetFn, get: GetFn, performerId: string, placeholderName: string, serverName: string | null) {
     set((s) => ({
         performers: s.performers.map((performer) => {
             if (performer.id !== performerId) {
@@ -190,6 +226,7 @@ export function setPerformerMcpBinding(set: SetFn, performerId: string, placehol
         }),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
 // ── Metadata & visibility ───────────────────────────────

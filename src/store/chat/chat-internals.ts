@@ -3,7 +3,11 @@
  */
 import type { StudioState } from '../types'
 import { api } from '../../api'
-import { mapSessionMessagesToChatMessages, type SessionMessageLike } from '../../lib/chat-messages'
+import {
+    mapSessionMessagesToChatMessages,
+    mergeSystemPrefixMessages,
+    type SessionMessageLike,
+} from '../../lib/chat-messages'
 import type { ChatMessage, PerformerNode } from '../../types'
 
 export type ChatGet = () => StudioState
@@ -44,92 +48,26 @@ export async function syncPerformerMessages(
     const response = await api.chat.messages(sessionId)
     const messages: SessionMessageLike[] = Array.isArray(response) ? response : (response.messages || [])
     const mapped = mapSessionMessagesToChatMessages(messages)
+    const merged = mergeSystemPrefixMessages(get().chatPrefixes[performerId], mapped)
     // Only carry forward system-role prefix messages (e.g. mode-switch notices)
     // that aren't already present in the server-synced messages.
     // User/assistant messages from previously detached sessions must NOT be
     // prepended — the server response already contains the full session history.
     set((state) => {
-        const serverIds = new Set(mapped.map((m) => m.id))
-        const systemPrefixes = (state.chatPrefixes[performerId] || []).filter(
-            (prefix) => prefix.role === 'system' && !serverIds.has(prefix.id),
-        )
         return {
             chats: {
                 ...state.chats,
-                [performerId]: [
-                    ...systemPrefixes,
-                    ...mapped,
-                ],
+                [performerId]: merged,
             },
         }
     })
+    get().registerBinding(performerId, sessionId)
+    if (!get().seEntities[sessionId]) {
+        get().upsertSession({ id: sessionId, status: get().seStatuses[sessionId] || { type: 'idle' } })
+    }
+    get().setSessionMessages(sessionId, mapped)
     if (getPerformerById(get, performerId)?.executionMode === 'safe') {
         void get().refreshSafeOwner('performer', performerId)
     }
     return messages
-}
-
-export function scheduleSessionFallbackSync(
-    set: ChatSet,
-    get: ChatGet,
-    performerId: string,
-    sessionId: string,
-    startedAt: number,
-    attempt = 0,
-) {
-    const maxAttempts = 8
-    const delay = attempt === 0 ? 2500 : 3000
-
-    globalThis.setTimeout(async () => {
-        if (get().loadingPerformerId !== performerId) {
-            return
-        }
-
-        try {
-            const messages = await syncPerformerMessages(set, get, performerId, sessionId)
-            const mapped = mapSessionMessagesToChatMessages(messages)
-            const latestAssistant = [...messages]
-                .reverse()
-                .find((message) => (message?.info?.role || message?.role) === 'assistant')
-
-            const settled = !!(
-                latestAssistant
-                && (latestAssistant.info?.time?.created || 0) >= (startedAt - 1000)
-                && (
-                    latestAssistant.info?.time?.completed
-                    || latestAssistant.info?.error
-                )
-            )
-
-            set((state) => ({
-                chats: {
-                    ...state.chats,
-                    [performerId]: mapped,
-                },
-                ...(settled
-                    ? { loadingPerformerId: state.loadingPerformerId === performerId ? null : state.loadingPerformerId }
-                    : {}),
-            }))
-
-            if (!settled && attempt < maxAttempts) {
-                scheduleSessionFallbackSync(set, get, performerId, sessionId, startedAt, attempt + 1)
-            } else if (!settled && attempt >= maxAttempts) {
-                // All retries exhausted — force-clear loading to prevent
-                // infinite spinner. The SSE stream may pick up later events
-                // and the user can always re-send.
-                set((state) => ({
-                    loadingPerformerId: state.loadingPerformerId === performerId ? null : state.loadingPerformerId,
-                }))
-            }
-        } catch {
-            if (attempt < maxAttempts) {
-                scheduleSessionFallbackSync(set, get, performerId, sessionId, startedAt, attempt + 1)
-            } else {
-                // All retries exhausted on error — force-clear loading.
-                set((state) => ({
-                    loadingPerformerId: state.loadingPerformerId === performerId ? null : state.loadingPerformerId,
-                }))
-            }
-        }
-    }, delay)
 }

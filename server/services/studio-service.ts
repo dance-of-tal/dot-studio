@@ -1,5 +1,6 @@
 import { exec } from 'child_process'
 import fs from 'fs/promises'
+import open from 'open'
 import path from 'path'
 import { promisify } from 'util'
 import { ensureDotDir } from '../lib/dot-source.js'
@@ -55,5 +56,33 @@ export async function activateStudioProject(workingDir: string) {
     return {
         ok: true as const,
         activeProjectDir: getActiveProjectDir(),
+    }
+}
+
+export async function openStudioPath(targetPath: string) {
+    if (!targetPath) {
+        return { ok: false as const, status: 400, error: 'path is required' }
+    }
+
+    const resolved = path.resolve(targetPath.replace(/\/+$/, ''))
+
+    try {
+        await fs.stat(resolved)
+    } catch {
+        return { ok: false as const, status: 404, error: `Path not found: ${resolved}` }
+    }
+
+    try {
+        await open(resolved)
+        return {
+            ok: true as const,
+            path: resolved,
+        }
+    } catch (error) {
+        return {
+            ok: false as const,
+            status: 500,
+            error: error instanceof Error ? error.message : 'Failed to open path',
+        }
     }
 }

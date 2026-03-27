@@ -1,7 +1,7 @@
 /**
  * RevertConfirmModal — Confirmation dialog before reverting to a message.
- * Warns that revert is irreversible and that file changes may not be
- * reverted without Git.
+ * Warns that revert is irreversible and that later file changes may also
+ * be rolled back by the session runtime.
  */
 import { createPortal } from 'react-dom'
 import { AlertTriangle, CornerDownLeft, X } from 'lucide-react'
@@ -10,14 +10,12 @@ import './RevertConfirmModal.css'
 
 type RevertConfirmModalProps = {
     messagePreview: string
-    hasGit: boolean | null  // null = unknown/loading
     onConfirm: () => void
     onCancel: () => void
 }
 
 export default function RevertConfirmModal({
     messagePreview,
-    hasGit,
     onConfirm,
     onCancel,
 }: RevertConfirmModalProps) {
@@ -49,16 +47,9 @@ export default function RevertConfirmModal({
                         <span>All messages after this point will be permanently deleted. This action cannot be undone.</span>
                     </div>
 
-                    {hasGit === false ? (
-                        <div className="revert-confirm-modal__warning revert-confirm-modal__warning--info">
-                            <AlertTriangle size={14} />
-                            <span>This workspace has no Git repository. File changes made after this message will <strong>not</strong> be reverted — only the chat history will be affected.</span>
-                        </div>
-                    ) : hasGit === true ? (
-                        <div className="revert-confirm-modal__note">
-                            File changes made after this message will also be reverted via Git.
-                        </div>
-                    ) : null}
+                    <div className="revert-confirm-modal__note">
+                        Studio will also ask the session runtime to roll back file changes made after this message when that history is reversible.
+                    </div>
                 </div>
 
                 <div className="publish-modal__footer">

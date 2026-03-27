@@ -70,6 +70,24 @@
     color: var(--text-secondary);
 }
 
+.permission-dock__always-hint {
+    padding: 6px 12px 0;
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+}
+
+.permission-dock__always-label {
+    color: var(--text-muted);
+    margin-right: 4px;
+}
+
+.permission-dock__always-patterns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+
 .permission-dock__actions {
     display: flex;
     gap: 6px;

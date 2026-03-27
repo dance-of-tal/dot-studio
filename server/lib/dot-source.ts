@@ -51,6 +51,22 @@ export {
     slugFromUrn,
 } from 'dance-of-tal/contracts'
 
+export {
+    parseSource,
+    getOwnerRepo,
+    shallowClone,
+    discoverSkills,
+    copySkillDir,
+    upsertSkillLockEntry,
+    readPluginManifest,
+} from 'dance-of-tal/lib/add'
+
+export type {
+    ParsedSource,
+    CloneResult,
+    DiscoveredSkill,
+} from 'dance-of-tal/lib/add'
+
 // Server convenience re-exports of types from shared/dot-types.ts
 // Server code can import types from either dot-source or shared/dot-types.
 export type {

@@ -1,15 +1,20 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Paperclip, Sparkles, GitCompare } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { ChatMessage } from '../../types'
 import ThreadBody from '../chat/ThreadBody'
-import ChatMessageContent from '../chat/ChatMessageContent'
+import ChatMessageContent, {
+    hasVisibleAssistantMessageContent,
+} from '../chat/ChatMessageContent'
+import { hasVisibleUserMessageContent } from '../chat/chat-message-visibility'
 import MessageActionBar from '../chat/MessageActionBar'
+import { SessionRevertDock } from '../../components/chat/SessionRevertDock'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
 import { SessionReview, collectSessionDiffs } from '../chat/SessionReview'
 import { shouldShowChatLoading } from './agent-frame-utils'
 import { useStudioStore } from '../../store'
+import { selectPendingPermission, selectSessionIdForChatKey, selectTodos } from '../../store/session'
 
 const EMPTY_TODOS: never[] = []
 
@@ -19,10 +24,7 @@ type Props = {
     prefixCount: number
     isLoading: boolean
     hasActiveSession: boolean
-    canUndoLastTurn: boolean
-    lastMessageId: string | null
     chatEndRef: RefObject<HTMLDivElement | null>
-    undoLastTurn: (performerId: string) => Promise<void>
     onOpenRevert: (performerId: string, messageId: string, content: string) => void
     composer: React.ReactNode
 }
@@ -33,20 +35,74 @@ export default function PerformerThreadView({
     prefixCount,
     isLoading,
     hasActiveSession,
-    canUndoLastTurn,
-    lastMessageId,
     chatEndRef,
-    undoLastTurn,
     onOpenRevert,
     composer,
 }: Props) {
-    const todos = useStudioStore((s) => s.todos[performerId]) ?? EMPTY_TODOS
+    const sessionId = useStudioStore((state) => selectSessionIdForChatKey(state, performerId))
+    const todos = useStudioStore((state) => (
+        sessionId ? selectTodos(state, sessionId) : EMPTY_TODOS
+    ))
+    const revertState = useStudioStore((state) => (
+        sessionId ? state.sessionReverts[sessionId] || null : null
+    ))
+    const pendingPermission = useStudioStore((state) => (
+        sessionId ? !!selectPendingPermission(state, sessionId) : false
+    ))
+    const restoreRevertedMessage = useStudioStore((state) => state.restoreRevertedMessage)
     const [showReview, setShowReview] = useState(false)
-    const hasDiffs = useMemo(() => collectSessionDiffs(messages).length > 0, [messages])
+
+    const visibleMessages = useMemo(() => {
+        if (!revertState?.messageId) {
+            return messages
+        }
+        return messages.filter((message) => message.id < revertState.messageId)
+    }, [messages, revertState?.messageId])
+
+    const rolledMessages = useMemo(() => {
+        if (!revertState?.messageId) {
+            return []
+        }
+        return messages
+            .filter((message) => message.role === 'user' && message.id >= revertState.messageId)
+            .map((message) => ({
+                id: message.id,
+                text: summarizeUserMessage(message),
+            }))
+    }, [messages, revertState?.messageId])
+
+    const hasDiffs = useMemo(() => collectSessionDiffs(visibleMessages).length > 0, [visibleMessages])
+
+    // TodoDock lifecycle: live when loading or blocked on permission
+    const isTodoLive = isLoading || pendingPermission
+
+    const handleTodoClear = useCallback(() => {
+        useStudioStore.setState((state) => {
+            const next = { ...state.todos }
+            const nextEntity = { ...state.seTodos }
+            delete next[performerId]
+            const resolvedSessionId = selectSessionIdForChatKey(state, performerId)
+            if (resolvedSessionId) {
+                delete next[resolvedSessionId]
+                delete nextEntity[resolvedSessionId]
+            }
+            return {
+                todos: next,
+                seTodos: nextEntity,
+            }
+        })
+    }, [performerId])
 
     const composerWithDock = (
         <>
-            <TodoDock todos={todos} />
+            <SessionRevertDock
+                items={rolledMessages}
+                disabled={isLoading}
+                onRestore={(messageId) => {
+                    void restoreRevertedMessage(performerId, messageId)
+                }}
+            />
+            <TodoDock todos={todos} isLive={isTodoLive} onClear={handleTodoClear} />
             {composer}
         </>
     )
@@ -54,11 +110,11 @@ export default function PerformerThreadView({
     return (
         <>
             {showReview && (
-                <SessionReview messages={messages} className="performer-session-review" />
+                <SessionReview messages={visibleMessages} className="performer-session-review" />
             )}
             <ThreadBody
-                messages={messages}
-                loading={shouldShowChatLoading(messages, isLoading)}
+                messages={visibleMessages}
+                loading={shouldShowChatLoading(visibleMessages, isLoading)}
                 renderEmpty={() => (
                     <div className="chat-empty-state">
                         <Sparkles size={28} className="empty-icon" />
@@ -68,6 +124,12 @@ export default function PerformerThreadView({
                 )}
                 renderMessage={(msg, index) => {
                     const isCurrentSession = index >= prefixCount
+                    if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
+                        return null
+                    }
+                    if (msg.role === 'assistant' && !hasVisibleAssistantMessageContent(msg)) {
+                        return null
+                    }
                     return (
                         <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`} data-scrollable>
                             {msg.role === 'user' ? (
@@ -87,15 +149,11 @@ export default function PerformerThreadView({
                             ) : (
                                 <ChatMessageContent message={msg} />
                             )}
-                            {msg.role !== 'system' && isCurrentSession ? (
+                            {msg.role === 'user' && isCurrentSession ? (
                                 <MessageActionBar
                                     message={msg}
                                     performerId={performerId}
-                                    isLastMessage={msg.id === lastMessageId}
-                                    canUndo={canUndoLastTurn}
                                     canRevert={hasActiveSession}
-                                    isLoading={isLoading}
-                                    onUndo={undoLastTurn}
                                     onRevert={(pid, mid) => onOpenRevert(pid, mid, msg.content)}
                                 />
                             ) : null}
@@ -124,4 +182,15 @@ export default function PerformerThreadView({
             )}
         </>
     )
+}
+
+function summarizeUserMessage(message: ChatMessage): string {
+    const text = (message.content || '').replace(/\s+/g, ' ').trim()
+    if (text) {
+        return text
+    }
+    if (message.attachments?.length) {
+        return message.attachments.length === 1 ? '[attachment]' : `[${message.attachments.length} attachments]`
+    }
+    return '[message]'
 }

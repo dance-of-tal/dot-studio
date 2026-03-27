@@ -69,6 +69,11 @@
     --terminal-fg: #1e1e1e;
     --terminal-output: #555555;
 
+    /* Derived token aliases */
+    --bg-main: var(--bg-panel);
+    --primary-rgb: 13, 153, 255;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+
     color-scheme: light;
 }
 
@@ -114,6 +119,11 @@
     --terminal-bg: #1e1e1e;
     --terminal-fg: #d4d4d4;
     --terminal-output: #a3a3a3;
+
+    /* Derived token aliases */
+    --bg-main: var(--bg-panel);
+    --primary-rgb: 13, 153, 255;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
     color-scheme: dark;
 }

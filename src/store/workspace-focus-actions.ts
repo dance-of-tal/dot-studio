@@ -1,5 +1,6 @@
 import { api, setApiWorkingDirContext } from '../api'
 import { resolveActExpandedHeight } from '../lib/act-layout'
+import { resolveFocusNodeId } from '../lib/focus-utils'
 import { normalizePath, mapCanvasTerminals } from './workspace-helpers'
 import type { StudioState } from './types'
 
@@ -14,12 +15,16 @@ export function enterFocusModeImpl(
     viewportSize: { width: number; height: number },
 ) {
     const state = get()
-    const FOCUS_PAD_X = 24
-    const FOCUS_PAD_Y = 80 // extra top clearance for canvas toolbar overlay
-    const focusWidth = viewportSize.width - FOCUS_PAD_X
-    const focusHeight = viewportSize.height - FOCUS_PAD_Y
+    if (state.focusSnapshot) {
+        // Prevent corrupting the root snapshot if accidentally called again.
+        return
+    }
+    // No padding — focused node fills the entire canvas viewport
+    const focusWidth = viewportSize.width
+    const focusHeight = viewportSize.height
 
     const focusSnapshotBase = {
+        nodeId,
         hiddenPerformerIds: state.performers.filter((performer) => performer.hidden).map((performer) => performer.id),
         hiddenActIds: state.acts.filter((act) => act.hidden).map((act) => act.id),
         hiddenEditorIds: state.markdownEditors.filter((editor) => editor.hidden).map((editor) => editor.id),
@@ -93,9 +98,10 @@ export function enterFocusModeImpl(
 export function exitFocusModeImpl(get: GetState, set: SetState) {
     const state = get()
     const snapshot = state.focusSnapshot
-    if (!snapshot || !state.focusedPerformerId) return
+    if (!snapshot) return
 
-    const focusedId = state.focusedPerformerId
+    // focusedPerformerId may have been cleared by selectAct / selectPerformer
+    const focusedId = resolveFocusNodeId(snapshot, state.focusedPerformerId)
     const focusedType = state.focusedNodeType || snapshot.type
 
     if (focusedType === 'performer') {
@@ -152,21 +158,27 @@ export function switchFocusTargetImpl(
 ) {
     const state = get()
     const snapshot = state.focusSnapshot
-    if (!snapshot || !state.focusedPerformerId) return
+    const prevId = resolveFocusNodeId(snapshot, state.focusedPerformerId)
+    if (!snapshot || !prevId) return
 
-    const prevId = state.focusedPerformerId
     const prevType = state.focusedNodeType || snapshot.type
 
     if (nodeId === prevId && nodeType === prevType) return
 
     let focusWidth = 800
     let focusHeight = 600
-    if (prevType === 'performer') {
-        const prev = state.performers.find((performer) => performer.id === prevId)
-        focusWidth = prev?.width || 800
-        focusHeight = prev?.height || 600
-    } else {
-        const prev = state.acts.find((act) => act.id === prevId)
+    
+    if (typeof document !== 'undefined') {
+        const pane = document.querySelector('.react-flow__pane')
+        if (pane) {
+            focusWidth = pane.clientWidth
+            focusHeight = pane.clientHeight
+        }
+    }
+
+    if (focusWidth === 800 && focusHeight === 600) {
+        const prevNodes = prevType === 'performer' ? state.performers : state.acts
+        const prev = prevNodes.find((n) => n.id === prevId)
         focusWidth = prev?.width || 800
         focusHeight = prev?.height || 600
     }
@@ -183,6 +195,7 @@ export function switchFocusTargetImpl(
             activeChatPerformerId: nodeId,
             focusSnapshot: {
                 ...snapshot,
+                nodeId,
                 type: 'performer',
                 nodeSize: { width: nextNode.width ?? 400, height: nextNode.height ?? 500 },
             },
@@ -215,9 +228,10 @@ export function switchFocusTargetImpl(
         selectedPerformerId: null,
         focusSnapshot: {
             ...snapshot,
+            nodeId,
             type: 'act',
             actId: nodeId,
-            nodeSize: { width: nextAct.width ?? 400, height: nextAct.height ?? 420 },
+            nodeSize: { width: nextAct.width ?? 400, height: resolveActExpandedHeight(nextAct.height) },
         },
         performers: state.performers.map((performer) => {
             if (performer.id === prevId && prevType === 'performer') {

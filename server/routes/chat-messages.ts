@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import type { ChatSendRequest } from '../../shared/chat-contracts.js'
 import { uniqueAssetRefs } from '../lib/chat-session.js'
@@ -17,6 +18,29 @@ import {
 import { requestWorkingDir } from './route-errors.js'
 
 const chatMessages = new Hono()
+
+function parseMessagesQuery(c: Context) {
+    const rawLimit = c.req.query('limit')
+    const rawBefore = c.req.query('before')
+
+    let limit: number | undefined
+    if (typeof rawLimit === 'string' && rawLimit.trim().length > 0) {
+        const parsed = Number.parseInt(rawLimit, 10)
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            throw new StudioValidationError('Query "limit" must be a positive integer.', 'fix_input')
+        }
+        limit = parsed
+    }
+
+    const before = typeof rawBefore === 'string' && rawBefore.trim().length > 0
+        ? rawBefore.trim()
+        : undefined
+
+    return {
+        limit,
+        before,
+    }
+}
 
 chatMessages.post('/api/chat/sessions/:id/send', async (c) => {
     const body = await c.req.json<ChatSendRequest>()
@@ -68,7 +92,14 @@ chatMessages.post('/api/chat/questions/:qid/reject', async (c) => {
 
 chatMessages.get('/api/chat/sessions/:id/messages', async (c) => {
     try {
-        return c.json(await listStudioSessionMessages(requestWorkingDir(c), c.req.param('id')))
+        const query = parseMessagesQuery(c)
+        const result = await listStudioSessionMessages(
+            requestWorkingDir(c),
+            c.req.param('id'),
+            query,
+        )
+        c.header('x-next-cursor', result.nextCursor || '')
+        return c.json(result.messages)
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -80,6 +111,24 @@ chatMessages.get('/api/chat/sessions/:id/diff', async (c) => {
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
+})
+
+/**
+ * Resolve a session ID to its owner info (chatKey / performerId).
+ * Used by the frontend to lazily register sessions created externally
+ * (e.g., by wake cascade) into the sessionMap.
+ */
+chatMessages.get('/api/chat/sessions/:id/resolve', async (c) => {
+    const context = await resolveSessionExecutionContext(c.req.param('id'))
+    if (!context) {
+        return c.json({ found: false }, 404)
+    }
+    return c.json({
+        found: true,
+        sessionId: context.sessionId,
+        ownerId: context.ownerId,
+        ownerKind: context.ownerKind,
+    })
 })
 
 export default chatMessages

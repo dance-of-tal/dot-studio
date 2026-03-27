@@ -10,6 +10,7 @@ import { createAdapterViewSlice } from './adapterViewSlice'
 import { createSafeModeSlice } from './safeModeSlice'
 import { createActSlice } from './actSlice'
 import { createAssistantSlice } from './assistantSlice'
+import { createSessionSlice } from './session/session-entity-store'
 import { initDraftAutoSave } from './draft-auto-save'
 
 export const useStudioStore = create<StudioState>()((...a) => ({
@@ -21,6 +22,7 @@ export const useStudioStore = create<StudioState>()((...a) => ({
     ...createSafeModeSlice(...a),
     ...createActSlice(...a),
     ...createAssistantSlice(...a),
+    ...createSessionSlice(...a),
 }))
 
 // Auto-save performer drafts when config changes on derived-from-asset performers

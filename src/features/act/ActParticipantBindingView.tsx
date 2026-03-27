@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { User, ArrowRightLeft, Hexagon, Trash2 } from 'lucide-react'
+import { User, ArrowRightLeft, ChevronLeft, Hexagon, Trash2 } from 'lucide-react'
 import type { ParticipantSubscriptions } from '../../types'
 import { useStudioStore } from '../../store'
 import { assetUrnDisplayName } from '../../lib/asset-urn'
@@ -36,6 +36,9 @@ export default function ActParticipantBindingView() {
         : `Draft: ${binding.performerRef.draftId}`
 
     const subscriptions = binding.subscriptions || {}
+    const availableMessageSources = Object.keys(act.participants)
+        .filter((key) => key !== participantKey)
+        .map((key) => ({ key, label: resolveActParticipantLabel(act, key, performers) }))
 
     const getSubscriptionValues = (field: DirectSubscriptionField) => subscriptions[field] || []
 
@@ -64,6 +67,13 @@ export default function ActParticipantBindingView() {
     return (
         <div className="act-panel__content">
             <div className="act-panel__item-header">
+                <button
+                    className="icon-btn"
+                    title="Back to Act Config"
+                    onClick={() => openActEditor(activeActId, 'act')}
+                >
+                    <ChevronLeft size={12} />
+                </button>
                 <User size={14} className="act-panel__item-icon" />
                 <span className="act-panel__item-name act-panel__item-name--edge">
                     {resolveActParticipantLabel(act, participantKey, performers)}
@@ -126,18 +136,24 @@ export default function ActParticipantBindingView() {
                     <div className="act-panel__tags">
                         {(subscriptions.messagesFrom || []).map((value) => (
                             <span key={value} className="act-panel__tag" onClick={() => removeSubItem('messagesFrom', value)}>
-                                {value} ×
+                                {resolveActParticipantLabel(act, value, performers)} ×
                             </span>
                         ))}
                     </div>
                     <div className="act-panel__sub-input-row">
-                        <input
+                        <select
                             className="act-panel__input act-panel__input--small"
                             value={subInput.messagesFrom}
                             onChange={(e) => setSubInput((prev) => ({ ...prev, messagesFrom: e.target.value }))}
-                            onKeyDown={(e) => e.key === 'Enter' && addSubItem('messagesFrom')}
-                            placeholder="participant key"
-                        />
+                        >
+                            <option value="">Select teammate…</option>
+                            {availableMessageSources.map((option) => (
+                                <option key={option.key} value={option.key}>{option.label}</option>
+                            ))}
+                        </select>
+                        <button className="act-panel__toggle" type="button" onClick={() => addSubItem('messagesFrom')}>
+                            Add
+                        </button>
                     </div>
                 </div>
 
@@ -162,7 +178,7 @@ export default function ActParticipantBindingView() {
                 </div>
 
                 <div className="act-panel__sub-field">
-                    <span className="act-panel__sub-label">Callboard Keys</span>
+                    <span className="act-panel__sub-label">Shared Note Keys</span>
                     <div className="act-panel__tags">
                         {getCallboardKeys(subscriptions).map((value: string) => (
                             <span key={value} className="act-panel__tag" onClick={() => removeSubItem('callboardKeys', value)}>
@@ -179,6 +195,24 @@ export default function ActParticipantBindingView() {
                             placeholder="key pattern (e.g. launch-brief, signal-*)"
                         />
                     </div>
+                </div>
+
+                <div className="act-panel__sub-field">
+                    <span className="act-panel__sub-label">Event Types</span>
+                    <label className="act-panel__checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        <input
+                            type="checkbox"
+                            checked={(subscriptions.eventTypes || []).includes('runtime.idle')}
+                            onChange={(e) => {
+                                const nextEt: ('runtime.idle')[] = e.target.checked ? ['runtime.idle'] : []
+                                updatePerformerBinding(activeActId, participantKey, {
+                                    subscriptions: nextSubscriptions(subscriptions, { eventTypes: nextEt }),
+                                })
+                            }}
+                        />
+                        <span>runtime.idle</span>
+                        <span className="act-panel__hint" style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>Wake when other participants go idle</span>
+                    </label>
                 </div>
             </div>
         </div>

@@ -1,3 +1,5 @@
+import type { FocusSnapshot } from '../store/types'
+
 /**
  * Shared focus-mode viewport constants and helpers.
  *
@@ -8,8 +10,8 @@
 /** Delay (ms) before calling fitView – gives React Flow time to reconcile node sizes. */
 export const FOCUS_FIT_DELAY = 50
 
-/** fitView options when *entering* focus mode (tight padding since the node fills the viewport). */
-export const FOCUS_ENTER_FIT = { duration: 400, padding: 0.08, maxZoom: 1 } as const
+/** fitView options when *entering* focus mode — zero padding for true fullscreen. */
+export const FOCUS_ENTER_FIT = { duration: 400, padding: 0, maxZoom: 1 } as const
 
 /** fitView options when *exiting* focus mode (wider padding to show the restored layout). */
 export const FOCUS_EXIT_FIT = { duration: 400, padding: 0.2, maxZoom: 1 } as const
@@ -24,4 +26,15 @@ export function scheduleFitView(
 ) {
     const opts = mode === 'enter' ? FOCUS_ENTER_FIT : FOCUS_EXIT_FIT
     setTimeout(() => { fitView(opts) }, FOCUS_FIT_DELAY)
+}
+
+export function resolveFocusNodeId(
+    focusSnapshot: FocusSnapshot | null,
+    focusedNodeId: string | null,
+) {
+    if (!focusSnapshot) {
+        return null
+    }
+
+    return focusedNodeId || focusSnapshot.nodeId || focusSnapshot.actId || null
 }

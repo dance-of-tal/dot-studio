@@ -84,7 +84,18 @@ export function resolveCanvasNodeClick(
 }
 
 export function resolveCanvasEdgeClick(edge: Pick<Edge, 'id'>) {
-    // Edges on main canvas represent Act relations — edge.id format: rel-{actId}-{relationId}
-    const parts = edge.id.split('-')
-    return parts.length >= 3 ? parts.slice(2).join('-') : edge.id
+    // Edges on main canvas represent Act relations — edge.id format: rel:{actId}:{relationId}
+    if (edge.id.startsWith('rel:')) {
+        const parts = edge.id.split(':')
+        return parts.length >= 3 ? parts.slice(2).join(':') : edge.id
+    }
+
+    // Backward-compatible fallback for older edge ids:
+    // rel-{actId}-{relationId}. Relation ids themselves start with "rel-".
+    const relationMarker = edge.id.indexOf('-rel-')
+    if (relationMarker >= 0) {
+        return edge.id.slice(relationMarker + 1)
+    }
+
+    return edge.id
 }

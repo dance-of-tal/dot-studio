@@ -1,0 +1,438 @@
+
+> dot-studio@0.0.1 lint
+> eslint .
+
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/server/lib/act-session-policy.ts
+  29:41  error  '_actId' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/server/services/adapter-view-service.ts
+  3:50  error  '_performerId' is defined but never used  @typescript-eslint/no-unused-vars
+  7:49  error  '_request' is defined but never used      @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/server/services/asset-service.ts
+  57:10  error  'assetStage' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/server/services/dot-add-service.ts
+  61:15  error  'ownerRepo' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/server/start.ts
+  17:14  error  'err' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/chat/SessionRevertDock.tsx
+  26:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/chat/SessionRevertDock.tsx:26:9
+  24 |
+  25 |     useEffect(() => {
+> 26 |         setCollapsed(true)
+     |         ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  27 |     }, [items.length, items[0]?.id])
+  28 |
+  29 |     const summary = useMemo(() => (  react-hooks/set-state-in-effect
+  27:23  warning  React Hook useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               react-hooks/exhaustive-deps
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/chat/TodoDock.tsx
+  99:17  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/chat/TodoDock.tsx:99:17
+   97 |         switch (visibility) {
+   98 |             case 'hide':
+>  99 |                 setDockVisible(false)
+      |                 ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  100 |                 break
+  101 |             case 'clear':
+  102 |                 setDockVisible(false)  react-hooks/set-state-in-effect
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/modals/ProviderConnectModal.tsx
+  65:35  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/modals/ProviderConnectModal.tsx:65:35
+  63 |     // Auto-transition: when flow starts (user clicked a method), move to the right step
+  64 |     useEffect(() => {
+> 65 |         if (flow?.mode === 'api') setStep('api')
+     |                                   ^^^^^^^ Avoid calling setState() directly within an effect
+  66 |         else if (flow?.mode === 'code' || flow?.mode === 'auto') setStep('oauth')
+  67 |     }, [flow?.mode])
+  68 |  react-hooks/set-state-in-effect
+  71:26  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/modals/ProviderConnectModal.tsx:71:26
+  69 |     // Auto-transition: when modelPicker appears, move to pick-model
+  70 |     useEffect(() => {
+> 71 |         if (modelPicker) setStep('pick-model')
+     |                          ^^^^^^^ Avoid calling setState() directly within an effect
+  72 |     }, [modelPicker])
+  73 |
+  74 |     // If step is 'api' and no flow yet, open it                                                                 react-hooks/set-state-in-effect
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/modals/SettingsModal.tsx
+  154:8  warning  React Hook useEffect has missing dependencies: 'auth', 'opencodeInfo', 'projectDraft', 'projectSnapshot', and 'providers.length'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/modals/publish-modal-utils.tsx
+   36:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   43:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   49:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   58:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   67:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+   85:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  118:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  174:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  194:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  204:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/panels/workspace-explorer-utils.tsx
+  48:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  53:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  84:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+  97:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/terminal/useTerminalConnection.ts
+   83:33  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `activeId`, but the source dependencies were [workingDir]. Inferred different dependency than source.
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/terminal/useTerminalConnection.ts:83:33
+   81 |
+   82 |     // Connect or reconnect WebSocket
+>  83 |     const connect = useCallback((action: 'create' | 'attach' = 'create', targetId?: string) => {
+      |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  84 |         if (wsRef.current) {
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+>  85 |             wsRef.current.close()
+      …
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 152 |         ws.onclose = () => { }
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 153 |     }, [workingDir])
+      | ^^^^^^ Could not preserve existing manual memoization
+  154 |
+  155 |     useEffect(() => {
+  156 |         if (!activeId) return  react-hooks/preserve-manual-memoization
+  107:42  error    Unexpected control character(s) in regular expression: \x1b, \x07, \x07, \x1b                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-control-regex
+  108:42  error    Unexpected control character(s) in regular expression: \x1b                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              no-control-regex
+  109:42  error    Unexpected control character(s) in regular expression: \x1b                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              no-control-regex
+  153:8   warning  React Hook useCallback has a missing dependency: 'activeId'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            react-hooks/exhaustive-deps
+  158:13  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/terminal/useTerminalConnection.ts:158:13
+  156 |         if (!activeId) return
+  157 |         if (sessions.length === 0) {
+> 158 |             setActiveId('')
+      |             ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  159 |             onToggle()
+  160 |             return
+  161 |         }                                                                                                                                                                        react-hooks/set-state-in-effect
+  236:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/terminal/useTerminalConnection.ts:236:9
+  234 |
+  235 |         lastWorkspaceRef.current = workingDir
+> 236 |         setSessions([])
+      |         ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  237 |         setActiveId('')
+  238 |
+  239 |         if (wsRef.current) {                                                                                                                                                                                                     react-hooks/set-state-in-effect
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/components/toolbar/WorkspaceToolbar.tsx
+  28:11  error  'isAssistantOpen' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  29:11  error  'toggleAssistant' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/act/ActMetaView.tsx
+  26:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+  27:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+  28:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+  32:5   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+  51:23  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/act/ActRelationView.tsx
+  25:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/act/ActRelationView.tsx:25:13
+  23 |     useEffect(() => {
+  24 |         if (relation) {
+> 25 |             setForm({
+     |             ^^^^^^^ Avoid calling setState() directly within an effect
+  26 |                 name: relation.name,
+  27 |                 description: relation.description,
+  28 |                 direction: relation.direction,  react-hooks/set-state-in-effect
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/act/ActSafetyEditor.tsx
+  94:11  warning  The 'safety' logical expression could make the dependencies of useCallback Hook (at line 107) change on every render. To fix this, wrap the initialization of 'safety' in its own useMemo() Hook  react-hooks/exhaustive-deps
+  96:26  error    React Hook "useCallback" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?     react-hooks/rules-of-hooks
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/chat/ChatMessageContent.tsx
+  12:31  error  Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/chat/ChatMessageContent.tsx:12:31
+  10 | function useThrottledValue<T>(value: T, ms = 100): T {
+  11 |     const [throttled, setThrottled] = useState(value)
+> 12 |     const lastUpdate = useRef(Date.now())
+     |                               ^^^^^^^^^^ Cannot call impure function
+  13 |     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  14 |
+  15 |     useEffect(() => {  react-hooks/purity
+  46:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    react-refresh/only-export-components
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/chat/SessionReview.tsx
+  47:17  error  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/chat/ToolGroup.tsx
+  448:27  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+  459:28  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/performer/AgentFrame.tsx
+   28:8   error  'SafeReviewModal' is defined but never used                  @typescript-eslint/no-unused-vars
+   36:48  error  'Shield' is defined but never used                           @typescript-eslint/no-unused-vars
+  175:9   error  'showSafeReview' is assigned a value but never used          @typescript-eslint/no-unused-vars
+  176:9   error  'safeBusy' is assigned a value but never used                @typescript-eslint/no-unused-vars
+  177:9   error  'pendingModeSwitch' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  178:9   error  'pendingSafeModeConfirm' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  179:9   error  'setShowSafeReview' is assigned a value but never used       @typescript-eslint/no-unused-vars
+  180:9   error  'setPendingModeSwitch' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  182:9   error  'confirmSafeModeSwitch' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  183:9   error  'cancelSafeModeSwitch' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  184:9   error  'switchNotice' is assigned a value but never used            @typescript-eslint/no-unused-vars
+  185:9   error  'applySafeReview' is assigned a value but never used         @typescript-eslint/no-unused-vars
+  186:9   error  'discardSafeReviewAll' is assigned a value but never used    @typescript-eslint/no-unused-vars
+  187:9   error  'discardSafeReviewFile' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  188:9   error  'undoSafeReviewApply' is assigned a value but never used     @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/performer/ComposerRuntimeRow.tsx
+   1:29  error  'Shield' is defined but never used              @typescript-eslint/no-unused-vars
+  23:5   error  'safeSummary' is defined but never used         @typescript-eslint/no-unused-vars
+  26:5   error  'onSetExecutionMode' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/performer/PerformerFrameHeaderMeta.tsx
+  16:5  error  'executionMode' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/performer/PerformerThreadView.tsx
+  55:37  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `revertState`, but the source dependencies were [messages, revertState?.messageId]. Inferred less specific property than source.
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/performer/PerformerThreadView.tsx:55:37
+  53 |     const [showReview, setShowReview] = useState(false)
+  54 |
+> 55 |     const visibleMessages = useMemo(() => {
+     |                                     ^^^^^^^
+> 56 |         if (!revertState?.messageId) {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 57 |             return messages
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 58 |         }
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 59 |         return messages.filter((message) => message.id < revertState.messageId)
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |     }, [messages, revertState?.messageId])
+     | ^^^^^^ Could not preserve existing manual memoization
+  61 |
+  62 |     const rolledMessages = useMemo(() => {
+  63 |         if (!revertState?.messageId) {  react-hooks/preserve-manual-memoization
+  55:37  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `revertState`, but the source dependencies were [messages, revertState?.messageId]. Inferred less specific property than source.
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/performer/PerformerThreadView.tsx:55:37
+  53 |     const [showReview, setShowReview] = useState(false)
+  54 |
+> 55 |     const visibleMessages = useMemo(() => {
+     |                                     ^^^^^^^
+> 56 |         if (!revertState?.messageId) {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 57 |             return messages
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 58 |         }
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 59 |         return messages.filter((message) => message.id < revertState.messageId)
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 60 |     }, [messages, revertState?.messageId])
+     | ^^^^^^ Could not preserve existing manual memoization
+  61 |
+  62 |     const rolledMessages = useMemo(() => {
+  63 |         if (!revertState?.messageId) {  react-hooks/preserve-manual-memoization
+  62:36  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `revertState`, but the source dependencies were [messages, revertState?.messageId]. Inferred less specific property than source.
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/features/performer/PerformerThreadView.tsx:62:36
+  60 |     }, [messages, revertState?.messageId])
+  61 |
+> 62 |     const rolledMessages = useMemo(() => {
+     |                                    ^^^^^^^
+> 63 |         if (!revertState?.messageId) {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 64 |             return []
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 71 |             }))
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 72 |     }, [messages, revertState?.messageId])
+     | ^^^^^^ Could not preserve existing manual memoization
+  73 |
+  74 |     const hasDiffs = useMemo(() => collectSessionDiffs(visibleMessages).length > 0, [visibleMessages])
+  75 |                                                                                                                          react-hooks/preserve-manual-memoization
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/hooks/useAutoScroll.ts
+  214:32  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/hooks/useAutoScroll.ts:214:32
+  212 |
+  213 |         if (working) {
+> 214 |             if (!userScrolled) scrollToBottom(true)
+      |                                ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  215 |             return
+  216 |         }
+  217 |  react-hooks/set-state-in-effect
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/hooks/useFileMentions.ts
+  19:42  error    Unnecessary escape character: \.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-useless-escape
+  19:44  error    Unnecessary escape character: \/                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-useless-escape
+  21:38  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `inputRef`, but the source dependencies were []. Inferred dependency not present in source.
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/hooks/useFileMentions.ts:21:38
+  19 |     const mentionRegex = /#([a-zA-Z0-9_\-\.\/]*)$/
+  20 |
+> 21 |     const checkMention = useCallback((value?: string, cursorPosition?: number | null) => {
+     |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 22 |         const input = inputRef.current
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 23 |         const sourceValue = typeof value === 'string' ? value : input?.value
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 36 |         }
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 37 |     }, [])
+     | ^^^^^^ Could not preserve existing manual memoization
+  38 |
+  39 |     useEffect(() => {
+  40 |         if (mentionQuery === null) return  react-hooks/preserve-manual-memoization
+  37:8   warning  React Hook useCallback has missing dependencies: 'inputRef' and 'mentionRegex'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+  62:44  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `inputRef`, but the source dependencies were []. Inferred dependency not present in source.
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/hooks/useFileMentions.ts:62:44
+  60 |     }, [mentionQuery])
+  61 |
+> 62 |     const extractMentionText = useCallback(() => {
+     |                                            ^^^^^^^
+> 63 |         if (!inputRef.current) return null
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 64 |         const cursor = inputRef.current.selectionStart
+     …
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 78 |         return newText
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 79 |     }, [])
+     | ^^^^^^ Could not preserve existing manual memoization
+  80 |
+  81 |     return {
+  82 |         inputRef,                                                                                                                                        react-hooks/preserve-manual-memoization
+  79:8   warning  React Hook useCallback has missing dependencies: 'inputRef' and 'mentionRegex'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/store/act-slice-actions.test.ts
+   7:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  30:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  43:20  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  66:31  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/store/participant-key-integration.test.ts
+  18:44  error  'WorkspaceActParticipantBinding' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/store/performerRelationSlice.ts
+  13:6   error  '_set' is defined but never used  @typescript-eslint/no-unused-vars
+  13:12  error  '_get' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/store/session/event-ingest.test.ts
+  62:48  error  '_id' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/store/session/event-ingest.ts
+  269:53  error  '_' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/store/session/event-reducer.test.ts
+  363:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  372:90  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  386:18  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  395:85  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  401:85  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/src/store/session/session-entity-store.ts
+   45:30  error  '_' is assigned a value but never used   @typescript-eslint/no-unused-vars
+   46:30  error  '_m' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   47:30  error  '_s' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   48:30  error  '_p' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   49:30  error  '_q' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   50:30  error  '_t' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   51:30  error  '_l' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   52:30  error  '_c' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  120:30  error  '_' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  131:30  error  '_' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  140:30  error  '_' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  194:30  error  '_' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  201:30  error  '_m' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  202:30  error  '_s' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  203:30  error  '_p' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  204:30  error  '_q' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  205:30  error  '_t' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  206:30  error  '_l' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  207:30  error  '_c' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  208:30  error  '_r' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/Users/junhoyoon/windsurfpjt/dance-of-tal/studio/test-types.ts
+  3:7  error  'args' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 112 problems (106 errors, 6 warnings)
+

@@ -6,7 +6,6 @@ import {
     addChatMessage,
     appendPerformerSystemMessage,
     getPerformerById,
-    scheduleSessionFallbackSync,
     type ChatGet,
     type ChatSet,
 } from './chat-internals'
@@ -35,8 +34,31 @@ export function createChatSendActions(
             text: string,
             attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
             extraDanceRefs: AssetRef[] = [],
-            mentionedPerformers: Array<{ performerId: string; name: string }> = [],
         ) => {
+            const removeLegacyMessage = (chatKey: string, messageId: string) => {
+                set((state) => ({
+                    chats: {
+                        ...state.chats,
+                        [chatKey]: (state.chats[chatKey] || []).filter((message) => message.id !== messageId),
+                    },
+                }))
+            }
+
+            const rollbackOptimisticMessage = (chatKey: string, messageId: string, sid?: string) => {
+                removeLegacyMessage(chatKey, messageId)
+                if (sid) {
+                    get().removeSessionMessage(sid, messageId)
+                    get().setSessionLoading(sid, false)
+                }
+            }
+
+            const ensureSessionBinding = (chatKey: string, sid: string) => {
+                get().registerBinding(chatKey, sid)
+                if (!get().seEntities[sid]) {
+                    get().upsertSession({ id: sid, status: { type: 'idle' } })
+                }
+            }
+
             let sessionId: string | undefined = get().sessionMap[performerId]
             const target = resolveChatRuntimeTarget(get, performerId)
             const performer = getPerformerById(get, performerId)
@@ -52,13 +74,56 @@ export function createChatSendActions(
             }
             if (!hasModelConfig(runtimeConfig.model)) return
 
+            // Optimistic UI: show user message + loading state immediately
+            const optimisticMsg = {
+                id: `temp-${Date.now()}`,
+                role: 'user' as const,
+                content: text,
+                timestamp: Date.now(),
+                attachments: attachments && attachments.length > 0
+                    ? attachments.map((a) => ({ type: a.type, filename: a.filename, mime: a.mime }))
+                    : undefined,
+                metadata: {
+                    agentName: runtimeConfig.agentId || 'build',
+                    modelId: runtimeConfig.model?.modelId,
+                    provider: runtimeConfig.model?.provider,
+                    variant: runtimeConfig.modelVariant || undefined,
+                },
+            }
+            addChatMessage(set, get, performerId, optimisticMsg)
+
+            // Dual-write: entity store
+            const existingSessionId = get().sessionMap[performerId]
+            if (existingSessionId) {
+                ensureSessionBinding(performerId, existingSessionId)
+                get().clearSessionRevert(existingSessionId)
+                get().appendSessionMessage(existingSessionId, optimisticMsg)
+                get().setSessionLoading(existingSessionId, true)
+            }
+
+            set({ loadingPerformerId: performerId })
+
+            // Ensure SSE is connected before session creation so we receive
+            // streaming deltas from the very first assistant response.
+            get().initRealtimeEvents()
+
             if (!sessionId) {
                 try {
                     const freshSession = await createFreshSession(performerId)
                     sessionId = freshSession.sessionId || undefined
+                    // Register binding in entity store
+                    if (sessionId) {
+                        ensureSessionBinding(performerId, sessionId)
+                        get().clearSessionRevert(sessionId)
+                        // Write optimistic message to entity store for new session
+                        get().appendSessionMessage(sessionId, optimisticMsg)
+                        get().setSessionLoading(sessionId, true)
+                    }
                 } catch (error) {
                     console.error('Failed to create session', error)
+                    rollbackOptimisticMessage(performerId, optimisticMsg.id)
                     appendPerformerSystemMessage(set, get, performerId, formatStudioApiErrorMessage(error))
+                    set({ loadingPerformerId: null })
                     return
                 }
             }
@@ -68,23 +133,7 @@ export function createChatSendActions(
                 return
             }
 
-            addChatMessage(set, get, performerId, {
-                id: Date.now().toString(),
-                role: 'user',
-                content: text,
-                timestamp: Date.now(),
-                metadata: {
-                    agentName: runtimeConfig.agentId || 'build',
-                    modelId: runtimeConfig.model?.modelId,
-                    provider: runtimeConfig.model?.provider,
-                    variant: runtimeConfig.modelVariant || undefined,
-                },
-            })
-
-            set({ loadingPerformerId: performerId })
-
             try {
-                get().initRealtimeEvents()
                 await api.chat.send(sessionId, {
                     message: text,
                     performer: {
@@ -101,50 +150,122 @@ export function createChatSendActions(
                         planMode: runtimeConfig.planMode,
                     },
                     attachments,
-                    mentions: mentionedPerformers.map((mention) => ({ performerId: mention.performerId })),
                     assistantContext: target?.assistantContext || null,
                 })
-                scheduleSessionFallbackSync(set, get, performerId, sessionId, Date.now())
+                // Settlement detection is now handled by entity store via session.idle SSE events.
             } catch (error) {
-                addChatMessage(set, get, performerId, {
+                rollbackOptimisticMessage(performerId, optimisticMsg.id, sessionId)
+                const errorMsg = {
                     id: `msg-${Date.now()}`,
-                    role: 'system',
+                    role: 'system' as const,
                     content: formatStudioApiErrorMessage(error),
                     timestamp: Date.now(),
-                })
+                }
+                addChatMessage(set, get, performerId, errorMsg)
+                // Dual-write: entity store error
+                if (sessionId) {
+                    get().appendSessionMessage(sessionId, errorMsg)
+                    get().setSessionLoading(sessionId, false)
+                }
                 set({ loadingPerformerId: null })
             }
         },
 
         sendActMessage: async (actId: string, threadId: string, participantKey: string, text: string) => {
+            const removeLegacyMessage = (chatKey: string, messageId: string) => {
+                set((state) => ({
+                    chats: {
+                        ...state.chats,
+                        [chatKey]: (state.chats[chatKey] || []).filter((message) => message.id !== messageId),
+                    },
+                }))
+            }
+
+            const rollbackOptimisticMessage = (chatKey: string, messageId: string, sid?: string) => {
+                removeLegacyMessage(chatKey, messageId)
+                if (sid) {
+                    get().removeSessionMessage(sid, messageId)
+                    get().setSessionLoading(sid, false)
+                }
+            }
+
+            const ensureSessionBinding = (chatKey: string, sid: string) => {
+                get().registerBinding(chatKey, sid)
+                if (!get().seEntities[sid]) {
+                    get().upsertSession({ id: sid, status: { type: 'idle' } })
+                }
+            }
+
             const act = get().acts.find((entry) => entry.id === actId)
             if (!act || !threadId) return
 
             const binding = act.participants[participantKey]
             if (!binding) return
+            const participantLabel = binding.displayName || participantKey
 
             const chatKey = buildActParticipantChatKey(actId, threadId, participantKey)
 
             let performer: ReturnType<typeof getPerformerById> = null
             if (binding.performerRef.kind === 'draft') {
                 const draftId = binding.performerRef.draftId
-                performer = get().performers.find((entry) => (entry.meta?.derivedFrom === draftId) || entry.id === draftId) || null
+                performer = get().performers.find((entry) =>
+                    entry.id === draftId
+                    || entry.meta?.derivedFrom === `draft:${draftId}`
+                ) || null
             } else {
                 const urn = binding.performerRef.urn
                 performer = get().performers.find((entry) => entry.meta?.derivedFrom === urn) || null
             }
 
-            const runtimeConfig = performer ? resolvePerformerRuntimeConfig(performer) : {
-                talRef: null,
-                danceRefs: [],
-                model: null,
-                modelVariant: null,
-                agentId: 'build',
-                mcpServerNames: [],
-                danceDeliveryMode: 'auto' as const,
-                planMode: false,
+            if (!performer) {
+                const refLabel = binding.performerRef.kind === 'registry'
+                    ? binding.performerRef.urn
+                    : binding.performerRef.draftId
+                appendPerformerSystemMessage(set, get, chatKey,
+                    `Cannot resolve performer for participant "${participantLabel}" (ref: ${refLabel}). ` +
+                    `No matching local performer node found. Try re-importing the Act or creating a performer manually.`,
+                )
+                return
             }
-            if (!hasModelConfig(runtimeConfig.model)) return
+
+            const runtimeConfig = resolvePerformerRuntimeConfig(performer)
+            if (!hasModelConfig(runtimeConfig.model)) {
+                appendPerformerSystemMessage(set, get, chatKey,
+                    `Model not configured for performer "${performer.name}". ` +
+                    `Open the performer editor and set up a model before sending messages.`,
+                )
+                return
+            }
+
+            // Optimistic UI: show user message + loading state immediately
+            const optimisticActMsg = {
+                id: `temp-${Date.now()}`,
+                role: 'user' as const,
+                content: text,
+                timestamp: Date.now(),
+                metadata: {
+                    agentName: runtimeConfig.agentId || 'build',
+                    modelId: runtimeConfig.model?.modelId,
+                    provider: runtimeConfig.model?.provider,
+                    variant: runtimeConfig.modelVariant || undefined,
+                },
+            }
+            addChatMessage(set, get, chatKey, optimisticActMsg)
+
+            // Dual-write: entity store
+            const existingActSessionId = get().sessionMap[chatKey]
+            if (existingActSessionId) {
+                ensureSessionBinding(chatKey, existingActSessionId)
+                get().clearSessionRevert(existingActSessionId)
+                get().appendSessionMessage(existingActSessionId, optimisticActMsg)
+                get().setSessionLoading(existingActSessionId, true)
+            }
+
+            set({ loadingPerformerId: chatKey })
+
+            // Ensure SSE is connected before session creation so we receive
+            // streaming deltas from the very first assistant response.
+            get().initRealtimeEvents()
 
             let sessionId: string | undefined = get().sessionMap[chatKey]
             if (!sessionId) {
@@ -174,10 +295,17 @@ export function createChatSendActions(
                             ),
                         },
                     }))
+                    // Register binding in entity store
+                    ensureSessionBinding(chatKey, result.sessionId)
+                    get().clearSessionRevert(result.sessionId)
+                    get().appendSessionMessage(result.sessionId, optimisticActMsg)
+                    get().setSessionLoading(result.sessionId, true)
                     await get().listSessions()
                 } catch (error) {
                     console.error('Failed to create Act session', error)
+                    rollbackOptimisticMessage(chatKey, optimisticActMsg.id)
                     appendPerformerSystemMessage(set, get, chatKey, formatStudioApiErrorMessage(error))
+                    set({ loadingPerformerId: null })
                     return
                 }
             }
@@ -187,23 +315,11 @@ export function createChatSendActions(
                 return
             }
 
-            addChatMessage(set, get, chatKey, {
-                id: Date.now().toString(),
-                role: 'user',
-                content: text,
-                timestamp: Date.now(),
-                metadata: {
-                    agentName: runtimeConfig.agentId || 'build',
-                    modelId: runtimeConfig.model?.modelId,
-                    provider: runtimeConfig.model?.provider,
-                    variant: runtimeConfig.modelVariant || undefined,
-                },
-            })
-
-            set({ loadingPerformerId: chatKey })
-
             try {
-                get().initRealtimeEvents()
+                // Persist workspace before Act send so wake cascade reads latest performer config
+                if (typeof get().saveWorkspace === 'function') {
+                    await get().saveWorkspace()
+                }
                 await api.chat.send(sessionId, {
                     message: text,
                     performer: {
@@ -221,14 +337,21 @@ export function createChatSendActions(
                     actId,
                     actThreadId: threadId,
                 })
-                scheduleSessionFallbackSync(set, get, chatKey, sessionId, Date.now())
+                // Settlement detection is now handled by entity store via session.idle SSE events.
             } catch (error) {
-                addChatMessage(set, get, chatKey, {
+                rollbackOptimisticMessage(chatKey, optimisticActMsg.id, sessionId)
+                const errorActMsg = {
                     id: `msg-${Date.now()}`,
-                    role: 'system',
+                    role: 'system' as const,
                     content: formatStudioApiErrorMessage(error),
                     timestamp: Date.now(),
-                })
+                }
+                addChatMessage(set, get, chatKey, errorActMsg)
+                // Dual-write: entity store error
+                if (sessionId) {
+                    get().appendSessionMessage(sessionId, errorActMsg)
+                    get().setSessionLoading(sessionId, false)
+                }
                 set({ loadingPerformerId: null })
             }
         },
@@ -239,6 +362,7 @@ export function createChatSendActions(
             if (!sessionId) return
 
             set({ loadingPerformerId: performerId })
+            get().setSessionLoading(sessionId, true)
             try {
                 if (cmd === '/share') {
                     const shareRes = await api.chat.share(sessionId)
@@ -258,6 +382,7 @@ export function createChatSendActions(
                 })
             } finally {
                 set({ loadingPerformerId: null })
+                get().setSessionLoading(sessionId, false)
             }
         },
     }

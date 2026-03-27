@@ -58,6 +58,8 @@ export class SafetyGuard {
         return new SafetyGuard({
             maxEventsPerAct: actSafety.maxEvents,
             maxMessagesPerPair: actSafety.maxMessagesPerPair,
+            maxBoardUpdatesPerKey: actSafety.maxBoardUpdatesPerKey,
+            quietWindowMs: actSafety.quietWindowMs,
             loopDetectionThreshold: actSafety.loopDetectionThreshold,
             ...(typeof actSafety.threadTimeoutMs === 'number'
                 ? { threadTimeoutMs: actSafety.threadTimeoutMs }

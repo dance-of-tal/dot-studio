@@ -83,7 +83,7 @@ export const api = {
         mcpServerNames: string[],
         planMode = false,
         danceDeliveryMode: DanceDeliveryMode = 'auto',
-        relatedPerformers?: Array<{
+        requestTargets?: Array<{
             performerId: string
             performerName: string
             description?: string
@@ -100,7 +100,7 @@ export const api = {
             mcpServerNames,
             planMode,
             danceDeliveryMode,
-            relatedPerformers,
+            requestTargets,
         } satisfies CompilePromptRequest),
 
     chat: chatApi,
@@ -111,6 +111,11 @@ export const api = {
                 `/api/act/${actId}/threads`,
                 actDefinition ? { actDefinition } : undefined,
             ),
+        syncDefinition: (actId: string, actDefinition: Record<string, unknown>) =>
+            patchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: ActThreadStatus; createdAt: number; participantSessions: Record<string, string> }> }>(
+                `/api/act/${actId}/runtime-definition`,
+                { actDefinition },
+            ),
         listThreads: (actId: string) =>
             fetchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: ActThreadStatus; createdAt: number; participantSessions: Record<string, string> }> }>(
                 `/api/act/${actId}/threads`,
@@ -119,6 +124,12 @@ export const api = {
             fetchJSON<{ ok: boolean; thread: Record<string, unknown> }>(`/api/act/${actId}/thread/${threadId}`),
         events: (actId: string, threadId: string, count = 50) =>
             fetchJSON<{ ok: boolean; events: Array<Record<string, unknown>> }>(`/api/act/${actId}/thread/${threadId}/events?count=${count}`),
+        deleteThread: (actId: string, threadId: string) =>
+            deleteJSON<{ ok: boolean }>(`/api/act/${actId}/thread/${threadId}`),
+        readBoard: (actId: string, threadId: string, key?: string) =>
+            fetchJSON<{ ok: boolean; entries: Array<Record<string, unknown>> }>(
+                `/api/act/${actId}/thread/${threadId}/read-board${key ? `?key=${encodeURIComponent(key)}` : ''}`,
+            ),
     },
 
     safe: {
@@ -155,6 +166,7 @@ export const api = {
             fetchJSON<{ theme?: string; lastWorkspaceId?: string; openCodeUrl?: string; projectDir?: string }>('/api/studio/config'),
         updateConfig: (config: Record<string, unknown>) => putJSON<unknown>('/api/studio/config', config),
         activate: (workingDir: string) => postJSON<{ ok: boolean; activeProjectDir: string }>('/api/studio/activate', { workingDir }),
+        openPath: (targetPath: string) => postJSON<{ ok: boolean; path: string }>('/api/studio/open-path', { path: targetPath }),
         pickDirectory: () => fetchJSON<{ path?: string; error?: string }>('/api/studio/pick-directory'),
     },
 

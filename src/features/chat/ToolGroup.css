@@ -729,7 +729,19 @@
     color: var(--text-muted);
 }
 
-/* ── Spinner ── */
+/* ── In-progress pulse (replaces spinner for todo items) ── */
+
+.todo-inline-pulse {
+    animation: todo-inline-pulse-anim 1.8s ease-in-out infinite;
+    transform-origin: center;
+}
+
+@keyframes todo-inline-pulse-anim {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ── Spinner (used by tool status indicators) ── */
 
 .spin-icon {
     animation: tool-spin 0.8s linear infinite;

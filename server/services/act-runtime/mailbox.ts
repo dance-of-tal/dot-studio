@@ -167,6 +167,20 @@ export class Mailbox {
     }
 
     /**
+     * Restore full mailbox state from a serialized MailboxState snapshot (WS5).
+     */
+    restoreFromState(state: MailboxState): void {
+        this.pendingMessages = [...(state.pendingMessages || [])]
+        this.board.clear()
+        if (state.board) {
+            for (const [key, entry] of Object.entries(state.board)) {
+                this.board.set(key, entry as BoardEntry)
+            }
+        }
+        this.wakeConditions = [...(state.wakeConditions || [])]
+    }
+
+    /**
      * Shutdown: discard ephemeral state, return durable state.
      */
     shutdown(): { board: BoardEntry[] } {

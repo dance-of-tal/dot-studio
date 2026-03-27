@@ -19,6 +19,11 @@ export type CompilePromptRequest = {
     mcpServerNames?: string[]
     planMode?: boolean
     danceDeliveryMode?: 'auto' | 'tool' | 'inline'
+    requestTargets?: Array<{
+        performerId: string
+        performerName: string
+        description?: string
+    }>
     relatedPerformers?: Array<{
         performerId: string
         performerName: string
@@ -59,7 +64,6 @@ export type ChatSendRequest = {
         configHash?: string
     }
     attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>
-    mentions?: Array<{ performerId: string }>
     actId?: string
     /** Thread within Act — used for choreography runtime context */
     actThreadId?: string

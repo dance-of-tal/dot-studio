@@ -93,15 +93,7 @@ export async function compileDance(
         }
 
         const parsed = parseUrn(ref.urn)
-        const logicalName = [
-            'dot-studio',
-            'stage',
-            stageHash,
-            sanitizeSegment(performerId),
-            parsed.author,
-            parsed.stage,
-            parsed.slug,
-        ].join('-')
+        const logicalName = parsed.slug
         const description = typeof asset?.description === 'string' ? asset.description : parsed.slug
         const skillDir = path.join(
             localSkillProjectionDir(executionDir, stageHash, performerId, scope, actId),
@@ -134,14 +126,7 @@ export async function compileDance(
         }
 
         const draft = await readDraft(cwd, 'dance', ref.draftId)
-        const logicalName = [
-            'dot-studio',
-            'stage',
-            stageHash,
-            sanitizeSegment(performerId),
-            'draft',
-            sanitizeSegment(ref.draftId),
-        ].join('-')
+        const logicalName = sanitizeSegment(draft?.name || ref.draftId)
         const description = extractDraftDescription(draft) || draft?.name || 'Draft skill'
         const skillDir = path.join(
             localSkillProjectionDir(executionDir, stageHash, performerId, scope, actId),
@@ -170,14 +155,7 @@ export async function compileDance(
         throw new Error(`Dance draft '${ref.draftId}' was not found or has no content.`)
     }
 
-    const logicalName = [
-        'dot-studio',
-        'stage',
-        stageHash,
-        sanitizeSegment(performerId),
-        'draft',
-        sanitizeSegment(ref.draftId),
-    ].join('-')
+    const logicalName = sanitizeSegment(draft.name || ref.draftId)
     const description = extractDraftDescription(draft) || draft.name || 'Draft skill'
     const filePath = path.join(
         localSkillProjectionDir(executionDir, stageHash, performerId, scope, actId),

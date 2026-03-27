@@ -28,6 +28,15 @@ const BASE_RECONNECT_DELAY_MS = 2000
 const slotReconnectAttempts = new WeakMap<EventSourceSlot, number>()
 const slotReconnectTimers = new WeakMap<EventSourceSlot, ReturnType<typeof setTimeout>>()
 
+function disposeEventSource(es: EventSource | null) {
+    if (!es) {
+        return
+    }
+    es.onmessage = null
+    es.onerror = null
+    es.close()
+}
+
 function getReconnectAttempts(slot: EventSourceSlot): number {
     return slotReconnectAttempts.get(slot) || 0
 }
@@ -54,6 +63,8 @@ export interface ReconnectOptions {
     createEventSource: () => EventSource | null
     /** Handle a parsed JSON message event. */
     onMessage: (data: unknown) => void
+    /** Called when the SSE connection drops (before reconnect attempt). */
+    onDisconnect?: () => void
 }
 
 /**
@@ -70,7 +81,7 @@ export interface ReconnectOptions {
  * successful message, so transient failures don't exhaust the budget.
  */
 export function reconnectManagedEventSource(opts: ReconnectOptions): void {
-    const { slot, resolveWorkingDir, resolveExtraKey, createEventSource, onMessage } = opts
+    const { slot, resolveWorkingDir, resolveExtraKey, createEventSource, onMessage, onDisconnect } = opts
 
     const workingDir = resolveWorkingDir()
     const extraKey = resolveExtraKey?.() ?? null
@@ -87,7 +98,7 @@ export function reconnectManagedEventSource(opts: ReconnectOptions): void {
     // Close stale connection and cancel pending reconnect timer.
     const existing = slot.getInstance()
     if (existing) {
-        existing.close()
+        disposeEventSource(existing)
         slot.setInstance(null)
     }
     resetReconnectAttempts(slot)
@@ -122,6 +133,9 @@ export function reconnectManagedEventSource(opts: ReconnectOptions): void {
             slot.setInstance(null)
         }
 
+        // Notify caller of disconnection (clear loading states, etc.)
+        onDisconnect?.()
+
         // Auto-reconnect with exponential backoff.
         const attempt = getReconnectAttempts(slot)
         if (attempt >= MAX_RECONNECT_ATTEMPTS) {
@@ -152,7 +166,7 @@ export function reconnectManagedEventSource(opts: ReconnectOptions): void {
 export function closeManagedEventSource(slot: EventSourceSlot): void {
     const es = slot.getInstance()
     if (es) {
-        es.close()
+        disposeEventSource(es)
         slot.setInstance(null)
     }
 }

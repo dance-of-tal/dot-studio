@@ -239,6 +239,7 @@ import type { ActRelation, ParticipantSubscriptions } from '../../shared/act-typ
 /** Canvas-specific participant binding (extends ActParticipantBinding with UI position) */
 export interface WorkspaceActParticipantBinding {
     performerRef: AssetRef
+    displayName?: string
     subscriptions?: ParticipantSubscriptions
     position: { x: number; y: number }
 }
@@ -256,6 +257,15 @@ export interface WorkspaceAct {
     participants: Record<string, WorkspaceActParticipantBinding>
     /** Communication contract relations between participants */
     relations: ActRelation[]
+    /** Runtime safety configuration */
+    safety?: {
+        maxEvents?: number
+        maxMessagesPerPair?: number
+        maxBoardUpdatesPerKey?: number
+        quietWindowMs?: number
+        threadTimeoutMs?: number
+        loopDetectionThreshold?: number
+    }
     hidden?: boolean
     createdAt: number
     meta?: {
@@ -371,12 +381,14 @@ export interface ChatMessage {
     content: string
     timestamp: number
     parts?: ChatMessagePart[]
+    attachments?: Array<{ type: string; filename?: string; mime?: string }>
     metadata?: {
         agentName?: string
         modelId?: string
         provider?: string
         variant?: string
         assistantActions?: AssistantAction[]
+        isWakeUp?: boolean
     }
 }
 

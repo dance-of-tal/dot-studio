@@ -1,7 +1,6 @@
 import { useEffect, useState, type RefObject } from 'react'
 import { loadMaterialFileIconForPath } from '../../lib/material-file-icons'
 import type { FileMention } from '../../hooks/useFileMentions'
-import type { PerformerMention } from '../../hooks/usePerformerMention'
 import type { DanceSearchItem } from './agent-frame-utils'
 
 function MentionFileIcon({ path }: { path: string }) {
@@ -31,12 +30,6 @@ interface ComposerMentionMenusProps {
     input: string
     setInput: (value: string) => void
     inputRef: RefObject<HTMLTextAreaElement | null>
-    // Performer mention
-    isPerformerMentioning: boolean
-    performerMentionResults: PerformerMention[]
-    performerMentionIndex: number
-    extractPerformerMentionText: () => string | null
-    setMentionedPerformers: React.Dispatch<React.SetStateAction<PerformerMention[]>>
     // File mention
     isFileMentioning: boolean
     fileMentionResults: FileMention[]
@@ -62,11 +55,6 @@ export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
     const {
         setInput,
         inputRef,
-        isPerformerMentioning,
-        performerMentionResults,
-        performerMentionIndex,
-        extractPerformerMentionText,
-        setMentionedPerformers,
         isFileMentioning,
         fileMentionResults,
         fileMentionIndex,
@@ -87,32 +75,6 @@ export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
 
     return (
         <>
-            {isPerformerMentioning && performerMentionResults.length > 0 ? (
-                <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
-                    {performerMentionResults.map((performerMention, i) => (
-                        <div
-                            key={performerMention.performerId}
-                            className={`slash-menu-item mention-menu-item ${i === performerMentionIndex ? 'active' : ''}`}
-                            onClick={() => {
-                                const newText = extractPerformerMentionText()
-                                if (newText !== null) {
-                                    setInput(newText)
-                                    setMentionedPerformers((current) => (
-                                        current.some((item) => item.performerId === performerMention.performerId) ? current : [...current, performerMention]
-                                    ))
-                                }
-                                inputRef.current?.focus()
-                            }}
-                        >
-                            <span className="mention-result__content">
-                                <span className="mention-result__name">{performerMention.name}</span>
-                                <span className="mention-result__path">Runs in this workspace</span>
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            ) : null}
-
             {isFileMentioning && fileMentionResults.length > 0 ? (
                 <div className="slash-menu" style={{ bottom: '100%', marginBottom: '4px' }}>
                     {fileMentionResults.map((file, i) => (

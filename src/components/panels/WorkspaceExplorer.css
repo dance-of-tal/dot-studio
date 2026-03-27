@@ -284,6 +284,38 @@
     opacity: 0.7;
 }
 
+.explorer__context--workspaces {
+    gap: 1px;
+    margin: 0;
+    padding: 8px 12px 10px;
+    border-bottom: 1px solid var(--border-light);
+    background: transparent;
+}
+
+.explorer__context--workspaces strong {
+    font-size: var(--font-base);
+    line-height: 1.4;
+}
+
+.explorer__context--workspaces .explorer__context-label {
+    color: var(--text-secondary);
+}
+
+.explorer__context--workspaces .explorer__context-path {
+    font-size: var(--font-xs);
+}
+
+.explorer__tree--workspaces {
+    flex: 1 1 auto;
+    padding: 4px 8px 16px;
+    scroll-padding-bottom: 16px;
+    overscroll-behavior: contain;
+}
+
+.explorer-section--workspaces .layer-row {
+    padding: 8px 9px;
+}
+
 .show-more-btn {
     margin: 2px 8px 0;
     padding: 6px 8px;
