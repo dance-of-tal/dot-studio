@@ -20,7 +20,7 @@ import { hasModelConfig, resolvePerformerAgentId } from '../../lib/performers'
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
 import { api } from '../../api'
 import { showToast } from '../../lib/toast'
-import { resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
+import { getCanvasViewportSize, resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
 import { assetUrnAuthor, assetUrnDisplayName, assetUrnPath } from '../../lib/asset-urn'
 import type { AssetListItem } from '../../../shared/asset-contracts'
 import type { AssetRef, ModelConfig } from '../../types'
@@ -202,6 +202,17 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         undoLastSafeApply,
     })
 
+    const handleToggleFocus = useCallback(() => {
+        if (isFocused) {
+            exitFocusMode()
+            scheduleFitView(rfFitView, 'exit')
+            return
+        }
+
+        enterFocusMode(id, 'performer', getCanvasViewportSize())
+        scheduleFitView(rfFitView, 'enter')
+    }, [enterFocusMode, exitFocusMode, id, isFocused, rfFitView])
+
     const openAssetEditor = useCallback(async (
         kind: 'tal' | 'dance',
         targetRef: AssetRef | null,
@@ -278,18 +289,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                             className={`icon-btn ${isFocused ? 'icon-btn--active' : ''}`}
                             onClick={(e) => {
                                 e.stopPropagation()
-                                if (isFocused) {
-                                    exitFocusMode()
-                                    scheduleFitView(rfFitView, 'exit')
-                                } else {
-                                    const canvasEl = document.querySelector('.canvas-area')
-                                    const rect = canvasEl?.getBoundingClientRect()
-                                    enterFocusMode(id, 'performer', {
-                                        width: rect?.width ?? 1200,
-                                        height: rect?.height ?? 800,
-                                    })
-                                    scheduleFitView(rfFitView, 'enter')
-                                }
+                                handleToggleFocus()
                             }}
                             title={isFocused ? 'Exit focus mode' : 'Focus mode'}
                             style={{ padding: '0 4px', opacity: 0.7 }}

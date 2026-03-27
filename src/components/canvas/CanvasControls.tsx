@@ -3,7 +3,7 @@ import { useReactFlow } from '@xyflow/react'
 import type { Viewport } from '@xyflow/react'
 import { Maximize, Maximize2, Minimize } from 'lucide-react'
 import { useStudioStore } from '../../store'
-import { scheduleFitView } from '../../lib/focus-utils'
+import { getCanvasViewportSize, scheduleFitView } from '../../lib/focus-utils'
 
 export default function CanvasControls() {
     const { fitView, zoomIn, zoomOut, getViewport, setViewport } = useReactFlow()
@@ -36,12 +36,7 @@ export default function CanvasControls() {
         const nodeType = selectedPerformerId ? 'performer' as const : 'act' as const
         if (!nodeId) return
 
-        const canvasEl = document.querySelector('.canvas-area')
-        const rect = canvasEl?.getBoundingClientRect()
-        enterFocusMode(nodeId, nodeType, {
-            width: rect?.width ?? 1200,
-            height: rect?.height ?? 800,
-        })
+        enterFocusMode(nodeId, nodeType, getCanvasViewportSize())
         scheduleFitView(fitView, 'enter')
     }, [selectedPerformerId, selectedActId, enterFocusMode, fitView])
 

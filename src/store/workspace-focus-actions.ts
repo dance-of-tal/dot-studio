@@ -1,6 +1,6 @@
 import { api, setApiWorkingDirContext } from '../api'
 import { resolveActExpandedHeight } from '../lib/act-layout'
-import { resolveFocusNodeId } from '../lib/focus-utils'
+import { getCanvasViewportSize, resolveFocusNodeId } from '../lib/focus-utils'
 import { normalizePath, mapCanvasTerminals } from './workspace-helpers'
 import type { StudioState } from './types'
 
@@ -77,13 +77,14 @@ export function enterFocusModeImpl(
             type: 'act',
             actId: nodeId,
             nodeSize: { width: act.width ?? 400, height: resolveActExpandedHeight(act.height) },
+            nodePosition: act.position,
         },
         selectedActId: nodeId,
         selectedPerformerId: null,
         performers: state.performers.map((performer) => ({ ...performer, hidden: true })),
         acts: state.acts.map((entry) => (
             entry.id === nodeId
-                ? { ...entry, hidden: false, width: focusWidth, height: focusHeight }
+                ? { ...entry, hidden: false, width: focusWidth, height: focusHeight, position: { x: 0, y: 0 } }
                 : { ...entry, hidden: true }
         )),
         markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: true })),
@@ -139,6 +140,7 @@ export function exitFocusModeImpl(get: GetState, set: SetState) {
                     ...act,
                     width: snapshot.nodeSize.width,
                     height: snapshot.nodeSize.height,
+                    position: snapshot.nodePosition || act.position,
                     hidden: snapshot.hiddenActIds.includes(act.id),
                 }
                 : { ...act, hidden: snapshot.hiddenActIds.includes(act.id) }
@@ -165,23 +167,15 @@ export function switchFocusTargetImpl(
 
     if (nodeId === prevId && nodeType === prevType) return
 
-    let focusWidth = 800
-    let focusHeight = 600
-    
-    if (typeof document !== 'undefined') {
-        const pane = document.querySelector('.react-flow__pane')
-        if (pane) {
-            focusWidth = pane.clientWidth
-            focusHeight = pane.clientHeight
-        }
-    }
-
-    if (focusWidth === 800 && focusHeight === 600) {
-        const prevNodes = prevType === 'performer' ? state.performers : state.acts
-        const prev = prevNodes.find((n) => n.id === prevId)
-        focusWidth = prev?.width || 800
-        focusHeight = prev?.height || 600
-    }
+    const prevNodes = prevType === 'performer' ? state.performers : state.acts
+    const prev = prevNodes.find((node) => node.id === prevId)
+    const { width: focusWidth, height: focusHeight } = getCanvasViewportSize(
+        typeof document !== 'undefined' ? document : undefined,
+        {
+            width: prev?.width || 800,
+            height: prev?.height || 600,
+        },
+    )
 
     if (nodeType === 'performer') {
         const nextNode = state.performers.find((performer) => performer.id === nodeId)
@@ -232,6 +226,7 @@ export function switchFocusTargetImpl(
             type: 'act',
             actId: nodeId,
             nodeSize: { width: nextAct.width ?? 400, height: resolveActExpandedHeight(nextAct.height) },
+            nodePosition: nextAct.position,
         },
         performers: state.performers.map((performer) => {
             if (performer.id === prevId && prevType === 'performer') {
@@ -241,10 +236,16 @@ export function switchFocusTargetImpl(
         }),
         acts: state.acts.map((act) => {
             if (act.id === prevId && prevType === 'act') {
-                return { ...act, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
+                return {
+                    ...act,
+                    width: snapshot.nodeSize.width,
+                    height: snapshot.nodeSize.height,
+                    position: snapshot.nodePosition || act.position,
+                    hidden: true,
+                }
             }
             if (act.id === nodeId) {
-                return { ...act, hidden: false, width: focusWidth, height: focusHeight }
+                return { ...act, hidden: false, width: focusWidth, height: focusHeight, position: { x: 0, y: 0 } }
             }
             return { ...act, hidden: true }
         }),

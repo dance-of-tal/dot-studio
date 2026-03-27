@@ -73,16 +73,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
 
     useEffect(() => {
         void loadThreads(actId)
-        if (!currentThread) return
-
-        const intervalId = window.setInterval(() => {
-            void loadThreads(actId)
-        }, 1000)
-
-        return () => {
-            window.clearInterval(intervalId)
-        }
-    }, [actId, currentThread, loadThreads])
+    }, [actId, loadThreads])
 
     // Active participant in thread
     const participantKeys = act ? Object.keys(act.participants) : []

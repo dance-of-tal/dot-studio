@@ -1,8 +1,8 @@
 /**
  * ActFrame — runtime-first Act canvas window with explicit edit mode.
  */
-import { useMemo } from 'react'
-import { useReactFlow, useStore } from '@xyflow/react'
+import { useEffect, useMemo, useRef, useCallback } from 'react'
+import { useReactFlow } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { Workflow } from 'lucide-react'
 import { useStudioStore } from '../../store'
@@ -14,7 +14,7 @@ import {
 } from '../../lib/act-layout'
 import ActHeaderActions from './ActHeaderActions'
 import ActSurfacePanel from './ActSurfacePanel'
-import { resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
+import { getCanvasViewportSize, resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
 import { evaluateActReadiness } from './act-readiness'
 import './ActFrame.css'
 
@@ -42,6 +42,7 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
         enterFocusMode,
         exitFocusMode,
     } = useStudioStore()
+    const bodyRef = useRef<HTMLDivElement>(null)
 
     const act = useMemo(() => acts.find((a) => a.id === id), [acts, id])
     const readiness = useMemo(
@@ -53,12 +54,18 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
     const isEditing = actEditorState?.actId === id
     const focusNodeId = resolveFocusNodeId(focusSnapshot, focusedPerformerId)
     const isFocused = focusSnapshot?.type === 'act' && focusNodeId === id
-    const rfWidth = useStore((state) => state.width)
-    const rfHeight = useStore((state) => state.height)
     const width = data.width || act?.width || ACT_DEFAULT_WIDTH
     const height = resolveActExpandedHeight(act?.height)
 
     const { fitView: rfFitView } = useReactFlow()
+
+    useEffect(() => {
+        const el = bodyRef.current
+        if (!el) return
+        const handler = (event: WheelEvent) => { event.stopPropagation() }
+        el.addEventListener('wheel', handler, { passive: true })
+        return () => el.removeEventListener('wheel', handler)
+    }, [])
 
     const handleSelectAct = () => selectAct(id)
     const handleToggleEdit = () => {
@@ -68,19 +75,16 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
         }
         openActEditor(id, 'act')
     }
-    const handleToggleFocus = () => {
+    const handleToggleFocus = useCallback(() => {
         if (isFocused) {
             exitFocusMode()
             scheduleFitView(rfFitView, 'exit')
             return
         }
 
-        enterFocusMode(id, 'act', {
-            width: rfWidth || 1200,
-            height: rfHeight || 800,
-        })
+        enterFocusMode(id, 'act', getCanvasViewportSize())
         scheduleFitView(rfFitView, 'enter')
-    }
+    }, [enterFocusMode, exitFocusMode, id, isFocused, rfFitView])
 
     if (!act) {
         return null
@@ -128,6 +132,8 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
                         onHide={() => toggleActVisibility(id)}
                     />
                 )}
+                bodyClassName="nowheel nodrag"
+                bodyRef={bodyRef}
             >
                 <ActSurfacePanel actId={id} />
             </CanvasWindowFrame>

@@ -30,6 +30,7 @@ export interface FocusSnapshot {
     nodeId: string
     type: 'performer' | 'act'
     actId?: string
+    nodePosition?: { x: number; y: number }
     hiddenPerformerIds: string[]
     hiddenActIds: string[]
     hiddenEditorIds: string[]
