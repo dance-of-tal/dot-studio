@@ -19,6 +19,7 @@ import {
 import {
     addActRelationImpl,
 } from './act-slice-actions'
+import { buildExitFocusModeState } from './workspace-focus-actions'
 
 function createActEditorState(
     actId: string,
@@ -75,17 +76,23 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     },
 
     removeAct: (id) => {
-        set((s) => ({
-            acts: s.acts.filter((a) => a.id !== id),
-            actThreads: Object.fromEntries(
-                Object.entries(s.actThreads).filter(([actId]) => actId !== id),
-            ),
-            selectedActId: s.selectedActId === id ? null : s.selectedActId,
-            actEditorState: s.actEditorState?.actId === id ? null : s.actEditorState,
-            activeThreadId: s.selectedActId === id ? null : s.activeThreadId,
-            activeThreadParticipantKey: s.selectedActId === id ? null : s.activeThreadParticipantKey,
-            workspaceDirty: true,
-        }))
+        set((s) => {
+            const focusExit = buildExitFocusModeState(s)
+            const acts = (focusExit?.acts as StudioState['acts'] | undefined) || s.acts
+
+            return {
+                ...focusExit,
+                acts: acts.filter((act) => act.id !== id),
+                actThreads: Object.fromEntries(
+                    Object.entries(s.actThreads).filter(([actId]) => actId !== id),
+                ),
+                selectedActId: s.selectedActId === id ? null : s.selectedActId,
+                actEditorState: s.actEditorState?.actId === id ? null : s.actEditorState,
+                activeThreadId: s.selectedActId === id ? null : s.activeThreadId,
+                activeThreadParticipantKey: s.selectedActId === id ? null : s.activeThreadParticipantKey,
+                workspaceDirty: true,
+            }
+        })
     },
 
     renameAct: (id, name) => {
@@ -143,10 +150,16 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     },
 
     toggleActVisibility: (id) => {
-        set((s) => ({
-            acts: s.acts.map((a) => (a.id === id ? { ...a, hidden: !a.hidden } : a)),
-            workspaceDirty: true,
-        }))
+        set((s) => {
+            const focusExit = buildExitFocusModeState(s)
+            const acts = (focusExit?.acts as StudioState['acts'] | undefined) || s.acts
+
+            return {
+                ...focusExit,
+                acts: acts.map((act) => (act.id === id ? { ...act, hidden: !act.hidden } : act)),
+                workspaceDirty: true,
+            }
+        })
     },
 
     // ── Participant Binding (ref-based) ─────────────────

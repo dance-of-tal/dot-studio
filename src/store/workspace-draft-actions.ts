@@ -4,6 +4,7 @@ import { ACT_DEFAULT_EXPANDED_HEIGHT, ACT_DEFAULT_WIDTH } from '../lib/act-layou
 import { createPerformerNode } from '../lib/performers'
 import { createActParticipantKey } from './act-slice-helpers'
 import { defaultMarkdownContent } from './workspace-helpers'
+import { buildExitFocusModeState } from './workspace-focus-actions'
 import type { StudioState } from './types'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
@@ -403,49 +404,56 @@ export function createMarkdownEditorImpl(
         y: 140 + (get().markdownEditors.length * 24),
     }
 
-    set((state: StudioState) => ({
-        drafts: {
-            ...state.drafts,
-            [draftId]: {
-                id: draftId,
-                kind,
-                name,
-                slug,
-                description,
-                tags,
-                content,
-                derivedFrom: source?.derivedFrom || undefined,
-                updatedAt: Date.now(),
-            },
-        },
-        markdownEditors: [
-            ...state.markdownEditors,
-            {
-                id: editorId,
-                kind,
-                position,
-                width: 560,
-                height: 380,
-                draftId,
-                baseline: source ? {
+    set((state: StudioState) => {
+        const focusExit = buildExitFocusModeState(state)
+        const markdownEditors = (focusExit?.markdownEditors as StudioState['markdownEditors'] | undefined) || state.markdownEditors
+
+        return {
+            ...focusExit,
+            drafts: {
+                ...state.drafts,
+                [draftId]: {
+                    id: draftId,
+                    kind,
                     name,
                     slug,
                     description,
                     tags,
                     content,
-                } : null,
-                attachTarget: options?.attachTarget || null,
-                hidden: false,
+                    derivedFrom: source?.derivedFrom || undefined,
+                    updatedAt: Date.now(),
+                },
             },
-        ],
-        selectedMarkdownEditorId: editorId,
-        selectedPerformerId: null,
-        selectedPerformerSessionId: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
-        inspectorFocus: null,
-        workspaceDirty: true,
-    }))
+            markdownEditors: [
+                ...markdownEditors,
+                {
+                    id: editorId,
+                    kind,
+                    position,
+                    width: 560,
+                    height: 380,
+                    draftId,
+                    baseline: source ? {
+                        name,
+                        slug,
+                        description,
+                        tags,
+                        content,
+                    } : null,
+                    attachTarget: options?.attachTarget || null,
+                    hidden: false,
+                },
+            ],
+            selectedMarkdownEditorId: editorId,
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            focusedPerformerId: null,
+            focusedNodeType: null,
+            focusSnapshot: null,
+            inspectorFocus: null,
+            workspaceDirty: true,
+        }
+    })
 
     return editorId
 }
@@ -459,12 +467,15 @@ export function openDraftEditorImpl(
     // If an editor for this draft already exists, just select it
     const existing = get().markdownEditors.find((e) => e.draftId === draftId)
     if (existing) {
+        const focusExit = buildExitFocusModeState(get())
         set({
+            ...(focusExit || {}),
             selectedMarkdownEditorId: existing.id,
             selectedPerformerId: null,
             selectedPerformerSessionId: null,
             focusedPerformerId: null,
             focusedNodeType: null,
+            focusSnapshot: null,
             inspectorFocus: null,
         })
         return existing.id
@@ -480,38 +491,45 @@ export function openDraftEditorImpl(
     const editorId = `markdown-editor-${markdownEditorIdCounter.value}`
     const content = typeof draft.content === 'string' ? draft.content : ''
 
-    set((state: StudioState) => ({
-        markdownEditors: [
-            ...state.markdownEditors,
-            {
-                id: editorId,
-                kind,
-                position: {
-                    x: 160 + (state.markdownEditors.length * 28),
-                    y: 140 + (state.markdownEditors.length * 24),
+    set((state: StudioState) => {
+        const focusExit = buildExitFocusModeState(state)
+        const markdownEditors = (focusExit?.markdownEditors as StudioState['markdownEditors'] | undefined) || state.markdownEditors
+
+        return {
+            ...focusExit,
+            markdownEditors: [
+                ...markdownEditors,
+                {
+                    id: editorId,
+                    kind,
+                    position: {
+                        x: 160 + (markdownEditors.length * 28),
+                        y: 140 + (markdownEditors.length * 24),
+                    },
+                    width: 560,
+                    height: 380,
+                    draftId,
+                    baseline: {
+                        name: draft.name,
+                        slug: draft.slug || '',
+                        description: draft.description || '',
+                        tags: draft.tags || [],
+                        content,
+                    },
+                    attachTarget: null,
+                    hidden: false,
                 },
-                width: 560,
-                height: 380,
-                draftId,
-                baseline: {
-                    name: draft.name,
-                    slug: draft.slug || '',
-                    description: draft.description || '',
-                    tags: draft.tags || [],
-                    content,
-                },
-                attachTarget: null,
-                hidden: false,
-            },
-        ],
-        selectedMarkdownEditorId: editorId,
-        selectedPerformerId: null,
-        selectedPerformerSessionId: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
-        inspectorFocus: null,
-        workspaceDirty: true,
-    }))
+            ],
+            selectedMarkdownEditorId: editorId,
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            focusedPerformerId: null,
+            focusedNodeType: null,
+            focusSnapshot: null,
+            inspectorFocus: null,
+            workspaceDirty: true,
+        }
+    })
 
     return editorId
 }

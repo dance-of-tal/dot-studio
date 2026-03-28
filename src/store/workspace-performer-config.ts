@@ -16,6 +16,7 @@ import {
     applyPerformerPatch,
     mapPerformers,
 } from './workspace-helpers'
+import { buildExitFocusModeState } from './workspace-focus-actions'
 import { isPerformerAttachedToAct } from '../features/act/act-inspector-helpers'
 import { scheduleActRuntimeSync } from './act-slice-helpers'
 
@@ -251,11 +252,19 @@ export function updatePerformerAuthoringMeta(set: SetFn, performerId: string, pa
     }))
 }
 
-export function togglePerformerVisibility(set: SetFn, id: string) {
-    set((s) => ({
-        performers: s.performers.map(a =>
-            a.id === id ? { ...a, hidden: !a.hidden } : a
-        ),
-        workspaceDirty: true,
-    }))
+export function togglePerformerVisibility(set: SetFn, _get: GetFn, id: string) {
+    set((state) => {
+        const focusExit = buildExitFocusModeState(state)
+        const performers = (focusExit?.performers as StudioState['performers'] | undefined) || state.performers
+
+        return {
+            ...focusExit,
+            performers: performers.map((performer) => (
+                performer.id === id
+                    ? { ...performer, hidden: !performer.hidden }
+                    : performer
+            )),
+            workspaceDirty: true,
+        }
+    })
 }

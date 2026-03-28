@@ -258,6 +258,7 @@ export default function CanvasArea() {
         editingTarget,
         reactFlowInstance,
         canvasAreaRef,
+        transformTarget,
         clearTransformTarget,
         closeEditor,
         closeActEditor,

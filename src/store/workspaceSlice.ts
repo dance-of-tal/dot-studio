@@ -45,6 +45,7 @@ import {
 } from './workspace-draft-actions'
 import {
     addCanvasTerminalImpl,
+    buildExitFocusModeState,
     closeTrackingWindowImpl,
     enterFocusModeImpl,
     exitFocusModeImpl,
@@ -255,18 +256,19 @@ export const createWorkspaceSlice: StateCreator<
 
     removePerformer: (id) => {
         set((s) => {
-            const actCascade = buildPerformerDeleteCascade(id, s.acts)
+            const focusExit = buildExitFocusModeState(s)
+            const baseActs = (focusExit?.acts as StudioState['acts'] | undefined) || s.acts
+            const basePerformers = (focusExit?.performers as StudioState['performers'] | undefined) || s.performers
+            const actCascade = buildPerformerDeleteCascade(id, baseActs)
             return {
-                performers: s.performers.filter(a => a.id !== id),
-                acts: actCascade.acts || s.acts,
+                ...focusExit,
+                performers: basePerformers.filter(a => a.id !== id),
+                acts: actCascade.acts || baseActs,
                 selectedPerformerId: s.selectedPerformerId === id ? null : s.selectedPerformerId,
                 selectedPerformerSessionId: s.selectedPerformerId === id ? null : s.selectedPerformerSessionId,
                 selectedMarkdownEditorId: s.selectedMarkdownEditorId,
                 editingTarget: s.editingTarget?.type === 'performer' && s.editingTarget.id === id ? null : s.editingTarget,
                 activeChatPerformerId: s.activeChatPerformerId === id ? null : s.activeChatPerformerId,
-                focusedPerformerId: s.focusedPerformerId === id ? null : s.focusedPerformerId,
-                focusedNodeType: s.focusedPerformerId === id ? null : s.focusedNodeType,
-                focusSnapshot: s.focusedPerformerId === id ? null : s.focusSnapshot,
                 workspaceDirty: true,
             }
         })
@@ -341,13 +343,15 @@ export const createWorkspaceSlice: StateCreator<
     selectPerformerSession: (sessionId) => set({ selectedPerformerSessionId: sessionId, selectedMarkdownEditorId: null }),
 
     selectMarkdownEditor: (id) => set((s) => ({
+        ...((id && s.focusSnapshot) ? (buildExitFocusModeState(s) || {}) : {}),
         selectedMarkdownEditorId: id,
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         selectedActId: id ? null : s.selectedActId,
         actEditorState: id ? null : s.actEditorState,
-        focusedPerformerId: null,
-        focusedNodeType: null,
+        focusedPerformerId: (id && s.focusSnapshot) ? null : s.focusedPerformerId,
+        focusedNodeType: (id && s.focusSnapshot) ? null : s.focusedNodeType,
+        focusSnapshot: (id && s.focusSnapshot) ? null : s.focusSnapshot,
         inspectorFocus: null,
     })),
 
@@ -459,7 +463,7 @@ export const createWorkspaceSlice: StateCreator<
 
     updatePerformerAuthoringMeta: (performerId, patch) => updatePerformerAuthoringMetaImpl(set, performerId, patch),
 
-    togglePerformerVisibility: (id) => togglePerformerVisibilityImpl(set, id),
+    togglePerformerVisibility: (id) => togglePerformerVisibilityImpl(set, get, id),
 
 
     setPerformerExecutionMode: (performerId, mode) => {

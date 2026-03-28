@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { ACT_DEFAULT_WIDTH } from '../lib/act-layout'
 import { createPerformerNode } from '../lib/performers'
 import {
+    buildExitFocusModeState,
     enterFocusModeImpl,
     exitFocusModeImpl,
     switchFocusTargetImpl,
 } from './workspace-focus-actions'
+import { createMarkdownEditorImpl } from './workspace-draft-actions'
 import type { StudioState } from './types'
 
 function createTestState(): StudioState {
@@ -136,6 +139,77 @@ describe('workspace focus actions', () => {
             hidden: false,
             width: 900,
             height: 700,
+        })
+    })
+
+    it('builds an exit patch that restores act position and side panels', () => {
+        const harness = createStateHarness({
+            ...createTestState(),
+            acts: [{
+                id: 'act-1',
+                name: 'Control',
+                position: { x: 220, y: 160 },
+                width: ACT_DEFAULT_WIDTH,
+                height: 420,
+                participants: {},
+                relations: [],
+                createdAt: Date.now(),
+                hidden: false,
+            }],
+        } as StudioState)
+
+        enterFocusModeImpl(harness.get, harness.set, 'act-1', 'act', { width: 1000, height: 760 })
+        harness.set({ focusedPerformerId: null })
+
+        const patch = buildExitFocusModeState(harness.read())
+
+        expect(patch).toMatchObject({
+            focusedPerformerId: null,
+            focusedNodeType: null,
+            focusSnapshot: null,
+            isAssetLibraryOpen: true,
+            isAssistantOpen: true,
+            isTerminalOpen: true,
+        })
+        expect((patch?.acts as StudioState['acts'])[0]).toMatchObject({
+            id: 'act-1',
+            hidden: false,
+            position: { x: 220, y: 160 },
+            width: ACT_DEFAULT_WIDTH,
+            height: 420,
+        })
+    })
+
+    it('exits focus mode before creating a markdown editor', () => {
+        const harness = createStateHarness()
+        const markdownEditorIdCounter = { value: 0 }
+
+        enterFocusModeImpl(harness.get, harness.set, 'performer-1', 'performer', { width: 960, height: 720 })
+
+        createMarkdownEditorImpl(
+            harness.get,
+            harness.set,
+            markdownEditorIdCounter,
+            (prefix) => `${prefix}-1`,
+            'tal',
+        )
+
+        const state = harness.read()
+        expect(state.focusSnapshot).toBeNull()
+        expect(state.focusedPerformerId).toBeNull()
+        expect(state.selectedMarkdownEditorId).toBe('markdown-editor-1')
+        expect(state.isAssetLibraryOpen).toBe(true)
+        expect(state.isAssistantOpen).toBe(true)
+        expect(state.isTerminalOpen).toBe(true)
+        expect(state.performers.find((entry) => entry.id === 'performer-1')).toMatchObject({
+            hidden: false,
+            width: 320,
+            height: 400,
+        })
+        expect(state.markdownEditors).toHaveLength(1)
+        expect(state.markdownEditors[0]).toMatchObject({
+            id: 'markdown-editor-1',
+            hidden: false,
         })
     })
 })

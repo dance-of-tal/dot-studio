@@ -12,6 +12,7 @@ import {
 import { resolveCanvasResizeChange } from './canvas-resize-router'
 
 type EditingTargetLike = WorkspaceSlice['editingTarget']
+type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
 
 type UseCanvasFlowHandlersArgs = {
     nodes: Node[]
@@ -19,6 +20,7 @@ type UseCanvasFlowHandlersArgs = {
     editingTarget: EditingTargetLike
     reactFlowInstance: ReactFlowInstance<Node> | null
     canvasAreaRef: React.RefObject<HTMLDivElement | null>
+    transformTarget: { id: string; type: CanvasNodeKind } | null
     clearTransformTarget: () => void
     closeEditor: () => void
     closeActEditor: () => void
@@ -51,6 +53,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         editingTarget,
         reactFlowInstance,
         canvasAreaRef,
+        transformTarget,
         clearTransformTarget,
         closeEditor,
         closeActEditor,
@@ -243,6 +246,12 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
             const resizeResult = resolveCanvasResizeChange(change, nodes)
             if (!resizeResult) return
 
+            const ownsResize = (
+                ('id' in resizeResult && !!transformTarget && transformTarget.id === resizeResult.id && transformTarget.type === resizeResult.kind)
+                || (resizeResult.kind === 'stageTracking' && transformTarget?.type === 'stageTracking')
+            )
+            if (!ownsResize) return
+
             switch (resizeResult.kind) {
                 case 'markdownEditor':
                     updateMarkdownEditorSize(resizeResult.id, resizeResult.width, resizeResult.height)
@@ -264,6 +273,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     }, [
         onNodesChange,
         nodes,
+        transformTarget,
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
         updateTrackingWindowSize,

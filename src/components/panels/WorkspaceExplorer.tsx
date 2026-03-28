@@ -361,6 +361,35 @@ export default function WorkspaceExplorer() {
         revealCanvasNode(actId, 'act');
     }, [closeEditor, revealCanvasNode, selectAct, switchFocusTarget]);
 
+    const openActThread = useCallback((actId: string, threadId: string) => {
+        const {
+            focusSnapshot: currentFocusSnapshot,
+            focusedPerformerId: currentFocusedId,
+            focusedNodeType: currentFocusedNodeType,
+            acts: currentActs,
+        } = useStudioStore.getState();
+
+        const actEntry = currentActs.find((a) => a.id === actId);
+        if (actEntry?.hidden) {
+            useStudioStore.setState((s) => ({
+                acts: s.acts.map((a) => (a.id === actId ? { ...a, hidden: false } : a)),
+            }));
+        }
+
+        closeEditor();
+        const shouldSwitchFocus = currentFocusSnapshot && (
+            currentFocusedId !== actId
+            || currentFocusedNodeType !== 'act'
+        );
+        if (shouldSwitchFocus) {
+            switchFocusTarget(actId, 'act');
+        } else {
+            selectAct(actId);
+        }
+        selectThread(actId, threadId);
+        revealCanvasNode(actId, 'act');
+    }, [closeEditor, revealCanvasNode, selectAct, selectThread, switchFocusTarget]);
+
     return (
         <div className="explorer explorer--stacked">
             <WorkspaceExplorerWorkspacesSection
@@ -408,7 +437,7 @@ export default function WorkspaceExplorer() {
                 onSaveActAsDraft={saveActAsDraft}
                 onToggleActVisibility={toggleActVisibility}
                 onRemoveAct={removeAct}
-                onSelectThread={selectThread}
+                onSelectThread={openActThread}
                 onDeleteThread={deleteThread}
                 onRenameThread={renameThread}
                 onStartNewSession={(performerId) => void startNewSession(performerId)}

@@ -7,6 +7,59 @@ import type { StudioState } from './types'
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
 
+export function buildExitFocusModeState(state: StudioState): Partial<StudioState> | null {
+    const snapshot = state.focusSnapshot
+    if (!snapshot) return null
+
+    const focusedId = resolveFocusNodeId(snapshot, state.focusedPerformerId)
+    const focusedType = state.focusedNodeType || snapshot.type
+
+    if (focusedType === 'performer') {
+        return {
+            focusedPerformerId: null,
+            focusedNodeType: null,
+            focusSnapshot: null,
+            performers: state.performers.map((performer) => (
+                performer.id === focusedId
+                    ? {
+                        ...performer,
+                        width: snapshot.nodeSize.width,
+                        height: snapshot.nodeSize.height,
+                        hidden: snapshot.hiddenPerformerIds.includes(performer.id),
+                    }
+                    : { ...performer, hidden: snapshot.hiddenPerformerIds.includes(performer.id) }
+            )),
+            acts: state.acts.map((act) => ({ ...act, hidden: snapshot.hiddenActIds.includes(act.id) })),
+            markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: snapshot.hiddenEditorIds.includes(editor.id) })),
+            isAssetLibraryOpen: snapshot.assetLibraryOpen,
+            isAssistantOpen: snapshot.assistantOpen,
+            isTerminalOpen: snapshot.terminalOpen,
+        }
+    }
+
+    return {
+        focusedPerformerId: null,
+        focusedNodeType: null,
+        focusSnapshot: null,
+        performers: state.performers.map((performer) => ({ ...performer, hidden: snapshot.hiddenPerformerIds.includes(performer.id) })),
+        acts: state.acts.map((act) => (
+            act.id === focusedId
+                ? {
+                    ...act,
+                    width: snapshot.nodeSize.width,
+                    height: snapshot.nodeSize.height,
+                    position: snapshot.nodePosition || act.position,
+                    hidden: snapshot.hiddenActIds.includes(act.id),
+                }
+                : { ...act, hidden: snapshot.hiddenActIds.includes(act.id) }
+        )),
+        markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: snapshot.hiddenEditorIds.includes(editor.id) })),
+        isAssetLibraryOpen: snapshot.assetLibraryOpen,
+        isAssistantOpen: snapshot.assistantOpen,
+        isTerminalOpen: snapshot.terminalOpen,
+    }
+}
+
 export function enterFocusModeImpl(
     get: GetState,
     set: SetState,
@@ -98,58 +151,9 @@ export function enterFocusModeImpl(
 
 export function exitFocusModeImpl(get: GetState, set: SetState) {
     const state = get()
-    const snapshot = state.focusSnapshot
-    if (!snapshot) return
-
-    // focusedPerformerId may have been cleared by selectAct / selectPerformer
-    const focusedId = resolveFocusNodeId(snapshot, state.focusedPerformerId)
-    const focusedType = state.focusedNodeType || snapshot.type
-
-    if (focusedType === 'performer') {
-        set({
-            focusedPerformerId: null,
-            focusedNodeType: null,
-            focusSnapshot: null,
-            performers: state.performers.map((performer) => (
-                performer.id === focusedId
-                    ? {
-                        ...performer,
-                        width: snapshot.nodeSize.width,
-                        height: snapshot.nodeSize.height,
-                        hidden: snapshot.hiddenPerformerIds.includes(performer.id),
-                    }
-                    : { ...performer, hidden: snapshot.hiddenPerformerIds.includes(performer.id) }
-            )),
-            acts: state.acts.map((act) => ({ ...act, hidden: snapshot.hiddenActIds.includes(act.id) })),
-            markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: snapshot.hiddenEditorIds.includes(editor.id) })),
-            isAssetLibraryOpen: snapshot.assetLibraryOpen,
-            isAssistantOpen: snapshot.assistantOpen,
-            isTerminalOpen: snapshot.terminalOpen,
-        })
-        return
-    }
-
-    set({
-        focusedPerformerId: null,
-        focusedNodeType: null,
-        focusSnapshot: null,
-        performers: state.performers.map((performer) => ({ ...performer, hidden: snapshot.hiddenPerformerIds.includes(performer.id) })),
-        acts: state.acts.map((act) => (
-            act.id === focusedId
-                ? {
-                    ...act,
-                    width: snapshot.nodeSize.width,
-                    height: snapshot.nodeSize.height,
-                    position: snapshot.nodePosition || act.position,
-                    hidden: snapshot.hiddenActIds.includes(act.id),
-                }
-                : { ...act, hidden: snapshot.hiddenActIds.includes(act.id) }
-        )),
-        markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: snapshot.hiddenEditorIds.includes(editor.id) })),
-        isAssetLibraryOpen: snapshot.assetLibraryOpen,
-        isAssistantOpen: snapshot.assistantOpen,
-        isTerminalOpen: snapshot.terminalOpen,
-    })
+    const patch = buildExitFocusModeState(state)
+    if (!patch) return
+    set(patch)
 }
 
 export function switchFocusTargetImpl(
