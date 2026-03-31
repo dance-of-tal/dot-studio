@@ -1,4 +1,10 @@
-import type { AssistantAction, AssistantActionEnvelope } from '../../../shared/assistant-actions'
+import type {
+    AssistantAction,
+    AssistantActionEnvelope,
+    AssistantParticipantSubscriptionsInput,
+    AssistantPerformerFields,
+} from '../../../shared/assistant-actions'
+import { normalizeAssistantBundlePath } from '../../../shared/assistant-bundle-path'
 import type { ChatMessage } from '../../types'
 
 const ACTION_BLOCK_PATTERN = /<assistant-actions>\s*([\s\S]*?)\s*<\/assistant-actions>/i
@@ -17,6 +23,12 @@ function isOptionalStringArray(value: unknown) {
     )
 }
 
+function isOptionalEventTypeArray(value: unknown) {
+    return value === undefined || (
+        Array.isArray(value) && value.every((entry) => entry === 'runtime.idle')
+    )
+}
+
 function isDraftBlueprint(value: unknown) {
     if (!isRecord(value)) return false
     return (
@@ -32,6 +44,19 @@ function isDraftBlueprint(value: unknown) {
 
 function isModelBlueprint(value: unknown) {
     return isRecord(value) && isNonEmptyString(value.provider) && isNonEmptyString(value.modelId)
+}
+
+function isParticipantSubscriptionsInput(value: unknown): value is AssistantParticipantSubscriptionsInput {
+    if (!isRecord(value)) return false
+    return (
+        isOptionalStringArray(value.messagesFromParticipantKeys)
+        && isOptionalStringArray(value.messagesFromPerformerIds)
+        && isOptionalStringArray(value.messagesFromPerformerRefs)
+        && isOptionalStringArray(value.messagesFromPerformerNames)
+        && isOptionalStringArray(value.messageTags)
+        && isOptionalStringArray(value.callboardKeys)
+        && isOptionalEventTypeArray(value.eventTypes)
+    )
 }
 
 function hasActLocator(action: Record<string, unknown>) {
@@ -56,21 +81,22 @@ function hasParticipantLocator(prefix: 'source' | 'target', action: Record<strin
     )
 }
 
-function isPerformerBlueprint(value: unknown) {
+function isPerformerFields(value: unknown): value is AssistantPerformerFields {
     if (!isRecord(value)) return false
     return (
-        isNonEmptyString(value.name)
-        && (value.ref === undefined || isNonEmptyString(value.ref))
+        (value.model === undefined || value.model === null || isModelBlueprint(value.model))
         && (value.talUrn === undefined || value.talUrn === null || isNonEmptyString(value.talUrn))
         && (value.talDraftId === undefined || isNonEmptyString(value.talDraftId))
         && (value.talDraftRef === undefined || isNonEmptyString(value.talDraftRef))
         && (value.talDraft === undefined || isDraftBlueprint(value.talDraft))
-        && isOptionalStringArray(value.danceUrns)
-        && isOptionalStringArray(value.danceDraftIds)
-        && isOptionalStringArray(value.danceDraftRefs)
-        && (value.danceDrafts === undefined || (Array.isArray(value.danceDrafts) && value.danceDrafts.every((draft) => isDraftBlueprint(draft))))
-        && (value.model === undefined || value.model === null || isModelBlueprint(value.model))
-        && isOptionalStringArray(value.mcpServerNames)
+        && isOptionalStringArray(value.addDanceUrns)
+        && isOptionalStringArray(value.addDanceDraftIds)
+        && isOptionalStringArray(value.addDanceDraftRefs)
+        && (value.addDanceDrafts === undefined || (Array.isArray(value.addDanceDrafts) && value.addDanceDrafts.every((draft) => isDraftBlueprint(draft))))
+        && isOptionalStringArray(value.removeDanceUrns)
+        && isOptionalStringArray(value.removeDanceDraftIds)
+        && isOptionalStringArray(value.addMcpServerNames)
+        && isOptionalStringArray(value.removeMcpServerNames)
     )
 }
 
@@ -91,6 +117,14 @@ function isValidAssistantAction(action: unknown): action is AssistantAction {
     }
 
     switch (action.type) {
+        case 'installRegistryAsset':
+            return isNonEmptyString(action.urn) && (action.scope === undefined || action.scope === 'global' || action.scope === 'stage')
+        case 'addDanceFromGitHub':
+            return isNonEmptyString(action.source) && (action.scope === undefined || action.scope === 'global' || action.scope === 'stage')
+        case 'importInstalledPerformer':
+            return isNonEmptyString(action.urn) || isNonEmptyString(action.performerName)
+        case 'importInstalledAct':
+            return isNonEmptyString(action.urn) || isNonEmptyString(action.actName)
         case 'createTalDraft':
         case 'createDanceDraft':
             return (
@@ -101,24 +135,55 @@ function isValidAssistantAction(action: unknown): action is AssistantAction {
                 && isOptionalStringArray(action.tags)
                 && (action.openEditor === undefined || typeof action.openEditor === 'boolean')
             )
+        case 'updateTalDraft':
+        case 'deleteTalDraft':
+            return !!resolveDraftLocator(action)
+        case 'updateDanceDraft':
+        case 'deleteDanceDraft':
+            return !!resolveDraftLocator(action)
+        case 'upsertDanceBundleFile':
+            return !!resolveDraftLocator(action) && hasValidBundlePath(action) && isNonEmptyString(action.content)
+        case 'deleteDanceBundleEntry':
+            return !!resolveDraftLocator(action) && hasValidBundlePath(action)
         case 'createPerformer':
+            return isNonEmptyString(action.name) && isPerformerFields(action)
+        case 'updatePerformer':
+            return (
+                hasPerformerLocator(action)
+                && (action.name === undefined || isNonEmptyString(action.name))
+                && isPerformerFields(action)
+            )
+        case 'deletePerformer':
+            return hasPerformerLocator(action)
         case 'createAct':
-            return isNonEmptyString(action.name)
-        case 'createPerformerBlueprint':
-            return isPerformerBlueprint(action)
-        case 'createActBlueprint':
             return (
                 isNonEmptyString(action.name)
-                && (action.ref === undefined || isNonEmptyString(action.ref))
                 && (action.description === undefined || isNonEmptyString(action.description))
+                && isOptionalStringArray(action.actRules)
                 && isOptionalStringArray(action.participantPerformerIds)
                 && isOptionalStringArray(action.participantPerformerRefs)
                 && isOptionalStringArray(action.participantPerformerNames)
-                && (action.participantBlueprints === undefined || (Array.isArray(action.participantBlueprints) && action.participantBlueprints.every((item) => isPerformerBlueprint(item))))
                 && (action.relations === undefined || (Array.isArray(action.relations) && action.relations.every((relation) => isActRelationBlueprint(relation))))
             )
+        case 'updateAct':
+            return (
+                hasActLocator(action)
+                && (action.name === undefined || isNonEmptyString(action.name))
+                && (action.description === undefined || isNonEmptyString(action.description))
+                && isOptionalStringArray(action.actRules)
+            )
+        case 'deleteAct':
+            return hasActLocator(action)
         case 'attachPerformerToAct':
             return hasActLocator(action) && hasPerformerLocator(action)
+        case 'detachParticipantFromAct':
+            return hasActLocator(action) && (isNonEmptyString(action.participantKey) || hasPerformerLocator(action))
+        case 'updateParticipantSubscriptions':
+            return (
+                hasActLocator(action)
+                && (isNonEmptyString(action.participantKey) || hasPerformerLocator(action))
+                && (action.subscriptions === null || isParticipantSubscriptionsInput(action.subscriptions))
+            )
         case 'connectPerformers':
             return (
                 hasActLocator(action)
@@ -128,32 +193,20 @@ function isValidAssistantAction(action: unknown): action is AssistantAction {
                 && (action.name === undefined || isNonEmptyString(action.name))
                 && (action.description === undefined || isNonEmptyString(action.description))
             )
-        case 'setPerformerModel':
-            return hasPerformerLocator(action) && isNonEmptyString(action.provider) && isNonEmptyString(action.modelId)
-        case 'setPerformerTal':
-            return (
-                hasPerformerLocator(action)
-                && (
-                    action.talUrn === null
-                    || isNonEmptyString(action.talUrn)
-                    || isNonEmptyString(action.talDraftId)
-                    || isNonEmptyString(action.talDraftRef)
-                )
-            )
-        case 'addPerformerDance':
-            return (
-                hasPerformerLocator(action)
-                && (
-                    isNonEmptyString(action.danceUrn)
-                    || isNonEmptyString(action.danceDraftId)
-                    || isNonEmptyString(action.danceDraftRef)
-                )
-            )
-        case 'addPerformerMcp':
-            return hasPerformerLocator(action) && isNonEmptyString(action.mcpServerName)
+        case 'updateRelation':
+        case 'removeRelation':
+            return hasActLocator(action) && isNonEmptyString(action.relationId)
         default:
             return false
     }
+}
+
+function resolveDraftLocator(action: Record<string, unknown>) {
+    return isNonEmptyString(action.draftId) || isNonEmptyString(action.draftRef) || isNonEmptyString(action.draftName)
+}
+
+function hasValidBundlePath(action: Record<string, unknown>) {
+    return normalizeAssistantBundlePath(typeof action.path === 'string' ? action.path : null) !== null
 }
 
 function normalizeEnvelope(input: unknown): AssistantActionEnvelope | null {

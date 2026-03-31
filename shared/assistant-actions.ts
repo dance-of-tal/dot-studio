@@ -1,4 +1,22 @@
 export type AssistantActionDirection = 'both' | 'one-way'
+export type AssistantParticipantEventType = 'runtime.idle'
+
+export interface AssistantParticipantSubscriptions {
+    messagesFrom?: string[]
+    messageTags?: string[]
+    callboardKeys?: string[]
+    eventTypes?: AssistantParticipantEventType[]
+}
+
+export interface AssistantParticipantSubscriptionsInput {
+    messagesFromParticipantKeys?: string[]
+    messagesFromPerformerIds?: string[]
+    messagesFromPerformerRefs?: string[]
+    messagesFromPerformerNames?: string[]
+    messageTags?: string[]
+    callboardKeys?: string[]
+    eventTypes?: AssistantParticipantEventType[]
+}
 
 // ── Blueprint sub-types ──────────────────────────────────────────────────────
 
@@ -60,6 +78,7 @@ export interface AssistantDraftSummary {
     name: string
     slug?: string
     description?: string
+    tags?: string[]
 }
 
 export interface AssistantAvailableModelSummary {
@@ -81,6 +100,8 @@ export interface AssistantStageActParticipantSummary {
     key: string
     performerName: string
     performerId: string | null
+    displayName?: string
+    subscriptions?: AssistantParticipantSubscriptions
 }
 
 export interface AssistantStageActRelationSummary {
@@ -94,6 +115,8 @@ export interface AssistantStageActRelationSummary {
 export interface AssistantStageActSummary {
     id: string
     name: string
+    description?: string
+    actRules?: string[]
     participants: AssistantStageActParticipantSummary[]
     relations: AssistantStageActRelationSummary[]
 }
@@ -109,6 +132,26 @@ export interface AssistantStageContext {
 // ── Action types ─────────────────────────────────────────────────────────────
 
 export type AssistantAction =
+    | {
+        type: 'installRegistryAsset'
+        urn: string
+        scope?: 'global' | 'stage'
+    }
+    | {
+        type: 'addDanceFromGitHub'
+        source: string
+        scope?: 'global' | 'stage'
+    }
+    | {
+        type: 'importInstalledPerformer'
+        urn?: string
+        performerName?: string
+    }
+    | {
+        type: 'importInstalledAct'
+        urn?: string
+        actName?: string
+    }
     // ── Tal draft CRUD ─────────────────────────────────
     | {
         type: 'createTalDraft'
@@ -163,6 +206,21 @@ export type AssistantAction =
         draftRef?: string
         draftName?: string
     }
+    | {
+        type: 'upsertDanceBundleFile'
+        draftId?: string
+        draftRef?: string
+        draftName?: string
+        path: string
+        content: string
+    }
+    | {
+        type: 'deleteDanceBundleEntry'
+        draftId?: string
+        draftRef?: string
+        draftName?: string
+        path: string
+    }
     // ── Performer CRUD ─────────────────────────────────
     | ({
         type: 'createPerformer'
@@ -188,6 +246,7 @@ export type AssistantAction =
         ref?: string
         name: string
         description?: string
+        actRules?: string[]
         // Inline participants + relations
         participantPerformerIds?: string[]
         participantPerformerRefs?: string[]
@@ -201,6 +260,7 @@ export type AssistantAction =
         actName?: string
         name?: string
         description?: string
+        actRules?: string[]
     }
     | {
         type: 'deleteAct'
@@ -227,6 +287,17 @@ export type AssistantAction =
         performerId?: string
         performerRef?: string
         performerName?: string
+    }
+    | {
+        type: 'updateParticipantSubscriptions'
+        actId?: string
+        actRef?: string
+        actName?: string
+        participantKey?: string
+        performerId?: string
+        performerRef?: string
+        performerName?: string
+        subscriptions: AssistantParticipantSubscriptionsInput | null
     }
     // ── Relation management ────────────────────────────
     | {

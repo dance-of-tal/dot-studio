@@ -2,8 +2,11 @@ import type {
     AssistantAction,
     AssistantActRelationBlueprint,
     AssistantDraftBlueprint,
+    AssistantParticipantSubscriptionsInput,
     AssistantPerformerFields,
 } from '../../../shared/assistant-actions'
+import { normalizeAssistantBundlePath } from '../../../shared/assistant-bundle-path'
+import type { AssetCard } from '../../types'
 import type { StudioState } from '../../store/types'
 import { useStudioStore } from '../../store'
 import { api } from '../../api'
@@ -30,6 +33,18 @@ function makeRefs(): AssistantRefState {
 
 function store(): StudioState {
     return useStudioStore.getState()
+}
+
+async function findInstalledAssetByUrnOrName(
+    kind: 'performer' | 'act',
+    options: { urn?: string; name?: string },
+): Promise<AssetCard | null> {
+    const assets = await api.assets.list(kind) as AssetCard[]
+    if (options.urn) {
+        return assets.find((asset) => asset.urn === options.urn) || null
+    }
+    const target = normalizeName(options.name)
+    return assets.find((asset) => normalizeName(asset.name) === target) || null
 }
 
 // ── Entity resolution helpers ─────────────────────────────────────────────────
@@ -78,21 +93,42 @@ function resolveDraftId(
     refs: AssistantRefState,
     kind: 'tal' | 'dance',
     options: { draftId?: string; draftRef?: string; draftName?: string },
+    flags?: { savedOnly?: boolean },
 ): string | null {
-    if (options.draftId) return options.draftId
+    const requireSaved = flags?.savedOnly === true
+    const stateDrafts = store().drafts
+    const isAllowed = (draftId: string | undefined | null) => {
+        if (!draftId) return false
+        const draft = stateDrafts[draftId]
+        if (!draft || draft.kind !== kind) return false
+        if (requireSaved && draft.saveState !== 'saved') return false
+        return true
+    }
+
+    if (options.draftId) {
+        return isAllowed(options.draftId) ? options.draftId : null
+    }
     if (options.draftRef) {
         const resolved = refs.drafts.get(options.draftRef)
-        return (resolved?.kind === kind ? resolved.id : null) || null
+        return (resolved?.kind === kind && isAllowed(resolved.id) ? resolved.id : null) || null
     }
     if (options.draftName) {
         const s = store()
         const target = normalizeName(options.draftName)
         const found = Object.values(s.drafts).find(
-            (d) => d.kind === kind && normalizeName(d.name) === target,
+            (d) => d.kind === kind && (!requireSaved || d.saveState === 'saved') && normalizeName(d.name) === target,
         )
         return found?.id || null
     }
     return null
+}
+
+function resolveSavedDraftId(
+    refs: AssistantRefState,
+    kind: 'tal' | 'dance',
+    options: { draftId?: string; draftRef?: string; draftName?: string },
+) {
+    return resolveDraftId(refs, kind, options, { savedOnly: true })
 }
 
 function resolveParticipantKey(
@@ -104,17 +140,110 @@ function resolveParticipantKey(
         performerRef?: string
         performerName?: string
     },
+    attachIfMissing = true,
 ): string | null {
     const s = store()
     const act = s.acts.find((a) => a.id === actId)
     if (!act) return null
-    if (options.participantKey && act.participants[options.participantKey]) {
-        return options.participantKey
-    }
-    // Resolve performer → auto-attach if needed
+    const existing = resolveBoundParticipantKey(refs, actId, options)
+    if (existing) return existing
+    if (!attachIfMissing) return null
     const performerId = resolvePerformerId(refs, options)
     if (!performerId) return null
     return s.attachPerformerToAct(actId, performerId)
+}
+
+function getActById(actId: string) {
+    return store().acts.find((act) => act.id === actId) || null
+}
+
+function hasRelation(actId: string, relationId: string) {
+    return !!getActById(actId)?.relations.some((relation) => relation.id === relationId)
+}
+
+function bindingMatchesPerformer(performerId: string, binding: StudioState['acts'][number]['participants'][string]) {
+    const performer = store().performers.find((entry) => entry.id === performerId)
+    if (!performer) return false
+
+    return (
+        (binding.performerRef.kind === 'draft' && (
+            performer.meta?.derivedFrom === binding.performerRef.draftId
+            || performerId === binding.performerRef.draftId
+        ))
+        || (binding.performerRef.kind === 'registry' && performer.meta?.derivedFrom === binding.performerRef.urn)
+    )
+}
+
+function resolveBoundParticipantKey(
+    refs: AssistantRefState,
+    actId: string,
+    options: {
+        participantKey?: string
+        performerId?: string
+        performerRef?: string
+        performerName?: string
+    },
+): string | null {
+    const act = getActById(actId)
+    if (!act) return null
+    if (options.participantKey && act.participants[options.participantKey]) {
+        return options.participantKey
+    }
+
+    const performerId = resolvePerformerId(refs, options)
+    if (!performerId) return null
+
+    const matchedKey = Object.keys(act.participants).find((key) =>
+        bindingMatchesPerformer(performerId, act.participants[key]),
+    )
+    if (matchedKey) {
+        return matchedKey
+    }
+
+    const performerName = store().performers.find((performer) => performer.id === performerId)?.name
+    if (performerName && act.participants[performerName]) {
+        return performerName
+    }
+
+    return null
+}
+
+function resolveSubscriptionMessagesFrom(
+    refs: AssistantRefState,
+    actId: string,
+    subscriptions: AssistantParticipantSubscriptionsInput,
+): string[] | null {
+    const resolved = new Set<string>()
+    const directKeys = subscriptions.messagesFromParticipantKeys || []
+    const act = getActById(actId)
+    if (!act) return null
+
+    for (const key of directKeys) {
+        if (!act.participants[key]) {
+            return null
+        }
+        resolved.add(key)
+    }
+
+    for (const performerId of subscriptions.messagesFromPerformerIds || []) {
+        const key = resolveBoundParticipantKey(refs, actId, { performerId })
+        if (!key) return null
+        resolved.add(key)
+    }
+
+    for (const performerRef of subscriptions.messagesFromPerformerRefs || []) {
+        const key = resolveBoundParticipantKey(refs, actId, { performerRef })
+        if (!key) return null
+        resolved.add(key)
+    }
+
+    for (const performerName of subscriptions.messagesFromPerformerNames || []) {
+        const key = resolveBoundParticipantKey(refs, actId, { performerName })
+        if (!key) return null
+        resolved.add(key)
+    }
+
+    return Array.from(resolved)
 }
 
 // ── Draft helpers ─────────────────────────────────────────────────────────────
@@ -133,7 +262,13 @@ async function createDraft(
         ...(blueprint.tags ? { tags: blueprint.tags } : {}),
     })
     useStudioStore.setState((state) => ({
-        drafts: { ...state.drafts, [draft.id]: draft },
+        drafts: {
+            ...state.drafts,
+            [draft.id]: {
+                ...draft,
+                saveState: 'saved',
+            },
+        },
         workspaceDirty: true,
     }))
     if (blueprint.ref) {
@@ -143,6 +278,19 @@ async function createDraft(
         store().openDraftEditor(draft.id)
     }
     return draft.id
+}
+
+async function resolveDanceBundleTarget(
+    refs: AssistantRefState,
+    options: { draftId?: string; draftRef?: string; draftName?: string; path: string },
+): Promise<{ draftId: string; path: string } | null> {
+    const draftId = resolveSavedDraftId(refs, 'dance', options)
+    if (!draftId) return null
+
+    const normalizedPath = normalizeAssistantBundlePath(options.path)
+    if (!normalizedPath) return null
+
+    return { draftId, path: normalizedPath }
 }
 
 async function resolveTalRef(
@@ -223,6 +371,24 @@ async function applyPerformerFields(
     }
 }
 
+function buildParticipantSubscriptions(
+    refs: AssistantRefState,
+    actId: string,
+    subscriptions: AssistantParticipantSubscriptionsInput,
+) {
+    const messagesFrom = resolveSubscriptionMessagesFrom(refs, actId, subscriptions)
+    if (messagesFrom === null) {
+        return null
+    }
+
+    return {
+        ...(messagesFrom.length > 0 ? { messagesFrom } : {}),
+        ...(subscriptions.messageTags !== undefined ? { messageTags: subscriptions.messageTags } : {}),
+        ...(subscriptions.callboardKeys !== undefined ? { callboardKeys: subscriptions.callboardKeys } : {}),
+        ...(subscriptions.eventTypes !== undefined ? { eventTypes: subscriptions.eventTypes } : {}),
+    }
+}
+
 // ── Relation helper ───────────────────────────────────────────────────────────
 
 async function applyRelationBlueprint(
@@ -266,6 +432,32 @@ export async function applyAssistantAction(
 ): Promise<{ success: boolean }> {
     try {
         switch (action.type) {
+            case 'installRegistryAsset': {
+                await api.dot.install(action.urn, undefined, false, action.scope || 'stage')
+                return { success: true }
+            }
+            case 'addDanceFromGitHub': {
+                await api.dot.addFromGitHub(action.source, action.scope || 'stage')
+                return { success: true }
+            }
+            case 'importInstalledPerformer': {
+                const asset = await findInstalledAssetByUrnOrName('performer', {
+                    urn: action.urn,
+                    name: action.performerName,
+                })
+                if (!asset) return { success: false }
+                store().addPerformerFromAsset(asset)
+                return { success: true }
+            }
+            case 'importInstalledAct': {
+                const asset = await findInstalledAssetByUrnOrName('act', {
+                    urn: action.urn,
+                    name: action.actName,
+                })
+                if (!asset) return { success: false }
+                store().importActFromAsset(asset)
+                return { success: true }
+            }
 
             // ── Tal draft CRUD ────────────────────────────────────────────────
             case 'createTalDraft': {
@@ -273,7 +465,7 @@ export async function applyAssistantAction(
                 return { success: true }
             }
             case 'updateTalDraft': {
-                const draftId = resolveDraftId(refs, 'tal', action)
+                const draftId = resolveSavedDraftId(refs, 'tal', action)
                 if (!draftId) return { success: false }
                 const draft = await api.drafts.update('tal', draftId, {
                     ...(action.name ? { name: action.name } : {}),
@@ -282,13 +474,13 @@ export async function applyAssistantAction(
                     ...(action.tags ? { tags: action.tags } : {}),
                 })
                 useStudioStore.setState((state) => ({
-                    drafts: { ...state.drafts, [draft.id]: draft },
+                    drafts: { ...state.drafts, [draft.id]: { ...draft, saveState: 'saved' } },
                     workspaceDirty: true,
                 }))
                 return { success: true }
             }
             case 'deleteTalDraft': {
-                const draftId = resolveDraftId(refs, 'tal', action)
+                const draftId = resolveSavedDraftId(refs, 'tal', action)
                 if (!draftId) return { success: false }
                 await api.drafts.delete('tal', draftId)
                 useStudioStore.setState((state) => {
@@ -305,7 +497,7 @@ export async function applyAssistantAction(
                 return { success: true }
             }
             case 'updateDanceDraft': {
-                const draftId = resolveDraftId(refs, 'dance', action)
+                const draftId = resolveSavedDraftId(refs, 'dance', action)
                 if (!draftId) return { success: false }
                 const draft = await api.drafts.update('dance', draftId, {
                     ...(action.name ? { name: action.name } : {}),
@@ -314,13 +506,13 @@ export async function applyAssistantAction(
                     ...(action.tags ? { tags: action.tags } : {}),
                 })
                 useStudioStore.setState((state) => ({
-                    drafts: { ...state.drafts, [draft.id]: draft },
+                    drafts: { ...state.drafts, [draft.id]: { ...draft, saveState: 'saved' } },
                     workspaceDirty: true,
                 }))
                 return { success: true }
             }
             case 'deleteDanceDraft': {
-                const draftId = resolveDraftId(refs, 'dance', action)
+                const draftId = resolveSavedDraftId(refs, 'dance', action)
                 if (!draftId) return { success: false }
                 await api.drafts.delete('dance', draftId)
                 useStudioStore.setState((state) => {
@@ -328,6 +520,18 @@ export async function applyAssistantAction(
                     delete drafts[draftId]
                     return { drafts, workspaceDirty: true }
                 })
+                return { success: true }
+            }
+            case 'upsertDanceBundleFile': {
+                const target = await resolveDanceBundleTarget(refs, action)
+                if (!target) return { success: false }
+                await api.drafts.danceBundle.writeFile(target.draftId, target.path, action.content)
+                return { success: true }
+            }
+            case 'deleteDanceBundleEntry': {
+                const target = await resolveDanceBundleTarget(refs, action)
+                if (!target) return { success: false }
+                await api.drafts.danceBundle.deleteFile(target.draftId, target.path)
                 return { success: true }
             }
 
@@ -357,6 +561,7 @@ export async function applyAssistantAction(
                 const actId = store().addAct(action.name)
                 if (action.ref) refs.acts.set(action.ref, actId)
                 if (action.description) store().updateActDescription(actId, action.description)
+                if (action.actRules !== undefined) store().updateActRules(actId, action.actRules)
                 for (const id of action.participantPerformerIds || []) {
                     store().attachPerformerToAct(actId, id)
                 }
@@ -378,6 +583,7 @@ export async function applyAssistantAction(
                 if (!actId) return { success: false }
                 if (action.name) store().renameAct(actId, action.name)
                 if (action.description !== undefined) store().updateActDescription(actId, action.description)
+                if (action.actRules !== undefined) store().updateActRules(actId, action.actRules)
                 return { success: true }
             }
             case 'deleteAct': {
@@ -392,41 +598,30 @@ export async function applyAssistantAction(
                 const actId = resolveActId(refs, action)
                 const performerId = resolvePerformerId(refs, action)
                 if (!actId || !performerId) return { success: false }
-                store().attachPerformerToAct(actId, performerId)
-                return { success: true }
+                return { success: !!store().attachPerformerToAct(actId, performerId) }
             }
             case 'detachParticipantFromAct': {
                 const actId = resolveActId(refs, action)
                 if (!actId) return { success: false }
-                let key = action.participantKey
-                if (!key) {
-                    const s = store()
-                    const act = s.acts.find((a) => a.id === actId)
-                    if (!act) return { success: false }
-                    // Resolve by performer identity
-                    const performerId = resolvePerformerId(refs, action)
-                    if (performerId) {
-                        key = Object.keys(act.participants).find((k) => {
-                            const binding = act.participants[k]
-                            return (
-                                (binding.performerRef.kind === 'draft' && (
-                                    s.performers.find((p) => p.id === performerId)?.meta?.derivedFrom === binding.performerRef.draftId
-                                    || performerId === binding.performerRef.draftId
-                                ))
-                                || (binding.performerRef.kind === 'registry' && (
-                                    s.performers.find((p) => p.id === performerId)?.meta?.derivedFrom === binding.performerRef.urn
-                                ))
-                            )
-                        }) || undefined
-                        // fallback: match by performer name as key
-                        if (!key) {
-                            const performerName = s.performers.find((p) => p.id === performerId)?.name
-                            if (performerName && act.participants[performerName]) key = performerName
-                        }
-                    }
-                }
-                if (!key) return { success: false }
+                const act = getActById(actId)
+                if (!act) return { success: false }
+                const key = resolveBoundParticipantKey(refs, actId, action)
+                if (!key || !act.participants[key]) return { success: false }
                 store().unbindPerformerFromAct(actId, key)
+                return { success: true }
+            }
+            case 'updateParticipantSubscriptions': {
+                const actId = resolveActId(refs, action)
+                if (!actId) return { success: false }
+                const participantKey = resolveBoundParticipantKey(refs, actId, action)
+                if (!participantKey) return { success: false }
+                if (action.subscriptions === null) {
+                    store().updatePerformerBinding(actId, participantKey, { subscriptions: undefined })
+                    return { success: true }
+                }
+                const subscriptions = buildParticipantSubscriptions(refs, actId, action.subscriptions)
+                if (!subscriptions) return { success: false }
+                store().updatePerformerBinding(actId, participantKey, { subscriptions })
                 return { success: true }
             }
 
@@ -439,7 +634,7 @@ export async function applyAssistantAction(
             }
             case 'updateRelation': {
                 const actId = resolveActId(refs, action)
-                if (!actId) return { success: false }
+                if (!actId || !hasRelation(actId, action.relationId)) return { success: false }
                 const patch = {
                     ...(action.name !== undefined ? { name: action.name } : {}),
                     ...(action.description !== undefined ? { description: action.description } : {}),
@@ -450,7 +645,7 @@ export async function applyAssistantAction(
             }
             case 'removeRelation': {
                 const actId = resolveActId(refs, action)
-                if (!actId) return { success: false }
+                if (!actId || !hasRelation(actId, action.relationId)) return { success: false }
                 store().removeRelation(actId, action.relationId)
                 return { success: true }
             }
@@ -465,10 +660,14 @@ export async function applyAssistantAction(
 }
 
 export async function applyAssistantActions(actions: AssistantAction[]) {
+    const expectedWorkingDir = store().workingDir
     const refs = makeRefs()
     let applied = 0
     let failed = 0
     for (const action of actions) {
+        if (store().workingDir !== expectedWorkingDir) {
+            break
+        }
         const result = await applyAssistantAction(action, refs)
         if (result.success) applied++
         else failed++

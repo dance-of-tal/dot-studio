@@ -9,6 +9,7 @@ export type { Posture } from './projection-manifest.js'
 import type { CompiledSkill } from './dance-compiler.js'
 import type { ModelSelection } from '../../../shared/model-types.js'
 import { readDraftTextContent } from '../draft-service.js'
+import { COLLABORATION_TOOL_NAMES, LEGACY_COLLABORATION_TOOL_NAMES } from '../act-runtime/act-tools.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -119,8 +120,19 @@ function buildTaskPermissionLines(taskAllowlist: string[]) {
     return lines
 }
 
-function buildToolsLines(toolMap: Record<string, boolean>, posture: Posture) {
-    const pairs = Object.entries(toolMap).sort(([left], [right]) => left.localeCompare(right))
+function buildToolsLines(
+    toolMap: Record<string, boolean>,
+    posture: Posture,
+    scope: 'workspace' | 'act',
+) {
+    const effectiveToolMap = { ...toolMap }
+    if (scope !== 'act') {
+        for (const toolName of [...COLLABORATION_TOOL_NAMES, ...LEGACY_COLLABORATION_TOOL_NAMES]) {
+            effectiveToolMap[toolName] = false
+        }
+    }
+
+    const pairs = Object.entries(effectiveToolMap).sort(([left], [right]) => left.localeCompare(right))
     if (posture === 'plan') {
         pairs.push(['bash', false], ['edit', false], ['write', false])
     }
@@ -139,6 +151,7 @@ function buildFrontmatter(input: {
     performerName: string
     model: ModelSelection
     posture: Posture
+    scope: 'workspace' | 'act'
     variantId?: string | null
     skillNames: string[]
     toolMap: Record<string, boolean>
@@ -158,7 +171,7 @@ function buildFrontmatter(input: {
     }
     lines.push(...buildSkillPermissionLines(input.skillNames))
     lines.push(...buildTaskPermissionLines(input.taskAllowlist || []))
-    lines.push(...buildToolsLines(input.toolMap, input.posture))
+    lines.push(...buildToolsLines(input.toolMap, input.posture, input.scope))
     lines.push('---')
     return lines.join('\n')
 }
@@ -190,6 +203,7 @@ function buildAgentFile(input: {
         performerName: input.performerName,
         model: input.model,
         posture: input.posture,
+        scope: input.scope,
         variantId: input.variantId,
         skillNames: input.skillNames,
         toolMap: input.toolMap,
@@ -281,7 +295,7 @@ export async function compilePerformer(
     const allFiles = [
         buildFile.relativePath,
         ...(planFile ? [planFile.relativePath] : []),
-        ...skills.map((skill) => skill.relativePath),
+        ...skills.flatMap((skill) => [skill.relativePath, ...skill.additionalFiles]),
     ]
 
     return {

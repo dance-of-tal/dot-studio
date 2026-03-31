@@ -1,0 +1,76 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import os from 'node:os'
+import path from 'node:path'
+import { promises as fs } from 'node:fs'
+
+const instanceDisposeMock = vi.fn().mockResolvedValue({})
+
+vi.mock('../../lib/opencode.js', () => ({
+    getOpencode: async () => ({
+        instance: { dispose: instanceDisposeMock },
+    }),
+}))
+
+describe('ensureAssistantAgent', () => {
+    let executionDir: string
+
+    beforeEach(async () => {
+        executionDir = await fs.mkdtemp(path.join(os.tmpdir(), 'studio-assistant-projection-'))
+        instanceDisposeMock.mockClear()
+    })
+
+    afterEach(async () => {
+        await fs.rm(executionDir, { recursive: true, force: true }).catch(() => {})
+    })
+
+    it('projects builtin skill sibling files and prunes stale siblings', async () => {
+        const staleFile = path.join(
+            executionDir,
+            '.opencode',
+            'skills',
+            'dot-studio',
+            'studio-assistant-skill-creator-guide',
+            'references',
+            'stale.md',
+        )
+        await fs.mkdir(path.dirname(staleFile), { recursive: true })
+        await fs.writeFile(staleFile, 'stale\n', 'utf-8')
+
+        const { ensureAssistantAgent } = await import('./assistant-service.js')
+
+        const agentName = await ensureAssistantAgent(executionDir)
+
+        expect(agentName).toBe('dot-studio/studio-assistant')
+        await expect(fs.readFile(path.join(
+            executionDir,
+            '.opencode',
+            'skills',
+            'dot-studio',
+            'studio-assistant-skill-creator-guide',
+            'references',
+            'bundle-authoring.md',
+        ), 'utf-8')).resolves.toContain('SKILL.md')
+        await expect(fs.stat(staleFile)).rejects.toMatchObject({ code: 'ENOENT' })
+        expect(instanceDisposeMock).toHaveBeenCalledWith({ directory: executionDir })
+    })
+
+    it('tells the assistant to avoid invented ids and string actRules payloads', async () => {
+        const { buildAssistantActionPrompt } = await import('./assistant-service.js')
+
+        const prompt = buildAssistantActionPrompt({
+            workingDir: '/tmp/workspace',
+            performers: [],
+            acts: [],
+            drafts: [],
+            availableModels: [],
+        })
+
+        expect(prompt).toContain('Do not stop after creating loose performers')
+        expect(prompt).toContain('Prefer explicit ids from the snapshot')
+        expect(prompt).toContain('ref on the create action')
+        expect(prompt).toContain('Actions are applied sequentially in array order')
+        expect(prompt).toContain('same-block refs as the main cascade mechanism')
+        expect(prompt).toContain('creating all missing performers first, then createAct with participantPerformerRefs')
+        expect(prompt).toContain('prefer adding at least one relation in createAct')
+    })
+})

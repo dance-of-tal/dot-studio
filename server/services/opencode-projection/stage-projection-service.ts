@@ -7,6 +7,7 @@ import { resolveRuntimeModel } from '../../lib/model-catalog.js'
 import { resolveRuntimeTools, type RuntimeToolResolution } from '../../lib/runtime-tools.js'
 import {
     cleanGroupFiles,
+    toRelativePath,
     updateGitExclude,
     updateManifestGroup,
     resolveAgentIdentity,
@@ -75,7 +76,6 @@ export interface PerformerProjectionInput {
     model: ModelSelection
     modelVariant?: string | null
     mcpServerNames: string[]
-    executionDir: string
     workingDir: string
     requestTargets?: Array<{
         performerId: string
@@ -154,9 +154,9 @@ async function resolveCapabilitySnapshot(cwd: string, model: ModelSelection): Pr
 
 export async function ensurePerformerProjection(input: PerformerProjectionInput): Promise<EnsuredPerformerProjection> {
     const workspaceHash = computeWorkspaceHash(input.workingDir)
-    const toolResolution = await resolveRuntimeTools(input.executionDir, input.model, input.mcpServerNames)
+    const toolResolution = await resolveRuntimeTools(input.workingDir, input.model, input.mcpServerNames)
     const toolMap = buildProjectedToolMap(
-        await allMcpToolIds(input.executionDir),
+        await allMcpToolIds(input.workingDir),
         toolResolution.resolvedTools,
     )
 
@@ -169,11 +169,11 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
     const skills: CompiledSkill[] = []
     for (const ref of input.danceRefs) {
         skills.push(await compileDance(
-            input.executionDir,
+            input.workingDir,
             ref,
             workspaceHash,
             input.performerId,
-            input.executionDir,
+            input.workingDir,
             input.scope || 'workspace',
             input.actId,
         ))
@@ -189,7 +189,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
     const compileScope = input.scope === 'workspace' ? 'stage' : input.scope
 
     const compiled = await compilePerformer(
-        input.executionDir,
+        input.workingDir,
         {
             performerId: input.performerId,
             performerName: input.performerName,
@@ -197,7 +197,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             model: input.model,
             modelVariant: input.modelVariant || null,
             workspaceHash,
-            executionDir: input.executionDir,
+            executionDir: input.workingDir,
             scope: compileScope || 'stage',
             actId: input.actId,
             skillNames: skills.map((skill) => skill.logicalName),
@@ -218,7 +218,7 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
             ...COLLABORATION_TOOL_NAMES,
             ...LEGACY_COLLABORATION_TOOL_NAMES,
         ])
-        const toolsDir = path.join(input.executionDir, '.opencode', 'tools')
+        const toolsDir = path.join(input.workingDir, '.opencode', 'tools')
         try {
             const existing = await fs.readdir(toolsDir)
             for (const file of existing) {
@@ -235,33 +235,17 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         }
 
         for (const tool of input.extraTools) {
-            const toolPath = path.join(input.executionDir, '.opencode', 'tools', `${tool.name}.ts`)
-            compiled.allFiles.push(toolPath)
+            const toolPath = path.join(input.workingDir, '.opencode', 'tools', `${tool.name}.ts`)
+            compiled.allFiles.push(toRelativePath(input.workingDir, toolPath))
             changed = (await writeIfChanged(toolPath, tool.content)) || changed
         }
     }
 
-    await cleanGroupFiles(input.executionDir, groupKey(input.performerId), compiled.allFiles)
+    await cleanGroupFiles(input.workingDir, groupKey(input.performerId), compiled.allFiles)
 
     for (const skill of skills) {
         changed = (await writeIfChanged(skill.filePath, skill.content)) || changed
-        // Track additional bundle files (scripts/, references/, assets/) in the manifest.
-        // copyBundleSiblings already wrote these files; we just need to check if any
-        // were new or updated so that opencode reloads when bundle content changes.
-        if (skill.additionalFiles.length > 0) {
-            compiled.allFiles.push(...skill.additionalFiles)
-            // Mark changed if any extra file is newer than the agent file (proxy for freshness)
-            if (!changed) {
-                for (const extra of skill.additionalFiles) {
-                    const stat = await fs.stat(extra).catch(() => null)
-                    const agentStat = await fs.stat(skill.filePath).catch(() => null)
-                    if (stat && agentStat && stat.mtimeMs > agentStat.mtimeMs) {
-                        changed = true
-                        break
-                    }
-                }
-            }
-        }
+        changed = skill.bundleChanged || changed
     }
     changed = (await writeIfChanged(compiled.agentPaths.build!, compiled.agentContents.build!)) || changed
     if (compiled.agentPaths.plan && compiled.agentContents.plan) {
@@ -269,22 +253,22 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
     }
 
     await updateManifestGroup(
-        input.executionDir,
+        input.workingDir,
         workspaceHash,
         groupKey(input.performerId),
         compiled.allFiles,
     )
-    await updateGitExclude(input.executionDir)
+    await updateGitExclude(input.workingDir)
 
     if (changed) {
         const oc = await getOpencode()
-        await oc.instance.dispose({ directory: input.executionDir }).catch(() => {})
+        await oc.instance.dispose({ directory: input.workingDir }).catch(() => {})
     }
 
     return {
         compiled,
         toolResolution,
-        capabilitySnapshot: await resolveCapabilitySnapshot(input.executionDir, input.model),
+        capabilitySnapshot: await resolveCapabilitySnapshot(input.workingDir, input.model),
     }
 }
 

@@ -1,4 +1,5 @@
 import type {
+    AssistantParticipantSubscriptions,
     AssistantStageActParticipantSummary,
     AssistantStageActRelationSummary,
     AssistantStageActSummary,
@@ -6,7 +7,7 @@ import type {
 } from '../../../shared/assistant-actions'
 import { resolvePerformerRuntimeConfig } from '../../lib/performers'
 import type { ActRelation, PerformerNode, WorkspaceAct, WorkspaceActParticipantBinding } from '../../types'
-import { ASSISTANT_PERFORMER_ID } from '../assistantSlice'
+import { isAssistantChatKey } from '../assistantSlice'
 import type { ChatGet } from './chat-internals'
 
 const EMPTY_RUNTIME_CONFIG = {
@@ -43,12 +44,23 @@ function resolveParticipantSummary(
             ? performerByRegistryUrn(performers, binding.performerRef.urn)
             : null
 
+    const subscriptions: AssistantParticipantSubscriptions | undefined = binding.subscriptions
+        ? {
+            ...(binding.subscriptions.messagesFrom ? { messagesFrom: binding.subscriptions.messagesFrom } : {}),
+            ...(binding.subscriptions.messageTags ? { messageTags: binding.subscriptions.messageTags } : {}),
+            ...(binding.subscriptions.callboardKeys ? { callboardKeys: binding.subscriptions.callboardKeys } : {}),
+            ...(binding.subscriptions.eventTypes ? { eventTypes: binding.subscriptions.eventTypes } : {}),
+        }
+        : undefined
+
     return {
         key: participantKey,
         performerName: performer?.name || binding?.displayName || (binding?.performerRef?.kind === 'registry'
             ? binding.performerRef.urn
             : binding?.performerRef?.draftId || participantKey),
         performerId: performer?.id || null,
+        displayName: binding.displayName,
+        ...(subscriptions ? { subscriptions } : {}),
     }
 }
 
@@ -67,13 +79,15 @@ function resolveActSummary(get: ChatGet, act: WorkspaceAct): AssistantStageActSu
     return {
         id: act.id,
         name: act.name,
+        description: act.description,
+        actRules: act.actRules,
         participants,
         relations,
     }
 }
 
 export function isAssistantPerformerId(performerId: string): boolean {
-    return performerId === ASSISTANT_PERFORMER_ID
+    return isAssistantChatKey(performerId)
 }
 
 export function buildAssistantStageContext(get: ChatGet): AssistantStageContext | null {
@@ -101,7 +115,7 @@ export function buildAssistantStageContext(get: ChatGet): AssistantStageContext 
         acts: state.acts.map((act) => resolveActSummary(get, act)),
         drafts: Object.values(state.drafts)
             .filter((draft): draft is typeof draft & { kind: 'tal' | 'dance' } =>
-                draft.kind === 'tal' || draft.kind === 'dance',
+                (draft.kind === 'tal' || draft.kind === 'dance') && draft.saveState === 'saved',
             )
             .map((draft) => ({
                 id: draft.id,
@@ -135,7 +149,6 @@ export function resolveChatRuntimeTarget(get: ChatGet, performerId: string) {
                     }
                     : null,
             },
-            executionMode: 'direct' as const,
             assistantContext: buildAssistantStageContext(get),
         }
     }
@@ -149,7 +162,6 @@ export function resolveChatRuntimeTarget(get: ChatGet, performerId: string) {
         isAssistant: false,
         name: performer.name || 'Untitled Performer',
         runtimeConfig: resolvePerformerRuntimeConfig(performer),
-        executionMode: performer.executionMode === 'safe' ? 'safe' as const : 'direct' as const,
         assistantContext: null,
     }
 }
