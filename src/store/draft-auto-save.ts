@@ -62,6 +62,8 @@ export function initDraftAutoSave(
             _timers.set(performer.id, setTimeout(() => {
                 _timers.delete(performer.id)
 
+                const description = performer.meta?.authoring?.description || performer.name
+
                 const content = {
                     talRef: performer.talRef || null,
                     danceRefs: performer.danceRefs || [],
@@ -79,6 +81,7 @@ export function initDraftAutoSave(
                 api.drafts.update('performer', draftId, {
                     name: `${performer.name} (modified)`,
                     content,
+                    description,
                     derivedFrom,
                 }).catch(() => {
                     api.drafts.create({
@@ -86,6 +89,7 @@ export function initDraftAutoSave(
                         id: draftId,
                         name: `${performer.name} (modified)`,
                         content,
+                        description,
                         derivedFrom,
                     }).catch((err) => {
                         console.warn('[auto-save] Failed to save performer draft', err)

@@ -21,7 +21,6 @@ export interface ResolvedPerformerConfig {
     mcpServerNames: string[]
     agentId: string | null
     planMode: boolean
-    executionMode: 'direct' | 'safe'
 }
 
 /**
@@ -38,7 +37,6 @@ interface WorkspacePerformer {
     mcpServerNames: string[]
     agentId?: string | null
     planMode?: boolean
-    executionMode?: 'direct' | 'safe'
     meta?: {
         derivedFrom?: string | null
     }
@@ -96,7 +94,6 @@ export async function resolvePerformerForWake(
         mcpServerNames: performer.mcpServerNames || [],
         agentId: performer.agentId ?? null,
         planMode: performer.planMode ?? false,
-        executionMode: performer.executionMode || 'direct',
     }
 }
 

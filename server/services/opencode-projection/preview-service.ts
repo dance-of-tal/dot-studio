@@ -18,7 +18,6 @@ export async function compileProjectionPreview(
         model: request.model,
         modelVariant: request.modelVariant || null,
         mcpServerNames: request.mcpServerNames || [],
-        executionDir: cwd,
         workingDir: cwd,
         requestTargets: getCompileRequestTargets(request),
     })

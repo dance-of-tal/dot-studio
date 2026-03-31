@@ -1,14 +1,16 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { assetFilePath, danceAssetDir, ensureDotDir, getGlobalCwd } from './dot-source.js'
+import { assetFilePath, danceAssetDir, ensureDotDir, getGlobalCwd, getRegistryPackage, readAsset } from './dot-source.js'
 import {
+    buildPublishPlan,
+    executePublishPlan,
+    existsInRegistry,
     getPayloadTags,
     loadLocalAssetByUrn,
     parseDotAsset,
-    parseUrn,
-    publishSingleAsset,
-    resolveDependencies,
+    parseDotAssetUrn,
 } from './dot-source.js'
+import { buildCanonicalStudioAssetUrn, stageFromWorkingDir } from '../../shared/publish-stage.js'
 
 const SLUG_RE = /^[a-z0-9][a-z0-9._-]{1,98}[a-z0-9]$/
 
@@ -19,25 +21,18 @@ type AuthUser = {
     username: string
 }
 
+type ProvidedPublishAsset = {
+    kind: 'tal' | 'performer' | 'act'
+    urn: string
+    payload: Record<string, unknown>
+    tags?: string[]
+}
+
 // Re-export auth helpers so dot-service.ts can import from one place
 export { readAuthUser as readDotAuthUser, clearAuthUser as clearDotAuthUser } from './dot-source.js'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-/**
- * Derives the URN stage from the working directory.
- * Uses the sanitized basename of the cwd (e.g. /projects/my-app → my-app).
- */
-function stageFromCwd(cwd: string): string {
-    const base = path.basename(cwd)
-    // Sanitize to lowercase slug format
-    return base
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        || 'default'
 }
 
 function sanitizeSlug(value: string) {
@@ -75,11 +70,10 @@ function ensureUrn(value: unknown, kind: StudioAssetKind) {
         throw new Error(`${kind} reference must be a string URN.`)
     }
     const urn = value.trim()
-    const parts = urn.split('/')
-    // Accept both 3-segment (kind/@owner/name) and 4-segment (kind/@owner/stage/name)
-    const validLength = parts.length === 3 || parts.length === 4
-    if (!validLength || parts[0] !== kind || !parts[1].startsWith('@') || !parts[parts.length - 1]) {
-        throw new Error(`Invalid URN '${urn}'. Expected ${kind}/@<owner>/<name> or ${kind}/@<owner>/<stage>/<name>.`)
+    try {
+        parseDotAssetUrn(urn, kind)
+    } catch {
+        throw new Error(`Invalid URN '${urn}'. Expected ${kind}/@<owner>/<stage>/<name>.`)
     }
     return urn
 }
@@ -88,11 +82,107 @@ function finalizeAsset(asset: Record<string, unknown>) {
     return parseDotAsset(asset) as Record<string, unknown>
 }
 
-function normalizeTalPayload(author: string, slug: string, payload: Record<string, unknown>) {
+function parseDanceUrn(urn: string) {
+    const parts = urn.split('/')
+    if (parts.length !== 4 || parts[0] !== 'dance' || !parts[1].startsWith('@')) {
+        return null
+    }
+    return {
+        owner: parts[1].slice(1),
+        stage: parts[2],
+        name: parts[3],
+    }
+}
+
+async function existsDanceInRegistry(urn: string) {
+    const parsed = parseDanceUrn(urn)
+    if (!parsed) return false
+    try {
+        await getRegistryPackage('dance', parsed.owner, parsed.stage, parsed.name)
+        return true
+    } catch {
+        return false
+    }
+}
+
+async function ensureDanceUrnPublished(cwd: string, urn: string) {
+    if (await existsDanceInRegistry(urn)) {
+        return
+    }
+
+    const local = await readAsset(cwd, urn)
+    if (local) {
+        throw new Error(`Dance dependency '${urn}' is local-only. Export it from the Dance editor, upload it to GitHub, import it from Asset Library, and then try again.`)
+    }
+
+    throw new Error(`Dance dependency '${urn}' is missing from the registry.`)
+}
+
+async function ensurePerformerDanceDependencies(cwd: string, payload: Record<string, unknown>) {
+    const parsed = parseDotAsset(payload)
+    if (parsed.kind !== 'performer') {
+        return
+    }
+
+    for (const danceUrn of parsed.payload.dances || []) {
+        await ensureDanceUrnPublished(cwd, danceUrn)
+    }
+}
+
+function mapProvidedAssetsByUrn(providedAssets: ProvidedPublishAsset[]) {
+    return new Map(providedAssets.map((asset) => [asset.urn, asset]))
+}
+
+async function ensureActDanceDependencies(cwd: string, payload: Record<string, unknown>, providedAssets: ProvidedPublishAsset[]) {
+    const parsed = parseDotAsset(payload)
+    if (parsed.kind !== 'act') {
+        return
+    }
+
+    const providedAssetsByUrn = mapProvidedAssetsByUrn(providedAssets)
+
+    for (const participant of parsed.payload.participants) {
+        const performerUrn = participant.performer
+        if (!performerUrn) continue
+
+        const providedPerformer = providedAssetsByUrn.get(performerUrn)
+        if (providedPerformer) {
+            await ensurePerformerDanceDependencies(cwd, providedPerformer.payload)
+            continue
+        }
+
+        if (await existsInRegistry(performerUrn)) {
+            continue
+        }
+
+        const localPerformer = await loadLocalAssetByUrn(cwd, performerUrn)
+        if (!localPerformer) {
+            throw new Error(`Participant performer dependency '${performerUrn}' is missing from both local assets and the registry.`)
+        }
+
+        await ensurePerformerDanceDependencies(cwd, localPerformer)
+    }
+}
+
+export async function ensurePublishableDependencies(
+    cwd: string,
+    kind: StudioAssetKind,
+    payload: Record<string, unknown>,
+    providedAssets: ProvidedPublishAsset[] = [],
+) {
+    if (kind === 'performer') {
+        await ensurePerformerDanceDependencies(cwd, payload)
+        return
+    }
+    if (kind === 'act') {
+        await ensureActDanceDependencies(cwd, payload, providedAssets)
+    }
+}
+
+function normalizeTalPayload(author: string, stage: string, slug: string, payload: Record<string, unknown>) {
     return finalizeAsset({
-        $schema: 'https://schemas.danceoftal.com/assets/tal.v1.json' as const,
         kind: 'tal' as const,
-        urn: `tal/@${author}/${slug}`,
+        urn: buildCanonicalStudioAssetUrn('tal', author, stage, slug),
         ...(normalizeDescription(payload.description) ? { description: normalizeDescription(payload.description) } : {}),
         tags: sanitizeTags(payload.tags),
         payload: {
@@ -103,9 +193,8 @@ function normalizeTalPayload(author: string, slug: string, payload: Record<strin
 
 function normalizeDancePayload(author: string, stage: string, slug: string, payload: Record<string, unknown>) {
     return finalizeAsset({
-        $schema: 'https://schemas.danceoftal.com/assets/dance.v1.json' as const,
         kind: 'dance' as const,
-        urn: `dance/@${author}/${stage}/${slug}`,
+        urn: buildCanonicalStudioAssetUrn('dance', author, stage, slug),
         ...(normalizeDescription(payload.description) ? { description: normalizeDescription(payload.description) } : {}),
         tags: sanitizeTags(payload.tags),
         payload: {
@@ -114,7 +203,7 @@ function normalizeDancePayload(author: string, stage: string, slug: string, payl
     })
 }
 
-function normalizePerformerPayload(author: string, slug: string, payload: Record<string, unknown>) {
+function normalizePerformerPayload(author: string, stage: string, slug: string, payload: Record<string, unknown>) {
     const dances = Array.isArray(payload.dances)
         ? payload.dances.map((value) => ensureUrn(value, 'dance'))
         : undefined
@@ -130,9 +219,8 @@ function normalizePerformerPayload(author: string, slug: string, payload: Record
     }
 
     return finalizeAsset({
-        $schema: 'https://schemas.danceoftal.com/assets/performer.v1.json' as const,
         kind: 'performer' as const,
-        urn: `performer/@${author}/${slug}`,
+        urn: buildCanonicalStudioAssetUrn('performer', author, stage, slug),
         ...(normalizeDescription(payload.description) ? { description: normalizeDescription(payload.description) } : {}),
         tags: sanitizeTags(payload.tags),
         payload: {
@@ -145,11 +233,10 @@ function normalizePerformerPayload(author: string, slug: string, payload: Record
     })
 }
 
-function normalizeActPayload(author: string, slug: string, payload: Record<string, unknown>) {
+function normalizeActPayload(author: string, stage: string, slug: string, payload: Record<string, unknown>) {
     return finalizeAsset({
-        $schema: 'https://schemas.danceoftal.com/assets/act.v1.json' as const,
         kind: 'act' as const,
-        urn: `act/@${author}/${slug}`,
+        urn: buildCanonicalStudioAssetUrn('act', author, stage, slug),
         ...(normalizeDescription(payload.description) ? { description: normalizeDescription(payload.description) } : {}),
         tags: sanitizeTags(payload.tags),
         payload: {
@@ -160,25 +247,24 @@ function normalizeActPayload(author: string, slug: string, payload: Record<strin
     })
 }
 
-export function normalizeStudioAssetPayload(kind: StudioAssetKind, authorInput: string, slugInput: string, payloadInput: unknown) {
+export function normalizeStudioAssetPayload(kind: StudioAssetKind, authorInput: string, slugInput: string, payloadInput: unknown, stageInput = 'default') {
     if (!isRecord(payloadInput)) {
         throw new Error('Asset payload must be a JSON object.')
     }
 
     const author = sanitizeAuthor(authorInput)
     const slug = sanitizeSlug(slugInput)
+    const stage = sanitizeSlug(stageInput)
 
     switch (kind) {
         case 'tal':
-            return normalizeTalPayload(author, slug, payloadInput)
+            return normalizeTalPayload(author, stage, slug, payloadInput)
         case 'dance':
-            // Dance URN requires a stage — caller must pass stage in slug as 'stage/name'
-            // or use saveLocalStudioAsset which derives stage from cwd
-            return normalizeDancePayload(author, 'default', slug, payloadInput)
+            return normalizeDancePayload(author, stage, slug, payloadInput)
         case 'performer':
-            return normalizePerformerPayload(author, slug, payloadInput)
+            return normalizePerformerPayload(author, stage, slug, payloadInput)
         case 'act':
-            return normalizeActPayload(author, slug, payloadInput)
+            return normalizeActPayload(author, stage, slug, payloadInput)
     }
 }
 
@@ -192,9 +278,8 @@ export async function saveLocalStudioAsset(options: {
 }) {
     const author = sanitizeAuthor(options.author)
     const slug = sanitizeSlug(options.slug)
-    const stage = stageFromCwd(options.cwd)
-    // All Studio assets use 4-segment URN: kind/@author/stage/name
-    const urn = `${options.kind}/@${author}/${stage}/${slug}`
+    const stage = stageFromWorkingDir(options.cwd)
+    const urn = buildCanonicalStudioAssetUrn(options.kind, author, stage, slug)
     await ensureDotDir(options.cwd)
 
     if (options.kind === 'dance') {
@@ -228,7 +313,7 @@ export async function saveLocalStudioAsset(options: {
     }
 
     // Tal / Performer / Act — JSON file with 4-segment URN embedded
-    const normalized = normalizeStudioAssetPayload(options.kind, author, slug, options.payload) as Record<string, unknown>
+    const normalized = normalizeStudioAssetPayload(options.kind, author, slug, options.payload, stage) as Record<string, unknown>
     // Override the URN embedded in the normalized payload to be 4-segment
     ;(normalized as Record<string, unknown>).urn = urn
     const filePath = assetFilePath(options.cwd, urn)
@@ -252,10 +337,43 @@ export async function publishStudioAsset(options: {
     slug: string
     payload?: unknown
     tags?: string[]
+    providedAssets?: ProvidedPublishAsset[]
     auth: AuthUser
 }) {
+    if (options.kind === 'dance') {
+        throw new Error('Dance assets cannot be published via the Studio registry pipeline. Export the draft, upload it to GitHub, and import it from Asset Library as Dance.')
+    }
+
     const slug = sanitizeSlug(options.slug)
     const username = sanitizeAuthor(options.auth.username)
+    const stage = stageFromWorkingDir(options.cwd)
+    const urn = buildCanonicalStudioAssetUrn(options.kind, username, stage, slug)
+    const providedAssets = (options.providedAssets || []).map((asset) => {
+        const parsed = parseDotAsset(asset.payload)
+        if (parsed.kind === 'dance') {
+            throw new Error('Dance assets are not accepted as Studio publish dependencies.')
+        }
+        if (parsed.kind !== asset.kind) {
+            throw new Error(`Provided asset '${asset.urn}' kind does not match its payload.`)
+        }
+        if (parsed.urn !== asset.urn) {
+            throw new Error(`Provided asset '${asset.urn}' does not match payload URN '${parsed.urn}'.`)
+        }
+
+        const parsedUrn = parseDotAssetUrn(asset.urn, asset.kind)
+        if (parsedUrn.owner.toLowerCase() !== username.toLowerCase()) {
+            throw new Error(`Provided asset '${asset.urn}' must belong to @${username}.`)
+        }
+
+        return {
+            kind: asset.kind,
+            urn: parsed.urn,
+            payload: parsed as Record<string, unknown>,
+            tags: sanitizeTags(asset.tags).length > 0
+                ? sanitizeTags(asset.tags)
+                : sanitizeTags(getPayloadTags(parsed as Record<string, unknown>)),
+        }
+    })
     let localPayload: Record<string, unknown>
 
     if (options.payload !== undefined) {
@@ -268,7 +386,6 @@ export async function publishStudioAsset(options: {
         })
         localPayload = saved.payload
     } else {
-        const urn = `${options.kind}/@${username}/${slug}`
         const existing = await loadLocalAssetByUrn(options.cwd, urn)
         if (!existing) {
             throw new Error(`Local asset '${urn}' was not found. Save it locally before publishing.`)
@@ -276,64 +393,31 @@ export async function publishStudioAsset(options: {
         localPayload = existing
     }
 
-    const dependenciesPublished: string[] = []
-    const dependenciesSkipped: string[] = []
-    const dependenciesExisting: string[] = []
+    await ensurePublishableDependencies(options.cwd, options.kind, localPayload, providedAssets)
 
-    if (options.kind === 'performer' || options.kind === 'act') {
-        const dependencies = await resolveDependencies(options.cwd, options.kind, localPayload, username)
-        const foreignMissing = dependencies.filter((dep) => dep.status === 'foreign_missing')
-        if (foreignMissing.length > 0) {
-            throw new Error(
-                `Cannot publish because some dependencies are missing from the registry and belong to other authors: ${foreignMissing.map((dep) => dep.urn).join(', ')}.`
-            )
-        }
-
-        for (const dependency of dependencies) {
-            if (dependency.status === 'exists') {
-                dependenciesExisting.push(dependency.urn)
-                continue
-            }
-            if (!dependency.payload) {
-                continue
-            }
-
-            const parsed = parseUrn(dependency.urn)
-            if (!parsed) {
-                continue
-            }
-            const published = await publishSingleAsset(parsed.kind, parsed.stage, parsed.name, dependency.payload, sanitizeTags(getPayloadTags(dependency.payload)), options.auth.token)
-            if (published) {
-                dependenciesPublished.push(dependency.urn)
-            } else {
-                dependenciesSkipped.push(dependency.urn)
-            }
-        }
-    }
-
-    // Dance assets are not publishable through the Studio registry pipeline
-    if (options.kind === 'dance') {
-        throw new Error('Dance assets cannot be published via the Studio registry pipeline. Use `dot add` to register from GitHub.')
-    }
-
-    const publishKind = options.kind as 'tal' | 'performer' | 'act'
-    // publishStudioAsset receives `options.slug` which is name only; stage is embedded in URN.
-    // For the studio, all assets use the stage from `parseUrn` of the built URN.
-    // The registry API needs (kind, stage, name, ...) — stage is the slug middle segment.
-    // Studio draft slugs are simple (no stage prefix), so we use the username as the stage owner.
-    // For now stage == slug to maintain backward compat (studio always publishes to the user's root stage).
     const tags = options.tags && options.tags.length > 0 ? sanitizeTags(options.tags) : sanitizeTags(getPayloadTags(localPayload))
-    const publishUrn = parseUrn(`${publishKind}/@${username}/${slug}`)
-    const publishStage = publishUrn?.stage ?? slug
-    const mainPublished = await publishSingleAsset(publishKind, publishStage, slug, localPayload, tags, options.auth.token)
-    const urn = `${options.kind}/@${username}/${slug}`
+    const publishKind = options.kind as 'tal' | 'performer' | 'act'
+    const plan = await buildPublishPlan({
+        cwd: options.cwd,
+        username,
+        root: {
+            kind: publishKind,
+            urn,
+            payload: localPayload,
+            tags,
+        },
+        providedAssets: Object.fromEntries(
+            providedAssets.map((asset) => [asset.urn, asset]),
+        ),
+    })
+    const publishResult = await executePublishPlan(plan, options.auth.token)
 
     return {
         urn,
-        published: mainPublished,
-        dependenciesPublished,
-        dependenciesSkipped,
-        dependenciesExisting,
+        published: publishResult.rootPublished,
+        dependenciesPublished: publishResult.published.filter((entryUrn) => entryUrn !== urn),
+        dependenciesSkipped: publishResult.skipped.filter((entryUrn) => entryUrn !== urn),
+        dependenciesExisting: publishResult.existing,
     }
 }
 

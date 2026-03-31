@@ -51,6 +51,7 @@ type PerformerEditPanelProps = {
     hideBackButton?: boolean
     onClose: () => void
     onNameChange: (value: string) => void
+    onDescriptionChange: (value: string) => void
     onTalRefChange: (ref: AssetRef | null) => void
     onDanceDeliveryModeChange: (value: DanceDeliveryMode) => void
     onModelChange: (model: ModelConfig | null) => void
@@ -74,6 +75,7 @@ export default function PerformerEditPanel({
     hideBackButton,
     onClose,
     onNameChange,
+    onDescriptionChange,
     onTalRefChange,
     onDanceDeliveryModeChange,
     onModelChange,
@@ -153,6 +155,15 @@ export default function PerformerEditPanel({
                                 className="text-input nodrag nowheel"
                                 value={performer?.name || ''}
                                 onChange={(event) => onNameChange(event.target.value)}
+                            />
+                        </label>
+                        <label className="adv-field">
+                            <span className="adv-field__label">Description</span>
+                            <input
+                                className="text-input nodrag nowheel"
+                                value={performer?.meta?.authoring?.description || ''}
+                                onChange={(event) => onDescriptionChange(event.target.value)}
+                                placeholder="Describe this performer"
                             />
                         </label>
                     </div>

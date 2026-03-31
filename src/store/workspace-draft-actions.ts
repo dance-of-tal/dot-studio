@@ -1,5 +1,5 @@
 import { api } from '../api'
-import type { AssetRef, DanceDeliveryMode, DraftAsset, ExecutionMode, MarkdownEditorNode, WorkspaceActParticipantBinding, ActRelation } from '../types'
+import type { AssetRef, DanceDeliveryMode, DraftAsset, MarkdownEditorNode, WorkspaceActParticipantBinding, ActRelation } from '../types'
 import { ACT_DEFAULT_EXPANDED_HEIGHT, ACT_DEFAULT_WIDTH } from '../lib/act-layout'
 import { createPerformerNode } from '../lib/performers'
 import { createActParticipantKey } from './act-slice-helpers'
@@ -19,7 +19,6 @@ type PerformerDraftContent = {
     mcpBindingMap?: Record<string, string>
     danceDeliveryMode?: DanceDeliveryMode
     planMode?: boolean
-    executionMode?: ExecutionMode
 }
 
 type ActDraftParticipant = {
@@ -60,6 +59,10 @@ export function upsertDraftImpl(
         workspaceDirty: true,
     }))
 
+    if (draft.saveState === 'unsaved') {
+        return
+    }
+
     scheduleDraftPersist(draft.id, () => {
         const current = get().drafts[draft.id]
         if (!current) return
@@ -72,24 +75,90 @@ export function upsertDraftImpl(
             tags: current.tags,
             derivedFrom: current.derivedFrom,
         }).catch((error) => {
-            api.drafts.create({
-                kind,
-                name: current.name,
-                content: current.content,
-                slug: current.slug,
-                description: current.description,
-                tags: current.tags,
-                derivedFrom: current.derivedFrom,
-            }).catch(() => {
-                console.warn('Failed to persist draft to disk', error)
-            })
+            console.warn('Failed to persist draft to disk', error)
         })
     })
+}
+
+export async function saveMarkdownDraftImpl(
+    get: GetState,
+    set: SetState,
+    editorId: string,
+): Promise<DraftAsset> {
+    const editor = get().markdownEditors.find((entry) => entry.id === editorId)
+    if (!editor) {
+        throw new Error('Markdown editor not found.')
+    }
+
+    const draft = get().drafts[editor.draftId]
+    if (!draft) {
+        throw new Error('Draft not found.')
+    }
+    if ((editor.kind !== 'tal' && editor.kind !== 'dance') || (draft.kind !== 'tal' && draft.kind !== 'dance')) {
+        throw new Error('Markdown draft kind mismatch.')
+    }
+    if (!draft.name.trim()) {
+        throw new Error('Draft name is required.')
+    }
+
+    const payload = {
+        id: draft.id,
+        kind: draft.kind,
+        name: draft.name,
+        content: draft.content,
+        slug: draft.slug,
+        description: draft.description,
+        tags: draft.tags,
+        derivedFrom: draft.derivedFrom,
+    }
+
+    const saved = draft.saveState === 'saved'
+        ? await api.drafts.update(draft.kind, draft.id, payload)
+        : await api.drafts.create(payload)
+
+    const nextDraft: DraftAsset = {
+        id: saved.id,
+        kind: saved.kind,
+        name: saved.name,
+        content: saved.content,
+        slug: saved.slug,
+        description: saved.description,
+        tags: saved.tags,
+        derivedFrom: saved.derivedFrom,
+        updatedAt: saved.updatedAt || Date.now(),
+        saveState: 'saved',
+    }
+
+    set((state: StudioState) => ({
+        drafts: {
+            ...state.drafts,
+            [saved.id]: nextDraft,
+        },
+        markdownEditors: state.markdownEditors.map((entry) => (
+            entry.id !== editorId
+                ? entry
+                : {
+                    ...entry,
+                    draftId: saved.id,
+                    baseline: {
+                        name: nextDraft.name,
+                        slug: nextDraft.slug || '',
+                        description: nextDraft.description || '',
+                        tags: nextDraft.tags || [],
+                        content: typeof nextDraft.content === 'string' ? nextDraft.content : '',
+                    },
+                }
+        )),
+        workspaceDirty: true,
+    }))
+
+    return nextDraft
 }
 
 export async function savePerformerAsDraftImpl(get: GetState, set: SetState, performerId: string) {
     const performer = get().performers.find((item) => item.id === performerId)
     if (!performer) return
+    const description = performer.meta?.authoring?.description || performer.name
 
     const draftContent = {
         talRef: performer.talRef || null,
@@ -101,7 +170,6 @@ export async function savePerformerAsDraftImpl(get: GetState, set: SetState, per
         danceDeliveryMode: performer.danceDeliveryMode || 'auto',
         planMode: performer.planMode || false,
         agentId: performer.agentId || null,
-        executionMode: performer.executionMode || 'direct',
     }
 
     try {
@@ -109,7 +177,7 @@ export async function savePerformerAsDraftImpl(get: GetState, set: SetState, per
             kind: 'performer',
             name: performer.name,
             content: draftContent,
-            description: performer.name,
+            description,
         })
 
         set((state: StudioState) => ({
@@ -122,6 +190,7 @@ export async function savePerformerAsDraftImpl(get: GetState, set: SetState, per
                     content: draft.content,
                     description: draft.description,
                     updatedAt: draft.updatedAt,
+                    saveState: 'saved',
                 },
             },
             workspaceDirty: true,
@@ -146,6 +215,7 @@ export async function loadDraftsFromDiskImpl(set: SetState) {
                 tags: draft.tags,
                 derivedFrom: draft.derivedFrom,
                 updatedAt: draft.updatedAt || Date.now(),
+                saveState: 'saved',
             }
         }
         set({ drafts: draftsMap })
@@ -203,6 +273,7 @@ export async function saveActAsDraftImpl(get: GetState, set: SetState, actId: st
                     content: draft.content,
                     description: draft.description,
                     updatedAt: draft.updatedAt,
+                    saveState: 'saved',
                 },
             },
             workspaceDirty: true,
@@ -218,11 +289,13 @@ export function addPerformerFromDraftImpl(
     performerIdCounter: { value: number },
     name: string,
     draftContent: PerformerDraftContent,
+    description?: string,
 ) {
     performerIdCounter.value++
     const id = `performer-${performerIdCounter.value}`
     const finalX = get().canvasCenter?.x ?? (60 + (get().performers.length * 28))
     const finalY = get().canvasCenter?.y ?? (60 + (get().performers.length * 20))
+    const authoringDescription = description?.trim()
 
     const node = createPerformerNode({
         id,
@@ -237,7 +310,15 @@ export function addPerformerFromDraftImpl(
         mcpBindingMap: draftContent.mcpBindingMap || {},
         danceDeliveryMode: draftContent.danceDeliveryMode || 'auto',
         planMode: draftContent.planMode || false,
-        executionMode: ((draftContent as Record<string, unknown>)?.executionMode as ExecutionMode) || 'direct',
+        ...(authoringDescription
+            ? {
+                meta: {
+                    authoring: {
+                        description: authoringDescription,
+                    },
+                },
+            }
+            : {}),
     })
 
     set((state: StudioState) => ({
@@ -355,7 +436,6 @@ export function importActFromDraftImpl(
             mcpBindingMap: perfContent?.mcpBindingMap || {},
             danceDeliveryMode: perfContent?.danceDeliveryMode || 'auto',
             planMode: perfContent?.planMode || false,
-            executionMode: ((perfContent as Record<string, unknown> | null)?.executionMode as ExecutionMode) || 'direct',
             meta: { derivedFrom: derivedTag },
         })
 
@@ -422,6 +502,7 @@ export function createMarkdownEditorImpl(
                     content,
                     derivedFrom: source?.derivedFrom || undefined,
                     updatedAt: Date.now(),
+                    saveState: 'unsaved',
                 },
             },
             markdownEditors: [

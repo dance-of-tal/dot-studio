@@ -3,16 +3,18 @@ import { Paperclip, Sparkles, GitCompare } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { ChatMessage } from '../../types'
 import ThreadBody from '../chat/ThreadBody'
-import ChatMessageContent, {
+import ChatMessageContent from '../chat/ChatMessageContent'
+import {
     hasVisibleAssistantMessageContent,
-} from '../chat/ChatMessageContent'
-import { hasVisibleUserMessageContent } from '../chat/chat-message-visibility'
+    hasVisibleUserMessageContent,
+    isStreamingAssistantMessage,
+    shouldShowAssistantLoadingPlaceholder,
+} from '../chat/chat-message-visibility'
 import MessageActionBar from '../chat/MessageActionBar'
 import { SessionRevertDock } from '../../components/chat/SessionRevertDock'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
 import { SessionReview, collectSessionDiffs } from '../chat/SessionReview'
-import { shouldShowChatLoading } from './agent-frame-utils'
 import { useStudioStore } from '../../store'
 import { selectPendingPermission, selectSessionIdForChatKey, selectTodos } from '../../store/session'
 
@@ -114,7 +116,7 @@ export default function PerformerThreadView({
             )}
             <ThreadBody
                 messages={visibleMessages}
-                loading={shouldShowChatLoading(visibleMessages, isLoading)}
+                loading={shouldShowAssistantLoadingPlaceholder(visibleMessages, isLoading)}
                 renderEmpty={() => (
                     <div className="chat-empty-state">
                         <Sparkles size={28} className="empty-icon" />
@@ -124,6 +126,7 @@ export default function PerformerThreadView({
                 )}
                 renderMessage={(msg, index) => {
                     const isCurrentSession = index >= prefixCount
+                    const isStreamingAssistant = isStreamingAssistantMessage(visibleMessages, index, isLoading)
                     if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
                         return null
                     }
@@ -147,7 +150,7 @@ export default function PerformerThreadView({
                                     ) : null}
                                 </div>
                             ) : (
-                                <ChatMessageContent message={msg} />
+                                <ChatMessageContent message={msg} streaming={isStreamingAssistant} />
                             )}
                             {msg.role === 'user' && isCurrentSession ? (
                                 <MessageActionBar

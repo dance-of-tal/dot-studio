@@ -15,6 +15,7 @@ import {
     getGlobalDotDir,
     getRegistryPackage,
     parseDotAsset,
+    parseDotAssetUrn,
     readAsset,
 } from '../lib/dot-source.js'
 import { readProjectMcpCatalog } from '../lib/project-config.js'
@@ -40,23 +41,12 @@ export type UninstallPlan = {
     dependents: UninstallPlanItem[]
 }
 
-/**
- * Returns the display name/slug of an asset.
- * For 4-segment URNs: kind/@owner/stage/name  → name (segment 3)
- * For 3-segment URNs: kind/@owner/name         → name (segment 2, legacy fallback)
- */
 function assetSlug(asset: ParsedInstalledAsset) {
-    const parts = asset.urn.split('/')
-    return (parts.length === 4 ? parts[3] : parts[2]) || asset.urn
+    return parseDotAssetUrn(asset.urn).name
 }
 
 function assetAuthor(asset: ParsedInstalledAsset) {
-    return asset.urn.split('/')[1] || '@unknown'
-}
-
-function assetStage(asset: ParsedInstalledAsset) {
-    const parts = asset.urn.split('/')
-    return parts.length === 4 ? parts[2] : undefined
+    return `@${parseDotAssetUrn(asset.urn).owner}`
 }
 
 function assetSchema(asset: ParsedInstalledAsset) {
@@ -214,13 +204,19 @@ async function scanAssetDir(
                     }
                 }
             } else {
-                // Tal / Performer / Act: @owner/name.json
-                const files = await fs.readdir(authorDir)
-                for (const file of files) {
-                    if (!file.endsWith('.json')) continue
-                    const parsed = await parseInstalledAssetFile(path.join(authorDir, file))
-                    if (!parsed || parsed.kind !== kind) continue
-                    resultsMap.set(parsed.urn, normalizeAsset(parsed, source, projectMcpServerNames, false))
+                // Tal / Performer / Act: @owner/stage/name.json
+                const stages = await fs.readdir(authorDir)
+                for (const stage of stages) {
+                    const stageDir = path.join(authorDir, stage)
+                    const stageStat = await fs.stat(stageDir).catch(() => null)
+                    if (!stageStat?.isDirectory()) continue
+                    const files = await fs.readdir(stageDir)
+                    for (const file of files) {
+                        if (!file.endsWith('.json')) continue
+                        const parsed = await parseInstalledAssetFile(path.join(stageDir, file))
+                        if (!parsed || parsed.kind !== kind) continue
+                        resultsMap.set(parsed.urn, normalizeAsset(parsed, source, projectMcpServerNames, false))
+                    }
                 }
             }
         }
@@ -271,13 +267,19 @@ async function collectAllInstalledAssets(cwd: string): Promise<InstalledAssetEnt
                             }
                         }
                     } else {
-                        // Tal / Performer / Act: @owner/name.json
-                        const files = await fs.readdir(authorDir)
-                        for (const file of files) {
-                            if (!file.endsWith('.json')) continue
-                            const parsed = await parseInstalledAssetFile(path.join(authorDir, file))
-                            if (!parsed || parsed.kind !== kind) continue
-                            entries.push({ asset: parsed, source: scope.source })
+                        // Tal / Performer / Act: @owner/stage/name.json
+                        const stages = await fs.readdir(authorDir)
+                        for (const stage of stages) {
+                            const stageDir = path.join(authorDir, stage)
+                            const stageStat = await fs.stat(stageDir).catch(() => null)
+                            if (!stageStat?.isDirectory()) continue
+                            const files = await fs.readdir(stageDir)
+                            for (const file of files) {
+                                if (!file.endsWith('.json')) continue
+                                const parsed = await parseInstalledAssetFile(path.join(stageDir, file))
+                                if (!parsed || parsed.kind !== kind) continue
+                                entries.push({ asset: parsed, source: scope.source })
+                            }
                         }
                     }
                 }
@@ -331,26 +333,20 @@ export async function resolveStudioAssetSource(cwd: string, urn: string): Promis
     }
 }
 
-export async function getStudioAsset(cwd: string, kind: string, author: string, assetPath: string) {
-    // Try 4-segment URN first (kind/@author/stage/name), then legacy 3-segment
-    const tryUrns = [
-        `${kind}/@${author}/${assetPath}`,
-    ]
-    // If path doesn't contain '/', also try with stage prefix derived from cwd
-    if (!assetPath.includes('/')) {
-        const { default: pathLib } = await import('path')
-        const stage = pathLib.basename(cwd).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'default'
-        tryUrns.unshift(`${kind}/@${author}/${stage}/${assetPath}`)
+function parseCanonicalAssetPath(assetPath: string) {
+    const [stage, name, ...rest] = String(assetPath || '').trim().split('/').filter(Boolean)
+    if (!stage || !name || rest.length > 0) {
+        throw new Error("Asset path must use canonical '<stage>/<name>' format.")
     }
+    return { stage, name }
+}
 
-    let raw: Record<string, unknown> | null = null
-    let resolvedUrn = ''
-    for (const urn of tryUrns) {
-        raw = await readAsset(cwd, urn)
-        if (raw) { resolvedUrn = urn; break }
-    }
+export async function getStudioAsset(cwd: string, kind: string, author: string, assetPath: string) {
+    const { stage, name } = parseCanonicalAssetPath(assetPath)
+    const resolvedUrn = `${kind}/@${author}/${stage}/${name}`
+    const raw = await readAsset(cwd, resolvedUrn)
     if (!raw) {
-        throw new Error(`Asset not found: ${tryUrns[0]}`)
+        throw new Error(`Asset not found: ${resolvedUrn}`)
     }
 
     const parsed = parseDotAsset(raw) as ParsedInstalledAsset
@@ -360,9 +356,7 @@ export async function getStudioAsset(cwd: string, kind: string, author: string, 
 }
 
 export async function getRegistryAssetDetail(cwd: string, kind: string, author: string, assetPath: string) {
-    const [stage, name] = assetPath.includes('/')
-        ? assetPath.split(/\/(?=[^/]+$)/)
-        : [assetPath, assetPath]
+    const { stage, name } = parseCanonicalAssetPath(assetPath)
     const pkg = await getRegistryPackage(kind, author, stage, name) as unknown as Record<string, unknown>
     const parsed = parseDotAsset(pkg.payload) as ParsedInstalledAsset
     const projectMcpServerNames = Object.keys(await readProjectMcpCatalog(cwd))

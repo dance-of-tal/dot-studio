@@ -3,6 +3,7 @@ import type { ActDefinition, AssetCard, WorkspaceAct, WorkspaceActParticipantBin
 import { api } from '../api'
 import { parseActAsset } from 'dance-of-tal/contracts'
 import { assetUrnDisplayName } from '../lib/asset-urn'
+import { resolvePreferredActThreadId } from '../lib/act-threads'
 import { showToast } from '../lib/toast'
 import type { StudioState } from './types'
 
@@ -40,6 +41,21 @@ export function fallbackParticipantLabel(performerRef: WorkspaceActParticipantBi
         return performerRef.draftId
     }
     return assetUrnDisplayName(performerRef.urn)
+}
+
+function resolveParticipantDescription(
+    binding: WorkspaceActParticipantBinding,
+    performers: StudioState['performers'],
+) {
+    const ref = binding.performerRef
+    const performer = ref.kind === 'draft'
+        ? (
+            performers.find((entry) => entry.id === ref.draftId)
+            || performers.find((entry) => entry.meta?.derivedFrom === `draft:${ref.draftId}`)
+        )
+        : performers.find((entry) => entry.meta?.derivedFrom === ref.urn)
+    const description = performer?.meta?.authoring?.description?.trim()
+    return description ? description : undefined
 }
 
 export function autoLayoutBindings(bindings: Record<string, WorkspaceActParticipantBinding>) {
@@ -183,7 +199,6 @@ export function importActFromAssetImpl(
             mcpBindingMap: {},
             declaredMcpConfig: null,
             danceDeliveryMode: 'auto',
-            executionMode: 'direct',
             hidden: true,
             meta: {
                 derivedFrom: urn,
@@ -204,7 +219,7 @@ export function importActFromAssetImpl(
     }))
 }
 
-export function buildServerActDefinition(act: WorkspaceAct): ActDefinition {
+export function buildServerActDefinition(act: WorkspaceAct, performers: StudioState['performers'] = []): ActDefinition {
     return {
         id: act.id,
         name: act.name,
@@ -214,6 +229,7 @@ export function buildServerActDefinition(act: WorkspaceAct): ActDefinition {
             Object.entries(act.participants).map(([key, binding]) => [key, {
                 performerRef: binding.performerRef,
                 displayName: binding.displayName,
+                description: resolveParticipantDescription(binding, performers),
                 subscriptions: normalizeSubscriptions(binding.subscriptions),
             }]),
         ),
@@ -252,7 +268,7 @@ export function scheduleActRuntimeSync(get: GetState, set: SetState, actId: stri
                 }
 
                 try {
-                    await api.actRuntime.syncDefinition(actId, buildServerActDefinition(latestAct) as Record<string, unknown>)
+                    await api.actRuntime.syncDefinition(actId, buildServerActDefinition(latestAct, latestState.performers) as unknown as Record<string, unknown>)
                     await loadActThreadsImpl(get, set, actId)
                 } catch (error) {
                     console.error('[act-sync] Failed to sync act runtime definition', error)
@@ -267,10 +283,10 @@ export function scheduleActRuntimeSync(get: GetState, set: SetState, actId: stri
 
 export async function createActThreadImpl(get: GetState, set: SetState, actId: string) {
     const act = get().acts.find((entry) => entry.id === actId)
-    const actDefinition = act ? buildServerActDefinition(act) : undefined
+    const actDefinition = act ? buildServerActDefinition(act, get().performers) : undefined
     // Save workspace before thread creation so auto-wake reads latest performer config
     await get().saveWorkspace()
-    const result = await api.actRuntime.createThread(actId, actDefinition as Record<string, unknown> | undefined)
+    const result = await api.actRuntime.createThread(actId, actDefinition as unknown as Record<string, unknown> | undefined)
     const thread = result.thread
 
     // Set active thread immediately for responsiveness
@@ -348,9 +364,7 @@ export async function loadActThreadsImpl(get: GetState, set: SetState, actId: st
             sessionMap,
             chats,
             activeThreadId: state.selectedActId === actId
-                ? (result.threads.some((thread) => thread.id === state.activeThreadId)
-                    ? state.activeThreadId
-                    : null)
+                ? resolvePreferredActThreadId(result.threads, state.activeThreadId)
                 : state.activeThreadId,
             activeThreadParticipantKey: nextActiveThreadParticipantKey,
         }

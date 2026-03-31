@@ -37,6 +37,9 @@ export {
 } from 'dance-of-tal/lib/auth'
 
 export {
+    buildPublishPlan,
+    executePublishPlan,
+    existsInRegistry,
     getPayloadTags,
     loadLocalAssetByUrn,
     parseUrn,
@@ -46,6 +49,7 @@ export {
 
 export {
     parseDotAsset,
+    parseDotAssetUrn,
     parsePerformerAsset,
     parseActAsset,
     slugFromUrn,

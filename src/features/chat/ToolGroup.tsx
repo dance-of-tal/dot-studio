@@ -1,11 +1,4 @@
 import { useState, useCallback, useMemo, type ReactNode } from 'react'
-import {
-    Check, ChevronDown, ChevronRight,
-    Loader2, Wrench, Terminal, FileEdit, ListTodo,
-    CheckCircle2, Circle, XCircle, Copy, Glasses,
-    Search, Globe, Brain, Ban,
-    Sparkles, ExternalLink,
-} from 'lucide-react'
 import type { Todo } from '@opencode-ai/sdk/v2'
 import type { ChatMessageToolInfo } from '../../types'
 import { useUISettings } from '../../store/settingsSlice'
@@ -78,6 +71,56 @@ function countDiffLines(oldStr: string, newStr: string): { additions: number; de
     }
 }
 
+function extractPatchText(input: Record<string, unknown> | undefined): string {
+    if (!input) return ''
+    if (typeof input.diff === 'string') return input.diff
+    if (typeof input.patch === 'string') return input.patch
+    if (typeof input.content === 'string') return input.content
+    return ''
+}
+
+function parsePatchFiles(patchText: string): Array<{ filename: string; diff: string; type: 'add' | 'update' | 'delete' }> {
+    if (!patchText) return []
+
+    const fileBlocks: Array<{ filename: string; diff: string; type: 'add' | 'update' | 'delete' }> = []
+    const lines = patchText.split('\n')
+    let currentFile = ''
+    let currentDiff: string[] = []
+    let currentType: 'add' | 'update' | 'delete' = 'update'
+
+    for (const line of lines) {
+        const diffHeader = line.match(/^diff --git a\/(.*?) b\/(.*?)$/)
+        const minusFile = line.match(/^--- (?:a\/)?(.+)$/)
+        const plusFile = line.match(/^\+\+\+ (?:b\/)?(.+)$/)
+
+        if (diffHeader) {
+            if (currentFile && currentDiff.length) {
+                fileBlocks.push({ filename: currentFile, diff: currentDiff.join('\n'), type: currentType })
+            }
+            currentFile = diffHeader[2] || diffHeader[1] || ''
+            currentDiff = [line]
+            currentType = 'update'
+        } else if (plusFile && plusFile[1] !== '/dev/null' && !currentFile) {
+            currentFile = plusFile[1]
+            currentDiff.push(line)
+        } else if (minusFile && minusFile[1] === '/dev/null') {
+            currentType = 'add'
+            currentDiff.push(line)
+        } else if (plusFile && plusFile[1] === '/dev/null') {
+            currentType = 'delete'
+            currentDiff.push(line)
+        } else {
+            currentDiff.push(line)
+        }
+    }
+
+    if (currentFile && currentDiff.length) {
+        fileBlocks.push({ filename: currentFile, diff: currentDiff.join('\n'), type: currentType })
+    }
+
+    return fileBlocks
+}
+
 /* ═══════════════════════════════════════════════════════
    Tool name sets
    ═══════════════════════════════════════════════════════ */
@@ -98,7 +141,7 @@ const SKILL_NAMES = new Set(['skill'])
    ═══════════════════════════════════════════════════════ */
 
 interface BasicToolProps {
-    icon: ReactNode
+    badge: string
     /** Two-line trigger: provides structured title/filename/directory/actions layout */
     trigger?: ReactNode
     /** Simple one-line trigger: title + subtitle text */
@@ -114,7 +157,7 @@ interface BasicToolProps {
 }
 
 function BasicTool({
-    icon,
+    badge,
     trigger,
     title,
     subtitle,
@@ -134,6 +177,8 @@ function BasicTool({
 
     const statusClass = `basic-tool--${status}`
 
+    const badgeLabel = pending ? 'RUN' : isError ? 'ERR' : badge
+
     return (
         <div className={`basic-tool ${statusClass} ${className}`}>
             <button
@@ -141,8 +186,8 @@ function BasicTool({
                 onClick={() => canToggle && setOpen(!open)}
                 style={{ cursor: canToggle ? 'pointer' : 'default' }}
             >
-                <span className={`basic-tool__icon${isError ? ' basic-tool__icon--error' : ''}`}>
-                    {pending ? <Loader2 size={12} className="spin-icon" /> : isError ? <Ban size={12} /> : icon}
+                <span className={`basic-tool__badge${isError ? ' basic-tool__badge--error' : ''}`}>
+                    {badgeLabel}
                 </span>
                 {trigger ? (
                     <span className="basic-tool__trigger-content">{trigger}</span>
@@ -162,7 +207,7 @@ function BasicTool({
                 {!pending && duration && <span className="basic-tool__duration">{duration}</span>}
                 {canToggle && !pending && (
                     <span className="basic-tool__arrow">
-                        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                        {open ? 'Hide' : 'Show'}
                     </span>
                 )}
             </button>
@@ -191,14 +236,14 @@ function ToolErrorCard({ error, toolName }: { error: string; toolName: string })
     return (
         <div className="tool-error-card">
             <div className="tool-error-card__header">
-                <Ban size={12} className="tool-error-card__icon" />
+                <span className="tool-error-card__pill">ERROR</span>
                 <span className="tool-error-card__name">{toolName}</span>
                 <button
                     className="tool-error-card__copy"
                     onClick={(e) => { e.stopPropagation(); void handleCopy() }}
                     title={copied ? 'Copied!' : 'Copy error'}
                 >
-                    {copied ? <Check size={10} /> : <Copy size={10} />}
+                    {copied ? 'Copied' : 'Copy'}
                 </button>
             </div>
             <button
@@ -208,7 +253,7 @@ function ToolErrorCard({ error, toolName }: { error: string; toolName: string })
                 <pre className="tool-error-card__text">{expanded ? error : preview}</pre>
                 {error.length > 120 && (
                     <span className="tool-error-card__toggle">
-                        {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                        {expanded ? 'Less' : 'More'}
                     </span>
                 )}
             </button>
@@ -283,7 +328,7 @@ function ToolFileAccordion({
                 {directory && <span className="tool-file-accordion__dir">{directory}</span>}
                 {badge && <span className="tool-file-accordion__badge">{badge}</span>}
                 <span className="tool-file-accordion__arrow">
-                    {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                    {open ? 'Hide' : 'Show'}
                 </span>
             </button>
             {open && children && (
@@ -330,7 +375,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
         return (
             <BasicTool
-                icon={<Terminal size={12} />}
+                badge="SHELL"
                 trigger={
                     <div className="shell-trigger">
                         <span className="shell-trigger__title">
@@ -351,7 +396,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
                         onClick={(e) => { e.stopPropagation(); void handleCopy(combined) }}
                         title={copied ? 'Copied!' : 'Copy'}
                     >
-                        {copied ? <Check size={10} /> : <Copy size={10} />}
+                        {copied ? 'Copied' : 'Copy'}
                     </button>
                     <pre className="tool-pre"><code>{combined}</code></pre>
                 </div>
@@ -371,7 +416,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
         return (
             <BasicTool
-                icon={<FileEdit size={12} />}
+                badge="EDIT"
                 trigger={
                     <EditWriteTrigger
                         label="Edit"
@@ -411,7 +456,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
         return (
             <BasicTool
-                icon={<FileEdit size={12} />}
+                badge="WRITE"
                 trigger={
                     <EditWriteTrigger
                         label="Write"
@@ -444,58 +489,8 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
     /* ── apply_patch (unified diff) ── */
     if (isPatch) {
-        // apply_patch typically receives a unified diff in input.diff or input.patch
-        const patchText = useMemo(() => {
-            const input = tool.input
-            if (!input) return ''
-            if (typeof input.diff === 'string') return input.diff
-            if (typeof input.patch === 'string') return input.patch
-            // Some agents send the raw patch as a single string property
-            if (typeof input.content === 'string') return input.content
-            return ''
-        }, [tool.input])
-
-        // Parse filenames from unified diff headers
-        const patchFiles = useMemo(() => {
-            if (!patchText) return []
-            const fileBlocks: Array<{ filename: string; diff: string; type: 'add' | 'update' | 'delete' }> = []
-            const lines = patchText.split('\n')
-            let currentFile = ''
-            let currentDiff: string[] = []
-            let currentType: 'add' | 'update' | 'delete' = 'update'
-
-            for (const line of lines) {
-                // Match --- a/path or +++ b/path or diff --git a/path b/path
-                const diffHeader = line.match(/^diff --git a\/(.*?) b\/(.*?)$/)
-                const minusFile = line.match(/^--- (?:a\/)?(.+)$/)
-                const plusFile = line.match(/^\+\+\+ (?:b\/)?(.+)$/)
-
-                if (diffHeader) {
-                    if (currentFile && currentDiff.length) {
-                        fileBlocks.push({ filename: currentFile, diff: currentDiff.join('\n'), type: currentType })
-                    }
-                    currentFile = diffHeader[2] || diffHeader[1] || ''
-                    currentDiff = [line]
-                    currentType = 'update'
-                } else if (plusFile && plusFile[1] !== '/dev/null' && !currentFile) {
-                    currentFile = plusFile[1]
-                    currentDiff.push(line)
-                } else if (minusFile && minusFile[1] === '/dev/null') {
-                    currentType = 'add'
-                    currentDiff.push(line)
-                } else if (plusFile && plusFile[1] === '/dev/null') {
-                    currentType = 'delete'
-                    currentDiff.push(line)
-                } else {
-                    currentDiff.push(line)
-                }
-            }
-            if (currentFile && currentDiff.length) {
-                fileBlocks.push({ filename: currentFile, diff: currentDiff.join('\n'), type: currentType })
-            }
-
-            return fileBlocks
-        }, [patchText])
+        const patchText = extractPatchText(tool.input)
+        const patchFiles = parsePatchFiles(patchText)
 
         // Single file or unknown format — show whole diff
         if (patchFiles.length <= 1) {
@@ -505,7 +500,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
             return (
                 <BasicTool
-                    icon={<FileEdit size={12} />}
+                    badge="PATCH"
                     trigger={
                         <EditWriteTrigger
                             label="Patch"
@@ -529,7 +524,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
         // Multi-file patch — accordion per file
         return (
             <BasicTool
-                icon={<FileEdit size={12} />}
+                badge="PATCH"
                 title="Patch"
                 subtitle={!pending ? `${patchFiles.length} files` : undefined}
                 status={tool.status}
@@ -558,7 +553,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
     if (isTodo) {
         return (
             <BasicTool
-                icon={<ListTodo size={12} />}
+                badge="TODO"
                 title="Todos"
                 status={tool.status}
                 duration={durationLabel}
@@ -578,10 +573,10 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
         const path = extractFilePath(tool.input) || (tool.input?.pattern ? String(tool.input.pattern) : '')
         return (
             <div className="context-tool-item">
-                <Glasses size={10} className="context-tool-icon" />
+                <span className="context-tool-badge">CTX</span>
                 <span className="context-tool-name">{label}</span>
                 {path && <span className="context-tool-path">{getFilename(path) || path}</span>}
-                {isError && <span className="context-tool-error">✗</span>}
+                {isError && <span className="context-tool-error">ERROR</span>}
             </div>
         )
     }
@@ -597,7 +592,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
         return (
             <BasicTool
-                icon={<Glasses size={12} />}
+                badge="CTX"
                 title={tool.title || tool.name}
                 subtitle={!pending ? (filePath ? getFilename(filePath) : pattern) + (args.length ? ` (${args.join(', ')})` : '') : undefined}
                 status={tool.status}
@@ -615,7 +610,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
         return (
             <BasicTool
-                icon={<Globe size={12} />}
+                badge={isWebFetch ? 'FETCH' : 'WEB'}
                 trigger={
                     <div className="search-trigger">
                         <span className="search-trigger__title">
@@ -637,7 +632,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
                             )
                         )}
                         {!pending && url && (
-                            <ExternalLink size={10} className="search-trigger__ext" />
+                            <span className="search-trigger__ext">Open</span>
                         )}
                     </div>
                 }
@@ -652,7 +647,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
         const query = tool.input?.query ? String(tool.input.query) : ''
         return (
             <BasicTool
-                icon={<Search size={12} />}
+                badge="CODE"
                 title="Code Search"
                 subtitle={!pending ? query : undefined}
                 status={tool.status}
@@ -669,7 +664,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
         return (
             <BasicTool
-                icon={<Brain size={12} />}
+                badge="TASK"
                 trigger={
                     <div className="agent-trigger">
                         <span className="agent-trigger__title">
@@ -691,7 +686,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
         const skillName = tool.input?.name ? String(tool.input.name) : tool.title || 'Skill'
         return (
             <BasicTool
-                icon={<Sparkles size={12} />}
+                badge="SKILL"
                 trigger={
                     <div className="skill-trigger">
                         <span className="skill-trigger__title">
@@ -709,7 +704,7 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
     const displayTitle = tool.title || tool.name
     return (
         <BasicTool
-            icon={<Wrench size={10} />}
+            badge="TOOL"
             title={displayTitle}
             subtitle={!pending ? extractFilePath(tool.input) || undefined : undefined}
             status={tool.status}
@@ -757,8 +752,8 @@ function ContextToolGroup({ tools }: { tools: ChatMessageToolInfo[] }) {
     return (
         <div className="context-group">
             <button className="context-group__trigger" onClick={() => setOpen(!open)}>
-                <span className="context-group__icon">
-                    {running ? <Loader2 size={12} className="spin-icon" /> : <Search size={12} />}
+                <span className="context-group__badge">
+                    {running ? 'RUN' : 'CTX'}
                 </span>
                 <span className="context-group__title">
                     <TextShimmer
@@ -773,7 +768,7 @@ function ContextToolGroup({ tools }: { tools: ChatMessageToolInfo[] }) {
                     <span className="context-group__error-badge">{errorCount} error{errorCount > 1 ? 's' : ''}</span>
                 )}
                 <span className="context-group__arrow">
-                    {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                    {open ? 'Hide' : 'Show'}
                 </span>
             </button>
             {open && (
@@ -824,15 +819,10 @@ function TodoInlineList({ input, output }: { input?: Record<string, unknown>; ou
     }
 
     const iconFor = (s: string) => {
-        if (s === 'completed') return <CheckCircle2 size={13} style={{ color: '#10b981' }} />
-        if (s === 'in_progress') return (
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{ color: 'var(--accent)' }}>
-                <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 3" />
-                <circle cx="7" cy="7" r="2.5" fill="currentColor" className="todo-inline-pulse" />
-            </svg>
-        )
-        if (s === 'cancelled') return <XCircle size={13} style={{ color: 'var(--text-muted)' }} />
-        return <Circle size={13} style={{ color: 'var(--text-muted)' }} />
+        if (s === 'completed') return <span className="todo-inline-status todo-inline-status--completed">DONE</span>
+        if (s === 'in_progress') return <span className="todo-inline-status todo-inline-status--active">WORK</span>
+        if (s === 'cancelled') return <span className="todo-inline-status todo-inline-status--cancelled">STOP</span>
+        return <span className="todo-inline-status">TODO</span>
     }
 
     return (

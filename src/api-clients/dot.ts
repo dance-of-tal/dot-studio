@@ -1,4 +1,14 @@
-import type { DotAuthUserResponse, DotInitResponse, DotInstallRequest, DotLoginResponse, DotPublishRequest, DotSaveLocalRequest, DotStatusResponse } from '../../shared/dot-contracts'
+import type {
+    DanceExportRequest,
+    DanceExportResponse,
+    DotAuthUserResponse,
+    DotInitResponse,
+    DotInstallRequest,
+    DotLoginResponse,
+    DotPublishRequest,
+    DotSaveLocalRequest,
+    DotStatusResponse,
+} from '../../shared/dot-contracts'
 import { fetchJSON, postJSON, putJSON, deleteJSON } from '../api-core'
 
 type DotPerformerResponse = Record<string, unknown>
@@ -45,6 +55,12 @@ export const dotApi = {
         slug: string,
         payload?: Record<string, unknown>,
         tags?: string[],
+        providedAssets?: Array<{
+            kind: 'tal' | 'performer' | 'act'
+            urn: string
+            payload: Record<string, unknown>
+            tags?: string[]
+        }>,
         acknowledgedTos = false,
     ) =>
         postJSON<{
@@ -54,7 +70,7 @@ export const dotApi = {
             dependenciesPublished: string[]
             dependenciesSkipped: string[]
             dependenciesExisting: string[]
-        }>('/api/dot/assets/publish', { kind, slug, payload, tags, acknowledgedTos } satisfies DotPublishRequest),
+        }>('/api/dot/assets/publish', { kind, slug, payload, tags, providedAssets, acknowledgedTos } satisfies DotPublishRequest),
 
     search: (query: string, kind?: string, limit?: number) =>
         fetchJSON<Array<{ kind: string; name: string; author: string; slug: string; description: string; tags: string[] }>>(
@@ -78,4 +94,10 @@ export const dotApi = {
             installed: Array<{ urn: string; name: string; description: string }>
             source: string
         }>('/api/dot/add', { source, scope }),
+
+    exportDanceBundle: (draftId: string, slug: string, destinationParentPath: string, overwrite = false) =>
+        postJSON<DanceExportResponse>(
+            '/api/dot/dance-export',
+            { draftId, slug, destinationParentPath, overwrite } satisfies DanceExportRequest,
+        ),
 }

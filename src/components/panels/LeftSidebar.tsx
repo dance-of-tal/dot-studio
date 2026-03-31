@@ -15,11 +15,25 @@ export default function LeftSidebar() {
     const [sidebarWidth, setSidebarWidth] = useState(240);
     const [drawerWidth, setDrawerWidth] = useState(320);
 
+    const suppressNextClick = useCallback(() => {
+        const handleClickCapture = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            document.removeEventListener('click', handleClickCapture, true);
+        };
+
+        document.addEventListener('click', handleClickCapture, true);
+        window.setTimeout(() => {
+            document.removeEventListener('click', handleClickCapture, true);
+        }, 0);
+    }, []);
+
     const useResize = (setter: (w: number) => void, min: number, max: number) => {
         const dragging = useRef(false);
 
         const onMouseDown = useCallback((e: React.MouseEvent) => {
             e.preventDefault();
+            e.stopPropagation();
             dragging.current = true;
             const startX = e.clientX;
             const startW = (() => {
@@ -32,12 +46,15 @@ export default function LeftSidebar() {
                 const delta = ev.clientX - startX;
                 setter(Math.min(max, Math.max(min, startW + delta)));
             };
-            const onUp = () => {
+            const onUp = (event: MouseEvent) => {
+                event.preventDefault();
+                event.stopPropagation();
                 dragging.current = false;
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
+                suppressNextClick();
             };
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
@@ -81,13 +98,24 @@ export default function LeftSidebar() {
                 <div
                     className="sidebar-resize-handle"
                     onMouseDown={onSidebarResize}
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }}
                 />
             </div>
             <div
                 className={`sidebar-drawer left-drawer ${isAssetDrawerOpen ? 'open' : ''}`}
                 style={isAssetDrawerOpen ? { width: drawerWidth } : undefined}
             >
-                <div className="sidebar-resize-handle sidebar-resize-handle--drawer" onMouseDown={onDrawerResize} />
+                <div
+                    className="sidebar-resize-handle sidebar-resize-handle--drawer"
+                    onMouseDown={onDrawerResize}
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }}
+                />
                 {isAssetDrawerOpen ? (
                     <Suspense fallback={null}>
                         <AssetLibrary onClose={() => setAssetLibraryOpen(false)} />

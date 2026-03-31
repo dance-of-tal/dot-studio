@@ -1,36 +1,11 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useCallback, useDeferredValue } from 'react'
 import { ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import type { ChatMessage, ChatMessagePart, ChatMessageToolInfo } from '../../types'
 import { stripAssistantActionBlock } from '../assistant/assistant-protocol'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { ToolGroup } from './ToolGroup'
-
-/** Throttle a rapidly changing value to update at most every `ms` milliseconds */
-function useThrottledValue<T>(value: T, ms = 100): T {
-    const [throttled, setThrottled] = useState(value)
-    const lastUpdate = useRef(Date.now())
-    const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-    useEffect(() => {
-        const now = Date.now()
-        const elapsed = now - lastUpdate.current
-        if (elapsed >= ms) {
-            lastUpdate.current = now
-            setThrottled(value)
-        } else {
-            if (timer.current) clearTimeout(timer.current)
-            timer.current = setTimeout(() => {
-                lastUpdate.current = Date.now()
-                setThrottled(value)
-                timer.current = undefined
-            }, ms - elapsed)
-        }
-        return () => { if (timer.current) clearTimeout(timer.current) }
-    }, [value, ms])
-
-    return throttled
-}
+import { useUISettings } from '../../store/settingsSlice'
 
 function stripMarkdownMarkers(text: string) {
     return text
@@ -41,19 +16,6 @@ function stripMarkdownMarkers(text: string) {
         .replace(/`/g, '')
         .replace(/\n+/g, ' ')
         .trim()
-}
-
-export function hasVisibleAssistantMessageContent(message: Pick<ChatMessage, 'content' | 'parts'>): boolean {
-    const visibleText = stripAssistantActionBlock(message.content || '').trim()
-    if (visibleText) {
-        return true
-    }
-
-    return !!message.parts?.some((part) =>
-        part.type === 'tool'
-        || part.type === 'compaction'
-        || (part.type === 'reasoning' && !!part.content?.trim()),
-    )
 }
 
 function ReasoningBlock({ content }: { content: string }) {
@@ -109,7 +71,7 @@ function groupParts(parts: ChatMessagePart[]): Array<{ kind: 'tool-group'; tools
     return groups
 }
 
-function MessageParts({ parts }: { parts: ChatMessagePart[] }) {
+function MessageParts({ parts, showReasoningSummaries }: { parts: ChatMessagePart[]; showReasoningSummaries: boolean }) {
     const grouped = useMemo(() => groupParts(parts), [parts])
 
     return (
@@ -119,7 +81,7 @@ function MessageParts({ parts }: { parts: ChatMessagePart[] }) {
                     return <ToolGroup key={`tg-${idx}`} tools={group.tools} />
                 }
                 const { part } = group
-                if (part.type === 'reasoning' && part.content) {
+                if (part.type === 'reasoning' && part.content && showReasoningSummaries) {
                     return <ReasoningBlock key={part.id} content={part.content} />
                 }
                 if (part.type === 'compaction') {
@@ -165,19 +127,25 @@ function CopyResponseButton({ content }: { content: string }) {
 export default function ChatMessageContent({
     message,
     className = 'assistant-body',
+    streaming = false,
 }: {
     message: Pick<ChatMessage, 'content' | 'parts'>
     className?: string
+    streaming?: boolean
 }) {
+    const { showReasoningSummaries } = useUISettings()
     const rawContent = useMemo(() => stripAssistantActionBlock(message.content || ''), [message.content])
-    const displayContent = useThrottledValue(rawContent, 100)
+    const displayContent = useDeferredValue(rawContent)
+    const showThinking = showReasoningSummaries && streaming
 
     return (
         <div className={className}>
-            {message.parts && message.parts.length > 0 ? <MessageParts parts={message.parts} /> : null}
+            {message.parts && message.parts.length > 0 ? (
+                <MessageParts parts={message.parts} showReasoningSummaries={showThinking} />
+            ) : null}
             {displayContent ? (
                 <>
-                    <MarkdownRenderer content={displayContent} />
+                    <MarkdownRenderer content={displayContent} showThinking={showThinking} />
                     <CopyResponseButton content={rawContent} />
                 </>
             ) : null}

@@ -14,7 +14,7 @@ import { buildWakePrompt, markMessagesDelivered } from './wake-prompt-builder.js
 import { SessionQueue } from './session-queue.js'
 import type { Mailbox } from './mailbox.js'
 import type { ThreadManager } from './thread-manager.js'
-import { ACT_EXECUTION_MODE, ACT_AGENT_POSTURE } from '../../lib/act-session-policy.js'
+import { ACT_AGENT_POSTURE } from '../../lib/act-session-policy.js'
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unknown error'
@@ -93,20 +93,8 @@ export async function drainParticipantQueueAfterSettlement(
     threadId: string,
     workingDir: string,
 ): Promise<WakeCascadeResult> {
-    const nextTarget = getSessionQueue(threadId).markIdle(participantKey)
-    if (!nextTarget) {
-        return emptyWakeCascadeResult()
-    }
-
-    console.log(`[wake-cascade] Draining queued wake-up for "${participantKey}" after session settled`)
-    return processWakeCascade(
-        nextTarget.triggerEvent,
-        actDefinition,
-        mailbox,
-        threadManager,
-        threadId,
-        workingDir,
-    )
+    getSessionQueue(threadId).clearRunning(participantKey)
+    return drainNextQueuedWake(actDefinition, mailbox, threadManager, threadId, workingDir, participantKey)
 }
 
 export interface WakeCascadeResult {
@@ -157,6 +145,290 @@ async function writeGenericActTools(
     }
 }
 
+async function drainNextQueuedWake(
+    actDefinition: ActDefinition,
+    mailbox: Mailbox,
+    threadManager: ThreadManager,
+    threadId: string,
+    workingDir: string,
+    settledParticipantKey?: string,
+): Promise<WakeCascadeResult> {
+    const queue = getSessionQueue(threadId)
+
+    while (true) {
+        const next = queue.dequeueNextRunnable()
+        if (!next) {
+            return emptyWakeCascadeResult()
+        }
+
+        const circuit = participantCircuitState(threadId, next.participantKey)
+        if (circuit) {
+            console.warn(
+                `[wake-cascade] Skipping queued wake for "${next.participantKey}" while circuit is open: ${circuit.reason}`,
+            )
+            continue
+        }
+
+        console.log(
+            `[wake-cascade] Draining queued wake-up for "${next.participantKey}"${settledParticipantKey ? ` after "${settledParticipantKey}" settled` : ''}`,
+        )
+        return injectWakeTarget(
+            next.target,
+            actDefinition,
+            mailbox,
+            threadManager,
+            threadId,
+            workingDir,
+        )
+    }
+}
+
+async function injectWakeTarget(
+    target: WakeUpTarget,
+    actDefinition: ActDefinition,
+    mailbox: Mailbox,
+    threadManager: ThreadManager,
+    threadId: string,
+    workingDir: string,
+): Promise<WakeCascadeResult> {
+    const result = emptyWakeCascadeResult()
+    result.targets = [target]
+
+    const participantKey = target.participantKey
+    const circuit = participantCircuitState(threadId, participantKey)
+    if (circuit) {
+        console.warn(
+            `[wake-cascade] Skipping wake for "${participantKey}" while circuit is open: ${circuit.reason}`,
+        )
+        return result
+    }
+
+    // Build wake-up prompt
+    const prompt = buildWakePrompt(target, mailbox, actDefinition)
+
+    // Mark messages as delivered
+    markMessagesDelivered(mailbox, participantKey)
+
+    // Mark as executing
+    markParticipantQueueRunning(threadId, participantKey)
+
+    try {
+        // Use dynamic imports to avoid circular dependencies
+        const { getOpencode } = await import('../../lib/opencode.js')
+        const oc = await getOpencode()
+        const { resolveSessionExecutionContext } = await import('../../lib/session-execution.js')
+
+        // Resolve performer config from workspace (model, TAL, Dance, MCP)
+        const { resolvePerformerForWake } = await import('./wake-performer-resolver.js')
+        const performerConfig = await resolvePerformerForWake(
+            threadManager.workingDir,
+            actDefinition,
+            participantKey,
+        )
+
+        const chatKey = `act:${actDefinition.id}:thread:${threadId}:participant:${participantKey}`
+
+        // Auto-create session if participant doesn't have one yet
+        let sessionId = threadManager.getPerformerSession(threadId, participantKey)
+        if (!sessionId) {
+            try {
+                const { createStudioChatSession } = await import('../chat-service.js')
+                const created = await createStudioChatSession(threadManager.workingDir, {
+                    performerId: chatKey,
+                    performerName: performerConfig?.performerName || participantKey,
+                    configHash: '',
+                    actId: actDefinition.id,
+                })
+                sessionId = created.sessionId
+                // Persist the session mapping in the thread
+                await threadManager.getOrCreateSession(threadId, participantKey, () => sessionId!)
+                console.log(`[wake-cascade] Auto-created session ${sessionId} for participant "${participantKey}"`)
+            } catch (createErr) {
+                result.errors.push(`Failed to auto-create session for ${participantKey}: ${errorMessage(createErr)}`)
+                const drainResult = await drainParticipantQueueAfterSettlement(
+                    participantKey,
+                    actDefinition,
+                    mailbox,
+                    threadManager,
+                    threadId,
+                    workingDir,
+                )
+                result.injected.push(...drainResult.injected)
+                result.queued.push(...drainResult.queued)
+                result.errors.push(...drainResult.errors)
+                return result
+            }
+        }
+
+        const sessionContext = sessionId
+            ? await resolveSessionExecutionContext(sessionId)
+            : null
+        const executionDir = sessionContext?.workingDir || threadManager.workingDir
+
+        // ── Performer projection (TAL, Dance, MCP, model) ──────────
+        // Project Act tools for this participant
+        const { projectActTools } = await import('./act-tool-projection.js')
+        const actProjection = projectActTools(
+            participantKey,
+            actDefinition,
+            threadId,
+            threadManager.workingDir,
+        )
+        const actExtraTools = actProjection.tools
+        const collaborationPromptSection = actProjection.contextPrompt
+        let promptText = prompt
+
+        let agentName: string | undefined
+        let modelOverride: { providerID: string; modelID: string } | undefined
+
+        if (performerConfig?.model) {
+            // Full performer projection — same as sendStudioChatMessage path
+            try {
+                const { ensurePerformerProjection } = await import(
+                    '../opencode-projection/stage-projection-service.js'
+                )
+                const ensured = await ensurePerformerProjection({
+                    performerId: participantKey,
+                    performerName: performerConfig.performerName,
+                    talRef: performerConfig.talRef,
+                    danceRefs: performerConfig.danceRefs,
+                    model: performerConfig.model,
+                    modelVariant: performerConfig.modelVariant,
+                    mcpServerNames: performerConfig.mcpServerNames,
+                    executionDir,
+                    workingDir: threadManager.workingDir,
+                    scope: 'act',
+                    actId: actDefinition.id,
+                    collaborationPromptSection,
+                    extraTools: actExtraTools,
+                })
+                // Act scope always uses build agent, ignoring performer planMode
+                const buildAgent = ensured.compiled.agentNames[ACT_AGENT_POSTURE]
+                if (buildAgent) agentName = buildAgent
+                modelOverride = {
+                    providerID: performerConfig.model.provider,
+                    modelID: performerConfig.model.modelId,
+                }
+                console.log(`[wake-cascade] Performer projection done for "${participantKey}" model=${performerConfig.model.modelId}`)
+            } catch (projErr) {
+                console.warn(`[wake-cascade] Performer projection failed for "${participantKey}", falling back to generic tools:`, projErr)
+                // Fallback: write generic Act tools only
+                promptText = [collaborationPromptSection, prompt].filter(Boolean).join('\n\n---\n\n')
+                await writeGenericActTools(
+                    executionDir,
+                    threadManager.workingDir,
+                )
+            }
+        } else {
+            // No performer model — write generic Act tools only
+            console.warn(`[wake-cascade] No model config for "${participantKey}", using generic Act tools only`)
+            promptText = [collaborationPromptSection, prompt].filter(Boolean).join('\n\n---\n\n')
+            await writeGenericActTools(
+                executionDir,
+                threadManager.workingDir,
+            )
+        }
+
+        await oc.session.promptAsync({
+            sessionID: sessionId,
+            directory: executionDir,
+            agent: agentName,
+            model: modelOverride,
+            parts: [{ type: 'text', text: promptText }],
+        })
+
+        result.injected.push(participantKey)
+
+        const { waitForSessionToSettle } = await import('../../lib/chat-session.js')
+        void waitForSessionToSettle(
+            oc,
+            sessionId,
+            { directory: executionDir },
+            { timeoutMs: 30 * 60_000, pollMs: 250, requireObservedBusy: true },
+        ).then((settled) => {
+            if (!settled) {
+                console.warn(`[wake-cascade] Session ${sessionId} for "${participantKey}" did not settle before timeout`)
+                return drainParticipantQueueAfterSettlement(
+                    participantKey,
+                    actDefinition,
+                    mailbox,
+                    threadManager,
+                    threadId,
+                    workingDir,
+                )
+            }
+            return Promise.all([
+                import('../../lib/opencode-errors.js'),
+                import('../../lib/chat-session.js'),
+            ]).then(async ([{ unwrapOpencodeResult }, { extractNonRetryableSessionError }]) => {
+                const rawMessages = unwrapOpencodeResult<unknown>(await oc.session.messages({
+                    sessionID: sessionId,
+                    directory: executionDir,
+                }))
+                const messages = Array.isArray(rawMessages) ? rawMessages : []
+                const fatalError = extractNonRetryableSessionError(messages)
+                if (fatalError) {
+                    tripParticipantCircuit(threadId, participantKey, fatalError)
+                    console.warn(
+                        `[wake-cascade] Opened circuit for "${participantKey}" after non-retryable session error: ${fatalError}`,
+                    )
+                    return drainParticipantQueueAfterSettlement(
+                        participantKey,
+                        actDefinition,
+                        mailbox,
+                        threadManager,
+                        threadId,
+                        workingDir,
+                    )
+                }
+
+                clearParticipantCircuit(threadId, participantKey)
+                return drainParticipantQueueAfterSettlement(
+                    participantKey,
+                    actDefinition,
+                    mailbox,
+                    threadManager,
+                    threadId,
+                    workingDir,
+                )
+            })
+        }).then((drainResult) => {
+            if (!drainResult) {
+                return
+            }
+            result.injected.push(...drainResult.injected)
+            result.queued.push(...drainResult.queued)
+            result.errors.push(...drainResult.errors)
+        }).catch((settleErr) => {
+            console.error(`[wake-cascade] Failed waiting for session settle for "${participantKey}":`, settleErr)
+            void drainParticipantQueueAfterSettlement(
+                participantKey,
+                actDefinition,
+                mailbox,
+                threadManager,
+                threadId,
+                workingDir,
+            )
+        })
+
+        return result
+    } catch (error: unknown) {
+        result.errors.push(`Wake injection failed for ${participantKey}: ${errorMessage(error)}`)
+        const drainResult = await drainParticipantQueueAfterSettlement(
+            participantKey,
+            actDefinition,
+            mailbox,
+            threadManager,
+            threadId,
+            workingDir,
+        )
+        result.injected.push(...drainResult.injected)
+        result.queued.push(...drainResult.queued)
+        result.errors.push(...drainResult.errors)
+        return result
+    }
+}
+
 /**
  * Process an event through the routing and wake-up cascade.
  * Called after tool call routes (send-message, post-to-board, etc.)
@@ -167,7 +439,7 @@ export async function processWakeCascade(
     mailbox: Mailbox,
     threadManager: ThreadManager,
     threadId: string,
-    _workingDir: string,
+    workingDir: string,
 ): Promise<WakeCascadeResult> {
     const result = emptyWakeCascadeResult()
 
@@ -195,213 +467,26 @@ export async function processWakeCascade(
 
     for (const target of targets) {
         const participantKey = target.participantKey
-        const circuit = participantCircuitState(threadId, participantKey)
 
-        if (circuit) {
-            console.warn(
-                `[wake-cascade] Skipping wake for "${participantKey}" while circuit is open: ${circuit.reason}`,
-            )
-            continue
-        }
-
-        // Check if participant is already executing (Same Participant Policy)
-        if (queue.isRunning(participantKey)) {
+        // Serialize participant wake-ups per thread so a tool-triggered handoff
+        // never starts another participant session while one is still running.
+        if (queue.hasRunning()) {
             queue.enqueue(participantKey, target)
             result.queued.push(participantKey)
             continue
         }
 
-        // Build wake-up prompt
-        const prompt = buildWakePrompt(target, mailbox, actDefinition)
-
-        // Mark messages as delivered
-        markMessagesDelivered(mailbox, participantKey)
-
-        // Mark as executing
-        markParticipantQueueRunning(threadId, participantKey)
-
-        // Inject prompt into participant's session
-        try {
-            // Use dynamic imports to avoid circular dependencies
-            const { getOpencode } = await import('../../lib/opencode.js')
-            const oc = await getOpencode()
-            const { getSafeOwnerExecutionDir } = await import('../../lib/safe-mode.js')
-            const { resolveSessionExecutionContext } = await import('../../lib/session-execution.js')
-
-            // Resolve performer config from workspace (model, TAL, Dance, MCP)
-            const { resolvePerformerForWake } = await import('./wake-performer-resolver.js')
-            const performerConfig = await resolvePerformerForWake(
-                threadManager.workingDir,
-                actDefinition,
-                participantKey,
-            )
-
-            // Act sessions are always direct — never inherit performer executionMode
-            const execMode = ACT_EXECUTION_MODE
-            const chatKey = `act:${actDefinition.id}:thread:${threadId}:participant:${participantKey}`
-
-            // Auto-create session if participant doesn't have one yet
-            let sessionId = threadManager.getPerformerSession(threadId, participantKey)
-            if (!sessionId) {
-                try {
-                    const { createStudioChatSession } = await import('../chat-service.js')
-                    const created = await createStudioChatSession(threadManager.workingDir, {
-                        performerId: chatKey,
-                        performerName: performerConfig?.performerName || participantKey,
-                        configHash: '',
-                        executionMode: execMode,
-                        actId: actDefinition.id,
-                    })
-                    sessionId = created.sessionId
-                    // Persist the session mapping in the thread
-                    await threadManager.getOrCreateSession(threadId, participantKey, () => sessionId!)
-                    console.log(`[wake-cascade] Auto-created session ${sessionId} for participant "${participantKey}"`)
-                } catch (createErr) {
-                    result.errors.push(`Failed to auto-create session for ${participantKey}: ${errorMessage(createErr)}`)
-                    queue.markIdle(participantKey)
-                    continue
-                }
-            }
-
-            const sessionContext = sessionId
-                ? await resolveSessionExecutionContext(sessionId)
-                : null
-            const executionDir = sessionContext?.executionDir || await getSafeOwnerExecutionDir(
-                threadManager.workingDir,
-                'act',
-                chatKey,
-                execMode,
-            )
-
-            // ── Performer projection (TAL, Dance, MCP, model) ──────────
-            // Project Act tools for this participant
-            const { projectActTools } = await import('./act-tool-projection.js')
-            const actProjection = projectActTools(
-                participantKey,
-                actDefinition,
-                threadId,
-                threadManager.workingDir,
-            )
-            const actExtraTools = actProjection.tools
-            const collaborationPromptSection = actProjection.contextPrompt
-            let promptText = prompt
-
-            let agentName: string | undefined
-            let modelOverride: { providerID: string; modelID: string } | undefined
-
-            if (performerConfig?.model) {
-                // Full performer projection — same as sendStudioChatMessage path
-                try {
-                    const { ensurePerformerProjection } = await import(
-                        '../opencode-projection/stage-projection-service.js'
-                    )
-                    const ensured = await ensurePerformerProjection({
-                        performerId: participantKey,
-                        performerName: performerConfig.performerName,
-                        talRef: performerConfig.talRef,
-                        danceRefs: performerConfig.danceRefs,
-                        model: performerConfig.model,
-                        modelVariant: performerConfig.modelVariant,
-                        mcpServerNames: performerConfig.mcpServerNames,
-                        executionDir,
-                        workingDir: threadManager.workingDir,
-                        scope: 'act',
-                        actId: actDefinition.id,
-                        collaborationPromptSection,
-                        extraTools: actExtraTools,
-                    })
-                    // Act scope always uses build agent, ignoring performer planMode
-                    const buildAgent = ensured.compiled.agentNames[ACT_AGENT_POSTURE]
-                    if (buildAgent) agentName = buildAgent
-                    modelOverride = {
-                        providerID: performerConfig.model.provider,
-                        modelID: performerConfig.model.modelId,
-                    }
-                    console.log(`[wake-cascade] Performer projection done for "${participantKey}" model=${performerConfig.model.modelId}`)
-                } catch (projErr) {
-                    console.warn(`[wake-cascade] Performer projection failed for "${participantKey}", falling back to generic tools:`, projErr)
-                    // Fallback: write generic Act tools only
-                    promptText = [collaborationPromptSection, prompt].filter(Boolean).join('\n\n---\n\n')
-                    await writeGenericActTools(
-                        executionDir,
-                        threadManager.workingDir,
-                    )
-                }
-            } else {
-                // No performer model — write generic Act tools only
-                console.warn(`[wake-cascade] No model config for "${participantKey}", using generic Act tools only`)
-                promptText = [collaborationPromptSection, prompt].filter(Boolean).join('\n\n---\n\n')
-                await writeGenericActTools(
-                    executionDir,
-                    threadManager.workingDir,
-                )
-            }
-
-            await oc.session.promptAsync({
-                sessionID: sessionId,
-                directory: executionDir,
-                agent: agentName,
-                model: modelOverride,
-                parts: [{ type: 'text', text: promptText }],
-            })
-
-            result.injected.push(participantKey)
-
-            const { waitForSessionToSettle } = await import('../../lib/chat-session.js')
-            void waitForSessionToSettle(
-                oc,
-                sessionId,
-                { directory: executionDir },
-                { timeoutMs: 30 * 60_000, pollMs: 250, requireObservedBusy: true },
-            ).then((settled) => {
-                if (!settled) {
-                    clearParticipantQueueRunning(threadId, participantKey)
-                    console.warn(`[wake-cascade] Session ${sessionId} for "${participantKey}" did not settle before timeout`)
-                    return
-                }
-                return Promise.all([
-                    import('../../lib/opencode-errors.js'),
-                    import('../../lib/chat-session.js'),
-                ]).then(async ([{ unwrapOpencodeResult }, { extractNonRetryableSessionError }]) => {
-                    const messages = unwrapOpencodeResult(await oc.session.messages({
-                        sessionID: sessionId,
-                        directory: executionDir,
-                    })) || []
-                    const fatalError = extractNonRetryableSessionError(messages)
-                    if (fatalError) {
-                        clearParticipantQueueRunning(threadId, participantKey)
-                        tripParticipantCircuit(threadId, participantKey, fatalError)
-                        console.warn(
-                            `[wake-cascade] Opened circuit for "${participantKey}" after non-retryable session error: ${fatalError}`,
-                        )
-                        return emptyWakeCascadeResult()
-                    }
-
-                    clearParticipantCircuit(threadId, participantKey)
-                    return drainParticipantQueueAfterSettlement(
-                        participantKey,
-                        actDefinition,
-                        mailbox,
-                        threadManager,
-                        threadId,
-                        _workingDir,
-                    )
-                })
-            }).then((drainResult) => {
-                if (!drainResult) {
-                    return
-                }
-                result.injected.push(...drainResult.injected)
-                result.queued.push(...drainResult.queued)
-                result.errors.push(...drainResult.errors)
-            }).catch((settleErr) => {
-                console.error(`[wake-cascade] Failed waiting for session settle for "${participantKey}":`, settleErr)
-                queue.markIdle(participantKey)
-            })
-        } catch (error: unknown) {
-            result.errors.push(`Wake injection failed for ${participantKey}: ${errorMessage(error)}`)
-            queue.markIdle(participantKey)
-        }
+        const injectionResult = await injectWakeTarget(
+            target,
+            actDefinition,
+            mailbox,
+            threadManager,
+            threadId,
+            workingDir,
+        )
+        result.injected.push(...injectionResult.injected)
+        result.queued.push(...injectionResult.queued)
+        result.errors.push(...injectionResult.errors)
     }
 
     return result

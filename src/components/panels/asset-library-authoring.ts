@@ -9,7 +9,7 @@ export function buildDraftAssetCards(
 ): AssetCard[] {
 
     return Object.values(drafts)
-        .filter((draft): draft is DraftAsset => !!draft && draft.kind === installedKind)
+        .filter((draft): draft is DraftAsset => !!draft && draft.kind === installedKind && draft.saveState === 'saved')
         .sort((left, right) => right.updatedAt - left.updatedAt)
         .map((draft) => ({
             kind: draft.kind,

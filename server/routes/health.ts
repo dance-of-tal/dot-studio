@@ -6,6 +6,7 @@ import {
     activateStudioProject,
     getStudioConfig,
     openStudioPath,
+    pickDirectory,
     pickWorkingDirectory,
     updateStudioConfig,
 } from '../services/studio-service.js'
@@ -19,7 +20,8 @@ health.get('/api/health', (c) => c.json({ ok: true, project: requestWorkingDir(c
 // ── Pick Directory (macOS) ──────────────────────────────
 health.get('/api/studio/pick-directory', async (c) => {
     try {
-        return c.json(await pickWorkingDirectory())
+        const prompt = c.req.query('prompt')
+        return c.json(prompt ? await pickDirectory(prompt) : await pickWorkingDirectory())
     } catch {
         return jsonError(c, 'Selection cancelled or failed', 400)
     }

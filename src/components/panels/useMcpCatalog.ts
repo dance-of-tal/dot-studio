@@ -16,6 +16,7 @@ import { showToast } from '../../lib/toast'
 import { extractProjectMcpCatalog } from '../../../shared/project-mcp'
 import type { ProjectMcpEntryDraft } from '../modals/settings-utils'
 import { buildProjectMcpDrafts, serializeProjectMcpEntries } from '../modals/settings-utils'
+import { useStudioStore } from '../../store'
 
 export interface McpCatalogState {
     mcpDraftEntries: ProjectMcpEntryDraft[]
@@ -43,6 +44,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
     const [pendingMcpAuthName, setPendingMcpAuthName] = useState<string | null>(null)
     const mcpAuthDeadlineRef = useRef<number | null>(null)
     const queryClient = useQueryClient()
+    const markRuntimeReloadPending = useStudioStore((state) => state.markRuntimeReloadPending)
 
     const { data: mcpServers = [] } = useMcpServers(showMcps)
 
@@ -186,6 +188,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
             })
             setMcpDraftSnapshot(mcpDraftEntries)
             setMcpCatalogStatus('Saved project MCP catalog.')
+            markRuntimeReloadPending()
             await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
         } catch (error: unknown) {
             setMcpCatalogStatus(error instanceof Error ? error.message : 'Failed to save project MCP catalog.')

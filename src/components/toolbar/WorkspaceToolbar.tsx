@@ -169,14 +169,14 @@ export default function WorkspaceToolbar() {
                     <Settings size={12} />
                 </button>
 
-                {/* Assistant 버튼은 UI에서 임시로 숨김 처리 */}
-                {/* <button
+                <button
                     className={`toolbar__assistant-btn ${isAssistantOpen ? 'is-active' : ''}`}
                     onClick={toggleAssistant}
-                    title="Toggle Studio Assistant"
+                    title={isAssistantOpen ? 'Hide Studio Assistant' : 'Show Studio Assistant'}
+                    aria-pressed={isAssistantOpen}
                 >
                     Assistant
-                </button> */}
+                </button>
             </div>
             {publishOpen ? (
                 <Suspense fallback={null}>

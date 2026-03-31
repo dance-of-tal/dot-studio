@@ -11,6 +11,11 @@ function participantDisplayName(actDefinition: ActDefinition, participantKey: st
     return actDefinition.participants[participantKey]?.displayName || participantKey
 }
 
+function participantDescription(actDefinition: ActDefinition, participantKey: string) {
+    const description = actDefinition.participants[participantKey]?.description?.trim()
+    return description ? description : null
+}
+
 /**
  * Build markdown Act context for a participant's agent prompt.
  */
@@ -28,21 +33,19 @@ export function buildActContext(
     }
     lines.push(`- Team: ${actDefinition.name}`)
     lines.push(`- Your role: ${selfName}`)
-
-    // ── Participants ─────────────────────────────────
-    lines.push('- Team members:')
-    for (const key of Object.keys(actDefinition.participants)) {
-        const isSelf = key === participantKey
-        lines.push(`  - ${participantDisplayName(actDefinition, key)}${isSelf ? ' (you)' : ''}`)
+    const selfDescription = participantDescription(actDefinition, participantKey)
+    if (selfDescription) {
+        lines.push(`- Your focus: ${selfDescription}`)
     }
     lines.push('')
 
     // ── Collaboration Runtime ────────────────────────
     lines.push('# Coordination Tools')
     lines.push('- Use `message_teammate` for direct coordination with one teammate.')
-    lines.push('- Use `update_shared_board` to publish durable notes, findings, tasks, and handoffs for the whole team.')
-    lines.push('- Use `read_shared_board` to review current shared context before acting.')
-    lines.push('- Use `wait_until` when you need to pause until future messages or shared updates arrive.')
+    lines.push('- Use `update_shared_board` to keep compact shared state: decisions, task status, findings, and handoffs.')
+    lines.push('- Use `read_shared_board` for the relevant key you need. Avoid reading the full board unless you need a full resync.')
+    lines.push('- Prefer replacing stale shared notes with a fresh summary instead of appending long incremental logs.')
+    lines.push('- Use `wait_until` when you are blocked on future input. Good self-wake conditions include `board_key_exists`, `message_received`, `timeout`, `all_of`, and `any_of`.')
     lines.push('')
 
     // ── Available Relations ─────────────────────────
@@ -50,15 +53,23 @@ export function buildActContext(
         (rel) => rel.between.includes(participantKey),
     )
     if (myRelations.length > 0) {
-        lines.push('# Team Connections')
+        lines.push('# Direct Connections')
         for (const rel of myRelations) {
             const partner = rel.between[0] === participantKey ? rel.between[1] : rel.between[0]
             const partnerName = participantDisplayName(actDefinition, partner)
+            const partnerDescription = participantDescription(actDefinition, partner)
             const dirLabel = rel.direction === 'one-way'
                 ? (rel.between[0] === participantKey ? '→' : '←')
                 : '↔'
             lines.push(`- ${selfName} ${dirLabel} ${partnerName}: ${rel.name}${rel.description ? ` — ${rel.description}` : ''}`)
+            if (partnerDescription) {
+                lines.push(`  - ${partnerName} focus: ${partnerDescription}`)
+            }
         }
+        lines.push('')
+    } else {
+        lines.push('# Direct Connections')
+        lines.push('- No direct participant relations are configured for you.')
         lines.push('')
     }
 

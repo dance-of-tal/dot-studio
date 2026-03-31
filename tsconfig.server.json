@@ -4,7 +4,7 @@
     "lib": ["ES2023"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": "..",
+    "rootDir": ".",
     "outDir": "./dist",
     "strict": true,
     "skipLibCheck": true,
@@ -16,7 +16,10 @@
   "include": [
     "cli.ts",
     "server/**/*.ts",
-    "shared/**/*.ts",
-    "../dot/src/**/*.ts"
+    "shared/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.spec.ts"
   ]
 }

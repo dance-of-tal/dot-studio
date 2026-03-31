@@ -4,6 +4,7 @@
 import fs from 'fs/promises'
 import { resolve, basename, dirname, join } from 'path'
 import net from 'net'
+import os from 'os'
 import { fileURLToPath } from 'url'
 import { spawn } from 'child_process'
 import readline from 'readline/promises'
@@ -109,9 +110,35 @@ function compareSemver(left: string, right: string) {
 async function readStudioPackageMeta(): Promise<StudioPackageMeta> {
     const currentFile = fileURLToPath(import.meta.url)
     const currentDir = dirname(currentFile)
-    const packageRoot = basename(currentDir) === 'dist' ? dirname(currentDir) : currentDir
-    const raw = await fs.readFile(join(packageRoot, 'package.json'), 'utf-8')
-    return JSON.parse(raw) as StudioPackageMeta
+    const searchRoots = basename(currentDir) === 'dist'
+        ? [dirname(currentDir), currentDir]
+        : [currentDir]
+
+    for (const initialDir of searchRoots) {
+        let searchDir = initialDir
+
+        while (true) {
+            const packageJsonPath = join(searchDir, 'package.json')
+
+            try {
+                const raw = await fs.readFile(packageJsonPath, 'utf-8')
+                const parsed = JSON.parse(raw) as Partial<StudioPackageMeta>
+                if (typeof parsed.name === 'string' && typeof parsed.version === 'string') {
+                    return parsed as StudioPackageMeta
+                }
+            } catch {
+                // Walk upward until we find the published package root.
+            }
+
+            const parentDir = dirname(searchDir)
+            if (parentDir === searchDir) {
+                break
+            }
+            searchDir = parentDir
+        }
+    }
+
+    throw new Error('Could not locate package.json for DOT Studio.')
 }
 
 async function fetchLatestVersion(packageName: string) {
@@ -129,7 +156,36 @@ async function fetchLatestVersion(packageName: string) {
     return payload.version || null
 }
 
+const UPDATE_SNOOZE_DURATION_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+function getUpdateSnoozePath(packageName: string) {
+    const safeName = packageName.replace(/[^a-z0-9-]/gi, '_')
+    return join(os.tmpdir(), `.${safeName}-update-snooze`)
+}
+
+async function isUpdateSnoozed(packageName: string): Promise<boolean> {
+    try {
+        const raw = await fs.readFile(getUpdateSnoozePath(packageName), 'utf-8')
+        const snoozedAt = Number.parseInt(raw.trim(), 10)
+        return Number.isFinite(snoozedAt) && Date.now() - snoozedAt < UPDATE_SNOOZE_DURATION_MS
+    } catch {
+        return false
+    }
+}
+
+async function snoozeUpdate(packageName: string) {
+    try {
+        await fs.writeFile(getUpdateSnoozePath(packageName), String(Date.now()), 'utf-8')
+    } catch {
+        // ignore write errors
+    }
+}
+
 async function promptForNpmUpdate(packageMeta: StudioPackageMeta) {
+    if (await isUpdateSnoozed(packageMeta.name)) {
+        return false
+    }
+
     let latestVersion: string | null = null
 
     try {
@@ -158,6 +214,7 @@ async function promptForNpmUpdate(packageMeta: StudioPackageMeta) {
     try {
         const answer = (await rl.question(message)).trim().toLowerCase()
         if (answer && answer !== 'y' && answer !== 'yes') {
+            await snoozeUpdate(packageMeta.name)
             return false
         }
     } finally {

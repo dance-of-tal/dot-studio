@@ -32,6 +32,7 @@ export interface PostToBoardParams {
 
 export interface ReadBoardParams {
     entryKey?: string
+    mode?: 'summary' | 'full'
 }
 
 export interface SetWakeConditionParams {
@@ -99,12 +100,12 @@ export default tool({
             content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Create or update a shared note for the whole team. Use this for durable context, decisions, findings, and handoffs.",
+    description: "Create or update a shared note for the whole team. Keep entries compact and durable: decisions, findings, task status, and handoffs.",
     args: {
         entryKey: tool.schema.string().describe("Stable key for the shared note, such as api-spec or review-report"),
         entryType: tool.schema.enum(["artifact", "fact", "task"]).describe("Type of shared note"),
-        content: tool.schema.string().describe("Entry content"),
-        mode: tool.schema.enum(["replace", "append"]).optional().describe("Whether to replace or append to an existing shared note"),
+        content: tool.schema.string().describe("Compact entry content. Prefer a fresh summary over a long transcript or raw dump."),
+        mode: tool.schema.enum(["replace", "append"]).optional().describe("How to update an existing shared note. Prefer replace; append is only for short incremental additions."),
     },
     async execute(args, context) {
         const sessionID = context.sessionID
@@ -130,14 +131,19 @@ export default tool({
             content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Read shared notes created by the team. Returns matching entries as JSON.",
+    description: "Read shared notes created by the team. By default this returns a recent summarized view; pass a specific key for the exact entry you need.",
     args: {
-        entryKey: tool.schema.string().optional().describe("Optional shared note key. Omit to read all shared notes."),
+        entryKey: tool.schema.string().optional().describe("Optional shared note key. Pass this when you know the relevant key you need."),
+        mode: tool.schema.enum(["summary", "full"]).optional().describe("Optional board read mode when no key is provided. Use full only when you truly need a full-board resync."),
     },
     async execute(args, context) {
         const sessionID = context.sessionID
-        const params = args.entryKey ? "&key=" + encodeURIComponent(args.entryKey) : ""
-        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/read-shared-board?workingDir=${wd}\` + params)
+        const params = new URLSearchParams()
+        if (args.entryKey) params.set("key", args.entryKey)
+        if (!args.entryKey && args.mode === "full") params.set("summaryOnly", "false")
+        const qs = params.toString()
+        const suffix = qs ? "&" + qs : ""
+        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/read-shared-board?workingDir=${wd}\` + suffix)
         const data = await res.json()
         if (!data.ok) return data.error
         return JSON.stringify(data.entries, null, 2)
@@ -150,10 +156,10 @@ export default tool({
             content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Pause until a condition is met, then resume with the provided instruction. Use this when you are waiting for more input or a shared update.",
+    description: "Pause until a condition is met, then resume with the provided instruction. Use this to self-wake when you are blocked on a teammate message, board update, timeout, or a combined condition.",
     args: {
-        resumeWith: tool.schema.string().describe("Instruction to receive when the wait is over"),
-        conditionJson: tool.schema.string().describe("JSON condition expression. Supported types: all_of, any_of, board_key_exists, message_received, timeout"),
+        resumeWith: tool.schema.string().describe("Instruction to receive when the wait is over, such as 'Resume once review-summary exists and send the next handoff'."),
+        conditionJson: tool.schema.string().describe('JSON condition expression. Supported types: all_of, any_of, board_key_exists, message_received, timeout. Example: {"type":"board_key_exists","key":"review-summary"}'),
     },
     async execute(args, context) {
         let condition

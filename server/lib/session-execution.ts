@@ -1,15 +1,14 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { STUDIO_DIR } from './config.js'
-import type { ExecutionMode, SafeOwnerKind } from '../../shared/safe-mode.js'
+
+export type SessionOwnerKind = 'performer' | 'act'
 
 export type SessionExecutionContext = {
     sessionId: string
-    ownerKind: SafeOwnerKind
+    ownerKind: SessionOwnerKind
     ownerId: string
-    mode: ExecutionMode
     workingDir: string
-    executionDir: string
     updatedAt: number
 }
 
@@ -18,7 +17,7 @@ type RegistryPayload = {
     sessions: Record<string, SessionExecutionContext>
 }
 
-const SESSION_EXECUTION_PATH = path.join(STUDIO_DIR, 'safe-mode', 'session-execution.json')
+const SESSION_EXECUTION_PATH = path.join(STUDIO_DIR, 'session-execution.json')
 let sessionExecutionCache: RegistryPayload | null = null
 
 export function parseActSessionOwnerId(ownerId: string) {
@@ -105,7 +104,7 @@ export async function unregisterSessionExecutionContext(sessionId: string) {
 
 export async function listSessionExecutionContextsForWorkingDir(
     workingDir: string,
-    ownerKind?: SafeOwnerKind,
+    ownerKind?: SessionOwnerKind,
 ) {
     const registry = await readRegistry()
     return Object.values(registry.sessions)

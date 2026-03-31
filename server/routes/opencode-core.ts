@@ -17,6 +17,7 @@ import {
     restartManagedOpenCode,
     updateOpenCodeConfig,
 } from '../services/opencode-service.js'
+import { applyStudioRuntimeReload } from '../services/runtime-reload-service.js'
 import { requestWorkingDir } from './route-errors.js'
 
 const opencodeCore = new Hono()
@@ -38,6 +39,14 @@ opencodeCore.post('/api/opencode/restart', async (c) => {
         return c.json(await restartManagedOpenCode())
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 400 })
+    }
+})
+
+opencodeCore.post('/api/opencode/runtime/apply', async (c) => {
+    try {
+        return c.json(await applyStudioRuntimeReload(requestWorkingDir(c)))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
     }
 })
 

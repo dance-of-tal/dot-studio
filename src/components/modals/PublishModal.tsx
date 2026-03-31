@@ -25,7 +25,7 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
                             <strong>Publish</strong>
                             <p>
                                 {controller.step === 'picker'
-                                    ? 'Select an asset to save or publish.'
+                                    ? 'Select a Tal, Performer, or Act to save or publish.'
                                     : controller.target ? `${controller.target.kind} · ${controller.target.name}` : ''}
                             </p>
                         </div>
@@ -69,10 +69,10 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
 
                 {controller.step === 'form' ? (
                     <div className="publish-modal__footer">
-                        <button className="publish-modal__action" onClick={controller.handleSaveLocal} disabled={!controller.canSaveOrPublish || !!controller.isLocalAsset}>
+                        <button className="publish-modal__action" onClick={controller.handleSaveLocal} disabled={!controller.canSaveLocal || !!controller.isLocalAsset}>
                             <Save size={11} /> {controller.action === 'save-local' ? 'Saving…' : 'Save Local'}
                         </button>
-                        <button className="publish-modal__action publish-modal__action--primary" onClick={controller.handlePublish} disabled={!controller.canSaveOrPublish}>
+                        <button className="publish-modal__action publish-modal__action--primary" onClick={controller.handlePublish} disabled={!controller.canPublish}>
                             <Upload size={11} /> {controller.action === 'publish' ? 'Publishing…' : 'Publish'}
                         </button>
                     </div>

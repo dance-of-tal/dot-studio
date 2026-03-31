@@ -54,13 +54,11 @@ export interface PerformerDraftContent {
     danceDeliveryMode?: 'auto' | 'tool' | 'inline'
     planMode?: boolean
     agentId?: string | null
-    /** Standalone performer execution mode. Act runtime ignores this value. */
-    executionMode?: 'direct' | 'safe'
 }
 
 /**
  * Act draft content shape (when DraftFile.kind === 'act').
- * Participant choreography: no executionMode, no entry participant.
+ * Participant choreography only; no standalone runtime-mode settings.
  */
 export interface ActDraftContent {
     description?: string

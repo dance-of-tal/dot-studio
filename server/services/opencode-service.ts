@@ -11,7 +11,13 @@ import { invalidate } from '../lib/cache.js'
 import { OPENCODE_URL } from '../lib/config.js'
 import { isManagedOpencode, canRestartOpencodeSidecar, restartOpencodeSidecar } from '../lib/opencode-sidecar.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
-import { readProjectConfigFile, readProjectMcpCatalog, summarizeProjectMcpCatalog } from '../lib/project-config.js'
+import {
+    readProjectConfigFile,
+    readProjectMcpCatalog,
+    resolveProjectConfigPath,
+    summarizeProjectMcpCatalog,
+    writeProjectConfigFile,
+} from '../lib/project-config.js'
 import type { ProjectMcpLiveStatusMap } from '../lib/project-config.js'
 import { projectMcpEntryEnabled } from '../../shared/project-mcp.js'
 import { invalidateProviderListCache } from '../lib/model-catalog.js'
@@ -21,7 +27,6 @@ type ResponseEnvelope<T> = { data?: T | null | undefined }
 type ProviderAuthStatus = Record<string, unknown>
 type OauthResponse = Record<string, unknown>
 type McpAuthResponse = Record<string, unknown>
-type ProjectConfigFileResponse = { content?: string }
 type ProviderAuthInput =
     | { type: 'oauth'; refresh: string; access: string; expires: number; enterpriseUrl?: string; accountId?: string }
     | { type: 'api'; key: string }
@@ -202,12 +207,11 @@ export async function restartManagedOpenCode() {
 }
 
 export async function updateOpenCodeConfig(directory: string, patch: unknown) {
-    const oc = await getOpencode()
     const current = await readProjectConfigFile(directory)
     const nextConfig = mergeProjectConfig(current, patch && typeof patch === 'object' ? patch as Record<string, unknown> : {})
-    const res = await oc.config.update({ directory, config: nextConfig })
+    await writeProjectConfigFile(directory, nextConfig)
     invalidate('mcp-servers')
-    return responseData(res, {})
+    return nextConfig
 }
 
 export async function authorizeProviderOauth(directory: string, providerId: string, method: number) {
@@ -312,31 +316,26 @@ export async function removeMcpAuth(directory: string, name: string) {
 // ── Config ──────────────────────────────────────────────
 
 export async function readProjectConfigFromOpencode(directory: string) {
-    const oc = await getOpencode()
-    const res = await oc.file.read({
-        directory,
-        path: 'config.json',
-    })
-    const data = responseData<ProjectConfigFileResponse>(res, {})
-    const raw = typeof data?.content === 'string' ? data.content : '{}'
     return {
         cwd: directory,
-        config: JSON.parse(raw),
+        config: await readProjectConfigFile(directory),
     }
 }
 
 export async function readProjectConfigSnapshot(directory: string) {
     try {
         const { cwd, config } = await readProjectConfigFromOpencode(directory)
+        const configPath = await resolveProjectConfigPath(cwd)
         return {
             exists: true as const,
-            path: `${cwd}/config.json`,
+            path: configPath,
             config,
         }
     } catch {
+        const configPath = await resolveProjectConfigPath(directory)
         return {
             exists: false as const,
-            path: `${directory}/config.json`,
+            path: configPath,
             config: {},
         }
     }

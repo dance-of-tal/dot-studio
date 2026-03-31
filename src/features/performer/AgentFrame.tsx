@@ -5,8 +5,6 @@
  * 1. Initializes shared hooks and store bindings
  * 2. Renders the CanvasWindowFrame shell with header
  * 3. Delegates to PerformerEditPanel or PerformerChatPanel
- * 4. Manages SafeReviewModal
- *
  * Edit-mode composition → PerformerEditPanel
  * Chat-mode conversation → PerformerChatPanel
  */
@@ -25,15 +23,13 @@ import { assetUrnAuthor, assetUrnDisplayName, assetUrnPath } from '../../lib/ass
 import type { AssetListItem } from '../../../shared/asset-contracts'
 import type { AssetRef, ModelConfig } from '../../types'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
-import SafeReviewModal from '../../components/modals/SafeReviewModal'
 
 import PerformerEditPanel from './PerformerEditPanel'
 import PerformerChatPanel from './PerformerChatPanel'
 import PerformerFrameHeaderMeta from './PerformerFrameHeaderMeta'
-import { usePerformerSafeReview } from './usePerformerSafeReview'
 import { selectMessagesForChatKey, selectChatKeyIsLoading } from '../../store/session'
 
-import { Pencil, EyeOff, Maximize2, Minimize2, Shield } from 'lucide-react'
+import { Pencil, EyeOff, Maximize2, Minimize2 } from 'lucide-react'
 import './AgentFrame.css'
 import './AgentChat.css'
 import './AgentChatComposer.css'
@@ -75,14 +71,11 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         performers, drafts,
         openDraftEditor,
         updatePerformerName,
+        updatePerformerAuthoringMeta,
         setPerformerTalRef, setPerformerDanceDeliveryMode,
         setPerformerModel, setPerformerModelVariant,
         removePerformerMcp, setPerformerMcpBinding, removePerformerDance,
-        setPerformerExecutionMode,
-        sessionMap, safeSummaries,
-        refreshSafeOwner, applySafeOwner, discardSafeOwnerFile,
-        discardAllSafeOwner, undoLastSafeApply,
-        detachPerformerSession,
+        sessionMap,
         enterFocusMode, exitFocusMode,
         focusSnapshot,
     } = useStudioStore()
@@ -105,7 +98,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
     const isActEditMode = !!data.actEditConnectVisible
     const shouldShowEditPanel = isEditMode || isActEditMode
     const performer = performers.find((item) => item.id === id) || null
-    const safeSummary = safeSummaries[`performer:${id}`] || null
     const sessionId = sessionMap[id] || null
     const hasActiveSession = !!sessionId
 
@@ -171,37 +163,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages, isLoading])
 
-    const {
-        showSafeReview,
-        safeBusy,
-        pendingModeSwitch,
-        pendingSafeModeConfirm,
-        setShowSafeReview,
-        setPendingModeSwitch,
-        handleToggleExecutionMode,
-        confirmSafeModeSwitch,
-        cancelSafeModeSwitch,
-        switchNotice,
-        applySafeReview,
-        discardSafeReviewAll,
-        discardSafeReviewFile,
-        undoSafeReviewApply,
-    } = usePerformerSafeReview({
-        performerId: id,
-        performer,
-        isSelected,
-        isFocused,
-        isEditMode: shouldShowEditPanel,
-        refreshSafeOwner,
-        safeSummary,
-        setPerformerExecutionMode,
-        detachPerformerSession,
-        applySafeOwner,
-        discardSafeOwnerFile,
-        discardAllSafeOwner,
-        undoLastSafeApply,
-    })
-
     const handleToggleFocus = useCallback(() => {
         if (isFocused) {
             exitFocusMode()
@@ -210,7 +171,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         }
 
         enterFocusMode(id, 'performer', getCanvasViewportSize())
-        scheduleFitView(rfFitView, 'enter')
     }, [enterFocusMode, exitFocusMode, id, isFocused, rfFitView])
 
     const openAssetEditor = useCallback(async (
@@ -280,9 +240,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                                 modelTitle={data.modelTitle || null}
                                 talLabel={data.talLabel || null}
                                 danceSummary={data.danceSummary || null}
-                                executionMode={performer?.executionMode === 'safe' ? 'safe' : 'direct'}
-                                pendingCount={safeSummary?.pendingCount || 0}
-                                conflictCount={safeSummary?.conflictCount || 0}
                             />
                         )}
                         <button
@@ -339,6 +296,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                         }}
                         onClose={closeEditor}
                         onNameChange={(value) => updatePerformerName(id, value)}
+                        onDescriptionChange={(value) => updatePerformerAuthoringMeta(id, { description: value })}
                         onTalRefChange={(ref) => setPerformerTalRef(id, ref)}
                         onDanceDeliveryModeChange={(value) => setPerformerDanceDeliveryMode(id, value)}
                         onModelChange={(model) => setPerformerModel(id, model)}
@@ -368,67 +326,9 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                         chatEndRef={chatEndRef}
                         onSetAgentId={setPerformerAgentId}
                         onSetModelVariant={setPerformerModelVariant}
-                        onSetExecutionMode={handleToggleExecutionMode}
-
-                        safeSummary={safeSummary}
                     />
                 )}
             </CanvasWindowFrame>
-            {/* [SAFE-MODE] Hidden from UI — DO NOT REMOVE during cleanup/refactoring.
-               Safe mode feature (SafeReviewModal + SafeModeConfirm) is preserved for future re-enablement.
-            {showSafeReview ? (
-                <SafeReviewModal
-                    title={pendingModeSwitch === 'direct' ? `${data.name} · Review before switching to Direct` : `${data.name} · Safe Mode Review`}
-                    summary={safeSummary}
-                    busy={safeBusy}
-                    onClose={() => { setShowSafeReview(false); setPendingModeSwitch(null) }}
-                    onApply={() => { void applySafeReview() }}
-                    onDiscardAll={() => { void discardSafeReviewAll() }}
-                    onDiscardFile={(filePath) => {
-                        void discardSafeReviewFile(filePath)
-                    }}
-                    onUndoLastApply={() => {
-                        void undoSafeReviewApply()
-                    }}
-                    switchNotice={switchNotice}
-                />
-            ) : null}
-            {pendingSafeModeConfirm ? (
-                <div className="publish-modal__backdrop" onClick={cancelSafeModeSwitch}>
-                    <div className="publish-modal safe-mode-confirm" onClick={(e) => e.stopPropagation()}>
-                        <div className="publish-modal__header">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <Shield size={16} />
-                                <h3 style={{ margin: 0 }}>Switch to Safe Mode?</h3>
-                            </div>
-                        </div>
-                        <div className="publish-modal__body">
-                            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 'var(--font-base)', lineHeight: 1.5 }}>
-                                Switching to Safe mode will start a new session in an isolated workspace.
-                                Your current chat context will not carry over to the new session.
-                            </p>
-                        </div>
-                        <div className="publish-modal__footer">
-                            <button
-                                type="button"
-                                className="publish-modal__action publish-modal__action--primary"
-                                onClick={confirmSafeModeSwitch}
-                            >
-                                <Shield size={12} />
-                                <span>Switch to Safe</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="publish-modal__action"
-                                onClick={cancelSafeModeSwitch}
-                            >
-                                <span>Cancel</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            ) : null}
-            */}
         </div>
     )
 }

@@ -193,6 +193,11 @@ export function useAssetLibraryController() {
         try {
             setDetailActionLoading(action)
             setDetailActionStatus(null)
+
+            if (asset.kind === 'dance' && action === 'publish') {
+                throw new Error('Dance assets are exported from the Dance editor. Export the draft, upload it to GitHub, then import it from Asset Library as Dance.')
+            }
+
             const payload = buildAuthoringPayloadFromAsset(asset)
             const targetSlug = asset.slug || slugifyAssetName(asset.name)
 
@@ -219,7 +224,7 @@ export function useAssetLibraryController() {
                 return
             }
 
-            const result = await api.dot.publishAsset(asset.kind, targetSlug, payload, Array.isArray(asset.tags) ? asset.tags : [], true)
+            const result = await api.dot.publishAsset(asset.kind, targetSlug, payload, Array.isArray(asset.tags) ? asset.tags : [], undefined, true)
             await invalidateInstalledAssetQueries(asset.kind)
             setDetailActionStatus(result.published
                 ? `Published ${result.urn}.`

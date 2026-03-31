@@ -39,6 +39,33 @@ type SetWakeConditionInput = {
     condition: ConditionExpr
 }
 
+type ReadBoardInput = {
+    key?: string
+    limit?: number
+    summaryOnly?: boolean
+}
+
+const BOARD_ENTRY_MAX_CHARS = 4000
+const BOARD_APPEND_MAX_CHARS = 600
+const BOARD_SUMMARY_MAX_CHARS = 280
+const BOARD_READ_LIMIT_DEFAULT = 8
+const BOARD_READ_LIMIT_MAX = 25
+
+function normalizeBoardReadLimit(limit?: number) {
+    if (!Number.isFinite(limit)) return BOARD_READ_LIMIT_DEFAULT
+    return Math.max(1, Math.min(BOARD_READ_LIMIT_MAX, Math.floor(limit || BOARD_READ_LIMIT_DEFAULT)))
+}
+
+function summarizeBoardEntry<T extends { content: string }>(entry: T): T {
+    if (entry.content.length <= BOARD_SUMMARY_MAX_CHARS) {
+        return entry
+    }
+    return {
+        ...entry,
+        content: `${entry.content.slice(0, BOARD_SUMMARY_MAX_CHARS)}…`,
+    }
+}
+
 class ActRuntimeService {
     private readonly threadManager: ThreadManager
     private readonly workingDir: string
@@ -153,13 +180,23 @@ class ActRuntimeService {
             return { ok: false as const, status: 429, error: timeoutCheck.reason }
         }
 
-        const boardCheck = guard.checkBoardUpdateBudget(body.key)
+        const key = body.key.trim()
+        const content = body.content.trim()
+        const updateMode = body.updateMode || 'replace'
+        if (!key) {
+            return { ok: false as const, status: 400, error: 'Shared note key is required' }
+        }
+        if (!content) {
+            return { ok: false as const, status: 400, error: 'Shared note content is required' }
+        }
+
+        const boardCheck = guard.checkBoardUpdateBudget(key)
         if (!boardCheck.ok) {
             return { ok: false as const, status: 429, error: boardCheck.reason }
         }
 
         // Board writePolicy check (PRD §16.6)
-        const existingEntry = runtime.mailbox.readBoard(body.key)
+        const existingEntry = runtime.mailbox.readBoard(key)
         if (existingEntry) {
             const wpCheck = guard.checkBoardWritePolicy(existingEntry, body.author)
             if (!wpCheck.ok) {
@@ -167,13 +204,25 @@ class ActRuntimeService {
             }
         }
 
+        if (content.length > BOARD_ENTRY_MAX_CHARS) {
+            return { ok: false as const, status: 400, error: `Shared note content must be ${BOARD_ENTRY_MAX_CHARS} characters or less` }
+        }
+        if (updateMode === 'append') {
+            if (content.length > BOARD_APPEND_MAX_CHARS) {
+                return { ok: false as const, status: 400, error: `Append updates must be ${BOARD_APPEND_MAX_CHARS} characters or less` }
+            }
+            if (existingEntry && `${existingEntry.content}\n${content}`.length > BOARD_ENTRY_MAX_CHARS) {
+                return { ok: false as const, status: 400, error: 'Append update would exceed the shared note size limit. Replace the entry with a compact summary instead.' }
+            }
+        }
+
         try {
             const entry = runtime.mailbox.postToBoard({
-                key: body.key,
+                key,
                 kind: body.kind,
                 author: body.author,
-                content: body.content,
-                updateMode: body.updateMode || 'replace',
+                content,
+                updateMode,
                 ownership: 'authoritative',
                 metadata: body.metadata,
                 threadId,
@@ -181,15 +230,14 @@ class ActRuntimeService {
 
             await this.threadManager.persistBoard(threadId)
 
-            const existing = runtime.mailbox.readBoard(body.key)
-            const eventType = (existing?.version ?? 0) > 1 ? 'board.updated' : 'board.posted'
+            const eventType = entry.version > 1 ? 'board.updated' : 'board.posted'
             const event: MailboxEvent = {
                 id: nanoid(),
                 type: eventType,
                 sourceType: 'performer',
                 source: body.author,
                 timestamp: Date.now(),
-                payload: { key: body.key, kind: body.kind, author: body.author, threadId },
+                payload: { key, kind: body.kind, author: body.author, threadId },
             }
             await this.threadManager.logEvent(threadId, event)
 
@@ -207,19 +255,26 @@ class ActRuntimeService {
         }
     }
 
-    async readBoard(threadId: string, key?: string) {
+    async readBoard(threadId: string, input: ReadBoardInput = {}) {
         await this.ensureThreadsLoaded()
         const runtime = this.threadManager.getThreadRuntime(threadId)
         if (!runtime) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
         }
 
+        const key = input.key?.trim()
         if (key) {
             const entry = runtime.mailbox.readBoard(key)
             return { ok: true as const, entries: entry ? [entry] : [] }
         }
 
-        return { ok: true as const, entries: runtime.mailbox.getBoardSnapshot() }
+        const entries = runtime.mailbox.getBoardSnapshot()
+            .sort((left, right) => right.timestamp - left.timestamp)
+            .slice(0, normalizeBoardReadLimit(input.limit))
+        return {
+            ok: true as const,
+            entries: input.summaryOnly === false ? entries : entries.map((entry) => summarizeBoardEntry(entry)),
+        }
     }
 
     async syncActDefinition(actId: string, actDefinition: ActDefinition) {

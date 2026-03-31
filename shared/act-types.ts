@@ -112,6 +112,7 @@ export interface ActRelation extends ActRelationV1 {
 export interface ActParticipantBinding {
     performerRef: SharedAssetRef
     displayName?: string
+    description?: string
     subscriptions?: ParticipantSubscriptions
 }
 

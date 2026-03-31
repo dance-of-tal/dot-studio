@@ -3,7 +3,6 @@
 import type {
     AssetRef,
     DanceDeliveryMode,
-    ExecutionMode,
     ModelConfig,
     PerformerNode,
     PerformerScope,
@@ -29,7 +28,6 @@ export function createPerformerNode(input: {
     mcpBindingMap?: Record<string, string>
     declaredMcpConfig?: Record<string, unknown> | null
     danceDeliveryMode?: DanceDeliveryMode
-    executionMode?: ExecutionMode
     planMode?: boolean
     hidden?: boolean
     activeSessionId?: string
@@ -60,7 +58,6 @@ export function createPerformerNode(input: {
         mcpBindingMap: sanitizeMcpBindingMap(input.mcpBindingMap),
         declaredMcpConfig: input.declaredMcpConfig || null,
         danceDeliveryMode: input.danceDeliveryMode || 'auto',
-        executionMode: input.executionMode || 'direct',
         ...(input.activeSessionId ? { activeSessionId: input.activeSessionId } : {}),
         ...(input.planMode ? { planMode: input.planMode } : {}),
         ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),

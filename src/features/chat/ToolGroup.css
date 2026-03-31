@@ -40,23 +40,33 @@
     background: var(--bg-hover);
 }
 
-.basic-tool__icon {
+.basic-tool__badge {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     flex-shrink: 0;
+    min-width: 42px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
     color: var(--text-muted);
+    background: var(--bg-default);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
 }
 
-.basic-tool--completed .basic-tool__icon {
+.basic-tool--completed .basic-tool__badge {
     color: #10b981;
 }
 
-.basic-tool__icon--error {
+.basic-tool__badge--error {
     color: var(--status-danger, #ef4444) !important;
+    border-color: color-mix(in srgb, var(--status-danger, #ef4444) 25%, var(--border-light));
 }
 
-.basic-tool--running .basic-tool__icon,
-.basic-tool--pending .basic-tool__icon {
+.basic-tool--running .basic-tool__badge,
+.basic-tool--pending .basic-tool__badge {
     color: var(--accent);
 }
 
@@ -113,7 +123,10 @@
     flex-shrink: 0;
     color: var(--text-muted);
     margin-left: 4px;
-    transition: transform 0.15s;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .basic-tool__content {
@@ -248,6 +261,9 @@
 .search-trigger__ext {
     flex-shrink: 0;
     color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 /* ── Agent / Skill trigger ── */
@@ -298,7 +314,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
+    min-width: 46px;
     height: 22px;
     border-radius: 4px;
     border: 1px solid var(--border-light);
@@ -308,6 +324,8 @@
     opacity: 0;
     transition: opacity 0.15s, background 0.1s;
     z-index: 1;
+    font-size: 10px;
+    font-weight: 600;
 }
 
 .tool-content-terminal:hover .tool-copy-btn {
@@ -474,6 +492,10 @@
     display: inline-flex;
     align-items: center;
     color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .tool-file-accordion__content {
@@ -495,8 +517,18 @@
     padding: 5px 8px 2px;
 }
 
-.tool-error-card__icon {
+.tool-error-card__pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--status-danger, #ef4444) 25%, var(--border-light));
     color: var(--status-danger, #ef4444);
+    background: color-mix(in srgb, var(--status-danger, #ef4444) 8%, var(--bg-default));
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
     flex-shrink: 0;
 }
 
@@ -513,7 +545,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
+    min-width: 46px;
     height: 20px;
     border-radius: 3px;
     border: 1px solid var(--border-light);
@@ -521,6 +553,8 @@
     color: var(--text-muted);
     cursor: pointer;
     transition: background 0.1s;
+    font-size: 10px;
+    font-weight: 600;
 }
 
 .tool-error-card__copy:hover {
@@ -555,6 +589,10 @@
     flex-shrink: 0;
     color: var(--text-muted);
     margin-top: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 /* ── Patch badges ── */
@@ -612,11 +650,20 @@
     background: var(--bg-hover);
 }
 
-.context-group__icon {
+.context-group__badge {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     color: var(--text-muted);
+    min-width: 42px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-default);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
 }
 
 .context-group__title {
@@ -646,6 +693,10 @@
     flex-shrink: 0;
     color: var(--text-muted);
     margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 .context-group__list {
@@ -662,9 +713,20 @@
     color: var(--text-secondary);
 }
 
-.context-tool-icon {
+.context-tool-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     color: var(--text-muted);
+    min-width: 32px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-default);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
 }
 
 .context-tool-name {
@@ -685,8 +747,10 @@
 .context-tool-error {
     color: var(--status-danger, #ef4444);
     font-weight: 600;
-    font-size: 11px;
+    font-size: 10px;
     margin-left: auto;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 /* ── ToolGroup v2 wrapper ── */
@@ -716,6 +780,34 @@
     transition: background 0.1s;
 }
 
+.todo-inline-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 38px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-default);
+    color: var(--text-muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
+.todo-inline-status--active {
+    color: var(--accent);
+}
+
+.todo-inline-status--completed {
+    color: #10b981;
+}
+
+.todo-inline-status--cancelled {
+    color: var(--text-muted);
+}
+
 .todo-inline-item--active {
     background: var(--bg-selected);
 }
@@ -727,26 +819,4 @@
 .todo-inline-text--done {
     text-decoration: line-through;
     color: var(--text-muted);
-}
-
-/* ── In-progress pulse (replaces spinner for todo items) ── */
-
-.todo-inline-pulse {
-    animation: todo-inline-pulse-anim 1.8s ease-in-out infinite;
-    transform-origin: center;
-}
-
-@keyframes todo-inline-pulse-anim {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.8); }
-}
-
-/* ── Spinner (used by tool status indicators) ── */
-
-.spin-icon {
-    animation: tool-spin 0.8s linear infinite;
-}
-
-@keyframes tool-spin {
-    to { transform: rotate(360deg); }
 }

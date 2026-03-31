@@ -191,7 +191,7 @@ export function createDragEndHandler(
                 // Draft performer: create from draft content
                 if (asset.source === 'draft' && asset.draftContent) {
                     const cfg = asset.draftContent as DraftConfigLike
-                    store.addPerformerFromDraft(asset.name || 'Draft Performer', cfg)
+                    store.addPerformerFromDraft(asset.name || 'Draft Performer', cfg, asset.description || undefined)
                     return true
                 }
                 store.addPerformerFromAsset(await resolvePerformerAssetForStudio(asset, showDropWarning))

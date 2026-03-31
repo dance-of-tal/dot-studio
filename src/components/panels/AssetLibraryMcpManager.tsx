@@ -205,6 +205,15 @@ function McpEntryBody({
                         <option value="disabled">Disabled</option>
                     </select>
                 </label>
+                <label className="asset-mcp-editor__field">
+                    <span>Timeout (ms)</span>
+                    <input
+                        className="text-input"
+                        value={entry.timeoutText}
+                        placeholder="5000"
+                        onChange={(e) => update((d) => ({ ...d, timeoutText: e.target.value }))}
+                    />
+                </label>
             </div>
 
             {/* ── STDIO fields ────────────────────────────── */}
@@ -416,7 +425,7 @@ export default function AssetLibraryMcpManager({
             )}
 
             <div className="asset-mcp-manager__footer">
-                <button className={`btn${showMcpRawConfig ? ' btn--active' : ''}`} onClick={() => setShowMcpRawConfig((v: boolean) => !v)} title="Show the raw config.json MCP payload sent to OpenCode">
+                <button className={`btn${showMcpRawConfig ? ' btn--active' : ''}`} onClick={() => setShowMcpRawConfig((v: boolean) => !v)} title="Show the raw project MCP payload sent to OpenCode">
                     {showMcpRawConfig ? 'Hide Raw' : 'View Raw'}
                 </button>
                 <button className="btn" onClick={resetMcpCatalog} disabled={!mcpCatalogDirty || mcpCatalogSaving}>Reset</button>

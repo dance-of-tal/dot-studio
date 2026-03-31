@@ -16,7 +16,7 @@ It exists only as:
 ## Identity
 
 - performer id: `studio-assistant`
-- UI entry: Stage toolbar assistant toggle
+- UI entry: toolbar assistant toggle
 - state owner:
   - `src/store/assistantSlice.ts`
 

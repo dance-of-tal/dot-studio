@@ -1,9 +1,8 @@
 const SESSION_TITLE_PREFIX = 'DOT Studio:'
 const SESSION_METADATA_PATTERN = /^DOT Studio:\s*(.*?)\s*\[studio:([^:\]]+):(.*)\]\s*$/
 
-export function buildStudioSessionTitle(performerId: string, performerName: string, configHash: string, executionMode?: string): string {
-    const safeLabel = executionMode === 'safe' ? '[SAFE] ' : ''
-    return `${SESSION_TITLE_PREFIX} ${safeLabel}${performerName} [studio:${performerId}:${configHash}]`
+export function buildStudioSessionTitle(performerId: string, performerName: string, configHash: string): string {
+    return `${SESSION_TITLE_PREFIX} ${performerName} [studio:${performerId}:${configHash}]`
 }
 
 export function parseStudioSessionTitle(title: string | undefined | null): {

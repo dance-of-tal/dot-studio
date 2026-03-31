@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { buildActAssetPayload, buildPerformerAssetPayload, normalizePerformerAssetInput } from './performers-publish'
+import {
+    buildActAssetPayload,
+    buildActPublishPayload,
+    buildPerformerAssetPayload,
+    buildPerformerPublishPayload,
+    getActPublishDependencyIssues,
+    getPerformerDependencyPublishIssues,
+    normalizePerformerAssetInput,
+} from './performers'
 
 describe('buildPerformerAssetPayload', () => {
     it('keeps portable declared MCP config when exporting performer assets', () => {
         const payload = buildPerformerAssetPayload({
-            talRef: { kind: 'registry', urn: 'tal/@user/reasoning' },
+            talRef: { kind: 'registry', urn: 'tal/@user/project/reasoning' },
             danceRefs: [],
             model: { provider: 'openai', modelId: 'gpt-5' },
             modelVariant: 'reasoning-high',
@@ -18,7 +26,7 @@ describe('buildPerformerAssetPayload', () => {
         })
 
         expect(payload.payload).toMatchObject({
-            tal: 'tal/@user/reasoning',
+            tal: 'tal/@user/project/reasoning',
             model: { provider: 'openai', modelId: 'gpt-5' },
             modelVariant: 'reasoning-high',
             mcp_config: {
@@ -29,7 +37,7 @@ describe('buildPerformerAssetPayload', () => {
 
     it('exports selected MCP server names as portable requirements for scratch performers', () => {
         const payload = buildPerformerAssetPayload({
-            talRef: { kind: 'registry', urn: 'tal/@user/reasoning' },
+            talRef: { kind: 'registry', urn: 'tal/@user/project/reasoning' },
             danceRefs: [],
             model: null,
             modelVariant: null,
@@ -41,11 +49,39 @@ describe('buildPerformerAssetPayload', () => {
         })
 
         expect(payload.payload).toMatchObject({
-            tal: 'tal/@user/reasoning',
+            tal: 'tal/@user/project/reasoning',
             mcp_config: {
                 servers: ['github-prod', 'postgres-readonly'],
             },
         })
+    })
+
+    it('reports draft Tal dependencies with a Tal-specific message', () => {
+        expect(() => buildPerformerAssetPayload({
+            talRef: { kind: 'draft', draftId: 'draft-tal-1' },
+            danceRefs: [{ kind: 'registry', urn: 'dance/@user/repo/review-skill' }],
+            model: null,
+            modelVariant: null,
+            mcpServerNames: [],
+            mcpBindingMap: {},
+            declaredMcpConfig: null,
+        }, {
+            name: 'Review Performer',
+        })).toThrow('Tal is still attached as a draft.')
+    })
+
+    it('reports draft Dance dependencies with a Dance-specific message', () => {
+        expect(() => buildPerformerAssetPayload({
+            talRef: { kind: 'registry', urn: 'tal/@user/project/reasoning' },
+            danceRefs: [{ kind: 'draft', draftId: 'draft-dance-1' }],
+            model: null,
+            modelVariant: null,
+            mcpServerNames: [],
+            mcpBindingMap: {},
+            declaredMcpConfig: null,
+        }, {
+            name: 'Review Performer',
+        })).toThrow('Draft Dance refs are still attached.')
     })
 })
 
@@ -53,9 +89,9 @@ describe('normalizePerformerAssetInput', () => {
     it('preserves modelVariant from imported performer assets', () => {
         const normalized = normalizePerformerAssetInput({
             name: 'Imported Performer',
-            urn: 'performer/@user/imported',
-            talUrn: 'tal/@user/reasoning',
-            danceUrns: ['dance/@user/style'],
+            urn: 'performer/@user/project/imported',
+            talUrn: 'tal/@user/project/reasoning',
+            danceUrns: ['dance/@user/repo/style'],
             model: { provider: 'openai', modelId: 'gpt-5' },
             modelVariant: 'reasoning-high',
             mcpConfig: {
@@ -65,9 +101,18 @@ describe('normalizePerformerAssetInput', () => {
 
         expect(normalized.modelVariant).toBe('reasoning-high')
         expect(normalized.meta).toEqual({
-            derivedFrom: 'performer/@user/imported',
-            publishBindingUrn: 'performer/@user/imported',
+            derivedFrom: 'performer/@user/project/imported',
+            publishBindingUrn: 'performer/@user/project/imported',
         })
+    })
+})
+
+describe('getPerformerDependencyPublishIssues', () => {
+    it('returns no issues when performer refs are installable', () => {
+        expect(getPerformerDependencyPublishIssues({
+            talRef: { kind: 'registry', urn: 'tal/@user/project/reasoning' },
+            danceRefs: [{ kind: 'registry', urn: 'dance/@user/repo/review-skill' }],
+        })).toEqual([])
     })
 })
 
@@ -102,5 +147,163 @@ describe('buildActAssetPayload', () => {
             ],
             createdAt: Date.now(),
         })).toThrow('requires a description')
+    })
+})
+
+describe('publish cascade builders', () => {
+    it('promotes a draft Tal into an in-memory dependency when publishing a performer', () => {
+        const result = buildPerformerPublishPayload({
+            talRef: { kind: 'draft', draftId: 'tal-draft-1' },
+            danceRefs: [],
+            model: { provider: 'openai', modelId: 'gpt-5' },
+            modelVariant: null,
+            mcpServerNames: [],
+            mcpBindingMap: {},
+            declaredMcpConfig: null,
+        }, {
+            name: 'Reviewer Performer',
+            slug: 'reviewer-performer',
+            description: 'Reviewer Performer',
+            tags: ['review'],
+        }, {
+            username: 'acme',
+            workingDir: '/tmp/agent-presets',
+            drafts: {
+                'tal-draft-1': {
+                    id: 'tal-draft-1',
+                    kind: 'tal',
+                    name: 'Reviewer Tal',
+                    slug: 'reviewer-tal',
+                    description: 'Reviewer Tal',
+                    tags: ['tal'],
+                    content: '# Review carefully',
+                    updatedAt: 1,
+                    saveState: 'saved',
+                },
+            },
+        })
+
+        expect(result.payload).toMatchObject({
+            urn: 'performer/@acme/agent-presets/reviewer-performer',
+            payload: {
+                tal: 'tal/@acme/agent-presets/reviewer-tal',
+            },
+        })
+        expect(result.providedAssets).toEqual([
+            expect.objectContaining({
+                kind: 'tal',
+                urn: 'tal/@acme/agent-presets/reviewer-tal',
+            }),
+        ])
+    })
+
+    it('promotes a draft performer and nested draft Tal when publishing an act', () => {
+        const result = buildActPublishPayload({
+            id: 'act-1',
+            name: 'Review Flow',
+            position: { x: 0, y: 0 },
+            width: 400,
+            height: 300,
+            participants: {
+                'participant-reviewer': {
+                    performerRef: { kind: 'draft', draftId: 'performer-draft-1' },
+                    displayName: 'Reviewer',
+                    position: { x: 0, y: 0 },
+                },
+            },
+            relations: [],
+            createdAt: Date.now(),
+        }, {
+            slug: 'review-flow',
+            description: 'Review Flow',
+            tags: ['workflow'],
+        }, {
+            username: 'acme',
+            workingDir: '/tmp/workflows',
+            drafts: {
+                'performer-draft-1': {
+                    id: 'performer-draft-1',
+                    kind: 'performer',
+                    name: 'Reviewer Performer',
+                    slug: 'reviewer-performer',
+                    description: 'Reviewer Performer',
+                    tags: ['performer'],
+                    content: {
+                        talRef: { kind: 'draft', draftId: 'tal-draft-1' },
+                        danceRefs: [],
+                        model: { provider: 'openai', modelId: 'gpt-5' },
+                        modelVariant: null,
+                        mcpServerNames: [],
+                        mcpBindingMap: {},
+                    },
+                    updatedAt: 1,
+                    saveState: 'saved',
+                },
+                'tal-draft-1': {
+                    id: 'tal-draft-1',
+                    kind: 'tal',
+                    name: 'Reviewer Tal',
+                    slug: 'reviewer-tal',
+                    description: 'Reviewer Tal',
+                    tags: ['tal'],
+                    content: '# Review carefully',
+                    updatedAt: 1,
+                    saveState: 'saved',
+                },
+            },
+        })
+
+        expect(result.payload).toMatchObject({
+            urn: 'act/@acme/workflows/review-flow',
+            payload: {
+                participants: [
+                    expect.objectContaining({
+                        key: 'Reviewer',
+                        performer: 'performer/@acme/workflows/reviewer-performer',
+                    }),
+                ],
+            },
+        })
+        expect(result.providedAssets.map((asset) => asset.urn)).toEqual([
+            'tal/@acme/workflows/reviewer-tal',
+            'performer/@acme/workflows/reviewer-performer',
+        ])
+    })
+
+    it('reports draft Dance blockers only for act publish dependency checks', () => {
+        expect(getActPublishDependencyIssues({
+            id: 'act-1',
+            name: 'Review Flow',
+            position: { x: 0, y: 0 },
+            width: 400,
+            height: 300,
+            participants: {
+                'participant-reviewer': {
+                    performerRef: { kind: 'draft', draftId: 'performer-draft-1' },
+                    displayName: 'Reviewer',
+                    position: { x: 0, y: 0 },
+                },
+            },
+            relations: [],
+            createdAt: Date.now(),
+        }, {
+            'performer-draft-1': {
+                id: 'performer-draft-1',
+                kind: 'performer',
+                name: 'Reviewer Performer',
+                content: {
+                    talRef: null,
+                    danceRefs: [{ kind: 'draft', draftId: 'dance-draft-1' }],
+                    model: null,
+                    modelVariant: null,
+                    mcpServerNames: [],
+                    mcpBindingMap: {},
+                },
+                updatedAt: 1,
+                saveState: 'saved',
+            },
+        })).toEqual([
+            'Draft Dance refs are still attached inside this act. Export them, upload them to GitHub, import them from Asset Library, and re-apply them before publishing this act.',
+        ])
     })
 })

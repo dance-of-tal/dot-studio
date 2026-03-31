@@ -216,13 +216,7 @@ export default function CanvasArea() {
                 }
             })
 
-            reactFlowInstance?.fitView({
-                duration: 200,
-                padding: 0,
-                minZoom: 1,
-                maxZoom: 1,
-                nodes: [{ id: focusNodeId }],
-            })
+            reactFlowInstance?.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 200 })
         }
 
         const scheduleSync = () => {

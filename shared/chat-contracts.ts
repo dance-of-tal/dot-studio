@@ -1,4 +1,3 @@
-import type { ExecutionMode } from './safe-mode.js'
 import type { AssistantStageContext } from './assistant-actions.js'
 
 export type SharedAssetRef =
@@ -35,7 +34,6 @@ export type ChatSessionCreateRequest = {
     performerId: string
     performerName: string
     configHash: string
-    executionMode?: ExecutionMode
     actId?: string
 }
 

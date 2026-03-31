@@ -21,9 +21,14 @@ export function useCanvasFocusFit(args: {
 
         const isFocusMode = !!focusSnapshot && focusNodeId === resolveFocusNodeId(focusSnapshot, focusedPerformerId)
         const timer = window.setTimeout(() => {
+            if (isFocusMode) {
+                reactFlowInstance.setViewport({ x: 0, y: 0, zoom: 1 })
+                return
+            }
+
             reactFlowInstance.fitView({
                 duration: 250,
-                padding: isFocusMode ? 0 : 0.15,
+                padding: 0.15,
                 minZoom: 1,
                 maxZoom: 1,
                 nodes: [{ id: focusNodeId }],

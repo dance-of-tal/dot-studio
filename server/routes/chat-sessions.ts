@@ -8,6 +8,7 @@ import { createStudioChatSession } from '../services/chat-service.js'
 import {
     abortStudioChatSession,
     deleteStudioChatSession,
+    getStudioChatSessionStatus,
     listStudioChatSessions,
     renameStudioChatSession,
     respondSessionPermission,
@@ -33,6 +34,14 @@ chatSessions.post('/api/chat/sessions', async (c) => {
 chatSessions.get('/api/chat/sessions', async (c) => {
     try {
         return c.json(await listStudioChatSessions(requestWorkingDir(c)))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+chatSessions.get('/api/chat/sessions/:id/status', async (c) => {
+    try {
+        return c.json(await getStudioChatSessionStatus(requestWorkingDir(c), c.req.param('id')))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

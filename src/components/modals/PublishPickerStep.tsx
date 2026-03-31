@@ -19,7 +19,6 @@ export default function PublishPickerStep({
     onStartLogin,
 }: Props) {
     const talItems = pickerItems.filter((item) => item.kind === 'tal')
-    const danceItems = pickerItems.filter((item) => item.kind === 'dance')
     const performerItems = pickerItems.filter((item) => item.kind === 'performer')
     const actItems = pickerItems.filter((item) => item.kind === 'act')
 
@@ -27,15 +26,12 @@ export default function PublishPickerStep({
         <div className="publish-modal__body">
             {pickerItems.length === 0 ? (
                 <div className="publish-modal__empty">
-                    No publishable assets. Create or customize a Tal, Dance, Performer, or Act on the canvas to get started.
+                    No publishable Tal, Performer, or Act assets. Export Dance drafts from the Dance editor, then upload them to GitHub and import them from Asset Library.
                 </div>
             ) : (
                 <>
                     {talItems.length > 0 && (
                         <PickerSection title="Tal" items={talItems} onPick={onPick} icon={<FileText size={12} />} />
-                    )}
-                    {danceItems.length > 0 && (
-                        <PickerSection title="Dance" items={danceItems} onPick={onPick} icon={<FileText size={12} />} />
                     )}
                     {performerItems.length > 0 && (
                         <PickerSection title="Performers" items={performerItems} onPick={onPick} icon={<Wand2 size={12} />} />

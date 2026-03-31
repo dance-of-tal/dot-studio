@@ -1,45 +1,40 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { ExternalLink, FileText, Save, Upload, X } from 'lucide-react'
+import type { NodeProps } from '@xyflow/react'
+import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
+import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
+import { useStudioStore } from '../../store'
+import { api } from '../../api'
+import { formatStudioApiErrorMessage } from '../../lib/api-errors'
+import type { MarkdownEditorNode } from '../../types'
+import { equalStringArray, markdownEditorModeConfig, nameToSlug } from './markdown-authoring'
+import DanceExportModal from './DanceExportModal'
 
-import { FileText, Eye, Save, Upload, X } from 'lucide-react';
-import type { NodeProps } from '@xyflow/react';
-import { useQueryClient } from '@tanstack/react-query';
-import MarkdownRenderer from '../../components/shared/MarkdownRenderer';
-import { useStudioStore } from '../../store';
-import { api } from '../../api';
-import { formatStudioApiErrorMessage } from '../../lib/api-errors';
-import type { MarkdownEditorNode } from '../../types';
-
-import { queryKeys, useDotAuthUser } from '../../hooks/queries';
-import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame';
-
-import './MarkdownEditorFrame.css';
-
-const DanceBundleEditorFrame = lazy(() => import('./DanceBundleEditorFrame'));
-
+import './MarkdownEditorFrame.css'
 
 function TagsInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
-    const [draft, setDraft] = useState('');
+    const [draft, setDraft] = useState('')
 
     const commitDraft = () => {
-        const trimmed = draft.trim();
+        const trimmed = draft.trim()
         if (trimmed && !tags.includes(trimmed)) {
-            onChange([...tags, trimmed]);
+            onChange([...tags, trimmed])
         }
-        setDraft('');
-    };
+        setDraft('')
+    }
 
     const removeTag = (index: number) => {
-        onChange(tags.filter((_, i) => i !== index));
-    };
+        onChange(tags.filter((_, i) => i !== index))
+    }
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === ',' || event.key === 'Enter') {
-            event.preventDefault();
-            commitDraft();
+            event.preventDefault()
+            commitDraft()
         } else if (event.key === 'Backspace' && !draft && tags.length > 0) {
-            removeTag(tags.length - 1);
+            removeTag(tags.length - 1)
         }
-    };
+    }
 
     return (
         <div className="markdown-editor-frame__field">
@@ -48,12 +43,7 @@ function TagsInput({ tags, onChange }: { tags: string[]; onChange: (tags: string
                 {tags.map((tag, index) => (
                     <span key={`${tag}-${index}`} className="tags-input__chip">
                         {tag}
-                        <button
-                            type="button"
-                            className="tags-input__remove"
-                            onClick={() => removeTag(index)}
-                            aria-label={`Remove ${tag}`}
-                        >
+                        <button type="button" className="tags-input__remove" onClick={() => removeTag(index)} aria-label={`Remove ${tag}`}>
                             ×
                         </button>
                     </span>
@@ -68,21 +58,7 @@ function TagsInput({ tags, onChange }: { tags: string[]; onChange: (tags: string
                 />
             </div>
         </div>
-    );
-}
-
-function nameToSlug(name: string) {
-    return name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        || 'untitled';
-}
-
-function equalStringArray(left: string[] = [], right: string[] = []) {
-    if (left.length !== right.length) return false;
-    return left.every((value, index) => value === right[index]);
+    )
 }
 
 type MarkdownEditorFrameData = Pick<MarkdownEditorNode, 'draftId' | 'kind' | 'baseline' | 'attachTarget' | 'width' | 'height'> & {
@@ -92,250 +68,144 @@ type MarkdownEditorFrameData = Pick<MarkdownEditorNode, 'draftId' | 'kind' | 'ba
     onDeactivateTransform?: () => void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default function MarkdownEditorFrame(props: NodeProps<any>) {
-    const { id, data, selected } = props as { id: string; data: MarkdownEditorFrameData; selected?: boolean };
-
-    // Dance kind → delegate to bundle editor
-    if (data.kind === 'dance') {
-        return (
-            <Suspense fallback={null}>
-                <DanceBundleEditorFrame id={id} data={data} selected={selected} type="markdownEditor" />
-            </Suspense>
-        );
-    }
-
-    // Tal kind (and any other) → original markdown editor
-    return <TalMarkdownEditor id={id} data={data} selected={selected} />;
+type MarkdownAssetEditorProps = {
+    title: string
+    dirty: boolean
+    saveLabel: string
+    showOpenButton: boolean
+    showExportButton: boolean
+    name: string
+    description: string
+    tags: string[]
+    content: string
+    previewContent: string
+    helpText: string
+    placeholder: string
+    saveState: 'unsaved' | 'saved'
+    exportDisabled?: boolean
+    exportTitle?: string
+    status: null | { tone: 'success' | 'error'; message: string }
+    busyLabel: string | null
+    selected: boolean
+    width: number
+    height: number
+    transformActive: boolean
+    onActivateTransform?: () => void
+    onDeactivateTransform?: () => void
+    onNameChange: (value: string) => void
+    onDescriptionChange: (value: string) => void
+    onTagsChange: (tags: string[]) => void
+    onContentChange: (value: string) => void
+    onSaveDraft: () => void
+    onOpen?: () => void
+    onExport?: () => void
+    onClose: () => void
 }
 
-function TalMarkdownEditor({ id, data, selected }: { id: string; data: MarkdownEditorFrameData; selected?: boolean }) {
-    const drafts = useStudioStore((state) => state.drafts);
-    const setPerformerTalRef = useStudioStore((state) => state.setPerformerTalRef);
-    const addPerformerDanceRef = useStudioStore((state) => state.addPerformerDanceRef);
-    const replacePerformerDanceRef = useStudioStore((state) => state.replacePerformerDanceRef);
-    const upsertDraft = useStudioStore((state) => state.upsertDraft);
-    const updateMarkdownEditorBaseline = useStudioStore((state) => state.updateMarkdownEditorBaseline);
-    const removeMarkdownEditor = useStudioStore((state) => state.removeMarkdownEditor);
-    const { data: authUser } = useDotAuthUser();
-    const queryClient = useQueryClient();
-
-    const draft = drafts[data.draftId];
-    const [status, setStatus] = useState<null | { tone: 'success' | 'error'; message: string }>(null);
-    const [action, setAction] = useState<null | 'draft' | 'local' | 'publish'>(null);
-
+function MarkdownAssetEditor({
+    title,
+    dirty,
+    saveLabel,
+    showOpenButton,
+    showExportButton,
+    name,
+    description,
+    tags,
+    content,
+    previewContent,
+    helpText,
+    placeholder,
+    saveState,
+    exportDisabled = false,
+    exportTitle,
+    status,
+    busyLabel,
+    selected,
+    width,
+    height,
+    transformActive,
+    onActivateTransform,
+    onDeactivateTransform,
+    onNameChange,
+    onDescriptionChange,
+    onTagsChange,
+    onContentChange,
+    onSaveDraft,
+    onOpen,
+    onExport,
+    onClose,
+}: MarkdownAssetEditorProps) {
     const stopCanvasEvent = (event: React.SyntheticEvent) => {
-        event.stopPropagation();
-    };
-
-    const baseline = data.baseline || null;
-    const currentName = typeof draft?.name === 'string' ? draft.name : '';
-    const currentSlug = typeof draft?.slug === 'string' && draft.slug.trim() ? draft.slug : nameToSlug(currentName);
-    const currentDescription = typeof draft?.description === 'string' ? draft.description : '';
-    const currentTags = useMemo(() => (Array.isArray(draft?.tags) ? draft.tags : []), [draft?.tags]);
-    const currentContent = typeof draft?.content === 'string' ? draft.content : '';
-
-    const dirty = useMemo(() => {
-        if (!baseline) {
-            return true;
-        }
-        return baseline.name !== currentName
-            || (baseline.slug || '') !== currentSlug
-            || (baseline.description || '') !== currentDescription
-            || !equalStringArray(baseline.tags || [], currentTags)
-            || baseline.content !== currentContent;
-    }, [baseline, currentContent, currentDescription, currentName, currentSlug, currentTags]);
-
-    const applyAttachTarget = (nextRef: { kind: 'draft' | 'registry'; draftId?: string; urn?: string }) => {
-        const attachTarget = data.attachTarget;
-        if (!attachTarget?.performerId) {
-            return;
-        }
-
-        if (attachTarget.mode === 'tal') {
-            setPerformerTalRef(attachTarget.performerId, nextRef.kind === 'draft'
-                ? { kind: 'draft', draftId: nextRef.draftId! }
-                : { kind: 'registry', urn: nextRef.urn! });
-            return;
-        }
-
-        if (attachTarget.mode === 'dance-new' && !attachTarget.targetRef) {
-            addPerformerDanceRef(attachTarget.performerId, nextRef.kind === 'draft'
-                ? { kind: 'draft', draftId: nextRef.draftId! }
-                : { kind: 'registry', urn: nextRef.urn! });
-            return;
-        }
-
-        if (attachTarget.targetRef) {
-            replacePerformerDanceRef(
-                attachTarget.performerId,
-                attachTarget.targetRef,
-                nextRef.kind === 'draft'
-                    ? { kind: 'draft', draftId: nextRef.draftId! }
-                    : { kind: 'registry', urn: nextRef.urn! },
-            );
-        }
-    };
-
-    const persistBaseline = (derivedFrom?: string | null) => {
-        updateMarkdownEditorBaseline(id, {
-            name: currentName,
-            slug: currentSlug,
-            description: currentDescription,
-            tags: currentTags,
-            content: currentContent,
-        });
-
-        upsertDraft({
-            id: data.draftId,
-            kind: data.kind,
-            name: currentName,
-            slug: currentSlug,
-            description: currentDescription,
-            tags: currentTags,
-            content: currentContent,
-            derivedFrom: derivedFrom || draft?.derivedFrom || undefined,
-            updatedAt: Date.now(),
-        });
-    };
-
-    const invalidateAssets = async () => {
-        await Promise.all([
-            queryClient.invalidateQueries({ queryKey: queryKeys.assets(data.workingDir) }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(data.workingDir) }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.assetKind(data.workingDir, data.kind) }),
-        ]);
-    };
-
-    const handleSaveDraft = () => {
-        applyAttachTarget({ kind: 'draft', draftId: data.draftId });
-        persistBaseline(draft?.derivedFrom || null);
-        setStatus({ tone: 'success', message: 'Saved stage-local draft.' });
-    };
-
-    const handleSaveLocal = async () => {
-        try {
-            setAction('local');
-            setStatus(null);
-            const payload = {
-                description: currentDescription.trim() || currentName.trim() || data.kind,
-                tags: currentTags,
-                content: currentContent,
-            };
-            const result = await api.dot.saveLocalAsset(data.kind, currentSlug.trim(), payload, authUser?.username || undefined);
-            applyAttachTarget({ kind: 'registry', urn: result.urn });
-            persistBaseline(result.urn);
-            await invalidateAssets();
-            setStatus({
-                tone: 'success',
-                message: result.existed
-                    ? `Updated local ${data.kind} asset at ${result.urn}.`
-                    : `Saved local ${data.kind} asset at ${result.urn}.`,
-            });
-        } catch (error: unknown) {
-            setStatus({ tone: 'error', message: formatStudioApiErrorMessage(error, false) });
-        } finally {
-            setAction(null);
-        }
-    };
-
-    const handlePublish = async () => {
-        try {
-            setAction('publish');
-            setStatus(null);
-            const payload = {
-                description: currentDescription.trim() || currentName.trim() || data.kind,
-                tags: currentTags,
-                content: currentContent,
-            };
-            const result = await api.dot.publishAsset(data.kind, currentSlug.trim(), payload, payload.tags, true);
-            applyAttachTarget({ kind: 'registry', urn: result.urn });
-            persistBaseline(result.urn);
-            await invalidateAssets();
-            setStatus({
-                tone: 'success',
-                message: result.published ? `Published ${result.urn}.` : `${result.urn} already exists in the registry.`,
-            });
-        } catch (error: unknown) {
-            setStatus({ tone: 'error', message: formatStudioApiErrorMessage(error, false) });
-        } finally {
-            setAction(null);
-        }
-    };
-
-    if (!draft) {
-        return (
-            <div className="markdown-editor-frame markdown-editor-frame--missing">
-                <div className="markdown-editor-frame__header">
-                    <span>Missing draft</span>
-                    <button className="icon-btn" onClick={() => removeMarkdownEditor(id)} title="Close editor">
-                        <X size={12} />
-                    </button>
-                </div>
-            </div>
-        );
+        event.stopPropagation()
     }
 
     return (
         <CanvasWindowFrame
-            className={`markdown-editor-frame`}
-            width={Number(data.width || 560)}
-            height={Number(data.height || 380)}
-            transformActive={!!data.transformActive}
-            onActivateTransform={data.onActivateTransform as (() => void) | undefined}
-            onDeactivateTransform={data.onDeactivateTransform as (() => void) | undefined}
-            selected={!!selected}
+            className="markdown-editor-frame"
+            width={width}
+            height={height}
+            transformActive={transformActive}
+            onActivateTransform={onActivateTransform}
+            onDeactivateTransform={onDeactivateTransform}
+            selected={selected}
             minWidth={420}
-            minHeight={280}
+            minHeight={300}
             headerStart={(
                 <div className="markdown-editor-frame__title">
                     <FileText size={13} />
-                    <span>{data.kind === 'tal' ? 'Tal Editor' : 'Dance Editor'}</span>
-                    {dirty ? <span className="markdown-editor-frame__dirty">Unsaved</span> : null}
+                    <span className="markdown-editor-frame__title-text">{title}</span>
+                    <span className={`markdown-editor-frame__badge markdown-editor-frame__badge--${saveState}`}>
+                        {saveState === 'saved' ? 'Saved Draft' : 'Unsaved Draft'}
+                    </span>
+                    {dirty ? <span className="markdown-editor-frame__dirty">Unsaved Changes</span> : null}
                 </div>
             )}
             headerEnd={(
                 <div className="markdown-editor-frame__actions">
-                    <button className="icon-btn" onClick={handleSaveDraft} title="Save draft">
-                        <Save size={12} />
+                    <button className="btn btn--primary btn--sm markdown-editor-frame__action-btn markdown-editor-frame__action-btn--save" onClick={onSaveDraft} disabled={!name.trim()}>
+                        <Save size={12} /> {saveLabel}
                     </button>
-                    <button className="icon-btn" onClick={handleSaveLocal} title="Save local asset" disabled={!dirty || !currentName.trim()}>
-                        <Eye size={12} />
-                    </button>
-                    <button className="icon-btn" onClick={handlePublish} title="Publish asset" disabled={!dirty || !currentName.trim()}>
-                        <Upload size={12} />
-                    </button>
-                    <button className="icon-btn" onClick={() => removeMarkdownEditor(id)} title="Close editor">
+                    {showOpenButton ? (
+                        <button
+                            className="btn btn--sm markdown-editor-frame__action-btn"
+                            onClick={onOpen}
+                            disabled={saveState !== 'saved'}
+                            title={saveState === 'saved' ? 'Open the saved bundle folder' : 'Save this draft to create the bundle folder first'}
+                        >
+                            <ExternalLink size={12} /> Open
+                        </button>
+                    ) : null}
+                    {showExportButton ? (
+                        <button
+                            className="btn btn--sm markdown-editor-frame__action-btn markdown-editor-frame__action-btn--export"
+                            onClick={onExport}
+                            disabled={exportDisabled}
+                            title={exportTitle}
+                        >
+                            <Upload size={12} /> Export
+                        </button>
+                    ) : null}
+                    <button className="icon-btn markdown-editor-frame__close-btn" onClick={onClose} title="Close editor">
                         <X size={12} />
                     </button>
                 </div>
             )}
         >
+            <div className="markdown-editor-frame__help" onPointerDownCapture={stopCanvasEvent} onClick={stopCanvasEvent}>
+                {helpText}
+            </div>
 
             <div className="markdown-editor-frame__meta nodrag nowheel" onPointerDownCapture={stopCanvasEvent} onClick={stopCanvasEvent}>
                 <div className="markdown-editor-frame__meta-row">
                     <label className="markdown-editor-frame__field">
                         <span className="markdown-editor-frame__field-label">Name</span>
-                        <input
-                            className="text-input nodrag nowheel"
-                            value={currentName}
-                            onChange={(event) => upsertDraft({ ...draft, name: event.target.value, updatedAt: Date.now() })}
-                            placeholder="Enter asset name"
-                        />
+                        <input className="text-input nodrag nowheel" value={name} onChange={(event) => onNameChange(event.target.value)} placeholder="Enter asset name" />
                     </label>
-                    <TagsInput
-                        tags={currentTags}
-                        onChange={(tags) => upsertDraft({ ...draft, tags, updatedAt: Date.now() })}
-                    />
+                    <TagsInput tags={tags} onChange={onTagsChange} />
                 </div>
                 <label className="markdown-editor-frame__field">
                     <span className="markdown-editor-frame__field-label">Description</span>
-                    <input
-                        className="text-input nodrag nowheel"
-                        value={currentDescription}
-                        onChange={(event) => upsertDraft({ ...draft, description: event.target.value, updatedAt: Date.now() })}
-                        placeholder="What this asset does"
-                    />
+                    <input className="text-input nodrag nowheel" value={description} onChange={(event) => onDescriptionChange(event.target.value)} placeholder="What this asset does" />
                 </label>
             </div>
 
@@ -344,20 +214,18 @@ function TalMarkdownEditor({ id, data, selected }: { id: string; data: MarkdownE
                     <span className="markdown-editor-frame__pane-label">Markdown Editor</span>
                     <textarea
                         className="markdown-editor-frame__textarea nodrag nowheel"
-                        value={currentContent}
-                        onChange={(event) => upsertDraft({ ...draft, content: event.target.value, updatedAt: Date.now() })}
+                        value={content}
+                        onChange={(event) => onContentChange(event.target.value)}
                         spellCheck={false}
-                        placeholder={data.kind === 'tal'
-                            ? 'Write the agent persona, global rules, workflows, and core instructions here using Markdown…'
-                            : 'Write an optional skill or knowledge the agent can use, including when to apply it and how…'}
+                        placeholder={placeholder}
                     />
                 </div>
                 <div className="markdown-editor-frame__preview-pane">
                     <span className="markdown-editor-frame__pane-label">Markdown Preview</span>
                     <div className="markdown-editor-frame__preview nowheel" onPointerDownCapture={stopCanvasEvent} onClick={stopCanvasEvent}>
-                        {currentContent
-                            ? <MarkdownRenderer content={currentContent} />
-                            : <span className="markdown-editor-frame__preview-empty">Preview will appear here as you type…</span>}
+                        {previewContent
+                            ? <MarkdownRenderer content={previewContent} />
+                            : <span className="markdown-editor-frame__preview-empty">Your preview will appear here as you write.</span>}
                     </div>
                 </div>
             </div>
@@ -368,11 +236,222 @@ function TalMarkdownEditor({ id, data, selected }: { id: string; data: MarkdownE
                 </div>
             ) : null}
 
-            {action ? (
+            {busyLabel ? (
                 <div className="markdown-editor-frame__status">
-                    {action === 'draft' ? 'Saving draft…' : action === 'local' ? 'Saving local asset…' : 'Publishing…'}
+                    {busyLabel}
                 </div>
             ) : null}
         </CanvasWindowFrame>
-    );
+    )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export default function MarkdownEditorFrame(props: NodeProps<any>) {
+    const { id, data, selected } = props as { id: string; data: MarkdownEditorFrameData; selected?: boolean }
+
+    const draft = useStudioStore((state) => state.drafts[data.draftId])
+    const workingDir = useStudioStore((state) => state.workingDir)
+    const upsertDraft = useStudioStore((state) => state.upsertDraft)
+    const saveMarkdownDraft = useStudioStore((state) => state.saveMarkdownDraft)
+    const removeMarkdownEditor = useStudioStore((state) => state.removeMarkdownEditor)
+    const setPerformerTalRef = useStudioStore((state) => state.setPerformerTalRef)
+    const addPerformerDanceRef = useStudioStore((state) => state.addPerformerDanceRef)
+    const replacePerformerDanceRef = useStudioStore((state) => state.replacePerformerDanceRef)
+
+    const [status, setStatus] = useState<null | { tone: 'success' | 'error'; message: string }>(null)
+    const [busyAction, setBusyAction] = useState<null | 'save'>(null)
+    const [exportOpen, setExportOpen] = useState(false)
+    const config = markdownEditorModeConfig(data.kind)
+    const [editorState, setEditorState] = useState(() => ({
+        name: typeof draft?.name === 'string' ? draft.name : '',
+        slug: typeof draft?.slug === 'string' && draft.slug.trim() ? draft.slug : nameToSlug(typeof draft?.name === 'string' ? draft.name : ''),
+        description: typeof draft?.description === 'string' ? draft.description : '',
+        tags: Array.isArray(draft?.tags) ? draft.tags : [],
+        content: typeof draft?.content === 'string' ? draft.content : '',
+    }))
+
+    useEffect(() => {
+        const currentDraft = data.draftId ? useStudioStore.getState().drafts[data.draftId] : undefined
+        setEditorState({
+            name: typeof currentDraft?.name === 'string' ? currentDraft.name : '',
+            slug: typeof currentDraft?.slug === 'string' && currentDraft.slug.trim() ? currentDraft.slug : nameToSlug(typeof currentDraft?.name === 'string' ? currentDraft.name : ''),
+            description: typeof currentDraft?.description === 'string' ? currentDraft.description : '',
+            tags: Array.isArray(currentDraft?.tags) ? currentDraft.tags : [],
+            content: typeof currentDraft?.content === 'string' ? currentDraft.content : '',
+        })
+    }, [data.draftId, draft?.id])
+
+    const currentName = editorState.name
+    const currentSlug = editorState.slug
+    const currentDescription = editorState.description
+    const currentTags = editorState.tags
+    const currentContent = editorState.content
+    const saveState = draft?.saveState || 'unsaved'
+    const baseline = data.baseline || null
+    const deferredPreviewContent = useDeferredValue(currentContent)
+
+    const dirty = useMemo(() => {
+        if (!baseline) return true
+        return baseline.name !== currentName
+            || (baseline.slug || '') !== currentSlug
+            || (baseline.description || '') !== currentDescription
+            || !equalStringArray(baseline.tags || [], currentTags)
+            || baseline.content !== currentContent
+    }, [baseline, currentContent, currentDescription, currentName, currentSlug, currentTags])
+    const exportDisabled = saveState !== 'saved' || dirty
+    const exportTitle = saveState !== 'saved'
+        ? 'Save this draft before exporting'
+        : dirty
+            ? 'Save your latest changes before exporting'
+            : 'Export this saved Dance bundle'
+
+    const applySavedDraftRef = (draftId: string) => {
+        const attachTarget = data.attachTarget
+        if (!attachTarget?.performerId) return
+        const nextRef = { kind: 'draft' as const, draftId }
+        if (attachTarget.mode === 'tal') {
+            setPerformerTalRef(attachTarget.performerId, nextRef)
+            return
+        }
+        if (attachTarget.mode === 'dance-new' && !attachTarget.targetRef) {
+            addPerformerDanceRef(attachTarget.performerId, nextRef)
+            return
+        }
+        if (attachTarget.targetRef) {
+            replacePerformerDanceRef(attachTarget.performerId, attachTarget.targetRef, nextRef)
+        }
+    }
+
+    const flushEditorStateToDraft = useCallback(() => {
+        if (!draft) return
+        upsertDraft({
+            ...draft,
+            name: currentName,
+            slug: currentSlug,
+            description: currentDescription,
+            tags: currentTags,
+            content: currentContent,
+            updatedAt: Date.now(),
+        })
+    }, [draft, upsertDraft, currentName, currentSlug, currentDescription, currentTags, currentContent])
+
+    useEffect(() => {
+        if (!draft) return
+        const draftName = typeof draft.name === 'string' ? draft.name : ''
+        const draftSlug = typeof draft.slug === 'string' && draft.slug.trim() ? draft.slug : nameToSlug(draftName)
+        const draftDescription = typeof draft.description === 'string' ? draft.description : ''
+        const draftTags = Array.isArray(draft.tags) ? draft.tags : []
+        const draftContent = typeof draft.content === 'string' ? draft.content : ''
+        if (
+            draftName === currentName
+            && draftSlug === currentSlug
+            && draftDescription === currentDescription
+            && equalStringArray(draftTags, currentTags)
+            && draftContent === currentContent
+        ) {
+            return
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            flushEditorStateToDraft()
+        }, 180)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [draft, currentName, currentSlug, currentDescription, currentTags, currentContent, flushEditorStateToDraft])
+
+    const handleSaveDraft = async () => {
+        if (!draft) return
+        try {
+            setBusyAction('save')
+            setStatus(null)
+            flushEditorStateToDraft()
+            const saved = await saveMarkdownDraft(id)
+            applySavedDraftRef(saved.id)
+            setStatus({
+                tone: 'success',
+                message: draft.saveState === 'saved'
+                    ? 'Draft updated.'
+                    : 'Draft saved.',
+            })
+        } catch (error) {
+            setStatus({ tone: 'error', message: formatStudioApiErrorMessage(error, false) })
+        } finally {
+            setBusyAction(null)
+        }
+    }
+
+    const handleOpenDanceBundle = async () => {
+        try {
+            if (!draft || draft.kind !== 'dance' || draft.saveState !== 'saved') return
+            await api.studio.openPath(`${workingDir}/.dance-of-tal/drafts/dance/${draft.id}`)
+        } catch (error) {
+            setStatus({ tone: 'error', message: formatStudioApiErrorMessage(error, false) })
+        }
+    }
+
+    const handleCloseEditor = () => {
+        flushEditorStateToDraft()
+        removeMarkdownEditor(id)
+    }
+
+    if (!draft) {
+        return (
+            <div className="markdown-editor-frame markdown-editor-frame--missing">
+                <div className="markdown-editor-frame__header">
+                    <span>Draft not found</span>
+                    <button className="icon-btn" onClick={() => removeMarkdownEditor(id)} title="Close editor">
+                        <X size={12} />
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <>
+            <MarkdownAssetEditor
+                title={config.title}
+                dirty={dirty}
+                saveLabel="Save Draft"
+                showOpenButton={config.showOpenButton}
+                showExportButton={config.showExportButton}
+                name={currentName}
+                description={currentDescription}
+                tags={currentTags}
+                content={currentContent}
+                previewContent={deferredPreviewContent}
+                helpText={config.helpText}
+                placeholder={config.placeholder}
+                saveState={saveState}
+                exportDisabled={exportDisabled}
+                exportTitle={exportTitle}
+                status={status}
+                busyLabel={busyAction === 'save' ? 'Saving draft…' : null}
+                selected={!!selected}
+                width={Number(data.width || 560)}
+                height={Number(data.height || 380)}
+                transformActive={!!data.transformActive}
+                onActivateTransform={data.onActivateTransform}
+                onDeactivateTransform={data.onDeactivateTransform}
+                onNameChange={(value) => setEditorState((state) => ({ ...state, name: value, slug: nameToSlug(value) }))}
+                onDescriptionChange={(value) => setEditorState((state) => ({ ...state, description: value }))}
+                onTagsChange={(tags) => setEditorState((state) => ({ ...state, tags }))}
+                onContentChange={(value) => setEditorState((state) => ({ ...state, content: value }))}
+                onSaveDraft={() => { void handleSaveDraft() }}
+                onOpen={data.kind === 'dance' ? () => { void handleOpenDanceBundle() } : undefined}
+                onExport={data.kind === 'dance' ? () => {
+                    setExportOpen(true)
+                } : undefined}
+                onClose={handleCloseEditor}
+            />
+
+            {data.kind === 'dance' ? (
+                <DanceExportModal
+                    open={exportOpen}
+                    draft={draft}
+                    onClose={() => setExportOpen(false)}
+                />
+            ) : null}
+        </>
+    )
 }

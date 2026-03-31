@@ -63,6 +63,12 @@ dotAssets.post('/api/dot/assets/publish', async (c) => {
         slug: string
         payload?: unknown
         tags?: string[]
+        providedAssets?: Array<{
+            kind: 'tal' | 'performer' | 'act'
+            urn: string
+            payload: Record<string, unknown>
+            tags?: string[]
+        }>
         acknowledgedTos?: boolean
     }>().catch(() => null)
 

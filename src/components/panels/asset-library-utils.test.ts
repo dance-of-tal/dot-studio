@@ -245,9 +245,9 @@ describe('labelForInstalledKind', () => {
 describe('buildDraftAssetCards', () => {
     it('builds cards from drafts filtered by kind', () => {
         const drafts: Record<string, DraftAsset> = {
-            d1: { id: 'd1', kind: 'tal', name: 'Draft Tal', updatedAt: 100, content: '# hello' },
-            d2: { id: 'd2', kind: 'dance', name: 'Draft Dance', updatedAt: 200, content: '## dance' },
-            d3: { id: 'd3', kind: 'tal', name: 'Another Tal', updatedAt: 300, content: '' },
+            d1: { id: 'd1', kind: 'tal', name: 'Draft Tal', updatedAt: 100, content: '# hello', saveState: 'saved' },
+            d2: { id: 'd2', kind: 'dance', name: 'Draft Dance', updatedAt: 200, content: '## dance', saveState: 'saved' },
+            d3: { id: 'd3', kind: 'tal', name: 'Another Tal', updatedAt: 300, content: '', saveState: 'saved' },
         }
         const cards = buildDraftAssetCards(drafts, 'tal')
         expect(cards).toHaveLength(2)

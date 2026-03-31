@@ -15,6 +15,7 @@ import type {
     ConnectedModel,
     ModelPickerState,
 } from './settings-utils'
+import { getProviderAuthSuccessAction } from './settings-utils'
 
 type ProjectConfigResponseLike = {
     config: {
@@ -51,7 +52,7 @@ interface UseProviderAuthOptions {
     providers: ProviderCard[]
     selectedPerformer: { id: string; name: string } | null
     setPerformerModel: (id: string, model: { provider: string; modelId: string }) => void
-    refreshProviderState: () => Promise<void>
+    refreshProviderState: () => Promise<ProviderCard[]>
     setError: (msg: string | null) => void
     setProjectMessage: (msg: string | null) => void
     setActiveTab: (tab: string) => void
@@ -116,12 +117,16 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
 
     async function handleAuthSuccess(providerId: string, providerName: string) {
         clearProviderFlow(providerId)
-        await refreshProviderState()
-        if (selectedPerformer) {
-            await openModelPicker(providerId, providerName)
-        } else {
-            setProjectMessage(`${providerName} connected. Select a performer to assign a model.`)
+        const refreshedProviders = await refreshProviderState()
+        const refreshedProvider = refreshedProviders.find((provider) => provider.id === providerId)
+        const nextProviderName = refreshedProvider?.name || providerName
+
+        if (getProviderAuthSuccessAction(selectedPerformer) === 'pick-model') {
+            await openModelPicker(providerId, nextProviderName)
+            return
         }
+
+        setModelPicker((current) => current?.providerId === providerId ? null : current)
     }
 
     async function waitForBrowserOauth(providerId: string, methodIndex: number) {
@@ -342,7 +347,6 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         handleApiAuthSave,
         dismissOauthFlow,
         disconnectProvider,
-        openModelPicker,
         applyPickedModel,
         retryBrowserOauth,
         syncFlowsWithProviders,

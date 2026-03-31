@@ -6,19 +6,6 @@ import type {
     ActParticipantV1 as InstalledActParticipant,
     ActRelationV1 as InstalledActRelation,
 } from '../../shared/dot-types'
-import type {
-    ExecutionMode,
-    SafeOwnerKind,
-    SafeOwnerFile,
-    SafeOwnerSummary,
-} from '../../shared/safe-mode'
-
-export type {
-    ExecutionMode,
-    SafeOwnerKind,
-    SafeOwnerFile,
-    SafeOwnerSummary,
-}
 
 export type AssetKind = 'tal' | 'dance' | 'act' | 'performer' | 'model' | 'mcp'
 
@@ -103,6 +90,7 @@ export interface DraftAsset {
     tags?: string[]
     derivedFrom?: string | null
     updatedAt: number
+    saveState: 'unsaved' | 'saved'
 }
 
 export interface MarkdownEditorAttachTarget {
@@ -197,7 +185,6 @@ export interface PerformerNode {
     declaredMcpConfig?: Record<string, unknown> | null
     activeSessionId?: string
     danceDeliveryMode: DanceDeliveryMode
-    executionMode?: ExecutionMode
     planMode?: boolean
     hidden?: boolean
     meta?: {

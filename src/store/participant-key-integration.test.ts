@@ -32,7 +32,6 @@ function makePerformer(id: string, name: string, derivedFrom?: string): Performe
         mcpBindingMap: {},
         declaredMcpConfig: null,
         danceDeliveryMode: 'auto',
-        executionMode: 'direct',
         ...(derivedFrom ? { meta: { derivedFrom } } : {}),
     }
 }

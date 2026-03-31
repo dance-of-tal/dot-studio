@@ -18,10 +18,13 @@ import {
     selectTodos,
 } from '../../store/session'
 import ThreadBody from '../chat/ThreadBody'
-import ChatMessageContent, {
+import ChatMessageContent from '../chat/ChatMessageContent'
+import {
     hasVisibleAssistantMessageContent,
-} from '../chat/ChatMessageContent'
-import { hasVisibleUserMessageContent } from '../chat/chat-message-visibility'
+    hasVisibleUserMessageContent,
+    isStreamingAssistantMessage,
+    shouldShowAssistantLoadingPlaceholder,
+} from '../chat/chat-message-visibility'
 import type { ChatMessage } from '../../types'
 import { resolveActParticipantLabel } from './participant-labels'
 import ActBoardView from './ActBoardView'
@@ -31,10 +34,12 @@ import QuestionWizard from '../performer/QuestionWizard'
 import { usePermissionInteraction } from '../../hooks/usePermissionInteraction'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
+import { resolveDisplayedActThread } from '../../lib/act-threads'
 import './ActChatPanel.css'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_TODOS: never[] = []
+const EMPTY_THREADS: never[] = []
 
 
 interface ActChatPanelProps {
@@ -68,8 +73,11 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     )
 
     // Thread state
-    const threads = actThreads[actId] || []
-    const currentThread = threads.find((t) => t.id === activeThreadId) || null
+    const threads = useMemo(() => actThreads[actId] || EMPTY_THREADS, [actId, actThreads])
+    const currentThread = useMemo(
+        () => resolveDisplayedActThread(threads, activeThreadId),
+        [activeThreadId, threads],
+    )
 
     useEffect(() => {
         void loadThreads(actId)
@@ -251,8 +259,9 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             ) : (
             <ThreadBody
                 messages={messages}
-                loading={isLoading}
+                loading={shouldShowAssistantLoadingPlaceholder(messages, isLoading)}
                 renderMessage={(msg, index) => {
+                    const isStreamingAssistant = isStreamingAssistantMessage(messages, index, isLoading)
                     if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
                         return null
                     }
@@ -271,7 +280,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                 {msg.content}
                             </div>
                         ) : (
-                            <ChatMessageContent message={msg} />
+                            <ChatMessageContent message={msg} streaming={isStreamingAssistant} />
                         )}
                     </div>
                     )

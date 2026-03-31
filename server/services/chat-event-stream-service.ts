@@ -1,8 +1,5 @@
 import { getOpencode } from '../lib/opencode.js'
-import {
-    listSessionExecutionContextsForWorkingDir,
-    resolveSessionExecutionContext,
-} from '../lib/session-execution.js'
+import { resolveSessionExecutionContext } from '../lib/session-execution.js'
 import { sseEncode } from '../lib/sse.js'
 
 const HEARTBEAT_INTERVAL_MS = 30_000
@@ -14,13 +11,7 @@ type StreamEvent = {
 }
 
 async function listEventDirectories(workingDir: string) {
-    const performerContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
-    const actContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'act')
-    return Array.from(new Set([
-        workingDir,
-        ...performerContexts.map((context) => context.executionDir),
-        ...actContexts.map((context) => context.executionDir),
-    ]))
+    return [workingDir]
 }
 
 export async function buildStudioChatEventStream(workingDir: string, abortSignal?: AbortSignal) {
@@ -108,7 +99,7 @@ export async function buildStudioChatEventStream(workingDir: string, abortSignal
                                                     sessionID,
                                                     permissionID,
                                                     response: 'always',
-                                                    directory: context.executionDir,
+                                                    directory: context.workingDir,
                                                 })
                                             } catch (error) {
                                                 console.error('Failed to auto-accept permission for Act session:', error)

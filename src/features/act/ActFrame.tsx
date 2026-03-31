@@ -12,11 +12,14 @@ import {
     ACT_MIN_EXPANDED_HEIGHT,
     resolveActExpandedHeight,
 } from '../../lib/act-layout'
+import { resolveActThreadOrdinal, resolveDisplayedActThread } from '../../lib/act-threads'
 import ActHeaderActions from './ActHeaderActions'
 import ActSurfacePanel from './ActSurfacePanel'
 import { getCanvasViewportSize, resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
 import { evaluateActReadiness } from './act-readiness'
 import './ActFrame.css'
+
+const EMPTY_THREADS: never[] = []
 
 type ActFrameData = {
     width?: number
@@ -56,6 +59,15 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
     const isFocused = focusSnapshot?.type === 'act' && focusNodeId === id
     const width = data.width || act?.width || ACT_DEFAULT_WIDTH
     const height = resolveActExpandedHeight(act?.height)
+    const threads = useMemo(() => actThreads[id] || EMPTY_THREADS, [actThreads, id])
+    const displayedThread = useMemo(
+        () => resolveDisplayedActThread(threads, activeThreadId),
+        [activeThreadId, threads],
+    )
+    const displayedThreadOrdinal = useMemo(
+        () => resolveActThreadOrdinal(threads, displayedThread?.id || null),
+        [displayedThread?.id, threads],
+    )
 
     const { fitView: rfFitView } = useReactFlow()
 
@@ -83,7 +95,6 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
         }
 
         enterFocusMode(id, 'act', getCanvasViewportSize())
-        scheduleFitView(rfFitView, 'enter')
     }, [enterFocusMode, exitFocusMode, id, isFocused, rfFitView])
 
     if (!act) {
@@ -96,11 +107,10 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
                 className={`act-frame nowheel ${isSelected ? 'act-frame--selected' : ''} ${isEditing ? 'act-frame--editing' : ''} ${isFocused ? 'canvas-frame--focused' : ''} act-frame--chat`}
                 width={width}
                 height={height}
-                resizable={isSelected}
                 focused={isFocused}
                 minWidth={ACT_DEFAULT_WIDTH}
                 minHeight={ACT_MIN_EXPANDED_HEIGHT}
-                transformActive={isSelected ? data.transformActive || false : false}
+                transformActive={data.transformActive || false}
                 onActivateTransform={data.onActivateTransform}
                 onDeactivateTransform={data.onDeactivateTransform}
                 selected={isSelected}
@@ -108,18 +118,11 @@ export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
                     <div className="act-frame__title" onClick={handleSelectAct}>
                         <Workflow size={12} className="act-frame__icon" />
                         <span className="act-frame__name">{act.name}</span>
-                        {(() => {
-                            const threads = actThreads[id] || []
-                            const currentIdx = threads.findIndex((t) => t.id === activeThreadId)
-                            if (threads.length > 0 && currentIdx >= 0) {
-                                return (
-                                    <span className="act-frame__thread-chip">
-                                        #{currentIdx + 1}
-                                    </span>
-                                )
-                            }
-                            return null
-                        })()}
+                        {displayedThreadOrdinal ? (
+                            <span className="act-frame__thread-chip">
+                                #{displayedThreadOrdinal}
+                            </span>
+                        ) : null}
                     </div>
                 }
                 headerEnd={(

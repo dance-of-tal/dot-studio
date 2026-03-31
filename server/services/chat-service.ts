@@ -4,12 +4,15 @@ import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/cha
 import { extractNonRetryableSessionError, waitForSessionToSettle } from '../lib/chat-session.js'
 import { describeUnavailableRuntimeTools } from '../lib/runtime-tools.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
-import { getSafeOwnerExecutionDir } from '../lib/safe-mode.js'
 import { registerSessionExecutionContext } from '../lib/session-execution.js'
 import { resolveActSessionPolicy, ACT_AGENT_POSTURE } from '../lib/act-session-policy.js'
 import { ensurePerformerProjection } from './opencode-projection/stage-projection-service.js'
 import { projectActTools } from './act-runtime/act-tool-projection.js'
 import { getActDefinitionForThread, getActRuntimeService } from './act-runtime/act-runtime-service.js'
+
+function isAssistantOwnerId(ownerId: string) {
+    return ownerId === 'studio-assistant' || ownerId.startsWith('studio-assistant--')
+}
 
 export async function createStudioChatSession(
     cwd: string,
@@ -19,30 +22,18 @@ export async function createStudioChatSession(
     const isAct = !!request.actId
     const actPolicy = isAct ? resolveActSessionPolicy(request.actId!) : null
     const ownerKind = isAct ? actPolicy!.ownerKind : 'performer' as const
-    // Use the full chatKey as both safe owner and session context owner so each
+    // Use the full chatKey as the session context owner so each
     // Act participant session resolves back to the correct tab and execution scope.
-    const safeOwnerId = request.performerId
     const contextOwnerId = request.performerId
-    // Act sessions are always direct — never inherit executionMode from request
-    const effectiveMode = isAct ? actPolicy!.executionMode : (request.executionMode || 'direct')
-    const executionDir = await getSafeOwnerExecutionDir(
-        cwd,
-        ownerKind,
-        safeOwnerId,
-        effectiveMode,
-    )
-
     const session = unwrapOpencodeResult<{ id: string; title: string }>(await oc.session.create({
-        directory: executionDir,
-        title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash, effectiveMode),
+        directory: cwd,
+        title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash),
     }))
     await registerSessionExecutionContext({
         sessionId: session.id,
         ownerKind,
         ownerId: contextOwnerId,
-        mode: effectiveMode,
         workingDir: cwd,
-        executionDir,
     })
 
     // Persist participant→session mapping to thread.json for Act participants
@@ -68,7 +59,6 @@ export async function createStudioChatSession(
 }
 
 export async function sendStudioChatMessage(
-    executionDir: string,
     workingDir: string,
     sessionId: string,
     request: ChatSendRequest,
@@ -117,7 +107,7 @@ export async function sendStudioChatMessage(
         }
     }
 
-    const isAssistant = rawPerformerId === 'studio-assistant'
+    const isAssistant = isAssistantOwnerId(rawPerformerId)
     let ensured: Awaited<ReturnType<typeof ensurePerformerProjection>> | null = null
     let assistantContextPrefix = ''
     let assistantAgentName: string | null = null
@@ -132,9 +122,17 @@ export async function sendStudioChatMessage(
     }
 
     if (isAssistant) {
-        const { buildAssistantActionPrompt, ensureAssistantAgent } = await import('./studio-assistant/assistant-service.js')
-        assistantAgentName = await ensureAssistantAgent(executionDir)
-        assistantContextPrefix = buildAssistantActionPrompt(request.assistantContext || null)
+        const {
+            buildAssistantActionPrompt,
+            buildAssistantDiscoveryPrompt,
+            ensureAssistantAgent,
+        } = await import('./studio-assistant/assistant-service.js')
+        assistantAgentName = await ensureAssistantAgent(workingDir)
+        const discoveryPrompt = await buildAssistantDiscoveryPrompt(workingDir, request.message)
+        assistantContextPrefix = [
+            buildAssistantActionPrompt(request.assistantContext || null),
+            discoveryPrompt,
+        ].filter(Boolean).join('\n\n')
     } else {
         ensured = await ensurePerformerProjection({
             performerId: rawPerformerId,
@@ -144,7 +142,6 @@ export async function sendStudioChatMessage(
             model: performer.model,
             modelVariant: performer.modelVariant || null,
             mcpServerNames: performer.mcpServerNames || [],
-            executionDir,
             workingDir,
             ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
             ...(collaborationPromptSection ? { collaborationPromptSection } : {}),
@@ -163,7 +160,7 @@ export async function sendStudioChatMessage(
         )
     }
 
-    const promptSections = [assistantContextPrefix, request.message].filter(Boolean)
+    const promptSections = [isAssistant ? '' : assistantContextPrefix, request.message].filter(Boolean)
     const parts: Array<
         | { type: 'text'; text: string }
         | { type: 'file'; mime: string; url: string; filename?: string }
@@ -198,7 +195,7 @@ export async function sendStudioChatMessage(
     try {
         unwrapOpencodeResult(await oc.session.promptAsync({
             sessionID: sessionId,
-            directory: executionDir,
+            directory: workingDir,
             agent: isAssistant
                 ? (assistantAgentName || undefined)
                 // Act scope always uses build agent, ignoring performer planMode
@@ -211,6 +208,7 @@ export async function sendStudioChatMessage(
                 providerID: performer.model.provider,
                 modelID: performer.model.modelId,
             } : undefined,
+            system: isAssistant ? (assistantContextPrefix || undefined) : undefined,
             parts,
         }))
     } catch (error) {
@@ -224,25 +222,24 @@ export async function sendStudioChatMessage(
         void waitForSessionToSettle(
             oc,
             sessionId,
-            { directory: executionDir },
+            { directory: workingDir },
             { timeoutMs: 30 * 60_000, pollMs: 250, requireObservedBusy: true },
         ).then((settled) => {
             if (!settled) {
-                void actRuntime.clearParticipantSessionBusy(request.actThreadId!, rawPerformerId)
                 console.warn(`[chat-service] Session ${sessionId} for "${rawPerformerId}" did not settle before timeout`)
-                return
+                return actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
             }
             return Promise.resolve(oc.session.messages({
                 sessionID: sessionId,
-                directory: executionDir,
+                directory: workingDir,
             })).then((response) => {
-                const messages = unwrapOpencodeResult(response) || []
+                const rawMessages = unwrapOpencodeResult<unknown>(response)
+                const messages = Array.isArray(rawMessages) ? rawMessages : []
                 const fatalError = extractNonRetryableSessionError(messages)
                 if (fatalError) {
-                    void actRuntime.clearParticipantSessionBusy(request.actThreadId!, rawPerformerId)
                     void actRuntime.tripParticipantAutoWakeCircuit(request.actThreadId!, rawPerformerId, fatalError)
                     console.warn(`[chat-service] Opened auto-wake circuit for "${rawPerformerId}": ${fatalError}`)
-                    return
+                    return actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
                 }
 
                 void actRuntime.clearParticipantAutoWakeCircuit(request.actThreadId!, rawPerformerId)
@@ -250,7 +247,7 @@ export async function sendStudioChatMessage(
             })
         }).catch((error) => {
             console.error(`[chat-service] Failed waiting for act session ${sessionId} to settle:`, error)
-            void actRuntime.clearParticipantSessionBusy(request.actThreadId!, rawPerformerId)
+            void actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
         })
     }
 

@@ -89,7 +89,12 @@ export function groupPerformerSessionsById(performerSessionRows: PerformerSessio
         map.set(entry.performerId, current)
     })
     map.forEach((entries, performerId) => {
-        map.set(performerId, [...entries].sort((left, right) => (right.session.createdAt || 0) - (left.session.createdAt || 0)))
+        map.set(performerId, [...entries].sort((left, right) => {
+            if (left.active !== right.active) {
+                return left.active ? -1 : 1
+            }
+            return (right.session.createdAt || 0) - (left.session.createdAt || 0)
+        }))
     })
     return map
 }

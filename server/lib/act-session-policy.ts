@@ -1,14 +1,11 @@
 /**
  * act-session-policy.ts — Single source of truth for Act session execution rules.
  *
- * Act is a direct-only runtime. Safe mode is only for standalone performer chats.
+ * Act is a direct-only runtime.
  * All Act participant sessions — manual sends and auto-wake — use the same policy.
  */
 
-/** Act sessions always run in direct mode (never safe). */
-export const ACT_EXECUTION_MODE = 'direct' as const
-
-/** Act sessions use 'act' as their SafeOwnerKind. */
+/** Act sessions use 'act' as their session owner kind. */
 export const ACT_OWNER_KIND = 'act' as const
 
 /** Act scope for projection — always 'act', never 'workspace'. */
@@ -28,7 +25,6 @@ export const ACT_AGENT_POSTURE = 'build' as const
  */
 export function resolveActSessionPolicy(_actId: string) {
     return {
-        executionMode: ACT_EXECUTION_MODE,
         ownerKind: ACT_OWNER_KIND,
         scope: ACT_SCOPE,
         agentPosture: ACT_AGENT_POSTURE,

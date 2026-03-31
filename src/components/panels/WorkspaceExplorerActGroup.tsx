@@ -63,7 +63,15 @@ export default function WorkspaceExplorerActGroup({
     const [renamingThreadId, setRenamingThreadId] = useState<string | null>(null)
     const [renameValue, setRenameValue] = useState('')
     const THREAD_LIMIT = 5
-    const visibleThreads = showAllThreads ? threads : threads.slice(0, THREAD_LIMIT)
+    const sortedThreads = [...threads].sort((left, right) => {
+        const leftActive = activeThreadId === left.id
+        const rightActive = activeThreadId === right.id
+        if (leftActive !== rightActive) {
+            return leftActive ? -1 : 1
+        }
+        return (right.createdAt || 0) - (left.createdAt || 0)
+    })
+    const visibleThreads = showAllThreads ? sortedThreads : sortedThreads.slice(0, THREAD_LIMIT)
     const hiddenThreadCount = threads.length - THREAD_LIMIT
 
     const performers = useStudioStore((s) => s.performers)

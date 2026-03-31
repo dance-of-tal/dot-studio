@@ -48,10 +48,31 @@ export type DotPublishRequest = {
     slug: string
     payload?: unknown
     tags?: string[]
+    providedAssets?: Array<{
+        kind: 'tal' | 'performer' | 'act'
+        urn: string
+        payload: Record<string, unknown>
+        tags?: string[]
+    }>
     acknowledgedTos?: boolean
 }
 
 export type DotUninstallRequest = {
     kind: 'tal' | 'dance' | 'performer' | 'act'
     urn: string
+}
+
+export type DanceExportRequest = {
+    draftId: string
+    slug: string
+    destinationParentPath: string
+    overwrite?: boolean
+}
+
+export type DanceExportResponse = {
+    ok: boolean
+    draftId: string
+    slug: string
+    exportPath: string
+    exportRelativeName: string
 }

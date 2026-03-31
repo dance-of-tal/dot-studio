@@ -47,6 +47,13 @@ export class SessionQueue {
     }
 
     /**
+     * Check if any participant in the thread is currently running.
+     */
+    hasRunning(): boolean {
+        return this.running.size > 0
+    }
+
+    /**
      * Enqueue a wake-up for a participant. Applies coalescing rules.
      */
     enqueue(participantKey: string, wakeUp: WakeUpTarget): void {
@@ -105,6 +112,30 @@ export class SessionQueue {
             this.queues.delete(participantKey)
         }
         return entry.target
+    }
+
+    /**
+     * Dequeue the next wake-up for any participant that is not currently running.
+     * Map iteration order preserves insertion order across participant queues.
+     */
+    dequeueNextRunnable(): { participantKey: string; target: WakeUpTarget } | null {
+        for (const [participantKey, queue] of this.queues.entries()) {
+            if (this.running.has(participantKey) || queue.length === 0) {
+                continue
+            }
+
+            const entry = queue.shift()!
+            if (queue.length === 0) {
+                this.queues.delete(participantKey)
+            }
+
+            return {
+                participantKey,
+                target: entry.target,
+            }
+        }
+
+        return null
     }
 
     /**

@@ -57,7 +57,6 @@ function createTestState(): StudioState {
         lspServers: [],
         lspDiagnostics: {},
         adapterViewsByPerformer: {},
-        safeSummaries: {},
         isAssistantOpen: true,
         assistantModel: null,
         assistantAvailableModels: [],

@@ -16,6 +16,7 @@ const actDefinition: ActDefinition = {
         'participant-lead': {
             performerRef: { kind: 'draft', draftId: 'lead-performer' },
             displayName: 'Lead',
+            description: 'Drive the final review and decide the next handoff.',
             subscriptions: {
                 messagesFrom: ['participant-researcher'],
                 messageTags: ['handoff'],
@@ -26,6 +27,7 @@ const actDefinition: ActDefinition = {
         'participant-researcher': {
             performerRef: { kind: 'draft', draftId: 'researcher-performer' },
             displayName: 'Researcher',
+            description: 'Collect findings and hand off concise updates.',
         },
     },
     relations: [
@@ -46,12 +48,18 @@ describe('act collaboration rewrite', () => {
         expect(context).toContain('# Collaboration Context')
         expect(context).toContain('Team: Review Team')
         expect(context).toContain('Your role: Lead')
+        expect(context).toContain('Your focus: Drive the final review and decide the next handoff.')
+        expect(context).toContain('# Direct Connections')
+        expect(context).toContain('Researcher focus: Collect findings and hand off concise updates.')
         expect(context).toContain('message_teammate')
         expect(context).toContain('update_shared_board')
+        expect(context).toContain('Use `read_shared_board` for the relevant key you need.')
+        expect(context).toContain('board_key_exists')
         expect(context).not.toContain('Act ID')
         expect(context).not.toContain('Thread ID')
         expect(context).not.toContain('participant key')
         expect(context).not.toContain('act_send_message')
+        expect(context).not.toContain('- Team members:')
     })
 
     it('builds wake prompts from transient updates only', () => {
@@ -88,6 +96,8 @@ describe('act collaboration rewrite', () => {
         expect(prompt).toContain('[Direct Message]')
         expect(prompt).toContain('Researcher sent you a direct message. label: handoff')
         expect(prompt).toContain('Pending Direct Messages (1)')
+        expect(prompt).toContain('Check only the sender or shared note key relevant to this event before acting.')
+        expect(prompt).toContain('save a self-wake with `wait_until`')
         expect(prompt).not.toContain('# Collaboration Context')
         expect(prompt).not.toContain('Team: Review Team')
         expect(prompt).not.toContain('message_teammate')
@@ -104,7 +114,9 @@ describe('act collaboration rewrite', () => {
         expect(messageTool?.content).toContain('/api/act/session/${encodeURIComponent(sessionID)}/message-teammate')
         expect(boardTool?.content).toContain('/api/act/session/${encodeURIComponent(sessionID)}/update-shared-board')
         expect(readTool?.content).toContain('/api/act/session/${encodeURIComponent(sessionID)}/read-shared-board')
+        expect(readTool?.content).toContain('summary", "full')
         expect(waitTool?.content).toContain('/api/act/session/${encodeURIComponent(sessionID)}/wait-until')
+        expect(waitTool?.content).toContain('board_key_exists')
         expect(messageTool?.content).not.toContain('const actId =')
         expect(messageTool?.content).not.toContain('const threadId =')
     })

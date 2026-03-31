@@ -63,6 +63,22 @@ export function registryUrnsFromRefs(refs: AssetRef[] | undefined | null): strin
         .filter((urn): urn is string => !!urn)
 }
 
+export function getPerformerDependencyPublishIssues(
+    performer: Pick<PerformerNode, 'talRef' | 'danceRefs'>,
+): string[] {
+    const issues: string[] = []
+
+    if (performer.talRef?.kind === 'draft') {
+        issues.push('Tal is still attached as a draft. Save or publish the Tal, then re-apply it before publishing this performer.')
+    }
+
+    if ((performer.danceRefs || []).some((ref) => ref.kind === 'draft')) {
+        issues.push('Draft Dance refs are still attached. Export them from the Dance editor, upload them to GitHub, import them from Asset Library, and re-apply them before publishing this performer.')
+    }
+
+    return issues
+}
+
 function declaredMcpServerNames(declaredMcpConfig: Record<string, unknown> | null | undefined) {
     return extractMcpServerNamesFromConfig(declaredMcpConfig)
 }
@@ -152,7 +168,11 @@ export function buildPerformerAssetPayload(
     ]
 
     if (unresolvedRefs.length > 0) {
-        throw new Error('Save Tal and Dance drafts as local assets before authoring this performer asset.')
+        const dependencyIssues = getPerformerDependencyPublishIssues(performer)
+        if (dependencyIssues.length > 0) {
+            throw new Error(dependencyIssues.join(' '))
+        }
+        throw new Error('Performer assets require installable Tal and Dance references. Reconnect them from Asset Library before saving or publishing this performer asset.')
     }
     if (!talUrn && danceUrns.length === 0) {
         throw new Error('A performer asset requires at least one Tal or Dance reference.')

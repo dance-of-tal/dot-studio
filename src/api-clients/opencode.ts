@@ -18,6 +18,14 @@ export const opencodeApi = {
     restart: () =>
         postJSON<{ ok: boolean; managed: boolean; mode: 'managed' | 'external' }>('/api/opencode/restart'),
 
+    applyRuntimeReload: () =>
+        postJSON<{
+            applied: boolean
+            blocked: boolean
+            runningSessions: number
+            disposedDirectories: string[]
+        }>('/api/opencode/runtime/apply'),
+
     lsp: {
         status: () => fetchJSON<LspServerInfo[]>('/api/lsp/status'),
     },

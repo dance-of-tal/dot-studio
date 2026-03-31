@@ -23,6 +23,7 @@ export function buildExitFocusModeState(state: StudioState): Partial<StudioState
                 performer.id === focusedId
                     ? {
                         ...performer,
+                        position: snapshot.nodePosition || performer.position,
                         width: snapshot.nodeSize.width,
                         height: snapshot.nodeSize.height,
                         hidden: snapshot.hiddenPerformerIds.includes(performer.id),
@@ -97,6 +98,7 @@ export function enterFocusModeImpl(
             focusSnapshot: {
                 ...focusSnapshotBase,
                 type: 'performer',
+                nodePosition: performer.position,
                 nodeSize: { width: performer.width ?? 400, height: performer.height ?? 500 },
             },
             selectedPerformerId: nodeId,
@@ -105,7 +107,7 @@ export function enterFocusModeImpl(
             selectedActId: null,
             performers: state.performers.map((entry) => (
                 entry.id === nodeId
-                    ? { ...entry, hidden: false, width: focusWidth, height: focusHeight }
+                    ? { ...entry, hidden: false, position: { x: 0, y: 0 }, width: focusWidth, height: focusHeight }
                     : { ...entry, hidden: true }
             )),
             acts: state.acts.map((act) => ({ ...act, hidden: true })),
@@ -195,14 +197,21 @@ export function switchFocusTargetImpl(
                 ...snapshot,
                 nodeId,
                 type: 'performer',
+                nodePosition: nextNode.position,
                 nodeSize: { width: nextNode.width ?? 400, height: nextNode.height ?? 500 },
             },
             performers: state.performers.map((performer) => {
                 if (performer.id === prevId && prevType === 'performer') {
-                    return { ...performer, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
+                    return {
+                        ...performer,
+                        position: snapshot.nodePosition || performer.position,
+                        width: snapshot.nodeSize.width,
+                        height: snapshot.nodeSize.height,
+                        hidden: true,
+                    }
                 }
                 if (performer.id === nodeId) {
-                    return { ...performer, hidden: false, width: focusWidth, height: focusHeight }
+                    return { ...performer, hidden: false, position: { x: 0, y: 0 }, width: focusWidth, height: focusHeight }
                 }
                 return { ...performer, hidden: true }
             }),
@@ -284,7 +293,6 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
         inspectorFocus: null,
         lspServers: [],
         lspDiagnostics: {},
-        safeSummaries: {},
         trackingWindow: null,
         isTrackingOpen: false,
         workspaceDirty: true,

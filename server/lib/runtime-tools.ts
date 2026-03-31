@@ -113,7 +113,7 @@ async function ensureConnectedServer(
             unavailable: {
                 serverName,
                 reason: 'not_defined' as const,
-                detail: 'Server is not defined in project config.json.',
+                detail: 'Server is not defined in the project MCP config.',
             },
         }
     }
@@ -124,7 +124,7 @@ async function ensureConnectedServer(
             unavailable: {
                 serverName,
                 reason: 'disabled' as const,
-                detail: 'Server is disabled in project config.json.',
+                detail: 'Server is disabled in the project MCP config.',
             },
         }
     }

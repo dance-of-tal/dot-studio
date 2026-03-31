@@ -94,8 +94,22 @@ export default function WorkspaceExplorerThreadsSection({
     const containerRef = useRef<HTMLDivElement>(null)
     const dividerDragging = useRef(false)
 
+    const suppressNextClick = useCallback(() => {
+        const handleClickCapture = (event: MouseEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
+            document.removeEventListener('click', handleClickCapture, true)
+        }
+
+        document.addEventListener('click', handleClickCapture, true)
+        window.setTimeout(() => {
+            document.removeEventListener('click', handleClickCapture, true)
+        }, 0)
+    }, [])
+
     const onDividerMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault()
+        e.stopPropagation()
         dividerDragging.current = true
         const container = containerRef.current
         if (!container) return
@@ -112,18 +126,21 @@ export default function WorkspaceExplorerThreadsSection({
             // Flex range: 0.15 to 0.85 (each side gets at least 15% of the space)
             setPerformersFlex(Math.min(5, Math.max(0.2, startFlex + ratio * 2)))
         }
-        const onUp = () => {
+        const onUp = (event: MouseEvent) => {
+            event.preventDefault()
+            event.stopPropagation()
             dividerDragging.current = false
             document.removeEventListener('mousemove', onMove)
             document.removeEventListener('mouseup', onUp)
             document.body.style.cursor = ''
             document.body.style.userSelect = ''
+            suppressNextClick()
         }
         document.addEventListener('mousemove', onMove)
         document.addEventListener('mouseup', onUp)
         document.body.style.cursor = 'row-resize'
         document.body.style.userSelect = 'none'
-    }, [performersFlex])
+    }, [performersFlex, suppressNextClick])
 
     return (
         <section className="explorer-section explorer-section--threads" ref={containerRef}>

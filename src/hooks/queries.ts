@@ -16,7 +16,7 @@ export const queryKeys = {
     assets: (workingDir: string) => ['assets', workingDir] as const,
     assetKind: (workingDir: string, kind: InstallableAssetKind) => ['assets', workingDir, kind] as const,
     assetInventory: (workingDir: string) => ['asset-inventory', workingDir] as const,
-    models: ['models'] as const,
+    models: (workingDir: string) => ['models', workingDir] as const,
     agents: ['agents'] as const,
     mcpServers: ['mcp-servers'] as const,
     runtimeTools: (workingDir: string, modelKey: string, serverKey: string) => ['runtime-tools', workingDir, modelKey, serverKey] as const,
@@ -63,7 +63,7 @@ export function useAssets(enabled = true) {
 export function useModels(enabled = true) {
     const workingDir = useStudioStore((s) => s.workingDir)
     return useQuery<RuntimeModelCatalogEntry[]>({
-        queryKey: [...queryKeys.models, workingDir],
+        queryKey: queryKeys.models(workingDir),
         queryFn: () => api.models.list(),
         enabled,
         staleTime: 60_000,       // models rarely change

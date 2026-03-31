@@ -66,8 +66,5 @@ export async function syncPerformerMessages(
         get().upsertSession({ id: sessionId, status: get().seStatuses[sessionId] || { type: 'idle' } })
     }
     get().setSessionMessages(sessionId, mapped)
-    if (getPerformerById(get, performerId)?.executionMode === 'safe') {
-        void get().refreshSafeOwner('performer', performerId)
-    }
     return messages
 }

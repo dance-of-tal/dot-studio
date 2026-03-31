@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 import type { PermissionRequest, QuestionAnswer, QuestionRequest } from '@opencode-ai/sdk/v2'
 import { Send, Square } from 'lucide-react'
-import type { PerformerNode, SafeOwnerSummary } from '../../types'
+import type { PerformerNode } from '../../types'
 import type { FileMention } from '../../hooks/useFileMentions'
 import type { TurnDanceSelection, DanceSearchItem } from './agent-frame-utils'
 import ComposerPillBar from './ComposerPillBar'
@@ -22,7 +22,6 @@ type Props = {
     selectedAgentId: string
     buildAgent: { name: string; description?: string } | null
     planAgent: { name: string; description?: string } | null
-    safeSummary: SafeOwnerSummary | null
     attachments: FileMention[]
     setAttachments: React.Dispatch<React.SetStateAction<FileMention[]>>
     turnDanceSelections: TurnDanceSelection[]
@@ -58,7 +57,6 @@ type Props = {
     rejectQuestion: (sessionId: string, questionId: string) => Promise<void>
     onSetAgentId: (id: string, agentId: string | null) => void
     onSetModelVariant: (id: string, variant: string | null) => void
-    onSetExecutionMode: () => void
 }
 
 export default function PerformerChatComposer(props: Props) {
@@ -73,7 +71,6 @@ export default function PerformerChatComposer(props: Props) {
         selectedAgentId,
         buildAgent,
         planAgent,
-        safeSummary,
         attachments,
         setAttachments,
         turnDanceSelections,
@@ -107,7 +104,6 @@ export default function PerformerChatComposer(props: Props) {
         rejectQuestion,
         onSetAgentId,
         onSetModelVariant,
-        onSetExecutionMode,
     } = props
 
     const {
@@ -222,10 +218,8 @@ export default function PerformerChatComposer(props: Props) {
                 selectedAgentId={selectedAgentId}
                 buildAgent={buildAgent}
                 planAgent={planAgent}
-                safeSummary={safeSummary}
                 onSetAgentId={onSetAgentId}
                 onSetModelVariant={onSetModelVariant}
-                onSetExecutionMode={onSetExecutionMode}
             />
         </div>
     )

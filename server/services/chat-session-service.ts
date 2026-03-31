@@ -1,10 +1,6 @@
 import type { QuestionAnswer, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import { getOpencode } from '../lib/opencode.js'
-import {
-    listSessionExecutionContextsForWorkingDir,
-    resolveSessionExecutionContext,
-    unregisterSessionExecutionContext,
-} from '../lib/session-execution.js'
+import { unregisterSessionExecutionContext } from '../lib/session-execution.js'
 import { normalizeIncompleteToolParts, waitForSessionToSettle } from '../lib/chat-session.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { responseData } from './opencode-service.js'
@@ -67,9 +63,9 @@ function readResponseHeader(result: unknown, name: string): string | null {
 }
 
 export async function directoryQueryForSession(workingDir: string, sessionId: string): Promise<{ directory: string }> {
-    const context = await resolveSessionExecutionContext(sessionId)
+    void sessionId
     return {
-        directory: context?.executionDir || workingDir,
+        directory: workingDir,
     }
 }
 
@@ -92,6 +88,17 @@ export async function renameStudioChatSession(workingDir: string, sessionId: str
         ...directoryQuery,
         title,
     }))
+}
+
+export async function getStudioChatSessionStatus(workingDir: string, sessionId: string) {
+    const oc = await getOpencode()
+    const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
+    const statuses = unwrapOpencodeResult<Record<string, OpenCodeSessionStatus>>(await oc.session.status({
+        ...directoryQuery,
+    })) || {}
+    return {
+        status: statuses[sessionId] || null,
+    }
 }
 
 export async function abortStudioChatSession(workingDir: string, sessionId: string) {
@@ -238,13 +245,7 @@ export async function unrevertStudioChatSession(workingDir: string, sessionId: s
 
 export async function listStudioChatSessions(workingDir: string) {
     const oc = await getOpencode()
-    const performerContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'performer')
-    const actContexts = await listSessionExecutionContextsForWorkingDir(workingDir, 'act')
-    const directories = Array.from(new Set([
-        workingDir,
-        ...performerContexts.map((context) => context.executionDir),
-        ...actContexts.map((context) => context.executionDir),
-    ]))
+    const directories = [workingDir]
     const directoryData = await Promise.all(
         directories.map(async (directory) => {
             const [sessions, statuses] = await Promise.all([

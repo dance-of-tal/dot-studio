@@ -64,6 +64,11 @@
     opacity: 1;
 }
 
+[data-component="text-shimmer"][data-active="true"]
+    [data-slot="text-shimmer-char-base"] {
+    opacity: 0;
+}
+
 [data-component="text-shimmer"]
     [data-slot="text-shimmer-char-shimmer"][data-run="true"] {
     animation-name: text-shimmer-sweep;
@@ -99,10 +104,6 @@
         background-clip: text;
     }
 
-    [data-component="text-shimmer"][data-active="true"]
-        [data-slot="text-shimmer-char-base"] {
-        opacity: 0;
-    }
 }
 
 @media (prefers-reduced-motion: reduce) {

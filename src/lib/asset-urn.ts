@@ -19,23 +19,7 @@ export function parseStudioAssetUrn(urn: string): ParsedStudioAssetUrn | null {
             stage: parsed.stage,
         }
     } catch {
-        const parts = String(urn || '').trim().split('/').filter(Boolean)
-        if (parts.length !== 3) {
-            return null
-        }
-
-        const [kind, author, name] = parts
-        if (!kind || !author || !author.startsWith('@') || !name) {
-            return null
-        }
-
-        return {
-            kind,
-            author,
-            path: name,
-            name,
-            stage: null,
-        }
+        return null
     }
 }
 

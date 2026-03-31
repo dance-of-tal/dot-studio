@@ -57,7 +57,6 @@ chatMessages.post('/api/chat/sessions/:id/send', async (c) => {
 
     try {
         const workingDir = requestWorkingDir(c)
-        const executionDir = (await resolveSessionExecutionContext(c.req.param('id')))?.executionDir || workingDir
         const normalizedBody: ChatSendRequest = {
             ...body,
             performer: {
@@ -66,7 +65,7 @@ chatMessages.post('/api/chat/sessions/:id/send', async (c) => {
                 extraDanceRefs: uniqueAssetRefs(body.performer?.extraDanceRefs || []),
             },
         }
-        const result = await sendStudioChatMessage(executionDir, workingDir, c.req.param('id'), normalizedBody)
+        const result = await sendStudioChatMessage(workingDir, c.req.param('id'), normalizedBody)
         return c.json(result, 202)
     } catch (err) {
         return jsonOpencodeError(c, err, { model: body.performer?.model })

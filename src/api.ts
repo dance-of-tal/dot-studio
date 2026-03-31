@@ -13,7 +13,6 @@ import type {
 } from './types'
 import type { AssetListItem } from '../shared/asset-contracts'
 import type { CompilePromptRequest } from '../shared/chat-contracts'
-import type { SafeOwnerKind, SafeOwnerSummary } from '../shared/safe-mode'
 import { fetchJSON, postJSON, putJSON, patchJSON, deleteJSON } from './api-core'
 import { chatApi } from './api-clients/chat'
 import { dotApi } from './api-clients/dot'
@@ -22,11 +21,19 @@ import { workspaceApi } from './api-clients/workspace'
 
 export { setApiWorkingDirContext } from './api-core'
 
+function hydrateDraft(draft: Omit<DraftAsset, 'saveState'> | DraftAsset): DraftAsset {
+    return {
+        ...draft,
+        saveState: 'saved',
+    }
+}
+
 export const api = {
     health: () => fetchJSON<{ ok: boolean; project: string }>('/api/health'),
 
     opencodeHealth: opencodeApi.health,
     opencodeRestart: opencodeApi.restart,
+    opencodeApplyRuntimeReload: opencodeApi.applyRuntimeReload,
 
     assets: {
         list: (kind: string) => fetchJSON<AssetListItem[]>(`/api/assets/${kind}`),
@@ -44,13 +51,13 @@ export const api = {
 
     drafts: {
         list: (kind?: 'tal' | 'dance' | 'performer' | 'act') =>
-            fetchJSON<{ drafts: DraftAsset[] }>(`/api/drafts${kind ? `?kind=${kind}` : ''}`).then((response) => response.drafts),
+            fetchJSON<{ drafts: DraftAsset[] }>(`/api/drafts${kind ? `?kind=${kind}` : ''}`).then((response) => response.drafts.map(hydrateDraft)),
         get: (kind: 'tal' | 'dance' | 'performer' | 'act', id: string) =>
-            fetchJSON<{ draft: DraftAsset }>(`/api/drafts/${kind}/${id}`).then((response) => response.draft),
+            fetchJSON<{ draft: DraftAsset }>(`/api/drafts/${kind}/${id}`).then((response) => hydrateDraft(response.draft)),
         create: (body: { kind: DraftAssetKind; name: string; content: unknown; id?: string; slug?: string; description?: string; tags?: string[]; derivedFrom?: string | null }) =>
-            postJSON<{ draft: DraftAsset }>('/api/drafts', body).then((response) => response.draft),
+            postJSON<{ draft: DraftAsset }>('/api/drafts', body).then((response) => hydrateDraft(response.draft)),
         update: (kind: 'tal' | 'dance' | 'performer' | 'act', id: string, patch: { name?: string; content?: unknown; slug?: string; description?: string; tags?: string[]; derivedFrom?: string | null }) =>
-            putJSON<{ draft: DraftAsset }>(`/api/drafts/${kind}/${id}`, patch).then((response) => response.draft),
+            putJSON<{ draft: DraftAsset }>(`/api/drafts/${kind}/${id}`, patch).then((response) => hydrateDraft(response.draft)),
         delete: (kind: 'tal' | 'dance' | 'performer' | 'act', id: string, cascade = false) =>
             deleteJSON<{ ok: boolean; deletedIds: string[] }>(`/api/drafts/${kind}/${id}`, { cascade }),
         previewDelete: (kind: 'tal' | 'dance' | 'performer' | 'act', id: string) =>
@@ -132,19 +139,6 @@ export const api = {
             ),
     },
 
-    safe: {
-        summary: (ownerKind: SafeOwnerKind, ownerId: string) =>
-            fetchJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}`),
-        apply: (ownerKind: SafeOwnerKind, ownerId: string) =>
-            postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/apply`),
-        discardFile: (ownerKind: SafeOwnerKind, ownerId: string, filePath: string) =>
-            postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/discard`, { filePath }),
-        discardAll: (ownerKind: SafeOwnerKind, ownerId: string) =>
-            postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/discard-all`),
-        undoLastApply: (ownerKind: SafeOwnerKind, ownerId: string) =>
-            postJSON<SafeOwnerSummary>(`/api/safe/${ownerKind}/${encodeURIComponent(ownerId)}/undo-last-apply`),
-    },
-
     lsp: opencodeApi.lsp,
     mcp: opencodeApi.mcp,
     models: opencodeApi.models,
@@ -167,7 +161,7 @@ export const api = {
         updateConfig: (config: Record<string, unknown>) => putJSON<unknown>('/api/studio/config', config),
         activate: (workingDir: string) => postJSON<{ ok: boolean; activeProjectDir: string }>('/api/studio/activate', { workingDir }),
         openPath: (targetPath: string) => postJSON<{ ok: boolean; path: string }>('/api/studio/open-path', { path: targetPath }),
-        pickDirectory: () => fetchJSON<{ path?: string; error?: string }>('/api/studio/pick-directory'),
+        pickDirectory: (prompt?: string) => fetchJSON<{ path?: string; error?: string }>(`/api/studio/pick-directory${prompt ? `?prompt=${encodeURIComponent(prompt)}` : ''}`),
     },
 
     dot: dotApi,

@@ -135,7 +135,7 @@ export function PinnedDetailPanel({
                     </button>
                 </div>
             ) : null}
-            {resolvedAsset?.source === 'stage' && authUser?.authenticated && onPublish ? (
+            {resolvedAsset?.source === 'stage' && resolvedAsset?.kind !== 'dance' && authUser?.authenticated && onPublish ? (
                 <div className="btns">
                     <button className="btn" onClick={() => onPublish(resolvedAsset)} disabled={actionLoading !== null}>
                         {actionLoading === 'publish' ? 'Publishing…' : 'Publish'}

@@ -18,7 +18,6 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         options?: {
             resetMessages?: Array<{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }>
             actId?: string
-            executionMode?: 'direct' | 'safe'
             performerName?: string
         },
     ) => {
@@ -43,12 +42,19 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             }
         }
 
-        const executionMode = options?.executionMode || target?.executionMode || 'direct'
+        if (get().runtimeReloadPending) {
+            const applied = await get().applyPendingRuntimeReload()
+            if (!applied && get().runtimeReloadPending) {
+                return {
+                    sessionId: null,
+                    runtimeConfig,
+                }
+            }
+        }
         const result = await api.chat.createSession(
             performerId,
             name,
             '',
-            executionMode,
             options?.actId,
         )
         const sessionId = result.sessionId
@@ -72,10 +78,6 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         get().upsertSession({ id: sessionId, title: name, createdAt: Date.now(), status: { type: 'idle' } })
         if (options?.resetMessages) {
             get().setSessionMessages(sessionId, options.resetMessages)
-        }
-
-        if (target?.executionMode === 'safe') {
-            get().forceReconnectRealtimeEvents()
         }
 
         await get().listSessions()

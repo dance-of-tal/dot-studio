@@ -23,7 +23,7 @@ interface UISettingsStore extends UISettings {
 }
 
 const defaults: UISettings = {
-    showReasoningSummaries: false,
+    showReasoningSummaries: true,
     shellToolPartsExpanded: true,
     editToolPartsExpanded: false,
     followup: 'steer',
@@ -38,6 +38,22 @@ export const useUISettings = create<UISettingsStore>()(
             setEditToolPartsExpanded: (value) => set({ editToolPartsExpanded: value }),
             setFollowup: (value) => set({ followup: value }),
         }),
-        { name: 'dot-studio-ui-settings' },
+        {
+            name: 'dot-studio-ui-settings',
+            version: 2,
+            migrate: (persistedState) => {
+                const record = (persistedState && typeof persistedState === 'object')
+                    ? persistedState as Partial<UISettingsStore>
+                    : {}
+
+                return {
+                    ...defaults,
+                    ...record,
+                    // This toggle existed before it was actually wired into chat rendering.
+                    // Reset legacy installs to the new visible-by-default behavior.
+                    showReasoningSummaries: true,
+                }
+            },
+        },
     ),
 )

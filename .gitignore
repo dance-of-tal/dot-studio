@@ -36,5 +36,12 @@ AGENT.md
 REFACTOR.md
 prd/
 
+# Local config (may contain API keys or sensitive values)
+config.json
+
+# Temporary build / dev artifacts
+tsc-results.txt
+fork-error.json
+
 #opencode-source
 .opencode-source/

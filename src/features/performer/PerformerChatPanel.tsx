@@ -8,7 +8,7 @@
  */
 import { useState, type RefObject } from 'react'
 import { useStudioStore } from '../../store'
-import type { ChatMessage, AssetCard, DraftAsset, PerformerNode, SafeOwnerSummary } from '../../types'
+import type { ChatMessage, AssetCard, DraftAsset, PerformerNode } from '../../types'
 import RevertConfirmModal from '../../components/chat/RevertConfirmModal'
 import PerformerChatComposer from './PerformerChatComposer'
 import PerformerThreadView from './PerformerThreadView'
@@ -37,8 +37,6 @@ type PerformerChatPanelProps = {
     chatEndRef: RefObject<HTMLDivElement | null>
     onSetAgentId: (id: string, agentId: string | null) => void
     onSetModelVariant: (id: string, variant: string | null) => void
-    onSetExecutionMode: () => void
-    safeSummary: SafeOwnerSummary | null
 }
 
 export default function PerformerChatPanel({
@@ -59,8 +57,6 @@ export default function PerformerChatPanel({
     chatEndRef,
     onSetAgentId,
     onSetModelVariant,
-    onSetExecutionMode,
-    safeSummary,
 }: PerformerChatPanelProps) {
     const {
         abortChat,
@@ -110,7 +106,6 @@ export default function PerformerChatPanel({
                         selectedAgentId={selectedAgentId}
                         buildAgent={buildAgent}
                         planAgent={planAgent}
-                        safeSummary={safeSummary}
                         attachments={composerState.attachments}
                         setAttachments={composerState.setAttachments}
                         turnDanceSelections={composerState.turnDanceSelections}
@@ -146,7 +141,6 @@ export default function PerformerChatPanel({
                         rejectQuestion={rejectQuestion}
                         onSetAgentId={onSetAgentId}
                         onSetModelVariant={onSetModelVariant}
-                        onSetExecutionMode={onSetExecutionMode}
                     />
                 )}
             />

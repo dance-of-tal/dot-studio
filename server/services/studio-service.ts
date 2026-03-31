@@ -15,9 +15,16 @@ import { invalidateAll } from '../lib/cache.js'
 
 const execAsync = promisify(exec)
 
-export async function pickWorkingDirectory() {
-    const { stdout } = await execAsync(`osascript -e 'POSIX path of (choose folder with prompt "Select Working Directory for Workspace")'`)
+export async function pickDirectory(prompt: string) {
+    const escapedPrompt = String(prompt || 'Select Folder')
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+    const { stdout } = await execAsync(`osascript -e 'POSIX path of (choose folder with prompt "${escapedPrompt}")'`)
     return { path: stdout.trim() }
+}
+
+export async function pickWorkingDirectory() {
+    return pickDirectory('Select Working Directory for Workspace')
 }
 
 export async function getStudioConfig(projectDir: string) {

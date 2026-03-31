@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { StudioState, WorkspaceSlice } from './types'
 import { api, setApiWorkingDirContext } from '../api'
 import { scheduleActRuntimeSync } from './act-slice-helpers'
+import { showToast } from '../lib/toast'
 import {
     createPerformerNode,
     createPerformerNodeFromAsset,
@@ -39,6 +40,7 @@ import {
     importActFromDraftImpl,
     loadDraftsFromDiskImpl,
     openDraftEditorImpl,
+    saveMarkdownDraftImpl,
     saveActAsDraftImpl,
     savePerformerAsDraftImpl,
     upsertDraftImpl,
@@ -59,6 +61,7 @@ import {
     updateTrackingWindowSizeImpl,
 } from './workspace-focus-actions'
 import { buildPerformerDeleteCascade } from './cascade-cleanup'
+import { hasRunningStudioSessions } from './runtime-reload-utils'
 
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
@@ -116,12 +119,31 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         inspectorFocus: null,
         workspaceList: [],
         workspaceDirty: false,
+        runtimeReloadPending: false,
         chats: {},
         chatPrefixes: {},
         sessionMap: {},
+        pendingPermissions: {},
+        pendingQuestions: {},
+        todos: {},
         sessions: [],
         loadingPerformerId: null,
         activeChatPerformerId: null,
+        assistantModel: null,
+        assistantAvailableModels: [],
+        appliedAssistantActionMessageIds: {},
+        assistantActionResults: {},
+        seEntities: {},
+        seMessages: {},
+        seStatuses: {},
+        sePermissions: {},
+        seQuestions: {},
+        seTodos: {},
+        chatKeyToSession: {},
+        sessionToChatKey: {},
+        sessionLoading: {},
+        historyCursors: {},
+        sessionReverts: {},
     }
 }
 
@@ -146,6 +168,7 @@ export const createWorkspaceSlice: StateCreator<
     inspectorFocus: null,
     workspaceList: [],
     workspaceDirty: false,
+    runtimeReloadPending: false,
     theme: (localStorage.getItem('dot-theme') as 'light' | 'dark') || 'light',
     workingDir: '',
     isTerminalOpen: false,
@@ -332,8 +355,6 @@ export const createWorkspaceSlice: StateCreator<
         // Clear act selection only when selecting a real performer (not when deselecting)
         selectedActId: id ? null : s.selectedActId,
         actEditorState: id ? null : s.actEditorState,
-        activeThreadId: id ? null : s.activeThreadId,
-        activeThreadParticipantKey: id ? null : s.activeThreadParticipantKey,
         // Preserve focus mode when switching performers in focus mode
         focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
         focusedNodeType: s.focusSnapshot ? s.focusedNodeType : null,
@@ -435,6 +456,65 @@ export const createWorkspaceSlice: StateCreator<
         get().listWorkspaces()
     },
 
+    markRuntimeReloadPending: () => {
+        const state = get()
+        if (!state.workingDir) {
+            return
+        }
+        if (!state.runtimeReloadPending) {
+            set({ runtimeReloadPending: true })
+        }
+        if (hasRunningStudioSessions(state)) {
+            showToast(
+                'Runtime-affecting changes were made while a session is running. Finish the current run before starting a new chat.',
+                'warning',
+                {
+                    title: 'Finish current run first',
+                    dedupeKey: `runtime-reload-pending:${state.workingDir}`,
+                    durationMs: 6000,
+                },
+            )
+        }
+    },
+
+    clearRuntimeReloadPending: () => set({ runtimeReloadPending: false }),
+
+    applyPendingRuntimeReload: async () => {
+        const state = get()
+        if (!state.runtimeReloadPending || !state.workingDir) {
+            return false
+        }
+
+        try {
+            const result = await api.opencodeApplyRuntimeReload()
+            if (result.applied) {
+                set({ runtimeReloadPending: false })
+                return true
+            }
+            if (result.blocked) {
+                showToast(
+                    `OpenCode still has ${result.runningSessions} running session${result.runningSessions === 1 ? '' : 's'}. New chats stay blocked until those runs finish.`,
+                    'warning',
+                    {
+                        title: 'New chat blocked',
+                        dedupeKey: `runtime-reload-blocked:${state.workingDir}`,
+                        durationMs: 6000,
+                    },
+                )
+            }
+        } catch (error) {
+            showToast(
+                error instanceof Error ? error.message : 'Failed to apply queued runtime changes.',
+                'error',
+                {
+                    title: 'Runtime refresh failed',
+                    dedupeKey: `runtime-reload-error:${state.workingDir}`,
+                },
+            )
+        }
+
+        return false
+    },
     setPerformerTal: (performerId, tal) => setPerformerTalImpl(set, get, performerId, tal),
 
     setPerformerTalRef: (performerId, talRef) => setPerformerTalRefImpl(set, get, performerId, talRef),
@@ -461,34 +541,9 @@ export const createWorkspaceSlice: StateCreator<
 
     setPerformerMcpBinding: (performerId, placeholderName, serverName) => setPerformerMcpBindingImpl(set, get, performerId, placeholderName, serverName),
 
-    updatePerformerAuthoringMeta: (performerId, patch) => updatePerformerAuthoringMetaImpl(set, performerId, patch),
+    updatePerformerAuthoringMeta: (performerId, patch) => updatePerformerAuthoringMetaImpl(set, get, performerId, patch),
 
     togglePerformerVisibility: (id) => togglePerformerVisibilityImpl(set, get, id),
-
-
-    setPerformerExecutionMode: (performerId, mode) => {
-        set((state) => ({
-            performers: state.performers.map((performer) => (
-                performer.id === performerId
-                    ? { ...performer, executionMode: mode }
-                    : performer
-            )),
-            workspaceDirty: true,
-        }))
-        get().clearSafeOwner('performer', performerId)
-        get().detachPerformerSession(
-            performerId,
-            mode === 'safe'
-                ? 'Switched to Safe mode. The next turn will start a new thread lineage in the safe workspace.'
-                : 'Switched to Direct mode. The next turn will start a new thread lineage in the project workspace.',
-        )
-        // Refresh session list so threads sidebar reflects the new directory context
-        get().listSessions()
-        // Reconnect SSE to subscribe to events from the new execution directory
-        get().forceReconnectRealtimeEvents()
-    },
-
-
     addCanvasTerminal: () => addCanvasTerminalImpl(set, canvasTerminalIdCounter),
 
     removeCanvasTerminal: (id) => removeCanvasTerminalImpl(set, id),
@@ -504,7 +559,6 @@ export const createWorkspaceSlice: StateCreator<
     updateTrackingWindowPosition: (x, y) => updateTrackingWindowPositionImpl(set, x, y),
 
     updateTrackingWindowSize: (width, height) => updateTrackingWindowSizeImpl(set, width, height),
-
     upsertDraft: (draft) => {
         upsertDraftImpl(get, set, scheduleDraftPersist, draft)
     },
@@ -515,13 +569,15 @@ export const createWorkspaceSlice: StateCreator<
 
     saveActAsDraft: async (actId) => saveActAsDraftImpl(get, set, actId),
 
-    addPerformerFromDraft: (name, draftContent) => addPerformerFromDraftImpl(get, set, performerIdCounter, name, draftContent),
+    addPerformerFromDraft: (name, draftContent, description) => addPerformerFromDraftImpl(get, set, performerIdCounter, name, draftContent, description),
 
     importActFromDraft: (name, draftContent) => importActFromDraftImpl(get, set, makeId, name, draftContent),
 
     createMarkdownEditor: (kind, options) => createMarkdownEditorImpl(get, set, markdownEditorIdCounter, makeId, kind, options),
 
     openDraftEditor: (draftId) => openDraftEditorImpl(get, set, markdownEditorIdCounter, draftId),
+
+    saveMarkdownDraft: async (editorId) => saveMarkdownDraftImpl(get, set, editorId),
 
     updateMarkdownEditorPosition: (id, x, y) => set((s) => ({
         markdownEditors: mapMarkdownEditors(s.markdownEditors, id, (editor) => ({ ...editor, position: { x, y } })),

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Settings, X, Sliders, Server, Cpu, FolderCog, LayoutGrid } from 'lucide-react'
 import { api } from '../../api'
+import { queryKeys } from '../../hooks/queries'
 import { useStudioStore } from '../../store'
 import './SettingsModal.css'
 import './SettingsControls.css'
@@ -65,7 +66,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const [opencodeInfo, setOpencodeInfo] = useState<OpenCodeInfo | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [refreshTick, setRefreshTick] = useState(0)
     const [activeTab, setActiveTab] = useState<SettingsTab>('general')
     const [projectDraft, setProjectDraft] = useState<ProjectSettingsDraft | null>(null)
     const [projectSnapshot, setProjectSnapshot] = useState<ProjectSettingsDraft | null>(null)
@@ -73,30 +73,16 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const [savingProject, setSavingProject] = useState(false)
     const [projectMessage, setProjectMessage] = useState<string | null>(null)
     const projectDirtyRef = useRef(false)
+    const projectDraftRef = useRef<ProjectSettingsDraft | null>(null)
+    const projectSnapshotRef = useRef<ProjectSettingsDraft | null>(null)
+    const providersRef = useRef<ProviderCard[]>([])
+    const opencodeInfoRef = useRef<OpenCodeInfo | null>(null)
+    const loadRequestIdRef = useRef(0)
 
     const selectedPerformer = useMemo(
         () => performers.find((p) => p.id === selectedPerformerId) || null,
         [performers, selectedPerformerId],
     )
-
-    function refreshSettings() {
-        setRefreshTick((v) => v + 1)
-    }
-
-    async function refreshProviderState() {
-        queryClient.invalidateQueries({ queryKey: ['models'] })
-        refreshSettings()
-    }
-
-    const auth = useProviderAuth({
-        providers,
-        selectedPerformer: selectedPerformer ? { id: selectedPerformer.id, name: selectedPerformer.name } : null,
-        setPerformerModel,
-        refreshProviderState,
-        setError,
-        setProjectMessage,
-        setActiveTab: (tab) => setActiveTab(tab as SettingsTab),
-    })
 
     const projectDirty = useMemo(
         () => !isProjectDraftEqual(projectDraft, projectSnapshot),
@@ -108,50 +94,110 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     }, [projectDirty])
 
     useEffect(() => {
-        if (!open) return
+        projectDraftRef.current = projectDraft
+    }, [projectDraft])
 
-        let cancelled = false
+    useEffect(() => {
+        projectSnapshotRef.current = projectSnapshot
+    }, [projectSnapshot])
 
-        const fetchAll = async () => {
-            if (providers.length === 0 && !opencodeInfo) setLoading(true)
-            setError(null)
+    useEffect(() => {
+        providersRef.current = providers
+    }, [providers])
 
-            try {
-                const [providerRes, authRes, healthRes, projectRes] = await Promise.all([
-                    api.providers.list(),
-                    api.provider.auth().catch(() => ({})),
-                    api.opencodeHealth().catch((err) => ({
-                        connected: false, url: '', error: err instanceof Error ? err.message : String(err), restartAvailable: false,
-                    })),
-                    api.config.getProject().catch(() => ({
-                        exists: false, path: `${workingDir}/config.json`, config: {},
-                    })),
-                ])
+    useEffect(() => {
+        opencodeInfoRef.current = opencodeInfo
+    }, [opencodeInfo])
 
-                if (cancelled) return
+    const loadSettingsState = useCallback(async (showLoading = false) => {
+        const requestId = ++loadRequestIdRef.current
+        if (showLoading) {
+            setLoading(true)
+        }
+        setError(null)
 
-                const mergedProviders = mergeProviders(providerRes, authRes || {})
-                setProviders(mergedProviders)
-                setOpencodeInfo(healthRes)
-                setProjectMeta({ exists: projectRes.exists, path: projectRes.path })
+        try {
+            const [providerRes, authRes, healthRes, projectRes] = await Promise.all([
+                api.providers.list(),
+                api.provider.auth().catch(() => ({})),
+                api.opencodeHealth().catch((err) => ({
+                    connected: false, url: '', error: err instanceof Error ? err.message : String(err), restartAvailable: false,
+                })),
+                api.config.getProject().catch(() => ({
+                    exists: false, path: `${workingDir}/config.json`, config: {},
+                })),
+            ])
 
-                if (!projectDirtyRef.current || !projectDraft || !projectSnapshot) {
-                    const nextDraft = buildProjectDraft(mergedProviders, projectRes.config || {})
-                    setProjectDraft(nextDraft)
-                    setProjectSnapshot(nextDraft)
-                }
+            const mergedProviders = mergeProviders(providerRes, authRes || {})
+            if (requestId !== loadRequestIdRef.current) {
+                return mergedProviders
+            }
 
-                auth.syncFlowsWithProviders(mergedProviders)
-            } catch (err) {
-                if (!cancelled) setError(err instanceof Error ? err.message : String(err))
-            } finally {
-                if (!cancelled) setLoading(false)
+            setProviders(mergedProviders)
+            setOpencodeInfo(healthRes)
+            setProjectMeta({ exists: projectRes.exists, path: projectRes.path })
+
+            if (
+                !projectDirtyRef.current
+                || !projectDraftRef.current
+                || !projectSnapshotRef.current
+            ) {
+                const nextDraft = buildProjectDraft(mergedProviders, projectRes.config || {})
+                setProjectDraft(nextDraft)
+                setProjectSnapshot(nextDraft)
+            }
+
+            return mergedProviders
+        } catch (err) {
+            if (requestId === loadRequestIdRef.current) {
+                setError(err instanceof Error ? err.message : String(err))
+            }
+            throw err
+        } finally {
+            if (requestId === loadRequestIdRef.current) {
+                setLoading(false)
             }
         }
+    }, [workingDir])
 
-        fetchAll()
-        return () => { cancelled = true }
-    }, [open, refreshTick, workingDir])
+    async function refreshProviderState() {
+        const mergedProviders = await loadSettingsState()
+        await queryClient.invalidateQueries({ queryKey: queryKeys.models(workingDir), exact: true })
+        await queryClient.refetchQueries({ queryKey: queryKeys.models(workingDir), exact: true, type: 'active' })
+        return mergedProviders
+    }
+
+    const auth = useProviderAuth({
+        providers,
+        selectedPerformer: selectedPerformer ? { id: selectedPerformer.id, name: selectedPerformer.name } : null,
+        setPerformerModel,
+        refreshProviderState,
+        setError,
+        setProjectMessage,
+        setActiveTab: (tab) => setActiveTab(tab as SettingsTab),
+    })
+    const syncFlowsWithProvidersRef = useRef(auth.syncFlowsWithProviders)
+
+    useEffect(() => {
+        syncFlowsWithProvidersRef.current = auth.syncFlowsWithProviders
+    }, [auth.syncFlowsWithProviders])
+
+    const refreshSettings = useCallback(async () => {
+        try {
+            const mergedProviders = await loadSettingsState(
+                providersRef.current.length === 0 && !opencodeInfoRef.current,
+            )
+            syncFlowsWithProvidersRef.current(mergedProviders)
+        } catch {
+            // Error state is already surfaced in loadSettingsState.
+        }
+    }, [loadSettingsState])
+
+    useEffect(() => {
+        if (!open) return
+
+        void refreshSettings()
+    }, [open, refreshSettings, workingDir])
 
     if (!open) return null
 
@@ -191,8 +237,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
             setProjectSnapshot(projectDraft)
             setProjectMessage('Saved to OpenCode project config.')
-            queryClient.invalidateQueries({ queryKey: ['models'] })
-            setRefreshTick((v) => v + 1)
+            await refreshProviderState()
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err))
         } finally {
@@ -224,10 +269,8 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                         handleApiAuthSave={auth.handleApiAuthSave}
                         dismissOauthFlow={auth.dismissOauthFlow}
                         disconnectProvider={auth.disconnectProvider}
-                        openModelPicker={auth.openModelPicker}
                         applyPickedModel={auth.applyPickedModel}
                         retryBrowserOauth={auth.retryBrowserOauth}
-                        selectedPerformer={selectedPerformer ? { id: selectedPerformer.id, name: selectedPerformer.name } : null}
                         projectMessage={projectMessage}
                     />
                 )
@@ -242,7 +285,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                         setError={setError}
                         onRestart={async () => {
                             await api.opencodeRestart()
-                            refreshSettings()
+                            await refreshSettings()
                         }}
                     />
                 )
@@ -271,7 +314,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 <div className="settings-header">
                     <h3><Settings size={16} style={{ display: 'inline', verticalAlign: '-2px', marginRight: 6 }} />Settings</h3>
                     <div className="settings-header-actions">
-                        <button className="icon-btn" onClick={refreshSettings} aria-label="Refresh settings">
+                        <button className="icon-btn" onClick={() => { void refreshSettings() }} aria-label="Refresh settings">
                             <RefreshCw size={14} />
                         </button>
                         <button className="icon-btn" onClick={onClose} aria-label="Close settings">

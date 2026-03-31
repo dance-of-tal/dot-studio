@@ -75,6 +75,7 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
 
             performerIdCounter.value = 0
             markdownEditorIdCounter.value = 0
+            get().cleanupRealtimeEvents()
             setApiWorkingDirContext(dir)
             set({
                 workspaceId: null,
@@ -84,6 +85,7 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
                 acts: [],
                 drafts: {},
                 markdownEditors: [],
+                canvasTerminals: [],
                 editingTarget: null,
                 selectedPerformerId: null,
                 selectedPerformerSessionId: null,
@@ -96,17 +98,32 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
                 chatPrefixes: {},
                 activeChatPerformerId: null,
                 sessionMap: {},
+                pendingPermissions: {},
+                pendingQuestions: {},
+                todos: {},
                 assistantModel: null,
                 assistantAvailableModels: [],
                 appliedAssistantActionMessageIds: {},
                 assistantActionResults: {},
-                safeSummaries: {},
+                seEntities: {},
+                seMessages: {},
+                seStatuses: {},
+                sePermissions: {},
+                seQuestions: {},
+                seTodos: {},
+                chatKeyToSession: {},
+                sessionToChatKey: {},
+                sessionLoading: {},
+                historyCursors: {},
+                sessionReverts: {},
                 sessions: [],
+                loadingPerformerId: null,
                 lspServers: [],
                 lspDiagnostics: {},
                 trackingWindow: null,
                 isTrackingOpen: false,
                 workspaceDirty: true,
+                runtimeReloadPending: false,
                 actEditorState: null,
                 actThreads: {},
                 activeThreadId: null,
@@ -231,7 +248,6 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
                 mcpBindingMap: performer.mcpBindingMap || {},
                 declaredMcpConfig: performer.declaredMcpConfig || null,
                 danceDeliveryMode: performer.danceDeliveryMode || 'auto',
-                executionMode: performer.executionMode === 'safe' ? 'safe' : 'direct',
                 planMode: performer.planMode || false,
                 hidden: performer.hidden || false,
                 activeSessionId: performer.activeSessionId,
@@ -270,6 +286,7 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
 
         const workingDir = normalizePath(data.workingDir || '')
         setApiWorkingDirContext(workingDir || null)
+        get().cleanupRealtimeEvents()
 
         set({
             workspaceId,
@@ -291,12 +308,26 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
             chats: {},
             chatPrefixes: {},
             sessionMap: rehydratedSessionMap,
+            pendingPermissions: {},
+            pendingQuestions: {},
+            todos: {},
             assistantModel: null,
             assistantAvailableModels: [],
             appliedAssistantActionMessageIds: {},
             assistantActionResults: {},
-            safeSummaries: {},
+            seEntities: {},
+            seMessages: {},
+            seStatuses: {},
+            sePermissions: {},
+            seQuestions: {},
+            seTodos: {},
+            chatKeyToSession: {},
+            sessionToChatKey: {},
+            sessionLoading: {},
+            historyCursors: {},
+            sessionReverts: {},
             sessions: [],
+            loadingPerformerId: null,
             canvasTerminals: (data.canvasTerminals || []).map((t: PersistedCanvasTerminal) => ({
                 id: t.id,
                 title: t.title || 'Terminal',
@@ -319,6 +350,7 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
             lspServers: [],
             lspDiagnostics: {},
             workspaceDirty: false,
+            runtimeReloadPending: false,
             workingDir,
             actThreads: {},
             activeThreadId: null,

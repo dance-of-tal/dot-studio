@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { ProviderAuthMethod, ProviderCard, OauthFlow } from './settings-utils'
 import type { ConnectedModel, ModelPickerState } from './settings-utils'
-import { isPopularProvider } from './settings-utils'
+import { isPopularProvider, shouldDisplayConnectedProvider } from './settings-utils'
 import ProviderConnectModal from './ProviderConnectModal'
 
 interface SettingsProvidersProps {
@@ -23,10 +23,8 @@ interface SettingsProvidersProps {
     handleApiAuthSave: (providerId: string) => void
     dismissOauthFlow: (providerId: string) => void
     disconnectProvider: (providerId: string, providerName: string) => void
-    openModelPicker: (providerId: string, providerName: string) => void
     applyPickedModel: (model: ConnectedModel) => void
     retryBrowserOauth: (providerId: string) => void
-    selectedPerformer: { id: string; name: string } | null
     projectMessage: string | null
 }
 
@@ -44,10 +42,10 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
         retryBrowserOauth, projectMessage,
     } = props
 
-    const [connectTarget, setConnectTarget] = useState<ProviderCard | null>(null)
+    const [connectTargetId, setConnectTargetId] = useState<string | null>(null)
 
     const connected = useMemo(
-        () => providers.filter((p) => p.connected && p.id !== 'opencode'),
+        () => providers.filter(shouldDisplayConnectedProvider),
         [providers],
     )
 
@@ -61,6 +59,21 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                 return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi)
             })
     }, [providers, connected])
+
+    const connectTarget = useMemo(
+        () => connectTargetId ? providers.find((provider) => provider.id === connectTargetId) || null : null,
+        [connectTargetId, providers],
+    )
+    const connectFlow = connectTargetId ? oauthFlows[connectTargetId] : undefined
+    const connectModelPicker = modelPicker?.providerId === connectTargetId ? modelPicker : null
+    const shouldShowConnectModal = Boolean(
+        connectTarget
+        && (
+            !connectTarget.connected
+            || connectFlow
+            || connectModelPicker
+        ),
+    )
 
     return (
         <div className="stg-panel">
@@ -113,7 +126,7 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                                 <span className="stg-provider-row__meta">{provider.modelCount} models</span>
                             </div>
                             <div className="stg-provider-row__actions">
-                                <button className="btn btn--primary" onClick={() => setConnectTarget(provider)}>
+                                <button className="btn btn--primary" onClick={() => setConnectTargetId(provider.id)}>
                                     Connect
                                 </button>
                             </div>
@@ -123,13 +136,13 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
             </div>
 
             {/* Connect modal overlay */}
-            {connectTarget && (
+            {connectTarget && shouldShowConnectModal && (
                 <ProviderConnectModal
                     provider={connectTarget}
-                    flow={oauthFlows[connectTarget.id]}
-                    modelPicker={modelPicker}
+                    flow={connectFlow}
+                    modelPicker={connectModelPicker}
                     visibleModelPickerModels={visibleModelPickerModels}
-                    onClose={() => setConnectTarget(null)}
+                    onClose={() => setConnectTargetId(null)}
                     openApiKeyFlow={openApiKeyFlow}
                     handleAuthMethod={handleAuthMethod}
                     handleOauthCallback={handleOauthCallback}

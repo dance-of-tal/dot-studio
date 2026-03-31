@@ -20,6 +20,7 @@ import {
     addActRelationImpl,
 } from './act-slice-actions'
 import { buildExitFocusModeState } from './workspace-focus-actions'
+import { resolvePreferredActThreadId } from '../lib/act-threads'
 
 function createActEditorState(
     actId: string,
@@ -130,16 +131,20 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     selectAct: (id) => {
         const state = get()
         const nextThreads = id ? (state.actThreads[id] || []) : []
-        const nextActiveThreadId = nextThreads.some((thread) => thread.id === state.activeThreadId)
-            ? state.activeThreadId
-            : null
+        const nextActiveThreadId = id
+            ? resolvePreferredActThreadId(nextThreads, state.activeThreadId)
+            : state.activeThreadId
         set((s) => ({
             selectedActId: id,
             selectedPerformerId: null,
             selectedPerformerSessionId: null,
             actEditorState: state.actEditorState?.actId === id ? state.actEditorState : null,
             activeThreadId: nextActiveThreadId,
-            activeThreadParticipantKey: state.selectedActId === id ? state.activeThreadParticipantKey : null,
+            activeThreadParticipantKey: id === null
+                ? state.activeThreadParticipantKey
+                : (state.selectedActId === id && nextActiveThreadId === state.activeThreadId
+                    ? state.activeThreadParticipantKey
+                    : null),
             // Clear stale focus when not in focus mode; preserve when in focus
             focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
             focusedNodeType: s.focusSnapshot ? s.focusedNodeType : null,
@@ -464,7 +469,9 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         await api.actRuntime.deleteThread(actId, threadId)
         set((state: StudioState) => {
             const threads = (state.actThreads[actId] || []).filter((t) => t.id !== threadId)
-            const nextActiveThread = state.activeThreadId === threadId ? null : state.activeThreadId
+            const nextActiveThread = state.activeThreadId === threadId
+                ? resolvePreferredActThreadId(threads, null)
+                : state.activeThreadId
 
             // Clean up orphaned sessionMap and chats entries for this thread
             const threadKeyPrefix = `act:${actId}:thread:${threadId}:participant:`

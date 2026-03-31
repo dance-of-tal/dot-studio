@@ -14,7 +14,6 @@ import opencodeRoutes from './routes/opencode.js'
 import compileRoutes from './routes/compile.js'
 import dotRoutes from './routes/dot.js'
 import adapterRoutes from './routes/adapter.js'
-import safeRoutes from './routes/safe.js'
 import draftRoutes from './routes/drafts.js'
 import actRuntimeRoutes from './routes/act-runtime.js'
 import { IS_PRODUCTION } from './lib/config.js'
@@ -38,7 +37,6 @@ function mountApiRoutes(app: Hono) {
     app.route('/', compileRoutes)
     app.route('/', dotRoutes)
     app.route('/', adapterRoutes)
-    app.route('/', safeRoutes)
     app.route('/', draftRoutes)
     app.route('/', actRuntimeRoutes)
 }

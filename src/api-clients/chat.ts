@@ -1,12 +1,11 @@
 import type { QuestionAnswer, PermissionRequest } from '@opencode-ai/sdk/v2'
 import type { ChatSendRequest, ChatSessionCreateResponse } from '../../shared/chat-contracts'
-import type { ExecutionMode } from '../../shared/safe-mode'
 import { createApiEventSource, deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
 import type { SessionMessageLike } from '../lib/chat-messages'
 
 export const chatApi = {
-    createSession: (performerId: string, performerName: string, configHash: string, executionMode: ExecutionMode, actId?: string) =>
-        postJSON<ChatSessionCreateResponse>('/api/chat/sessions', { performerId, performerName, configHash, executionMode, actId }),
+    createSession: (performerId: string, performerName: string, configHash: string, actId?: string) =>
+        postJSON<ChatSessionCreateResponse>('/api/chat/sessions', { performerId, performerName, configHash, actId }),
 
     deleteSession: (id: string) =>
         deleteJSON<{ ok: boolean }>(`/api/chat/sessions/${id}`),
@@ -19,6 +18,9 @@ export const chatApi = {
         payload: ChatSendRequest,
     ) =>
         postJSON<{ accepted: boolean }>(`/api/chat/sessions/${id}/send`, payload satisfies ChatSendRequest),
+
+    status: (id: string) =>
+        fetchJSON<{ status: { type: 'idle' | 'busy' | 'retry' | 'error' } | null }>(`/api/chat/sessions/${id}/status`),
 
     abort: (id: string) =>
         postJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/abort`),

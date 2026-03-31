@@ -3,8 +3,16 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useStudioStore } from '../../store'
 import { api } from '../../api'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
-import { buildActAssetPayload, buildPerformerAssetPayload, slugifyAssetName } from '../../lib/performers'
-import { queryKeys } from '../../hooks/queries'
+import {
+    buildActAssetPayload,
+    buildActPublishPayload,
+    buildPerformerAssetPayload,
+    buildPerformerPublishPayload,
+    getActPublishDependencyIssues,
+    getPerformerPublishBlockReasons,
+    slugifyAssetName,
+} from '../../lib/performers'
+import { queryKeys, useAssetKind } from '../../hooks/queries'
 import { useDotLogin } from '../../hooks/useDotLogin'
 import {
     buildMarkdownAssetPayload,
@@ -31,6 +39,7 @@ export function usePublishModalController(open: boolean) {
 
     const queryClient = useQueryClient()
     const { authUser, startLogin, isAuthenticating } = useDotLogin()
+    const { data: installedTals = [] } = useAssetKind('tal', open)
 
     const [step, setStep] = useState<'picker' | 'form'>('picker')
     const [pickerSelection, setPickerSelection] = useState<PickerItem | null>(null)
@@ -55,20 +64,19 @@ export function usePublishModalController(open: boolean) {
         ? { kind: 'performer' as const, id: performer.id, name: performer.name }
         : selectedAct
             ? { kind: 'act' as const, id: selectedAct.id, name: selectedAct.name }
-            : markdownEditor && draft
+            : markdownEditor && draft && markdownEditor.kind === 'tal'
                 ? { kind: markdownEditor.kind, id: markdownEditor.id, name: draft.name || `${markdownEditor.kind} draft` }
                 : isLocalAsset && pickerSelection
                     ? { kind: pickerSelection.kind, id: pickerSelection.urn, name: pickerSelection.name }
                     : null
 
     const pickerItems = useMemo(() => buildPickerItems({
-        installedTals: [],
-        installedDances: [],
+        installedTals,
         markdownEditors,
         drafts,
         performers,
         acts,
-    }), [markdownEditors, drafts, performers, acts])
+    }), [acts, drafts, installedTals, markdownEditors, performers])
 
     useEffect(() => {
         if (open) {
@@ -114,24 +122,33 @@ export function usePublishModalController(open: boolean) {
             || baseline.content !== draft.content
     }, [draft, markdownEditor])
 
-    const performerHasBlockingDependencies = useMemo(
-        () => performerPreflight.some((entry) => entry.status !== 'ready'),
-        [performerPreflight],
-    )
     const publishBlockedReason = useMemo(() => {
-        if (performer && performerHasBlockingDependencies) {
-            return 'Save Tal and Dance dependencies as local or published assets before exporting this performer.'
+        if (performer) {
+            const dependencyIssues = getPerformerPublishBlockReasons(performer, drafts)
+            if (dependencyIssues.length > 0) {
+                return dependencyIssues.join(' ')
+            }
         }
         if (selectedAct) {
-            const actBlockReasons = getActPublishBlockReasons(selectedAct)
+            const actBlockReasons = [
+                ...getActPublishBlockReasons(selectedAct),
+                ...getActPublishDependencyIssues(selectedAct, drafts),
+            ]
             if (actBlockReasons.length > 0) {
                 return actBlockReasons.join(' ')
             }
         }
         return null
-    }, [performer, performerHasBlockingDependencies, selectedAct])
+    }, [drafts, performer, selectedAct])
 
-    const canSaveOrPublish = !!target
+    const canSaveLocal = !!target
+        && !!slug.trim()
+        && (!markdownEditor || markdownDirty)
+        && !!authUser?.authenticated
+        && (!performer || performerPreflight.every((entry) => entry.status === 'ready'))
+        && (!selectedAct || getActPublishBlockReasons(selectedAct).length === 0)
+
+    const canPublish = !!target
         && !!slug.trim()
         && (!markdownEditor || markdownDirty)
         && !publishBlockedReason
@@ -214,7 +231,7 @@ export function usePublishModalController(open: boolean) {
                 return
             }
 
-            if ((target.kind === 'tal' || target.kind === 'dance') && markdownEditor && draft) {
+            if (target.kind === 'tal' && markdownEditor && draft) {
                 const payload = buildMarkdownAssetPayload(markdownEditor, draft, slug, description, tags)
                 const result = await api.dot.saveLocalAsset(markdownEditor.kind, slug, payload, authUser?.username || undefined)
                 syncMarkdownDraftPublishState(result.urn, slug, payload)
@@ -226,7 +243,7 @@ export function usePublishModalController(open: boolean) {
                 return
             }
 
-            if ((target.kind === 'tal' || target.kind === 'dance') && isLocalAsset) {
+            if (target.kind === 'tal' && isLocalAsset) {
                 setStatus({ tone: 'success', message: `${target.kind}/${target.id} is already saved locally.` })
             }
         } catch (error: unknown) {
@@ -245,12 +262,17 @@ export function usePublishModalController(open: boolean) {
 
             if (target.kind === 'performer' && performer) {
                 updatePerformerAuthoringMeta(performer.id, { slug, description, tags })
-                const payload = buildPerformerAssetPayload(performer, {
+                const publishInput = buildPerformerPublishPayload(performer, {
                     name: performer.name,
+                    slug,
                     description,
                     tags,
+                }, {
+                    drafts,
+                    username: authUser?.username || '',
+                    workingDir,
                 })
-                const result = await api.dot.publishAsset('performer', slug, payload, tags, true)
+                const result = await api.dot.publishAsset('performer', slug, publishInput.payload, tags, publishInput.providedAssets, true)
                 await invalidateKind('performer')
                 setStatus({
                     tone: 'success',
@@ -260,8 +282,12 @@ export function usePublishModalController(open: boolean) {
             }
 
             if (target.kind === 'act' && selectedAct) {
-                const payload = buildActAssetPayload(selectedAct, { description, tags })
-                const result = await api.dot.publishAsset('act', slug, payload, tags, true)
+                const publishInput = buildActPublishPayload(selectedAct, { slug, description, tags }, {
+                    drafts,
+                    username: authUser?.username || '',
+                    workingDir,
+                })
+                const result = await api.dot.publishAsset('act', slug, publishInput.payload, tags, publishInput.providedAssets, true)
                 await invalidateKind('act')
                 setStatus({
                     tone: 'success',
@@ -270,9 +296,9 @@ export function usePublishModalController(open: boolean) {
                 return
             }
 
-            if ((target.kind === 'tal' || target.kind === 'dance') && markdownEditor && draft) {
+            if (target.kind === 'tal' && markdownEditor && draft) {
                 const payload = buildMarkdownAssetPayload(markdownEditor, draft, slug, description, tags)
-                const result = await api.dot.publishAsset(markdownEditor.kind, slug, payload, tags, true)
+                const result = await api.dot.publishAsset(markdownEditor.kind, slug, payload, tags, undefined, true)
                 syncMarkdownDraftPublishState(result.urn, slug, payload)
                 await invalidateKind(markdownEditor.kind)
                 setStatus({
@@ -282,8 +308,8 @@ export function usePublishModalController(open: boolean) {
                 return
             }
 
-            if ((target.kind === 'tal' || target.kind === 'dance') && isLocalAsset) {
-                const result = await api.dot.publishAsset(target.kind, slug, undefined, tags, true)
+            if (target.kind === 'tal' && isLocalAsset) {
+                const result = await api.dot.publishAsset(target.kind, slug, undefined, tags, undefined, true)
                 await invalidateKind(target.kind)
                 setStatus({
                     tone: 'success',
@@ -320,7 +346,8 @@ export function usePublishModalController(open: boolean) {
         markdownDirty,
         draft,
         publishBlockedReason,
-        canSaveOrPublish,
+        canSaveLocal,
+        canPublish,
         isLocalAsset,
         handleSaveLocal,
         handlePublish,

@@ -3,11 +3,7 @@ import path from 'path'
 import { createHash } from 'crypto'
 import { getOpencode } from '../lib/opencode.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
-import { deleteSafeOwnerWorkspace } from '../lib/safe-mode.js'
-import {
-    listSessionExecutionContextsForWorkingDir,
-    unregisterSessionExecutionContext,
-} from '../lib/session-execution.js'
+import { listSessionExecutionContextsForWorkingDir, unregisterSessionExecutionContext } from '../lib/session-execution.js'
 import { workspacesDir, workspaceDir } from '../lib/config.js'
 
 type WorkspaceSessionSummary = { id?: string }
@@ -60,12 +56,9 @@ async function purgeLinkedOpencodeData(workspace: WorkspaceLinkedSnapshot) {
     }
 
     const executionContexts = await listSessionExecutionContextsForWorkingDir(workingDir)
-    const directories = Array.from(new Set([
-        workingDir,
-        ...executionContexts.map((context) => context.executionDir),
-    ]))
+    const directories = [workingDir]
     const sessionDirectories = new Map<string, string>(
-        executionContexts.map((context) => [context.sessionId, context.executionDir]),
+        executionContexts.map((context) => [context.sessionId, context.workingDir]),
     )
 
     try {
@@ -98,27 +91,10 @@ async function purgeLinkedOpencodeData(workspace: WorkspaceLinkedSnapshot) {
         console.warn('[workspace-service] Failed to purge OpenCode data for workspace delete', { workingDir, error })
     }
 
-    const ownerTargets = new Map<string, { ownerKind: 'performer' | 'act'; ownerId: string }>()
-    for (const context of executionContexts) {
-        ownerTargets.set(`${context.ownerKind}:${context.ownerId}`, {
-            ownerKind: context.ownerKind,
-            ownerId: context.ownerId,
-        })
-    }
-    for (const performer of Array.isArray(workspace?.performers) ? workspace.performers : []) {
-        if (typeof performer?.id === 'string' && performer.id) {
-            ownerTargets.set(`performer:${performer.id}`, { ownerKind: 'performer', ownerId: performer.id })
-        }
-    }
     for (const act of Array.isArray(workspace?.acts) ? workspace.acts : []) {
         if (typeof act?.id === 'string' && act.id) {
-            ownerTargets.set(`act:${act.id}`, { ownerKind: 'act', ownerId: act.id })
             await fs.rm(path.join(workspaceDir(workspaceIdForWorkingDir(workingDir)), 'act-runtime', act.id), { recursive: true, force: true }).catch(() => {})
         }
-    }
-
-    for (const { ownerKind, ownerId } of Array.from(ownerTargets.values())) {
-        await deleteSafeOwnerWorkspace(workingDir, ownerKind, ownerId).catch(() => {})
     }
 }
 

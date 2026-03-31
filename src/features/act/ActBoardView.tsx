@@ -236,11 +236,8 @@ export default function ActBoardView({ actId, threadId }: ActBoardViewProps) {
                     <Clipboard size={20} className="act-board__empty-icon" />
                     <span>
                         {entries.length === 0
-                            ? 'No shared notes yet'
+                            ? 'No shared board yet'
                             : `No ${KIND_LABELS[filter].toLowerCase()} found`}
-                    </span>
-                    <span className="act-board__empty-hint">
-                        Participants can post shared notes using the update_shared_board tool during collaboration.
                     </span>
                 </div>
             ) : (

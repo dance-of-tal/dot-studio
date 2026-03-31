@@ -112,7 +112,11 @@ export function removePerformerDance(set: SetFn, get: GetFn, performerId: string
         performers: s.performers.map(a =>
             a.id === performerId
                 ? (() => {
-                    const danceRefs = a.danceRefs.filter((ref) => assetRefKey(ref) !== danceUrn && !(ref.kind === 'registry' && ref.urn === danceUrn))
+                    const danceRefs = a.danceRefs.filter((ref) => (
+                        assetRefKey(ref) !== danceUrn
+                        && !(ref.kind === 'registry' && ref.urn === danceUrn)
+                        && !(ref.kind === 'draft' && ref.draftId === danceUrn)
+                    ))
                     return applyPerformerPatch(a, { danceRefs })
                 })()
                 : a
@@ -232,7 +236,7 @@ export function setPerformerMcpBinding(set: SetFn, get: GetFn, performerId: stri
 
 // ── Metadata & visibility ───────────────────────────────
 
-export function updatePerformerAuthoringMeta(set: SetFn, performerId: string, patch: Record<string, unknown>) {
+export function updatePerformerAuthoringMeta(set: SetFn, get: GetFn, performerId: string, patch: Record<string, unknown>) {
     set((s) => ({
         performers: s.performers.map((a) => (
             a.id === performerId
@@ -250,6 +254,7 @@ export function updatePerformerAuthoringMeta(set: SetFn, performerId: string, pa
         )),
         workspaceDirty: true,
     }))
+    scheduleActWorkspacePersist(get, set, performerId)
 }
 
 export function togglePerformerVisibility(set: SetFn, _get: GetFn, id: string) {

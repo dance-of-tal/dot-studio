@@ -37,7 +37,6 @@ export default function CanvasControls() {
         if (!nodeId) return
 
         enterFocusMode(nodeId, nodeType, getCanvasViewportSize())
-        scheduleFitView(fitView, 'enter')
     }, [selectedPerformerId, selectedActId, enterFocusMode, fitView])
 
     useEffect(() => {

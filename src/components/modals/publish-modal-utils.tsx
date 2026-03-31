@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * publish-modal-utils.tsx – Pure helpers, types, and sub-components
  * extracted from PublishModal.tsx.
@@ -12,8 +13,8 @@ import { registryUrnFromRef } from '../../lib/performers'
 
 // ── Types ───────────────────────────────────────────────
 
-export type PickerItemLocal = { kind: 'tal' | 'dance'; source: 'local'; urn: string; name: string; slug: string; issue?: string }
-export type PickerItemDraft = { kind: 'tal' | 'dance'; source: 'draft'; editorId: string; draftId: string; name: string; issue?: string }
+export type PickerItemLocal = { kind: 'tal'; source: 'local'; urn: string; name: string; slug: string; issue?: string }
+export type PickerItemDraft = { kind: 'tal'; source: 'draft'; editorId: string; draftId: string; name: string; issue?: string }
 export type PickerItemPerformer = { kind: 'performer'; source: 'canvas'; performerId: string; name: string; issue?: string }
 export type PickerItemAct = { kind: 'act'; source: 'canvas'; actId: string; name: string; issue?: string }
 export type PickerItem = PickerItemLocal | PickerItemDraft | PickerItemPerformer | PickerItemAct
@@ -21,7 +22,7 @@ export type PickerItem = PickerItemLocal | PickerItemDraft | PickerItemPerformer
 export type PerformerPreflightEntry = {
     label: string
     required: boolean
-    status: 'ready' | 'draft' | 'missing'
+    status: 'ready' | 'draft' | 'missing' | 'will_publish'
     detail: string
 }
 
@@ -117,7 +118,6 @@ export function getActPublishBlockReasons(act: WorkspaceAct): string[] {
 
 export function buildPickerItems(args: {
     installedTals: AssetCard[]
-    installedDances: AssetCard[]
     markdownEditors: ReturnType<typeof useStudioStore.getState>['markdownEditors']
     drafts: ReturnType<typeof useStudioStore.getState>['drafts']
     performers: PerformerNode[]
@@ -131,21 +131,14 @@ export function buildPickerItems(args: {
         items.push({ kind: 'tal', source: 'local', urn: tal.urn, name: tal.name, slug: tal.name, issue: hasContent ? undefined : 'Empty content' })
     }
 
-    const localDances = args.installedDances.filter((asset) => asset.source === 'stage')
-    for (const dance of localDances) {
-        const hasContent = typeof dance.content === 'string' && dance.content.trim().length > 0
-        items.push({ kind: 'dance', source: 'local', urn: dance.urn, name: dance.name, slug: dance.name, issue: hasContent ? undefined : 'Empty content' })
-    }
-
     const localTalUrns = new Set(localTals.map((asset) => asset.urn))
-    const localDanceUrns = new Set(localDances.map((asset) => asset.urn))
     for (const editor of args.markdownEditors) {
         const draft = args.drafts[editor.draftId]
         if (!draft) continue
         if (draft.derivedFrom) {
             if (editor.kind === 'tal' && localTalUrns.has(draft.derivedFrom)) continue
-            if (editor.kind === 'dance' && localDanceUrns.has(draft.derivedFrom)) continue
         }
+        if (editor.kind !== 'tal' || draft.saveState !== 'saved') continue
         const hasContent = typeof draft.content === 'string' && draft.content.trim().length > 0
         items.push({
             kind: editor.kind,
@@ -185,7 +178,11 @@ export function buildPerformerPreflight(performer: PerformerNode | null): Perfor
             return { ...entry, status: 'ready' as const, detail: urn }
         }
         if (entry.ref.kind === 'draft') {
-            return { ...entry, status: 'draft' as const, detail: `draft:${entry.ref.draftId}` }
+            return {
+                ...entry,
+                status: entry.label === 'Tal' ? 'will_publish' as const : 'draft' as const,
+                detail: entry.label === 'Tal' ? 'Will publish from draft' : `draft:${entry.ref.draftId}`,
+            }
         }
         return { ...entry, status: 'missing' as const, detail: 'not set' }
     })

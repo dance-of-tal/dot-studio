@@ -16,9 +16,47 @@ import {
 import { invalidate } from '../lib/cache.js'
 import type { DiscoveredSkill } from '../lib/dot-source.js'
 
+const REGISTRY_URL = process.env.DOT_REGISTRY_URL || 'https://registry.dance-of-tal.workers.dev'
+
 export interface AddResult {
     installed: Array<{ urn: string; name: string; description: string }>
     source: string
+}
+
+async function autoRegisterInRegistry(
+    urn: string,
+    skill: DiscoveredSkill,
+    sourceUrl: string,
+    ref?: string,
+): Promise<void> {
+    const ownerRepo = getOwnerRepo(sourceUrl)
+
+    try {
+        const response = await fetch(`${REGISTRY_URL}/assets/dance`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                urn,
+                name: skill.name,
+                description: skill.description,
+                tags: skill.tags,
+                resource: {
+                    type: 'github',
+                    repo: ownerRepo,
+                    path: skill.relativePath,
+                    ref: ref || 'main',
+                },
+            }),
+        })
+
+        if (!response.ok) {
+            return
+        }
+    } catch {
+        // Best-effort only: install should still succeed without registry registration.
+    }
 }
 
 export async function addDanceFromGitHub(cwd: string, source: string, scope?: 'global' | 'stage'): Promise<AddResult> {
@@ -58,7 +96,6 @@ export async function addDanceFromGitHub(cwd: string, source: string, scope?: 'g
         const targetCwd = scope === 'global' ? getGlobalCwd() : cwd
         const owner = parsed.owner
         const stage = parsed.repo
-        const ownerRepo = getOwnerRepo(parsed.url)
         const installed: AddResult['installed'] = []
 
         await ensureDotDir(targetCwd)
@@ -76,6 +113,7 @@ export async function addDanceFromGitHub(cwd: string, source: string, scope?: 'g
                 skillPath: skill.relativePath,
             })
 
+            await autoRegisterInRegistry(urn, skill, parsed.url, parsed.ref)
             reportInstall(urn).catch(() => {})
 
             installed.push({ urn, name: skill.name, description: skill.description })

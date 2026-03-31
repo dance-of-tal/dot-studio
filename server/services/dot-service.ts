@@ -63,7 +63,36 @@ export async function searchDotRegistry(query: string, options: { kind?: string 
     })
 }
 
-/** Validates that performer URNs follow the 3-part format: kind/@author/name */
+const SKILLS_SH_API = 'https://skills.sh/api/search'
+
+export async function searchSkillsCatalog(query: string, limit = 10) {
+    if (!query.trim()) return []
+    const url = `${SKILLS_SH_API}?q=${encodeURIComponent(query)}&limit=${limit}`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+        skills: Array<{ id: string; name: string; installs: number; source: string }>
+    }
+    return (data.skills || []).map((skill) => ({
+        urn: `dance/@${skill.source || 'skills.sh'}/${skill.name}`,
+        kind: 'dance',
+        name: skill.name,
+        owner: skill.source || 'skills.sh',
+        stage: skill.source?.split('/')[1] || '',
+        description: `${formatInstalls(skill.installs)} · from ${skill.source || 'skills.sh'}`,
+        tags: ['skills.sh'] as string[],
+        installs: skill.installs,
+    }))
+}
+
+function formatInstalls(count: number): string {
+    if (!count || count <= 0) return '0 installs'
+    if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M installs`
+    if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}K installs`
+    return `${count} install${count === 1 ? '' : 's'}`
+}
+
+/** Validates canonical performer assets after parsing. */
 export function validateDotPerformer(performer: PerformerAssetV1): void {
     // Canonical assets are already validated by parsePerformerAsset,
     // but we can add extra runtime checks if needed.
@@ -161,6 +190,12 @@ export async function publishDotAsset(cwd: string, input: {
     slug: string
     payload?: unknown
     tags?: string[]
+    providedAssets?: Array<{
+        kind: 'tal' | 'performer' | 'act'
+        urn: string
+        payload: Record<string, unknown>
+        tags?: string[]
+    }>
 }) {
     const auth = await readDotAuthUser()
     if (!auth) {

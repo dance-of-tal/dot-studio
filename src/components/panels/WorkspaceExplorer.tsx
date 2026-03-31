@@ -27,8 +27,22 @@ export default function WorkspaceExplorer() {
     const [workspacesHeight, setWorkspacesHeight] = useState(208);
     const dividerDragging = useRef(false);
 
+    const suppressNextClick = useCallback(() => {
+        const handleClickCapture = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            document.removeEventListener('click', handleClickCapture, true);
+        };
+
+        document.addEventListener('click', handleClickCapture, true);
+        window.setTimeout(() => {
+            document.removeEventListener('click', handleClickCapture, true);
+        }, 0);
+    }, []);
+
     const onDividerMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
+        e.stopPropagation();
         dividerDragging.current = true;
         const startY = e.clientY;
         const startH = workspacesHeight;
@@ -38,18 +52,21 @@ export default function WorkspaceExplorer() {
             const delta = ev.clientY - startY;
             setWorkspacesHeight(Math.min(400, Math.max(80, startH + delta)));
         };
-        const onUp = () => {
+        const onUp = (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
             dividerDragging.current = false;
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
+            suppressNextClick();
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
         document.body.style.cursor = 'row-resize';
         document.body.style.userSelect = 'none';
-    }, [workspacesHeight]);
+    }, [suppressNextClick, workspacesHeight]);
     const {
         workspaceId,
         workingDir,

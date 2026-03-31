@@ -77,7 +77,10 @@ actRuntimeTools.get('/api/act/session/:sessionId/read-shared-board', async (c) =
     }
 
     const key = c.req.query('key')
-    const result = await getActRuntimeService(target.workingDir).readBoard(target.threadId, key)
+    const summaryOnly = c.req.query('summaryOnly') !== 'false'
+    const limitRaw = c.req.query('limit')
+    const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined
+    const result = await getActRuntimeService(target.workingDir).readBoard(target.threadId, { key, summaryOnly, limit })
     if (!result.ok) {
         return c.json(result, result.status as 404)
     }
@@ -129,7 +132,7 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/post-to-board', async (c)
     const result = await getActRuntimeService(workingDir).postToBoard(threadId, body)
     console.log(`[act-tool] post-to-board result: ok=${result.ok}${!result.ok ? `, error=${result.error}` : ''}`)
     if (!result.ok) {
-        return c.json(result, result.status as 403 | 404 | 429)
+        return c.json(result, result.status as 400 | 403 | 404 | 429)
     }
     return c.json(result)
 })
@@ -155,7 +158,7 @@ actRuntimeTools.post('/api/act/session/:sessionId/update-shared-board', async (c
         updateMode: body.mode,
     })
     if (!result.ok) {
-        return c.json(result, result.status as 403 | 404 | 429)
+        return c.json(result, result.status as 400 | 403 | 404 | 429)
     }
     return c.json(result)
 })
@@ -165,7 +168,10 @@ actRuntimeTools.get('/api/act/:actId/thread/:threadId/read-board', async (c) => 
     const workingDir = requestWorkingDir(c)
     console.log(`[act-tool] read-board: threadId=${threadId}, workingDir=${workingDir}`)
     const key = c.req.query('key')
-    const result = await getActRuntimeService(workingDir).readBoard(threadId, key)
+    const summaryOnly = c.req.query('summaryOnly') !== 'false'
+    const limitRaw = c.req.query('limit')
+    const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined
+    const result = await getActRuntimeService(workingDir).readBoard(threadId, { key, summaryOnly, limit })
     console.log(`[act-tool] read-board result: ok=${result.ok}${!result.ok ? `, error=${result.error}` : ''}`)
     if (!result.ok) {
         return c.json(result, result.status as 404)

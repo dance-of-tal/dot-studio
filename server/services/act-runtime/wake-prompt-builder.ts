@@ -32,6 +32,7 @@ export function buildWakePrompt(
     if (target.reason === 'wake-condition' && target.wakeCondition) {
         parts.push(`[Resume]`)
         parts.push(target.wakeCondition.onSatisfiedMessage)
+        parts.push(`Your saved wait condition has been satisfied.`)
         parts.push('')
     } else {
         switch (event.type) {
@@ -43,10 +44,12 @@ export function buildWakePrompt(
                 parts.push(`[Shared Note Added]`)
                 parts.push(`${participantName(event.source)} added a shared note with key "${payloadString(payload, 'key') || ''}".`)
                 if (payloadString(payload, 'kind')) parts.push(`type: ${payloadString(payload, 'kind')}`)
+                if (payloadString(payload, 'key')) parts.push(`relevant key: ${payloadString(payload, 'key')}`)
                 break
             case 'board.updated':
                 parts.push(`[Shared Note Updated]`)
                 parts.push(`${participantName(event.source)} updated the shared note with key "${payloadString(payload, 'key') || ''}".`)
+                if (payloadString(payload, 'key')) parts.push(`relevant key: ${payloadString(payload, 'key')}`)
                 break
             case 'runtime.idle':
                 parts.push(`[System Update]`)
@@ -70,7 +73,8 @@ export function buildWakePrompt(
     }
 
     // ── Instruction ─────────────────────────────────
-    parts.push('Review the latest shared context and decide your next step using the available coordination tools when helpful.')
+    parts.push('Check only the sender or shared note key relevant to this event before acting.')
+    parts.push('If you are blocked on future input, save a self-wake with `wait_until` instead of polling the full shared board.')
 
     return parts.join('\n')
 }

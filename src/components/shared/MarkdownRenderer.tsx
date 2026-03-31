@@ -6,7 +6,8 @@ import { Check, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 import 'highlight.js/styles/github-dark.min.css';
 
 interface MarkdownRendererProps {
-    content: string;
+    content: string
+    showThinking?: boolean
 }
 
 type CodeElementProps = {
@@ -23,33 +24,33 @@ function toCodeText(value: unknown): string {
 
 /** Separate thinking/reasoning text from the actual response */
 function splitThinking(content: string): { thinking: string | null; response: string } {
-    // Only detect explicit <think>...</think> tags (DeepSeek/Claude style)
-    const thinkMatch = content.match(/^<think>([\s\S]*?)<\/think>\s*([\s\S]*)$/);
+    // Detect a leading <think> block even if there is leading whitespace or tag attributes.
+    const thinkMatch = content.match(/^\s*<think(?:\s[^>]*)?>([\s\S]*?)<\/think>\s*([\s\S]*)$/i)
     if (thinkMatch) {
-        return { thinking: thinkMatch[1].trim(), response: thinkMatch[2].trim() };
+        return { thinking: thinkMatch[1].trim(), response: thinkMatch[2].trim() }
     }
 
-    return { thinking: null, response: content };
+    return { thinking: null, response: content }
 }
 
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = useCallback(() => {
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    }, [text]);
+        navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+    }, [text])
 
     return (
         <button className="code-copy-btn" onClick={handleCopy} title="Copy code">
             {copied ? <Check size={12} /> : <Copy size={12} />}
         </button>
-    );
+    )
 }
 
 function ThinkingBlock({ content }: { content: string }) {
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(false)
 
     return (
         <div className="thinking-block">
@@ -71,15 +72,16 @@ function ThinkingBlock({ content }: { content: string }) {
                 </div>
             )}
         </div>
-    );
+    )
 }
 
-export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
-    const { thinking, response } = splitThinking(content);
+export default function MarkdownRenderer({ content, showThinking = true }: MarkdownRendererProps) {
+    const { thinking, response } = splitThinking(content)
+    const visibleThinking = showThinking ? thinking : null
 
     return (
         <div className="md-renderer">
-            {thinking && <ThinkingBlock content={thinking} />}
+            {visibleThinking && <ThinkingBlock content={visibleThinking} />}
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeHighlight]}
@@ -121,5 +123,5 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
                 {response}
             </ReactMarkdown>
         </div>
-    );
+    )
 }

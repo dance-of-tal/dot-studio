@@ -1,9 +1,0 @@
-{
-  "provider": {
-    "openai": {
-      "options": {
-        "apiKey": "test-key"
-      }
-    }
-  }
-}

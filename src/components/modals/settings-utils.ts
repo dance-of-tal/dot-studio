@@ -144,6 +144,22 @@ export function providerSupportsApiKey(provider: ProviderCard) {
     return provider.authMethods.some((method) => method.type === 'api') || provider.env.length > 0
 }
 
+export function isBuiltinOpenCodeProvider(provider: Pick<ProviderSummary, 'id' | 'source'>) {
+    return provider.id === 'opencode' && provider.source !== 'custom'
+}
+
+export function shouldDisplayConnectedProvider(
+    provider: Pick<ProviderSummary, 'connected' | 'id' | 'source'>,
+) {
+    return provider.connected && !isBuiltinOpenCodeProvider(provider)
+}
+
+export function getProviderAuthSuccessAction(
+    selectedPerformer: { id: string; name: string } | null,
+) {
+    return selectedPerformer ? 'pick-model' : 'close-modal'
+}
+
 export function labelForAuthMethod(method: ProviderAuthMethod) {
     if (method.type === 'api') {
         return 'Enter API Key'

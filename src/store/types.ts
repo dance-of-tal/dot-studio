@@ -1,7 +1,6 @@
 import type {
     AssetRef,
     DraftAsset,
-    ExecutionMode,
     LspDiagnostic,
     LspServerInfo,
     MarkdownEditorKind,
@@ -14,8 +13,6 @@ import type {
     SavedWorkspaceSummary,
     CanvasTerminalNode,
     CanvasTrackingWindow,
-    SafeOwnerKind,
-    SafeOwnerSummary,
     WorkspaceAct,
     WorkspaceActParticipantBinding,
     ActRelation,
@@ -63,6 +60,7 @@ export interface WorkspaceSlice {
     inspectorFocus: string | null
     workspaceList: SavedWorkspaceSummary[]
     workspaceDirty: boolean
+    runtimeReloadPending: boolean
     theme: 'light' | 'dark'
     workingDir: string
     isTerminalOpen: boolean
@@ -124,6 +122,9 @@ export interface WorkspaceSlice {
     loadWorkspace: (workspaceId: string) => Promise<void>
     listWorkspaces: () => Promise<void>
     deleteWorkspace: (workspaceId: string) => Promise<void>
+    markRuntimeReloadPending: () => void
+    clearRuntimeReloadPending: () => void
+    applyPendingRuntimeReload: () => Promise<boolean>
 
     setPerformerTal: (performerId: string, tal: AssetCard | null) => void
     setPerformerTalRef: (performerId: string, talRef: AssetRef | null) => void
@@ -140,7 +141,6 @@ export interface WorkspaceSlice {
     setPerformerMcpBinding: (performerId: string, placeholderName: string, serverName: string | null) => void
     updatePerformerAuthoringMeta: (performerId: string, patch: { slug?: string; description?: string; tags?: string[] }) => void
     togglePerformerVisibility: (id: string) => void
-    setPerformerExecutionMode: (performerId: string, mode: ExecutionMode) => void
     addCanvasTerminal: () => void
     removeCanvasTerminal: (id: string) => void
     updateCanvasTerminalPosition: (id: string, x: number, y: number) => void
@@ -153,7 +153,7 @@ export interface WorkspaceSlice {
     savePerformerAsDraft: (performerId: string) => Promise<void>
     saveActAsDraft: (actId: string) => Promise<void>
     loadDraftsFromDisk: () => Promise<void>
-    addPerformerFromDraft: (name: string, draftContent: Record<string, unknown>) => void
+    addPerformerFromDraft: (name: string, draftContent: Record<string, unknown>, description?: string) => void
     importActFromDraft: (name: string, draftContent: Record<string, unknown>) => void
     createMarkdownEditor: (
         kind: MarkdownEditorKind,
@@ -170,6 +170,7 @@ export interface WorkspaceSlice {
             position?: { x: number; y: number }
         },
     ) => string
+    saveMarkdownDraft: (editorId: string) => Promise<DraftAsset>
     updateMarkdownEditorPosition: (id: string, x: number, y: number) => void
     updateMarkdownEditorSize: (id: string, width: number, height: number) => void
     updateMarkdownEditorBaseline: (id: string, baseline: MarkdownEditorNode['baseline']) => void
@@ -238,16 +239,6 @@ export interface AdapterViewSlice {
     adapterViewsByPerformer: Record<string, Record<string, AdapterViewProjection>>
     upsertAdapterViewProjection: (projection: AdapterViewProjection) => void
     clearAdapterViewsForPerformer: (performerId: string) => void
-}
-
-export interface SafeModeSlice {
-    safeSummaries: Record<string, SafeOwnerSummary>
-    refreshSafeOwner: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<SafeOwnerSummary | null>
-    clearSafeOwner: (ownerKind: SafeOwnerKind, ownerId: string) => void
-    applySafeOwner: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<void>
-    discardSafeOwnerFile: (ownerKind: SafeOwnerKind, ownerId: string, filePath: string) => Promise<void>
-    discardAllSafeOwner: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<void>
-    undoLastSafeApply: (ownerKind: SafeOwnerKind, ownerId: string) => Promise<void>
 }
 
 export interface ActThreadState {
@@ -341,4 +332,4 @@ export interface AssistantSlice {
     resetAssistantRuntimeState: () => void
 }
 
-export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & SafeModeSlice & ActSlice & AssistantSlice & SessionSlice
+export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & ActSlice & AssistantSlice & SessionSlice

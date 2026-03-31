@@ -1,21 +1,30 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useStudioStore } from '../../store'
-import { Send, Sparkles, ChevronUp, AlertCircle, Settings, Plus } from 'lucide-react'
+import { Send, Sparkles, ChevronUp, AlertCircle, Settings, RefreshCcw, Square, X } from 'lucide-react'
 import { useModels } from '../../hooks/queries'
 import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
 import { DropdownMenu } from '../../components/shared/DropdownMenu'
-import { ASSISTANT_PERFORMER_ID } from '../../store/assistantSlice'
+import { buildAssistantChatKey } from '../../store/assistantSlice'
 import { applyAssistantActions } from './assistant-actions'
 import { getAssistantMessageActions } from './assistant-protocol'
 import { showToast } from '../../lib/toast'
-import { selectMessagesForChatKey, selectChatKeyIsLoading } from '../../store/session'
+import {
+    selectMessagesForChatKey,
+    selectChatKeyIsLoading,
+    selectSessionIdForChatKey,
+    selectSessionStatus,
+} from '../../store/session'
+import { TextShimmer } from '../../components/chat/TextShimmer'
 
 // Reuse performer chat rendering components
 import ThreadBody from '../chat/ThreadBody'
-import ChatMessageContent, {
+import ChatMessageContent from '../chat/ChatMessageContent'
+import {
     hasVisibleAssistantMessageContent,
-} from '../chat/ChatMessageContent'
-import { hasVisibleUserMessageContent } from '../chat/chat-message-visibility'
+    hasVisibleUserMessageContent,
+    isStreamingAssistantMessage,
+    shouldShowAssistantLoadingPlaceholder,
+} from '../chat/chat-message-visibility'
 
 import './AssistantChat.css'
 
@@ -26,7 +35,9 @@ export function AssistantChat() {
         appliedAssistantActionMessageIds,
         assistantActionResults,
         sendMessage,
+        abortChat,
         startNewSession,
+        toggleAssistant,
         setAssistantModel,
         setAssistantAvailableModels,
         markAssistantActionsApplied,
@@ -34,9 +45,15 @@ export function AssistantChat() {
         initRealtimeEvents,
     } = useStudioStore()
 
+    const workingDir = useStudioStore((state) => state.workingDir)
+    const assistantChatKey = useMemo(() => buildAssistantChatKey(workingDir), [workingDir])
     // Read from entity store with legacy fallback
-    const messages = useStudioStore((state) => selectMessagesForChatKey(state, ASSISTANT_PERFORMER_ID))
-    const isLoading = useStudioStore((state) => selectChatKeyIsLoading(state, ASSISTANT_PERFORMER_ID))
+    const messages = useStudioStore((state) => selectMessagesForChatKey(state, assistantChatKey))
+    const isLoading = useStudioStore((state) => selectChatKeyIsLoading(state, assistantChatKey))
+    const sessionId = useStudioStore((state) => selectSessionIdForChatKey(state, assistantChatKey))
+    const sessionStatus = useStudioStore((state) => (
+        sessionId ? selectSessionStatus(state, sessionId) : null
+    ))
 
     const { data: models } = useModels()
     const connectedModels = useMemo(
@@ -48,6 +65,7 @@ export function AssistantChat() {
     const [input, setInput] = useState('')
     const [panelWidth, setPanelWidth] = useState(320)
     const chatEndRef = useRef<HTMLDivElement>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
     const dragging = useRef(false)
 
     // Auto-select first connected model
@@ -111,7 +129,7 @@ export function AssistantChat() {
         return () => {
             cancelled = true
         }
-    }, [messages, isLoading, appliedAssistantActionMessageIds, markAssistantActionsApplied, recordAssistantActionResult])
+    }, [messages, isLoading, appliedAssistantActionMessageIds, markAssistantActionsApplied, recordAssistantActionResult, workingDir])
 
     // Resize handle
     const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -140,15 +158,34 @@ export function AssistantChat() {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
+    useEffect(() => {
+        const textarea = textareaRef.current
+        if (!textarea) return
+        textarea.style.height = '0px'
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`
+    }, [input])
+
     const handleSend = () => {
-        if (!input.trim() || !assistantModel) return
+        const trimmed = input.trim()
+        if (!trimmed || !assistantModel || isLoading) return
         initRealtimeEvents()
-        sendMessage(ASSISTANT_PERFORMER_ID, input)
+        sendMessage(assistantChatKey, trimmed)
         setInput('')
     }
 
-    const handleNewSession = () => {
-        startNewSession(ASSISTANT_PERFORMER_ID)
+    const handleRefreshSession = async () => {
+        if (!hasModels || isLoading) return
+        await startNewSession(assistantChatKey)
+        setInput('')
+
+        showToast(
+            'Assistant session refreshed.',
+            'success',
+            {
+                title: 'Studio Assistant',
+                dedupeKey: 'assistant:refresh-session',
+            },
+        )
     }
 
     const openSettings = () => {
@@ -166,6 +203,21 @@ export function AssistantChat() {
         acc[m.providerName].push(m)
         return acc
     }, {})
+
+    const statusLabel = (() => {
+        if (isLoading) return 'Thinking'
+        if (!sessionId) return 'Ready'
+        switch (sessionStatus?.type) {
+            case 'error':
+                return 'Needs attention'
+            case 'busy':
+                return 'Running'
+            case 'retry':
+                return 'Retrying'
+            default:
+                return 'Ready'
+        }
+    })()
 
     const renderAssistantActionStatus = (messageId: string) => {
         const result = assistantActionResults[messageId]
@@ -195,19 +247,33 @@ export function AssistantChat() {
 
             {/* Header */}
             <div className="assistant-header">
-                <div className="assistant-header__title">
-                    <div className="assistant-header__icon">
-                        <Sparkles size={14} />
+                <div className="assistant-header__meta">
+                    <div className="assistant-header__title">
+                        <div className="assistant-header__icon">
+                            <Sparkles size={14} />
+                        </div>
+                        <span>Studio Assistant</span>
                     </div>
-                    <span>Studio Assistant</span>
+                    <div className="assistant-header__subtitle">
+                        <span>{currentModelLabel || 'No model selected'}</span>
+                        <span className={`assistant-status-pill ${isLoading ? 'is-busy' : ''}`}>{statusLabel}</span>
+                    </div>
                 </div>
                 <div className="assistant-header__actions">
                     <button
                         className="assistant-sessions__new"
-                        onClick={handleNewSession}
-                        title="New session"
+                        onClick={handleRefreshSession}
+                        title="Refresh session"
+                        disabled={!hasModels || isLoading}
                     >
-                        <Plus size={13} />
+                        <RefreshCcw size={13} />
+                    </button>
+                    <button
+                        className="icon-btn assistant-header__close"
+                        onClick={toggleAssistant}
+                        title="Hide Studio Assistant"
+                    >
+                        <X size={12} />
                     </button>
                 </div>
             </div>
@@ -230,7 +296,7 @@ export function AssistantChat() {
             ) : (
                 <ThreadBody
                     messages={messages}
-                    loading={isLoading}
+                    loading={shouldShowAssistantLoadingPlaceholder(messages, isLoading)}
                     historyClassName="assistant-content"
                     endRef={chatEndRef}
                     renderEmpty={() => (
@@ -242,7 +308,8 @@ export function AssistantChat() {
                             </p>
                         </div>
                     )}
-                    renderMessage={(msg) => {
+                    renderMessage={(msg, index) => {
+                        const isStreamingAssistant = isStreamingAssistantMessage(messages, index, isLoading)
                         if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
                             return null
                         }
@@ -257,7 +324,7 @@ export function AssistantChat() {
                                     </div>
                                 ) : (
                                     <>
-                                        <ChatMessageContent message={msg} />
+                                        <ChatMessageContent message={msg} streaming={isStreamingAssistant} />
                                         {renderAssistantActionStatus(msg.id)}
                                     </>
                                 )}
@@ -267,9 +334,7 @@ export function AssistantChat() {
                     renderLoading={() => (
                         <div className="thread-msg thread-msg--assistant" data-scrollable>
                             <div className="assistant-body">
-                                <div className="loading-dots">
-                                    <span /><span /><span />
-                                </div>
+                                <TextShimmer text="Thinking" active />
                             </div>
                         </div>
                     )}
@@ -277,6 +342,7 @@ export function AssistantChat() {
                         <div className="assistant-footer">
                             <div className="assistant-input-wrapper">
                                 <textarea
+                                    ref={textareaRef}
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyDown={(e) => {
@@ -286,18 +352,29 @@ export function AssistantChat() {
                                             handleSend()
                                         }
                                     }}
-                                    placeholder="Ask the assistant..."
+                                    placeholder={isLoading ? 'Assistant is working...' : 'Ask the assistant...'}
                                     className="assistant-input"
                                     rows={1}
+                                    disabled={isLoading || !assistantModel}
                                 />
-                                <button
-                                    className="assistant-submit"
-                                    onClick={handleSend}
-                                    disabled={!input.trim()}
-                                    title="Send message"
-                                >
-                                    <Send size={14} />
-                                </button>
+                                {isLoading ? (
+                                    <button
+                                        className="assistant-submit"
+                                        onClick={() => void abortChat(assistantChatKey)}
+                                        title="Abort generation"
+                                    >
+                                        <Square size={14} fill="currentColor" />
+                                    </button>
+                                ) : (
+                                    <button
+                                        className="assistant-submit"
+                                        onClick={handleSend}
+                                        disabled={!input.trim() || !assistantModel}
+                                        title="Send message"
+                                    >
+                                        <Send size={14} />
+                                    </button>
+                                )}
                             </div>
 
                             <div className="assistant-footer__model-row">

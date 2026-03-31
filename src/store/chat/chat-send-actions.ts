@@ -6,6 +6,7 @@ import {
     addChatMessage,
     appendPerformerSystemMessage,
     getPerformerById,
+    syncPerformerMessages,
     type ChatGet,
     type ChatSet,
 } from './chat-internals'
@@ -13,6 +14,14 @@ import { resolveChatRuntimeTarget } from './chat-runtime-target'
 
 function buildActParticipantChatKey(actId: string, threadId: string, participantKey: string) {
     return `act:${actId}:thread:${threadId}:participant:${participantKey}`
+}
+
+const SETTLEMENT_FALLBACK_GRACE_MS = 1200
+const SETTLEMENT_FALLBACK_POLL_MS = 1000
+const SETTLEMENT_FALLBACK_MAX_POLLS = 45
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 export function createChatSendActions(
@@ -23,11 +32,46 @@ export function createChatSendActions(
         options?: {
             resetMessages?: Array<{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }>
             actId?: string
-            executionMode?: 'direct' | 'safe'
             performerName?: string
         },
     ) => Promise<{ sessionId: string | null; runtimeConfig: ReturnType<typeof resolvePerformerRuntimeConfig> }>,
 ) {
+    const scheduleSettlementFallbackSync = (chatKey: string, sessionId: string) => {
+        void (async () => {
+            await sleep(SETTLEMENT_FALLBACK_GRACE_MS)
+
+            for (let attempt = 0; attempt < SETTLEMENT_FALLBACK_MAX_POLLS; attempt++) {
+                const state = get()
+                if (state.sessionMap[chatKey] !== sessionId) {
+                    return
+                }
+                if (!state.sessionLoading[sessionId]) {
+                    return
+                }
+
+                try {
+                    const { status } = await api.chat.status(sessionId)
+                    if (status?.type === 'idle' || status?.type === 'error') {
+                        await syncPerformerMessages(set, get, chatKey, sessionId).catch(() => {})
+                        if (get().sessionMap[chatKey] !== sessionId) {
+                            return
+                        }
+                        get().setSessionStatus(sessionId, status)
+                        get().setSessionLoading(sessionId, false)
+                        if (get().loadingPerformerId === chatKey) {
+                            set({ loadingPerformerId: null })
+                        }
+                        return
+                    }
+                } catch {
+                    // Ignore fallback polling errors and keep waiting for SSE.
+                }
+
+                await sleep(SETTLEMENT_FALLBACK_POLL_MS)
+            }
+        })()
+    }
+
     return {
         sendMessage: async (
             performerId: string,
@@ -73,6 +117,19 @@ export function createChatSendActions(
                 planMode: false,
             }
             if (!hasModelConfig(runtimeConfig.model)) return
+
+            if (get().runtimeReloadPending) {
+                const applied = await get().applyPendingRuntimeReload()
+                if (!applied && get().runtimeReloadPending) {
+                    appendPerformerSystemMessage(
+                        set,
+                        get,
+                        performerId,
+                        'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
+                    )
+                    return
+                }
+            }
 
             // Optimistic UI: show user message + loading state immediately
             const optimisticMsg = {
@@ -153,6 +210,7 @@ export function createChatSendActions(
                     assistantContext: target?.assistantContext || null,
                 })
                 // Settlement detection is now handled by entity store via session.idle SSE events.
+                scheduleSettlementFallbackSync(performerId, sessionId)
             } catch (error) {
                 rollbackOptimisticMessage(performerId, optimisticMsg.id, sessionId)
                 const errorMsg = {
@@ -235,6 +293,19 @@ export function createChatSendActions(
                     `Open the performer editor and set up a model before sending messages.`,
                 )
                 return
+            }
+
+            if (get().runtimeReloadPending) {
+                const applied = await get().applyPendingRuntimeReload()
+                if (!applied && get().runtimeReloadPending) {
+                    appendPerformerSystemMessage(
+                        set,
+                        get,
+                        chatKey,
+                        'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
+                    )
+                    return
+                }
             }
 
             // Optimistic UI: show user message + loading state immediately
@@ -338,6 +409,7 @@ export function createChatSendActions(
                     actThreadId: threadId,
                 })
                 // Settlement detection is now handled by entity store via session.idle SSE events.
+                scheduleSettlementFallbackSync(chatKey, sessionId)
             } catch (error) {
                 rollbackOptimisticMessage(chatKey, optimisticActMsg.id, sessionId)
                 const errorActMsg = {
