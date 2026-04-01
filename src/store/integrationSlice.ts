@@ -5,7 +5,11 @@ import type { ChatMessage } from '../types'
 import { api } from '../api'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers'
 import { formatStudioApiErrorComment } from '../lib/api-errors'
-import { mapSessionMessagesToChatMessages, mergeSystemPrefixMessages } from '../lib/chat-messages'
+import {
+    mapSessionMessagesToChatMessages,
+    mergePendingOptimisticUserMessages,
+    mergeSystemPrefixMessages,
+} from '../lib/chat-messages'
 import type { SessionMessageLike } from '../lib/chat-messages'
 import {
     handleLspDiagnostics,
@@ -183,15 +187,18 @@ export const createIntegrationSlice: StateCreator<
         syncingSessions.add(sessionId)
         try {
             const response = await api.chat.messages(sessionId)
-            const messages: SessionMessageLike[] = Array.isArray(response) ? response : (response.messages || [])
-            const mapped = mapSessionMessagesToChatMessages(messages)
+            const sessionMessages: SessionMessageLike[] = Array.isArray(response) ? response : (response.messages || [])
+            const mappedMessages = mapSessionMessagesToChatMessages(sessionMessages)
             const chatKey = streamTargetToChatKey(target)
+            const state = get()
+            const currentMessages = state.seMessages[sessionId] || []
+            const reconciledMessages = mergePendingOptimisticUserMessages(mappedMessages, currentMessages, !!state.sessionLoading[sessionId])
             set((state) => updateTargetMessages(
                 state,
                 target,
-                () => mergeSystemPrefixMessages(state.chatPrefixes[chatKey], mapped),
+                () => mergeSystemPrefixMessages(state.chatPrefixes[chatKey], reconciledMessages),
             ))
-            get().setSessionMessages(sessionId, mapped)
+            state.setSessionMessages(sessionId, reconciledMessages)
         } catch {
             // Ignore background sync failures and keep streamed content.
         } finally {

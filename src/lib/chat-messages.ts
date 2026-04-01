@@ -230,6 +230,56 @@ export function mergeSystemPrefixMessages(
     return [...systemPrefixes, ...messages]
 }
 
+const OPTIMISTIC_USER_MIRROR_WINDOW_MS = 30_000
+
+function buildAttachmentSignature(message: ChatMessage): string {
+    return (message.attachments || [])
+        .map((attachment) => `${attachment.type}:${attachment.filename || ''}:${attachment.mime || ''}`)
+        .join('|')
+}
+
+function isOptimisticUserMessage(message: ChatMessage): boolean {
+    return message.role === 'user' && message.id.startsWith('temp-')
+}
+
+function isPersistedUserMessage(message: ChatMessage): boolean {
+    return message.role === 'user' && !message.id.startsWith('temp-')
+}
+
+function hasMatchingServerUserMessage(serverMessages: ChatMessage[], optimisticMessage: ChatMessage): boolean {
+    const optimisticAttachmentSignature = buildAttachmentSignature(optimisticMessage)
+    return serverMessages.some((message) => (
+        isPersistedUserMessage(message)
+        && message.content === optimisticMessage.content
+        && buildAttachmentSignature(message) === optimisticAttachmentSignature
+        && Math.abs(message.timestamp - optimisticMessage.timestamp) < OPTIMISTIC_USER_MIRROR_WINDOW_MS
+    ))
+}
+
+export function mergePendingOptimisticUserMessages(
+    serverMessages: ChatMessage[],
+    currentMessages: ChatMessage[],
+    keepPendingOptimisticMessages: boolean,
+): ChatMessage[] {
+    if (!keepPendingOptimisticMessages || currentMessages.length === 0) {
+        return serverMessages
+    }
+
+    const optimisticMessages = currentMessages.filter(isOptimisticUserMessage)
+    if (optimisticMessages.length === 0) {
+        return serverMessages
+    }
+
+    const merged = [...serverMessages]
+    for (const optimisticMessage of optimisticMessages) {
+        if (!hasMatchingServerUserMessage(serverMessages, optimisticMessage)) {
+            merged.push(optimisticMessage)
+        }
+    }
+
+    return merged.sort((left, right) => left.timestamp - right.timestamp)
+}
+
 export function extractLatestNonRetryableAssistantError(
     sessionMessages: SessionMessageLike[],
 ): { id: string; message: string } | null {

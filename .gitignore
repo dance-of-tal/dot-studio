@@ -35,6 +35,7 @@ pnpm-debug.log*
 AGENT.md
 REFACTOR.md
 prd/
+doc/
 
 # Local config (may contain API keys or sensitive values)
 config.json
