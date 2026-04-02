@@ -32,13 +32,11 @@ export const opencodeApi = {
 
     mcp: {
         list: () => fetchJSON<import('../types').McpServer[]>('/api/mcp/servers'),
-        add: (name: string, config: { command: string; args?: string[] } | { url: string }) => postJSON<unknown>('/api/mcp/add', { name, config }),
         authStart: (name: string) => postJSON<{ authorizationUrl: string }>(`/api/mcp/${name}/auth/start`),
         authCallback: (name: string, code: string) => postJSON<unknown>(`/api/mcp/${name}/auth/callback`, { code }),
         authenticate: (name: string) => postJSON<unknown>(`/api/mcp/${name}/auth/authenticate`),
         clearAuth: (name: string) => deleteJSON<{ success: true }>(`/api/mcp/${name}/auth`),
         connect: (name: string) => postJSON<unknown>(`/api/mcp/${name}/connect`),
-        disconnect: (name: string) => postJSON<unknown>(`/api/mcp/${name}/disconnect`),
     },
 
     models: {
@@ -81,9 +79,10 @@ export const opencodeApi = {
     },
 
     config: {
-        get: () => fetchJSON<Record<string, unknown>>('/api/config'),
+        getGlobal: () => fetchJSON<Record<string, unknown>>('/api/config'),
+        updateGlobal: (config: Record<string, unknown>) => putJSON<unknown>('/api/config', config),
         getProject: () => fetchJSON<{ exists: boolean; path: string; config: Record<string, unknown> }>('/api/config/project'),
-        update: (config: Record<string, unknown>) => putJSON<unknown>('/api/config', config),
+        updateProject: (config: Record<string, unknown>) => putJSON<unknown>('/api/config/project', config),
     },
 
     providers: {

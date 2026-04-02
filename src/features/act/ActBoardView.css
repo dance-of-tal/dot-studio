@@ -154,7 +154,7 @@
     border-color: color-mix(in srgb, var(--model-color) 20%, transparent);
 }
 
-.act-board__badge--fact {
+.act-board__badge--finding {
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--accent);
     border-color: color-mix(in srgb, var(--accent) 20%, transparent);
@@ -211,21 +211,44 @@
 }
 
 .act-board__card-content {
-    font-size: var(--font-sm);
-    color: var(--text-secondary);
-    line-height: 1.5;
+    position: relative;
     overflow: hidden;
-    display: -webkit-box;
-    line-clamp: 3;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
+    max-height: 108px;
+}
+
+.act-board__card-content::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 26px;
+    background: linear-gradient(to bottom, transparent, var(--bg-card));
+    pointer-events: none;
 }
 
 .act-board__card-content--expanded {
-    line-clamp: unset;
-    -webkit-line-clamp: unset;
-    display: block;
-    white-space: pre-wrap;
+    max-height: none;
+    overflow: visible;
+}
+
+.act-board__card-content--expanded::after {
+    display: none;
+}
+
+.act-board__card-content .md-renderer {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+}
+
+.act-board__card-content .md-renderer h1,
+.act-board__card-content .md-renderer h2,
+.act-board__card-content .md-renderer h3,
+.act-board__card-content .md-renderer h4 {
+    margin-top: 0;
+}
+
+.act-board__card-content .md-renderer ul,
+.act-board__card-content .md-renderer ol {
+    margin-bottom: 0;
 }
 
 .act-board__expand-btn {

@@ -82,7 +82,7 @@ describe('ensurePerformerProjection source boundaries', () => {
     it('uses workingDir, not executionDir, to resolve draft Tal and Dance sources', async () => {
         const { ensurePerformerProjection } = await import('./stage-projection-service.js')
 
-        await ensurePerformerProjection({
+        const result = await ensurePerformerProjection({
             performerId: 'performer-1',
             performerName: 'Performer',
             talRef: { kind: 'draft', draftId: 'tal-draft-1' },
@@ -93,6 +93,7 @@ describe('ensurePerformerProjection source boundaries', () => {
             workingDir,
         })
 
+        expect(result.changed).toBe(true)
         expect(compileDanceMock).toHaveBeenCalledWith(
             workingDir,
             { kind: 'draft', draftId: 'dance-draft-1' },
@@ -111,5 +112,91 @@ describe('ensurePerformerProjection source boundaries', () => {
             }),
             expect.any(Array),
         )
+    })
+
+    it('projects performer MCP access as server glob patterns', async () => {
+        resolveRuntimeToolsMock.mockResolvedValueOnce({
+            selectedMcpServers: ['github'],
+            requestedTools: ['github_*'],
+            availableTools: ['github_*'],
+            resolvedTools: ['github_*'],
+            unavailableTools: [],
+            unavailableDetails: [],
+        })
+
+        const { ensurePerformerProjection } = await import('./stage-projection-service.js')
+
+        const result = await ensurePerformerProjection({
+            performerId: 'performer-1',
+            performerName: 'Performer',
+            talRef: null,
+            danceRefs: [],
+            model: { provider: 'openai', modelId: 'gpt-5.4' },
+            modelVariant: null,
+            mcpServerNames: ['github'],
+            workingDir,
+        })
+
+        expect(result.changed).toBe(true)
+        expect(compilePerformerMock).toHaveBeenCalledWith(
+            workingDir,
+            expect.objectContaining({
+                toolMap: {
+                    'github_*': true,
+                },
+            }),
+            expect.any(Array),
+        )
+    })
+
+    it('prunes stale performer agent files from the manifest', async () => {
+        const workspaceHash = 'hash'
+        const activeBuild = path.join(workingDir, '.opencode', 'agents', 'dot-studio', 'workspace', workspaceHash, 'performer-1--build.md')
+        const activePlan = path.join(workingDir, '.opencode', 'agents', 'dot-studio', 'workspace', workspaceHash, 'performer-1--plan.md')
+        const staleBuild = path.join(workingDir, '.opencode', 'agents', 'dot-studio', 'workspace', workspaceHash, 'performer-2--build.md')
+        const stalePlan = path.join(workingDir, '.opencode', 'agents', 'dot-studio', 'workspace', workspaceHash, 'performer-2--plan.md')
+
+        await fs.mkdir(path.dirname(activeBuild), { recursive: true })
+        await fs.writeFile(activeBuild, 'active build', 'utf-8')
+        await fs.writeFile(activePlan, 'active plan', 'utf-8')
+        await fs.writeFile(staleBuild, 'stale build', 'utf-8')
+        await fs.writeFile(stalePlan, 'stale plan', 'utf-8')
+        await fs.writeFile(
+            path.join(workingDir, '.opencode', 'dot-studio.manifest.json'),
+            JSON.stringify({
+                version: 1,
+                owner: 'dot-studio',
+                workspaceHash,
+                groups: {
+                    'performer:performer-1': [
+                        '.opencode/agents/dot-studio/workspace/hash/performer-1--build.md',
+                        '.opencode/agents/dot-studio/workspace/hash/performer-1--plan.md',
+                    ],
+                    'performer:performer-2': [
+                        '.opencode/agents/dot-studio/workspace/hash/performer-2--build.md',
+                        '.opencode/agents/dot-studio/workspace/hash/performer-2--plan.md',
+                    ],
+                },
+            }, null, 2),
+            'utf-8',
+        )
+
+        const { pruneStalePerformerProjections } = await import('./stage-projection-service.js')
+        const changed = await pruneStalePerformerProjections(workingDir, ['performer-1'])
+
+        expect(changed).toBe(true)
+        await expect(fs.access(activeBuild)).resolves.toBeUndefined()
+        await expect(fs.access(activePlan)).resolves.toBeUndefined()
+        await expect(fs.access(staleBuild)).rejects.toBeTruthy()
+        await expect(fs.access(stalePlan)).rejects.toBeTruthy()
+
+        const manifest = JSON.parse(await fs.readFile(path.join(workingDir, '.opencode', 'dot-studio.manifest.json'), 'utf-8'))
+        expect(manifest.groups).toEqual({
+            'performer:performer-1': [
+                '.opencode/agents/dot-studio/workspace/hash/performer-1--build.md',
+                '.opencode/agents/dot-studio/workspace/hash/performer-1--plan.md',
+            ],
+        })
+        expect(instanceDisposeMock).not.toHaveBeenCalled()
     })
 })

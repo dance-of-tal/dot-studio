@@ -24,8 +24,8 @@ vi.mock('../../lib/chat-session.js', () => ({
     extractNonRetryableSessionError: vi.fn(() => null),
 }))
 
-vi.mock('../../lib/session-execution.js', () => ({
-    resolveSessionExecutionContext,
+vi.mock('../session-ownership-service.js', () => ({
+    resolveSessionOwnership: resolveSessionExecutionContext,
 }))
 
 vi.mock('./wake-performer-resolver.js', () => ({

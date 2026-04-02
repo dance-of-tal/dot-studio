@@ -12,28 +12,43 @@
  */
 import type { StateCreator } from 'zustand'
 import type { StudioState, AssistantSlice } from './types'
+import {
+    ASSISTANT_CHAT_OWNER_ID,
+    buildAssistantChatKey,
+    isAssistantChatKey,
+} from '../../shared/chat-targets'
 
-export const ASSISTANT_PERFORMER_ID = 'studio-assistant'
+export const ASSISTANT_PERFORMER_ID = ASSISTANT_CHAT_OWNER_ID
+export { buildAssistantChatKey, isAssistantChatKey }
 
-function hashWorkspaceKey(input: string) {
-    let hash = 2166136261
-    for (let i = 0; i < input.length; i++) {
-        hash ^= input.charCodeAt(i)
-        hash = Math.imul(hash, 16777619)
-    }
-    return (hash >>> 0).toString(36)
+function sameAssistantModel(
+    left: StudioState['assistantModel'],
+    right: StudioState['assistantModel'],
+) {
+    if (left === right) return true
+    if (!left || !right) return left === right
+    return left.provider === right.provider && left.modelId === right.modelId
 }
 
-export function buildAssistantChatKey(workingDir: string | null | undefined) {
-    const normalized = workingDir?.trim()
-    if (!normalized) {
-        return ASSISTANT_PERFORMER_ID
+function sameAvailableModels(
+    left: StudioState['assistantAvailableModels'],
+    right: StudioState['assistantAvailableModels'],
+) {
+    if (left === right) return true
+    if (left.length !== right.length) return false
+    for (let index = 0; index < left.length; index += 1) {
+        const current = left[index]
+        const next = right[index]
+        if (
+            current.provider !== next.provider
+            || current.providerName !== next.providerName
+            || current.modelId !== next.modelId
+            || current.name !== next.name
+        ) {
+            return false
+        }
     }
-    return `${ASSISTANT_PERFORMER_ID}--${hashWorkspaceKey(normalized)}`
-}
-
-export function isAssistantChatKey(performerId: string) {
-    return performerId === ASSISTANT_PERFORMER_ID || performerId.startsWith(`${ASSISTANT_PERFORMER_ID}--`)
+    return true
 }
 
 export const createAssistantSlice: StateCreator<StudioState, [], [], AssistantSlice> = (set) => ({
@@ -47,9 +62,20 @@ export const createAssistantSlice: StateCreator<StudioState, [], [], AssistantSl
         set((state) => ({ isAssistantOpen: !state.isAssistantOpen }))
     },
 
-    setAssistantModel: (model) => set({ assistantModel: model }),
+    setAssistantModel: (model) => set((state) => (
+        sameAssistantModel(state.assistantModel, model)
+            ? state
+            : {
+                assistantModel: model,
+                workspaceDirty: true,
+            }
+    )),
 
-    setAssistantAvailableModels: (models) => set({ assistantAvailableModels: models }),
+    setAssistantAvailableModels: (models) => set((state) => (
+        sameAvailableModels(state.assistantAvailableModels, models)
+            ? state
+            : { assistantAvailableModels: models }
+    )),
 
     markAssistantActionsApplied: (messageId) => set((state) => ({
         appliedAssistantActionMessageIds: {

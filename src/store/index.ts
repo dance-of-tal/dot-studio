@@ -11,7 +11,6 @@ import { createActSlice } from './actSlice'
 import { createAssistantSlice } from './assistantSlice'
 import { createSessionSlice } from './session/session-entity-store'
 import { initDraftAutoSave } from './draft-auto-save'
-import { initRuntimeReloadMonitor } from './runtime-reload-monitor'
 
 export const useStudioStore = create<StudioState>()((...a) => ({
     ...createPerformerRelationSlice(...a),
@@ -26,6 +25,5 @@ export const useStudioStore = create<StudioState>()((...a) => ({
 
 // Auto-save performer drafts when config changes on derived-from-asset performers
 initDraftAutoSave(useStudioStore.subscribe)
-initRuntimeReloadMonitor(useStudioStore)
 
 export * from './types'

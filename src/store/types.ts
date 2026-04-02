@@ -18,8 +18,9 @@ import type {
     ActRelation,
 } from '../types'
 import type { AdapterViewProjection } from '../../shared/adapter-view'
-import type { PermissionRequest, QuestionAnswer, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
+import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import type { SessionSlice } from './session/types'
+import type { ProjectionDirtyState, RuntimeChangeClass, StudioChangeDescriptor } from './runtime-change-policy'
 
 export type PerformerRelationSlice = Record<never, never>
 
@@ -60,6 +61,7 @@ export interface WorkspaceSlice {
     inspectorFocus: string | null
     workspaceList: SavedWorkspaceSummary[]
     workspaceDirty: boolean
+    projectionDirty: ProjectionDirtyState
     runtimeReloadPending: boolean
     theme: 'light' | 'dark'
     workingDir: string
@@ -122,6 +124,9 @@ export interface WorkspaceSlice {
     loadWorkspace: (workspaceId: string) => Promise<void>
     listWorkspaces: () => Promise<void>
     deleteWorkspace: (workspaceId: string) => Promise<void>
+    markProjectionDirty: (patch: Partial<ProjectionDirtyState>) => void
+    clearProjectionDirty: (patch?: Partial<ProjectionDirtyState>) => void
+    recordStudioChange: (change: StudioChangeDescriptor) => RuntimeChangeClass
     markRuntimeReloadPending: () => void
     clearRuntimeReloadPending: () => void
     applyPendingRuntimeReload: () => Promise<boolean>
@@ -179,15 +184,8 @@ export interface WorkspaceSlice {
 }
 
 export interface ChatSlice {
-    chats: Record<string, ChatMessage[]>
-    chatPrefixes: Record<string, ChatMessage[]>
     activeChatPerformerId: string | null
-    sessionMap: Record<string, string>
-    loadingPerformerId: string | null
     sessions: Array<{ id: string; title?: string; createdAt?: number }>
-    pendingPermissions: Record<string, PermissionRequest>
-    pendingQuestions: Record<string, QuestionRequest>
-    todos: Record<string, Todo[]>
 
     setActiveChatPerformer: (performerId: string | null) => void
     addChatMessage: (performerId: string, msg: ChatMessage) => void

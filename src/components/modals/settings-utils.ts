@@ -1,7 +1,5 @@
 // Types and utility functions extracted from SettingsModal.tsx
 
-import type { ProjectMcpCatalog, ProjectMcpEntryConfig } from '../../../shared/project-mcp'
-
 export type ProviderAuthMethod = {
     type: 'oauth' | 'api'
     label: string
@@ -23,7 +21,7 @@ export type ProviderCard = ProviderSummary & {
 
 export type SettingsTab = 'runtime' | 'project' | 'providers'
 export type ProviderListFilter = 'popular' | 'connected' | 'all'
-export type McpStatusTone = 'connected' | 'disconnected' | 'needs_auth' | 'failed' | 'disabled'
+export type McpStatusTone = 'connected' | 'disconnected' | 'needs_auth' | 'failed'
 
 export type OauthFlow = {
     methodIndex: number
@@ -73,32 +71,6 @@ export type ProjectConfig = {
     username?: string
     disabled_providers?: string[]
     enabled_providers?: string[]
-    mcp?: ProjectMcpCatalog
-}
-
-export type McpKVPair = { key: string; value: string }
-
-export type ProjectMcpEntryDraft = {
-    key: string
-    name: string
-    enabled: boolean
-    transport: 'stdio' | 'http'
-    timeoutText: string
-
-    // STDIO fields
-    command: string
-    args: string[]
-    env: McpKVPair[]
-
-    // Streamable HTTP fields
-    url: string
-    headers: McpKVPair[]
-
-    // OAuth (for remote)
-    oauthEnabled: boolean
-    oauthClientId: string
-    oauthClientSecret: string
-    oauthScope: string
 }
 
 /** Auto-detect: server text starting with http(s):// is a remote MCP server */
@@ -107,15 +79,10 @@ export function isRemoteServer(serverText: string): boolean {
     return trimmed.startsWith('http://') || trimmed.startsWith('https://')
 }
 
-export function isRemoteDraft(draft: ProjectMcpEntryDraft): boolean {
-    return draft.transport === 'http'
-}
-
 export type ProjectSettingsDraft = {
     share: 'manual' | 'auto' | 'disabled'
     username: string
     visibleProviders: Record<string, boolean>
-    mcpEntries: ProjectMcpEntryDraft[]
 }
 
 export type ProjectConfigMeta = {
@@ -229,23 +196,11 @@ export function buildProjectDraft(
         share: config.share || 'manual',
         username: config.username || '',
         visibleProviders,
-        mcpEntries: buildProjectMcpDrafts(config.mcp || {}),
     }
 }
 
 export function isProjectDraftEqual(left: ProjectSettingsDraft | null, right: ProjectSettingsDraft | null) {
     return JSON.stringify(left) === JSON.stringify(right)
-}
-
-function recordFromKVPairs(pairs: McpKVPair[]): Record<string, string> | undefined {
-    const filtered = pairs.filter((p) => p.key.trim())
-    if (filtered.length === 0) return undefined
-    return Object.fromEntries(filtered.map((p) => [p.key.trim(), p.value.trim()]))
-}
-
-function kvPairsFromRecord(record: Record<string, string> | undefined): McpKVPair[] {
-    if (!record) return []
-    return Object.entries(record).map(([key, value]) => ({ key, value }))
 }
 
 export function parseKeyValueText(text: string): Record<string, string> | undefined {
@@ -267,104 +222,4 @@ export function parseKeyValueText(text: string): Record<string, string> | undefi
     }
 
     return Object.fromEntries(entries)
-}
-
-function blankDraft(key: string, name: string): ProjectMcpEntryDraft {
-    return {
-        key,
-        name,
-        enabled: true,
-        transport: 'stdio',
-        timeoutText: '',
-        command: '',
-        args: [],
-        env: [],
-        url: '',
-        headers: [],
-        oauthEnabled: true,
-        oauthClientId: '',
-        oauthClientSecret: '',
-        oauthScope: '',
-    }
-}
-
-export function buildProjectMcpDrafts(catalog: ProjectMcpCatalog): ProjectMcpEntryDraft[] {
-    return Object.entries(catalog)
-        .map(([name, rawEntry]) => {
-            const entry = rawEntry as ProjectMcpEntryConfig
-            const base = blankDraft(`mcp:${name}`, name)
-
-            if ('type' in entry && entry.type === 'remote') {
-                return {
-                    ...base,
-                    enabled: entry.enabled !== false,
-                    transport: 'http' as const,
-                    timeoutText: typeof entry.timeout === 'number' ? String(entry.timeout) : '',
-                    url: entry.url,
-                    headers: kvPairsFromRecord(entry.headers),
-                    oauthEnabled: entry.oauth !== false,
-                    oauthClientId: entry.oauth && typeof entry.oauth === 'object' ? entry.oauth.clientId || '' : '',
-                    oauthClientSecret: entry.oauth && typeof entry.oauth === 'object' ? entry.oauth.clientSecret || '' : '',
-                    oauthScope: entry.oauth && typeof entry.oauth === 'object' ? entry.oauth.scope || '' : '',
-                }
-            }
-
-            if ('type' in entry && entry.type === 'local') {
-                const [cmd, ...args] = entry.command
-                return {
-                    ...base,
-                    enabled: entry.enabled !== false,
-                    transport: 'stdio' as const,
-                    timeoutText: typeof entry.timeout === 'number' ? String(entry.timeout) : '',
-                    command: cmd || '',
-                    args,
-                    env: kvPairsFromRecord(entry.environment),
-                }
-            }
-
-            return { ...base, enabled: entry.enabled !== false }
-        })
-        .sort((left, right) => left.name.localeCompare(right.name))
-}
-
-export function serializeProjectMcpEntries(entries: ProjectMcpEntryDraft[]): ProjectMcpCatalog {
-    return Object.fromEntries(
-        entries
-            .filter((entry) => entry.name.trim())
-            .map((entry): [string, ProjectMcpEntryConfig] => {
-                const name = entry.name.trim()
-                const timeout = entry.timeoutText.trim() ? Number(entry.timeoutText.trim()) : undefined
-
-                if (entry.transport === 'http') {
-                    const headers = recordFromKVPairs(entry.headers)
-                    return [name, {
-                        type: 'remote',
-                        url: entry.url.trim(),
-                        enabled: entry.enabled,
-                        ...(typeof timeout === 'number' && Number.isFinite(timeout) ? { timeout } : {}),
-                        ...(headers ? { headers } : {}),
-                        ...(entry.oauthEnabled
-                            ? {
-                                oauth: {
-                                    ...(entry.oauthClientId.trim() ? { clientId: entry.oauthClientId.trim() } : {}),
-                                    ...(entry.oauthClientSecret.trim() ? { clientSecret: entry.oauthClientSecret.trim() } : {}),
-                                    ...(entry.oauthScope.trim() ? { scope: entry.oauthScope.trim() } : {}),
-                                },
-                            }
-                            : { oauth: false }),
-                    }]
-                }
-
-                const command = [entry.command.trim(), ...entry.args].filter(Boolean)
-                const environment = recordFromKVPairs(entry.env)
-
-                return [name, {
-                    type: 'local',
-                    command,
-                    enabled: entry.enabled,
-                    ...(typeof timeout === 'number' && Number.isFinite(timeout) ? { timeout } : {}),
-                    ...(environment ? { environment } : {}),
-                }]
-            }),
-    )
 }

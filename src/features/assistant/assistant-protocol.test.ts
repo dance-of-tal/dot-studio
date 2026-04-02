@@ -53,6 +53,15 @@ describe('assistant-protocol', () => {
         expect(result.content).toBe('Created a reviewer setup.')
     })
 
+    it('accepts raw JSON envelopes without the assistant-actions wrapper', () => {
+        const content = '{"version":1,"actions":[{"type":"createAct","name":"Investment Team"}]}'
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope?.actions).toHaveLength(1)
+        expect(result.content).toBe('')
+    })
+
     it('accepts dependency-complete createPerformer payloads', () => {
         const content = [
             'Created the researcher.',
@@ -87,6 +96,42 @@ describe('assistant-protocol', () => {
 
         expect(result.envelope?.actions).toHaveLength(2)
         expect(result.content).toBe('Updated the workflow contract.')
+    })
+
+    it('accepts legacy from/to relation aliases in createAct payloads', () => {
+        const content = [
+            'Created the analyst workflow.',
+            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"macro","name":"Macro Analyst"},{"type":"createPerformer","ref":"equity","name":"Equity Researcher"},{"type":"createAct","name":"Investment Team","participantPerformerRefs":["macro","equity"],"relations":[{"fromPerformerRef":"macro","toPerformerRef":"equity","direction":"one-way","name":"macro handoff","description":"Macro Analyst hands regime context to Equity Researcher."}]}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope?.actions).toHaveLength(3)
+        expect(result.content).toBe('Created the analyst workflow.')
+    })
+
+    it('rejects createAct relations without both name and description', () => {
+        const content = [
+            'hello',
+            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"macro","name":"Macro Analyst"},{"type":"createPerformer","ref":"equity","name":"Equity Researcher"},{"type":"createAct","name":"Investment Team","participantPerformerRefs":["macro","equity"],"relations":[{"sourcePerformerRef":"macro","targetPerformerRef":"equity","direction":"one-way","name":"macro handoff"}]}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope).toBeNull()
+        expect(result.content).toBe('hello')
+    })
+
+    it('rejects connectPerformers actions without both name and description', () => {
+        const content = [
+            'hello',
+            '<assistant-actions>{"version":1,"actions":[{"type":"connectPerformers","actName":"Investment Team","sourcePerformerName":"Macro Analyst","targetPerformerName":"Equity Researcher","direction":"one-way","name":"macro handoff"}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope).toBeNull()
+        expect(result.content).toBe('hello')
     })
 
     it('rejects act creation payloads that use a string instead of actRules array', () => {

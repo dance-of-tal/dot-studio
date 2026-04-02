@@ -25,15 +25,8 @@ export const createChatSlice: StateCreator<
     const sessionActions = createChatSessionActions(set, get)
 
     return {
-        chats: {},
-        chatPrefixes: {},
         activeChatPerformerId: null,
-        sessionMap: {},
-        loadingPerformerId: null,
         sessions: [],
-        pendingPermissions: {},
-        pendingQuestions: {},
-        todos: {},
 
         setActiveChatPerformer: (performerId) => set({ activeChatPerformerId: performerId }),
 

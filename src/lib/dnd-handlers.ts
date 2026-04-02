@@ -28,8 +28,8 @@ export type DragAsset = Omit<Partial<AssetCard>, 'kind'> & {
     mcpConfig?: Record<string, unknown> | null;
     mcpBindingMap?: Record<string, string>;
     declaredMcpServerNames?: string[];
-    projectMcpMatches?: string[];
-    projectMcpMissing?: string[];
+    matchedMcpServerNames?: string[];
+    missingMcpServerNames?: string[];
     /** Structured draft content for performer/act drafts */
     draftContent?: unknown;
 };

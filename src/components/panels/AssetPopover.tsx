@@ -92,6 +92,8 @@ export function PinnedDetailPanel({
     onImportToStage,
     onDeleteDraft,
     onUninstall,
+    onEditMcp,
+    onDeleteMcp,
 }: {
     asset: AssetPanelAsset | null
     installed: boolean
@@ -104,6 +106,8 @@ export function PinnedDetailPanel({
     onImportToStage?: AssetPanelHandler
     onDeleteDraft?: AssetPanelHandler
     onUninstall?: AssetPanelHandler
+    onEditMcp?: AssetPanelHandler
+    onDeleteMcp?: AssetPanelHandler
 }) {
     const { resolvedAsset, loading } = useResolvedAssetDetail(asset)
 
@@ -154,6 +158,20 @@ export function PinnedDetailPanel({
                     <button className="btn btn--danger" onClick={() => onDeleteDraft(resolvedAsset)}>
                         <Trash2 size={11} style={{ marginRight: 4 }} /> Delete Draft
                     </button>
+                </div>
+            ) : null}
+            {resolvedAsset?.kind === 'mcp' && (onEditMcp || onDeleteMcp) ? (
+                <div className="btns">
+                    {onEditMcp ? (
+                        <button className="btn" onClick={() => onEditMcp(resolvedAsset)}>
+                            Edit Server
+                        </button>
+                    ) : null}
+                    {onDeleteMcp ? (
+                        <button className="btn btn--danger" onClick={() => onDeleteMcp(resolvedAsset)}>
+                            <Trash2 size={11} style={{ marginRight: 4 }} /> Remove Server
+                        </button>
+                    ) : null}
                 </div>
             ) : null}
             {(resolvedAsset?.source === 'global' || resolvedAsset?.source === 'stage') && onUninstall ? (

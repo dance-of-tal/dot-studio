@@ -18,7 +18,7 @@ import {
     parseDotAssetUrn,
     readAsset,
 } from '../lib/dot-source.js'
-import { readProjectMcpCatalog } from '../lib/project-config.js'
+import { readGlobalMcpCatalog } from '../lib/mcp-catalog.js'
 import { resolvePerformerMcpPortability } from '../../shared/performer-mcp-portability.js'
 
 type ParsedInstalledAsset = TalAsset | DanceAsset | PerformerAsset | ActAsset
@@ -56,7 +56,7 @@ function assetSchema(asset: ParsedInstalledAsset) {
 function normalizeAsset(
     asset: ParsedInstalledAsset,
     source: 'global' | 'stage' | 'registry',
-    projectMcpServerNames: string[],
+    availableMcpServerNames: string[],
     detail = false,
 ): AssetListItem {
     switch (asset.kind) {
@@ -89,7 +89,7 @@ function normalizeAsset(
         case 'performer': {
             const portability = resolvePerformerMcpPortability(
                 asset.payload.mcp_config,
-                projectMcpServerNames,
+                availableMcpServerNames,
             )
             return {
                 kind: asset.kind,
@@ -107,8 +107,8 @@ function normalizeAsset(
                 modelVariant: asset.payload.modelVariant || null,
                 mcpConfig: asset.payload.mcp_config || null,
                 declaredMcpServerNames: portability.declaredMcpServerNames,
-                projectMcpMatches: portability.projectMcpMatches,
-                projectMcpMissing: portability.projectMcpMissing,
+                matchedMcpServerNames: portability.matchedMcpServerNames,
+                missingMcpServerNames: portability.missingMcpServerNames,
             }
         }
         case 'act':
@@ -169,7 +169,7 @@ async function scanAssetDir(
     kind: ParsedInstalledAsset['kind'],
     source: 'global' | 'stage',
     resultsMap: Map<string, AssetListItem>,
-    projectMcpServerNames: string[],
+    availableMcpServerNames: string[],
 ) {
     const kindDir = path.join(baseDir, 'assets', kind)
     try {
@@ -197,7 +197,7 @@ async function scanAssetDir(
                         if (!parsed) continue
                         try {
                             const asset = parseDotAsset(parsed) as ParsedInstalledAsset
-                            resultsMap.set(asset.urn, normalizeAsset(asset, source, projectMcpServerNames, false))
+                            resultsMap.set(asset.urn, normalizeAsset(asset, source, availableMcpServerNames, false))
                         } catch {
                             // invalid asset, skip
                         }
@@ -215,7 +215,7 @@ async function scanAssetDir(
                         if (!file.endsWith('.json')) continue
                         const parsed = await parseInstalledAssetFile(path.join(stageDir, file))
                         if (!parsed || parsed.kind !== kind) continue
-                        resultsMap.set(parsed.urn, normalizeAsset(parsed, source, projectMcpServerNames, false))
+                        resultsMap.set(parsed.urn, normalizeAsset(parsed, source, availableMcpServerNames, false))
                     }
                 }
             }
@@ -297,9 +297,9 @@ export async function listStudioAssets(
     kind: ParsedInstalledAsset['kind'],
 ): Promise<AssetListItem[]> {
     const resultsMap = new Map<string, AssetListItem>()
-    const projectMcpServerNames = Object.keys(await readProjectMcpCatalog(cwd))
-    await scanAssetDir(getGlobalDotDir(), getGlobalCwd(), kind, 'global', resultsMap, projectMcpServerNames)
-    await scanAssetDir(getDotDir(cwd), cwd, kind, 'stage', resultsMap, projectMcpServerNames)
+    const availableMcpServerNames = Object.keys(await readGlobalMcpCatalog())
+    await scanAssetDir(getGlobalDotDir(), getGlobalCwd(), kind, 'global', resultsMap, availableMcpServerNames)
+    await scanAssetDir(getDotDir(cwd), cwd, kind, 'stage', resultsMap, availableMcpServerNames)
     return Array.from(resultsMap.values())
 }
 
@@ -351,18 +351,18 @@ export async function getStudioAsset(cwd: string, kind: string, author: string, 
 
     const parsed = parseDotAsset(raw) as ParsedInstalledAsset
     const source = await resolveStudioAssetSource(cwd, resolvedUrn)
-    const projectMcpServerNames = Object.keys(await readProjectMcpCatalog(cwd))
-    return normalizeAsset(parsed, source, projectMcpServerNames, true)
+    const availableMcpServerNames = Object.keys(await readGlobalMcpCatalog())
+    return normalizeAsset(parsed, source, availableMcpServerNames, true)
 }
 
 export async function getRegistryAssetDetail(cwd: string, kind: string, author: string, assetPath: string) {
     const { stage, name } = parseCanonicalAssetPath(assetPath)
     const pkg = await getRegistryPackage(kind, author, stage, name) as unknown as Record<string, unknown>
     const parsed = parseDotAsset(pkg.payload) as ParsedInstalledAsset
-    const projectMcpServerNames = Object.keys(await readProjectMcpCatalog(cwd))
+    const availableMcpServerNames = Object.keys(await readGlobalMcpCatalog())
 
     return {
-        ...normalizeAsset(parsed, 'registry', projectMcpServerNames, true),
+        ...normalizeAsset(parsed, 'registry', availableMcpServerNames, true),
         ...extractRegistryDetailMeta(pkg),
     }
 }

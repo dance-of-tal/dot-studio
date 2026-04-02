@@ -30,8 +30,8 @@ export function buildInstalledAssetDragPayload(asset: LibraryAsset) {
             modelVariant: asset.modelVariant || null,
             mcpConfig: asset.mcpConfig || null,
             declaredMcpServerNames: Array.isArray(asset.declaredMcpServerNames) ? asset.declaredMcpServerNames : [],
-            projectMcpMatches: Array.isArray(asset.projectMcpMatches) ? asset.projectMcpMatches : [],
-            projectMcpMissing: Array.isArray(asset.projectMcpMissing) ? asset.projectMcpMissing : [],
+            matchedMcpServerNames: Array.isArray(asset.matchedMcpServerNames) ? asset.matchedMcpServerNames : [],
+            missingMcpServerNames: Array.isArray(asset.missingMcpServerNames) ? asset.missingMcpServerNames : [],
         }
     }
 

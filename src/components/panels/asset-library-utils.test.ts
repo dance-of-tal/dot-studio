@@ -274,13 +274,13 @@ describe('buildInstalledAssetDragPayload', () => {
             modelVariant: 'reasoning-high',
             mcpConfig: { github: { command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'] } },
             declaredMcpServerNames: ['github'],
-            projectMcpMatches: ['github'],
-            projectMcpMissing: [],
+            matchedMcpServerNames: ['github'],
+            missingMcpServerNames: [],
         } as LibraryAsset)).toMatchObject({
             kind: 'performer',
             modelVariant: 'reasoning-high',
             declaredMcpServerNames: ['github'],
-            projectMcpMatches: ['github'],
+            matchedMcpServerNames: ['github'],
         })
     })
 

@@ -26,7 +26,7 @@ type SendMessageInput = {
 type PostToBoardInput = {
     author: string
     key: string
-    kind: 'artifact' | 'fact' | 'task'
+    kind: 'artifact' | 'finding' | 'task'
     content: string
     updateMode?: 'replace' | 'append'
     metadata?: Record<string, unknown>

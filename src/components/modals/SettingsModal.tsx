@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Settings, X, Sliders, Server, Cpu, FolderCog, LayoutGrid } from 'lucide-react'
 import { api } from '../../api'
-import { queryKeys } from '../../hooks/queries'
 import { useStudioStore } from '../../store'
+import { queryKeys } from '../../hooks/queries'
 import './SettingsModal.css'
 import './SettingsControls.css'
 import { useProviderAuth } from './useProviderAuth'
@@ -228,12 +228,13 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 .filter((p) => !projectDraft.visibleProviders[p.id])
                 .map((p) => p.id)
 
-            await api.config.update({
+            await api.config.updateProject({
                 share: projectDraft.share,
                 username: projectDraft.username,
                 disabled_providers: disabledProviders,
                 enabled_providers: [],
             })
+            useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
 
             setProjectSnapshot(projectDraft)
             setProjectMessage('Saved to OpenCode project config.')

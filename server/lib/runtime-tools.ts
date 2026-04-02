@@ -1,8 +1,12 @@
 import { getOpencode } from './opencode.js'
 import type { ModelSelection } from '../../shared/model-types.js'
-import { projectMcpEntryEnabled, type ProjectMcpCatalog } from '../../shared/project-mcp.js'
-import { readProjectMcpCatalog } from './project-config.js'
-import type { ProjectMcpLiveStatusEntry, ProjectMcpLiveStatusMap } from './project-config.js'
+import {
+    mcpToolPattern,
+    type McpCatalog,
+} from '../../shared/mcp-catalog.js'
+import { readGlobalMcpCatalog, readProjectMcpServerNames } from './mcp-catalog.js'
+import type { McpLiveStatusMap } from './mcp-catalog.js'
+import { unwrapOpencodeResult } from './opencode-errors.js'
 
 export type RuntimeToolResolution = {
     selectedMcpServers: string[]
@@ -12,7 +16,7 @@ export type RuntimeToolResolution = {
     unavailableTools: string[]
     unavailableDetails: Array<{
         serverName: string
-        reason: 'not_defined' | 'disabled' | 'needs_auth' | 'needs_client_registration' | 'connect_failed' | 'connected_but_no_tools_for_model'
+        reason: 'not_defined' | 'shadowed_by_project' | 'needs_auth' | 'needs_client_registration' | 'connect_failed'
         toolId?: string
         detail?: string
     }>
@@ -22,24 +26,8 @@ function unique(values: string[]) {
     return Array.from(new Set(values.filter(Boolean)))
 }
 
-function responseData<T>(response: unknown, fallback: T): T {
-    if (!response || typeof response !== 'object' || !('data' in response)) {
-        return fallback
-    }
-    return ((response as { data?: T | null }).data ?? fallback) as T
-}
-
 function errorMessage(error: unknown, fallback: string) {
     return error instanceof Error && error.message ? error.message : fallback
-}
-
-function toolNames(entry: ProjectMcpLiveStatusEntry | undefined): string[] {
-    return (entry?.tools || []).map((tool) => {
-        if (!tool || typeof tool !== 'object' || !('name' in tool) || typeof tool.name !== 'string') {
-            return ''
-        }
-        return tool.name
-    }).filter(Boolean)
 }
 
 export function describeUnavailableRuntimeTools(
@@ -50,20 +38,17 @@ export function describeUnavailableRuntimeTools(
     }
 
     const parts = resolution.unavailableDetails.map((detail) => {
-        if (detail.reason === 'connected_but_no_tools_for_model' && detail.toolId) {
-            return `${detail.serverName}: ${detail.toolId} is unavailable for the current model`
-        }
         if (detail.reason === 'needs_auth') {
             return `${detail.serverName}: authentication required`
         }
         if (detail.reason === 'needs_client_registration') {
             return `${detail.serverName}: OAuth client registration required`
         }
-        if (detail.reason === 'disabled') {
-            return `${detail.serverName}: disabled in project config`
-        }
         if (detail.reason === 'not_defined') {
-            return `${detail.serverName}: not defined in project config`
+            return `${detail.serverName}: not defined in the Studio MCP library`
+        }
+        if (detail.reason === 'shadowed_by_project') {
+            return `${detail.serverName}: shadowed by a project MCP definition in this workspace`
         }
         return `${detail.serverName}: connection failed`
     })
@@ -95,16 +80,16 @@ function emptyResolution(selectedMcpServers: string[]): RuntimeToolResolution {
 }
 
 async function currentMcpStatus(oc: Awaited<ReturnType<typeof getOpencode>>, cwd: string) {
-    const res = await oc.mcp.status({ directory: cwd })
-    return responseData<ProjectMcpLiveStatusMap>(res, {})
+    return unwrapOpencodeResult<McpLiveStatusMap>(await oc.mcp.status({ directory: cwd })) || {}
 }
 
 async function ensureConnectedServer(
     oc: Awaited<ReturnType<typeof getOpencode>>,
     cwd: string,
     serverName: string,
-    catalog: ProjectMcpCatalog,
-    statusMap: ProjectMcpLiveStatusMap,
+    catalog: McpCatalog,
+    statusMap: McpLiveStatusMap,
+    shadowedServerNames: Set<string>,
 ) {
     const config = catalog[serverName]
     if (!config) {
@@ -113,18 +98,18 @@ async function ensureConnectedServer(
             unavailable: {
                 serverName,
                 reason: 'not_defined' as const,
-                detail: 'Server is not defined in the project MCP config.',
+                detail: 'Server is not defined in the Studio MCP library.',
             },
         }
     }
 
-    if (!projectMcpEntryEnabled(config)) {
+    if (shadowedServerNames.has(serverName)) {
         return {
             statusMap,
             unavailable: {
                 serverName,
-                reason: 'disabled' as const,
-                detail: 'Server is disabled in the project MCP config.',
+                reason: 'shadowed_by_project' as const,
+                detail: 'This workspace defines a project MCP with the same name. Studio ignores project-level MCP definitions.',
             },
         }
     }
@@ -206,6 +191,16 @@ async function ensureConnectedServer(
         }
     }
 
+    if (!next?.status || next.status === 'disconnected' || next.status === 'unknown') {
+        // OpenCode can return an empty MCP status map even after a successful
+        // connect() call for globally configured servers. In that case, trust
+        // the successful mutation and allow projection to proceed.
+        return {
+            statusMap: refreshed,
+            unavailable: null,
+        }
+    }
+
     return {
         statusMap: refreshed,
         unavailable: {
@@ -218,7 +213,7 @@ async function ensureConnectedServer(
 
 export async function resolveRuntimeTools(
     cwd: string,
-    model: ModelSelection,
+    _model: ModelSelection,
     mcpServerNames: string[],
 ): Promise<RuntimeToolResolution> {
     const selectedMcpServers = unique(mcpServerNames)
@@ -227,76 +222,29 @@ export async function resolveRuntimeTools(
     }
 
     const oc = await getOpencode()
-    const catalog = await readProjectMcpCatalog(cwd)
+    const catalog = await readGlobalMcpCatalog()
+    const shadowedServerNames = new Set(await readProjectMcpServerNames(cwd))
     let mcpStatus = await currentMcpStatus(oc, cwd)
     const unavailableDetails: RuntimeToolResolution['unavailableDetails'] = []
 
     for (const serverName of selectedMcpServers) {
-        const ensured = await ensureConnectedServer(oc, cwd, serverName, catalog, mcpStatus)
+        const ensured = await ensureConnectedServer(oc, cwd, serverName, catalog, mcpStatus, shadowedServerNames)
         mcpStatus = ensured.statusMap
         if (ensured.unavailable) {
             unavailableDetails.push(ensured.unavailable)
         }
     }
 
-    const requestedTools = unique(
-        selectedMcpServers.flatMap((serverName) =>
-            toolNames(mcpStatus[serverName])
-        )
-    )
-
-    if (requestedTools.length === 0) {
-        return {
-            ...emptyResolution(selectedMcpServers),
-            unavailableDetails,
-        }
-    }
-
-    let availableTools: string[] = []
-    if (model) {
-        const toolListRes = await oc.tool.list({
-            provider: model.provider,
-            model: model.modelId,
-            directory: cwd,
-        })
-        const items = responseData<Array<{ id?: string }>>(toolListRes, [])
-        availableTools = unique(items.map((item) => item.id || ''))
-    } else {
-        const toolIdsRes = await oc.tool.ids({
-            directory: cwd,
-        })
-        availableTools = unique(responseData<string[]>(toolIdsRes, []))
-    }
-
-    const availableSet = new Set(availableTools)
-    const resolvedTools = requestedTools.filter((toolId) => availableSet.has(toolId))
-    const unavailableTools = requestedTools.filter((toolId) => !availableSet.has(toolId))
-    const toolServerNames = new Map<string, string[]>()
-    for (const serverName of selectedMcpServers) {
-        for (const toolId of toolNames(mcpStatus[serverName])) {
-            if (!toolId) continue
-            const current = toolServerNames.get(toolId) || []
-            current.push(serverName)
-            toolServerNames.set(toolId, current)
-        }
-    }
-    for (const toolId of unavailableTools) {
-        for (const serverName of toolServerNames.get(toolId) || []) {
-            unavailableDetails.push({
-                serverName,
-                toolId,
-                reason: 'connected_but_no_tools_for_model',
-                detail: model
-                    ? `${toolId} is not available for ${model.provider}/${model.modelId}.`
-                    : `${toolId} is not available in the current runtime.`,
-            })
-        }
-    }
+    const unavailableServerNames = new Set(unavailableDetails.map((detail) => detail.serverName))
+    const requestedTools = selectedMcpServers.map(mcpToolPattern)
+    const resolvedServers = selectedMcpServers.filter((serverName) => !unavailableServerNames.has(serverName))
+    const resolvedTools = resolvedServers.map(mcpToolPattern)
+    const unavailableTools = unavailableDetails.map((detail) => mcpToolPattern(detail.serverName))
 
     return {
         selectedMcpServers,
         requestedTools,
-        availableTools,
+        availableTools: resolvedTools,
         resolvedTools,
         unavailableTools,
         unavailableDetails,

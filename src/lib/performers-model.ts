@@ -94,11 +94,11 @@ export function normalizeAssetModelForStudio<T extends {
 export function normalizeAssetMcpForStudio<T extends {
     mcpConfig?: Record<string, unknown> | null
     mcpServerNames?: string[]
-}>(asset: T, projectMcpServerNames: string[]): T & {
+}>(asset: T, availableMcpServerNames: string[]): T & {
     mcpServerNames: string[]
 } {
     const declaredNames = extractMcpServerNamesFromConfig(asset.mcpConfig)
-    const allowed = new Set(projectMcpServerNames)
+    const allowed = new Set(availableMcpServerNames)
     return {
         ...asset,
         mcpServerNames: declaredNames.filter((name) => allowed.has(name)),

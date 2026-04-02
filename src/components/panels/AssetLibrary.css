@@ -10,6 +10,14 @@
     background: var(--bg-panel);
 }
 
+.asset-library-local-view {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .search-wrapper {
     display: flex;
     align-items: center;
@@ -349,6 +357,11 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+}
+
+.asset-library-body--mcp {
+    overflow-y: auto;
+    padding-bottom: var(--space-3);
 }
 
 /* ── Pinned Detail Panel ─────────────────────────────── */

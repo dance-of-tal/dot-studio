@@ -17,20 +17,6 @@ import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
 
-/** Resolve sessionId → chatKey from the entity store binding index. */
-function resolveChatKey(state: StudioState, sessionId: string): string | null {
-    const indexed = state.sessionToChatKey[sessionId]
-    if (indexed) {
-        return indexed
-    }
-    for (const [chatKey, mappedSessionId] of Object.entries(state.sessionMap)) {
-        if (mappedSessionId === sessionId) {
-            return chatKey
-        }
-    }
-    return null
-}
-
 function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
     const next = { ...record }
     delete next[key]
@@ -39,15 +25,7 @@ function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T
 
 /** Resolve sessionId → sessionId (confirmed it exists in entity store). */
 function hasSession(state: StudioState, sessionId: string): boolean {
-    if (state.sessionToChatKey[sessionId]) {
-        return true
-    }
-    for (const mappedSessionId of Object.values(state.sessionMap)) {
-        if (mappedSessionId === sessionId) {
-            return true
-        }
-    }
-    return false
+    return !!(state.sessionToChatKey[sessionId] || state.seEntities[sessionId] || state.seMessages[sessionId])
 }
 
 // ── Message Reducers ──
@@ -415,14 +393,10 @@ export function reduceTodoUpdated(
     set: SetFn,
 ) {
     const state = get()
-    const chatKey = resolveChatKey(state, sessionId)
-
-    // Store by both sessionId and chatKey for easy UI lookup
     set({
         seTodos: {
             ...state.seTodos,
             [sessionId]: todos,
-            ...(chatKey && chatKey !== sessionId ? { [chatKey]: todos } : {}),
         },
     })
 }

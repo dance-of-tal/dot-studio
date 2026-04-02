@@ -13,13 +13,12 @@ import { isManagedOpencode, canRestartOpencodeSidecar, restartOpencodeSidecar } 
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import {
     readProjectConfigFile,
-    readProjectMcpCatalog,
     resolveProjectConfigPath,
-    summarizeProjectMcpCatalog,
     writeProjectConfigFile,
 } from '../lib/project-config.js'
-import type { ProjectMcpLiveStatusMap } from '../lib/project-config.js'
-import { projectMcpEntryEnabled } from '../../shared/project-mcp.js'
+import { mergeOpenCodeConfig, readGlobalConfigFile, writeGlobalConfigFile } from '../lib/global-config.js'
+import { readGlobalMcpCatalog, readProjectMcpServerNames, summarizeMcpCatalog } from '../lib/mcp-catalog.js'
+import type { McpLiveStatusMap } from '../lib/mcp-catalog.js'
 import { invalidateProviderListCache } from '../lib/model-catalog.js'
 import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
 
@@ -31,12 +30,6 @@ type ProviderAuthInput =
     | { type: 'oauth'; refresh: string; access: string; expires: number; enterpriseUrl?: string; accountId?: string }
     | { type: 'api'; key: string }
     | { type: 'wellknown'; key: string; token: string }
-type McpServerConfigInput =
-    | { command: string; args?: string[]; env?: Record<string, string> }
-    | { url: string }
-type McpServerConfig =
-    | { type: 'local'; command: string[]; environment?: Record<string, string>; enabled?: boolean }
-    | { type: 'remote'; url: string; enabled?: boolean }
 
 function extractResponseData<T>(response: unknown): T | undefined {
     if (!response || typeof response !== 'object' || !('data' in response)) {
@@ -73,22 +66,6 @@ function isProviderAuthInput(value: unknown): value is ProviderAuthInput {
         return typeof auth.key === 'string' && typeof auth.token === 'string'
     }
     return false
-}
-
-function normalizeMcpServerConfig(config: McpServerConfigInput): McpServerConfig {
-    if ('url' in config) {
-        return {
-            type: 'remote',
-            url: config.url,
-            enabled: true,
-        }
-    }
-    return {
-        type: 'local',
-        command: [config.command, ...(config.args || [])],
-        environment: config.env,
-        enabled: true,
-    }
 }
 
 // ── Read-only OpenCode queries ─────────────────────────
@@ -136,10 +113,8 @@ export async function listOpenCodeToolsForModel(directory: string, provider: str
     return responseData(res, [])
 }
 
-export async function getOpenCodeConfig(directory: string) {
-    const oc = await getOpencode()
-    const res = await oc.config.get({ directory })
-    return responseData(res, {})
+export async function getGlobalOpenCodeConfig() {
+    return readGlobalConfigFile()
 }
 
 export async function getProviderAuthStatus(directory: string) {
@@ -206,7 +181,15 @@ export async function restartManagedOpenCode() {
     }
 }
 
-export async function updateOpenCodeConfig(directory: string, patch: unknown) {
+export async function updateGlobalOpenCodeConfig(patch: unknown) {
+    const current = await readGlobalConfigFile()
+    const nextConfig = mergeOpenCodeConfig(current, patch && typeof patch === 'object' ? patch as Record<string, unknown> : {})
+    await writeGlobalConfigFile(nextConfig)
+    invalidate('mcp-servers')
+    return nextConfig
+}
+
+export async function updateProjectOpenCodeConfig(directory: string, patch: unknown) {
     const current = await readProjectConfigFile(directory)
     const nextConfig = mergeProjectConfig(current, patch && typeof patch === 'object' ? patch as Record<string, unknown> : {})
     await writeProjectConfigFile(directory, nextConfig)
@@ -265,9 +248,10 @@ export async function listMcpServers(directory: string) {
 async function cachedMcpServers(cwd: string) {
     const oc = await getOpencode()
     const res = await oc.mcp.status({ directory: cwd })
-    const data = responseData<ProjectMcpLiveStatusMap>(res, {})
-    const catalog = await readProjectMcpCatalog(cwd)
-    return summarizeProjectMcpCatalog(catalog, data)
+    const data = responseData<McpLiveStatusMap>(res, {})
+    const catalog = await readGlobalMcpCatalog()
+    const shadowedServerNames = await readProjectMcpServerNames(cwd)
+    return summarizeMcpCatalog(catalog, data, shadowedServerNames)
 }
 
 export async function startMcpAuth(directory: string, name: string) {
@@ -364,41 +348,21 @@ export async function runMcpMutation(
     return responseData(result, {})
 }
 
-export async function addMcpServer(
-    directory: string,
-    input: { name: string; config: McpServerConfigInput },
-) {
-    return runMcpMutation(directory, (oc) => oc.mcp.add({
-        directory,
-        name: input.name,
-        config: normalizeMcpServerConfig(input.config),
-    }))
-}
-
 export async function connectMcpServer(directory: string, name: string) {
+    await validateStudioManagedMcpServer(directory, name)
     return runMcpMutation(directory, (oc) => oc.mcp.connect({
         name,
         directory,
     }))
 }
 
-export async function disconnectMcpServer(directory: string, name: string) {
-    return runMcpMutation(directory, (oc) => oc.mcp.disconnect({
-        name,
-        directory,
-    }))
-}
-
 export async function validateMcpAuthRequest(directory: string, name: string) {
-    const catalog = await readProjectMcpCatalog(directory)
+    await validateStudioManagedMcpServer(directory, name)
+    const catalog = await readGlobalMcpCatalog()
     const config = catalog[name]
 
     if (!config) {
-        throw new StudioValidationError(`MCP server '${name}' is not defined in this project.`, 'fix_input', 404)
-    }
-
-    if (!projectMcpEntryEnabled(config)) {
-        throw new StudioValidationError(`MCP server '${name}' is disabled in this project.`, 'fix_input', 400)
+        throw new StudioValidationError(`MCP server '${name}' is not defined in the Studio MCP library.`, 'fix_input', 404)
     }
 
     if (!('type' in config) || config.type !== 'remote') {
@@ -407,5 +371,16 @@ export async function validateMcpAuthRequest(directory: string, name: string) {
 
     if (config.oauth === false) {
         throw new StudioValidationError(`MCP server '${name}' does not support OAuth authentication.`, 'fix_input', 400)
+    }
+}
+
+async function validateStudioManagedMcpServer(directory: string, name: string) {
+    const projectMcpNames = new Set(await readProjectMcpServerNames(directory))
+    if (projectMcpNames.has(name)) {
+        throw new StudioValidationError(
+            `MCP server '${name}' is shadowed by this workspace's project config. Studio only manages global MCP servers.`,
+            'fix_input',
+            409,
+        )
     }
 }

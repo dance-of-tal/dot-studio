@@ -37,7 +37,7 @@ export type CallboardMessage = MailboxMessage
 export interface BoardEntry {
     id: string
     key: string
-    kind: 'artifact' | 'fact' | 'task' | 'note'
+    kind: 'artifact' | 'finding' | 'task' | 'note'
     author: string
     sourceType?: 'performer' | 'user' | 'system'
     content: string

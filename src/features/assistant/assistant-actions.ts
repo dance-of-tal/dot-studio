@@ -271,6 +271,7 @@ async function createDraft(
         },
         workspaceDirty: true,
     }))
+    store().recordStudioChange({ kind, draftIds: [draft.id] })
     if (blueprint.ref) {
         refs.drafts.set(blueprint.ref, { kind, id: draft.id })
     }
@@ -397,17 +398,30 @@ async function applyRelationBlueprint(
     refs: AssistantRefState,
 ): Promise<boolean> {
     const s = store()
+    if (!relation.name?.trim() || !relation.description?.trim()) return false
+    const sourceOptions = {
+        participantKey: relation.sourceParticipantKey || relation.fromParticipantKey,
+        performerId: relation.sourcePerformerId || relation.fromPerformerId,
+        performerRef: relation.sourcePerformerRef || relation.fromPerformerRef,
+        performerName: relation.sourcePerformerName || relation.fromPerformerName,
+    }
+    const targetOptions = {
+        participantKey: relation.targetParticipantKey || relation.toParticipantKey,
+        performerId: relation.targetPerformerId || relation.toPerformerId,
+        performerRef: relation.targetPerformerRef || relation.toPerformerRef,
+        performerName: relation.targetPerformerName || relation.toPerformerName,
+    }
     const sourceKey = resolveParticipantKey(refs, actId, {
-        participantKey: relation.sourceParticipantKey,
-        performerId: relation.sourcePerformerId,
-        performerRef: relation.sourcePerformerRef,
-        performerName: relation.sourcePerformerName,
+        participantKey: sourceOptions.participantKey,
+        performerId: sourceOptions.performerId,
+        performerRef: sourceOptions.performerRef,
+        performerName: sourceOptions.performerName,
     })
     const targetKey = resolveParticipantKey(refs, actId, {
-        participantKey: relation.targetParticipantKey,
-        performerId: relation.targetPerformerId,
-        performerRef: relation.targetPerformerRef,
-        performerName: relation.targetPerformerName,
+        participantKey: targetOptions.participantKey,
+        performerId: targetOptions.performerId,
+        performerRef: targetOptions.performerRef,
+        performerName: targetOptions.performerName,
     })
     if (!sourceKey || !targetKey || sourceKey === targetKey) return false
 
@@ -477,6 +491,7 @@ export async function applyAssistantAction(
                     drafts: { ...state.drafts, [draft.id]: { ...draft, saveState: 'saved' } },
                     workspaceDirty: true,
                 }))
+                store().recordStudioChange({ kind: 'draft', draftIds: [draft.id] })
                 return { success: true }
             }
             case 'deleteTalDraft': {
@@ -488,6 +503,7 @@ export async function applyAssistantAction(
                     delete drafts[draftId]
                     return { drafts, workspaceDirty: true }
                 })
+                store().recordStudioChange({ kind: 'draft', draftIds: [draftId], workspaceWide: true })
                 return { success: true }
             }
 
@@ -509,6 +525,7 @@ export async function applyAssistantAction(
                     drafts: { ...state.drafts, [draft.id]: { ...draft, saveState: 'saved' } },
                     workspaceDirty: true,
                 }))
+                store().recordStudioChange({ kind: 'draft', draftIds: [draft.id] })
                 return { success: true }
             }
             case 'deleteDanceDraft': {
@@ -520,6 +537,7 @@ export async function applyAssistantAction(
                     delete drafts[draftId]
                     return { drafts, workspaceDirty: true }
                 })
+                store().recordStudioChange({ kind: 'draft', draftIds: [draftId], workspaceWide: true })
                 return { success: true }
             }
             case 'upsertDanceBundleFile': {
@@ -558,6 +576,9 @@ export async function applyAssistantAction(
 
             // ── Act CRUD ──────────────────────────────────────────────────────
             case 'createAct': {
+                if ((action.relations || []).some((relation) => !relation.name?.trim() || !relation.description?.trim())) {
+                    return { success: false }
+                }
                 const actId = store().addAct(action.name)
                 if (action.ref) refs.acts.set(action.ref, actId)
                 if (action.description) store().updateActDescription(actId, action.description)
@@ -629,6 +650,7 @@ export async function applyAssistantAction(
             case 'connectPerformers': {
                 const actId = resolveActId(refs, action)
                 if (!actId) return { success: false }
+                if (!action.name?.trim() || !action.description?.trim()) return { success: false }
                 const ok = await applyRelationBlueprint(actId, action, refs)
                 return { success: ok }
             }

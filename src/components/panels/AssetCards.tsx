@@ -34,8 +34,8 @@ function performerMcpSummary(asset: LibraryAsset) {
         return null
     }
 
-    const matchCount = Array.isArray(asset.projectMcpMatches) ? asset.projectMcpMatches.length : 0
-    const missingCount = Array.isArray(asset.projectMcpMissing) ? asset.projectMcpMissing.length : 0
+    const matchCount = Array.isArray(asset.matchedMcpServerNames) ? asset.matchedMcpServerNames.length : 0
+    const missingCount = Array.isArray(asset.missingMcpServerNames) ? asset.missingMcpServerNames.length : 0
     return `MCP ${asset.declaredMcpServerNames.length} declared · ${matchCount} match · ${missingCount} need mapping`
 }
 
@@ -202,13 +202,17 @@ export function DraggableMcp({
     mcp,
     selected,
     onSelect,
+    onEdit,
+    onDelete,
 }: {
     mcp: McpServer
     selected: boolean
     onSelect: AssetPanelHandler
+    onEdit?: AssetPanelHandler
+    onDelete?: AssetPanelHandler
 }) {
     const dragPayload = useMemo(() => buildMcpDragPayload(mcp), [mcp])
-    const dragDisabled = mcp.enabled === false || mcp.defined === false
+    const dragDisabled = mcp.defined === false
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: `mcp-${mcp.name}`,
         data: dragPayload,
@@ -230,16 +234,38 @@ export function DraggableMcp({
                     icon={assetKindIcon('mcp')}
                     name={mcp.name}
                     dragHandle
+                    trailing={
+                        <>
+                            {onEdit ? (
+                                <button
+                                    className="asset-card__edit-btn"
+                                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onEdit(mcpAsset) }}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    title="Edit server"
+                                >
+                                    <Pencil size={11} />
+                                </button>
+                            ) : null}
+                            {onDelete ? (
+                                <button
+                                    className="asset-card__delete-btn"
+                                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(mcpAsset) }}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    title="Remove server"
+                                >
+                                    <Trash2 size={11} />
+                                </button>
+                            ) : null}
+                        </>
+                    }
                 />
                 <div className="asset-card__author">
                     <span className={`asset-mcp-editor__status-dot asset-mcp-editor__status-dot--${mcp.status || 'disconnected'}`} style={{ display: 'inline-block', marginRight: 4, verticalAlign: 'middle' }} />
                     {mcp.status}
                     {mcp.configType ? ` · ${mcp.configType}` : ''}
-                    {mcp.enabled === false ? ' · disabled' : ''}
                 </div>
                 <div className="asset-card__desc">
-                    {mcp.tools?.length || 0} Tools • {mcp.resources?.length || 0} Resources
-                    {dragDisabled ? ' • not draggable' : ''}
+                    {dragDisabled ? 'Save this server before dragging.' : 'Drag onto a performer to enable it there.'}
                 </div>
             </div>
         </HoverableCard>

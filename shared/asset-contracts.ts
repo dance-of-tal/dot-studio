@@ -40,8 +40,8 @@ export type PerformerAssetListItem = AssetListItemBase<'performer'> & {
     modelVariant?: string | null
     mcpConfig?: Record<string, unknown> | null
     declaredMcpServerNames?: string[]
-    projectMcpMatches?: string[]
-    projectMcpMissing?: string[]
+    matchedMcpServerNames?: string[]
+    missingMcpServerNames?: string[]
 }
 
 export type ActAssetListItem = AssetListItemBase<'act'> & {

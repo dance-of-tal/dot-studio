@@ -179,14 +179,14 @@ export function PerformerModelDetail({
                     </div>
                 </div>
             ) : null}
-            {runtimeTools && runtimeTools.resolvedTools.length > 0 ? (
+            {runtimeTools && runtimeTools.selectedMcpServers.length > 0 ? (
                 <div className="adv-section">
                     <div className="adv-section__head">
                         <span className="section-title">Runtime</span>
                     </div>
                     <div className="adv-section__body">
                         <span className="adv-section__summary">
-                            {runtimeTools.resolvedTools.length} tools resolved
+                            {runtimeTools.resolvedTools.length} MCP server{runtimeTools.resolvedTools.length === 1 ? '' : 's'} ready
                             {runtimeTools.unavailableDetails.length > 0 ? ` · ${runtimeTools.unavailableDetails.length} unavailable` : ''}
                         </span>
                     </div>
@@ -262,7 +262,7 @@ export function PerformerMcpDetail({
                                         value={binding.serverName || ''}
                                         onChange={(event) => onSetMcpBinding(performerId, binding.placeholderName, event.target.value || null)}
                                     >
-                                        <option value="">Select project MCP server</option>
+                                        <option value="">Select Studio MCP server</option>
                                         {(mcpBindingOptions || []).map((option) => (
                                             <option key={option.name} value={option.name} disabled={option.disabled}>
                                                 {option.name}{option.disabled ? ' (disabled)' : ''}

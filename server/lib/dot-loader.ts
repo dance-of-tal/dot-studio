@@ -3,7 +3,7 @@ import { createHash } from 'crypto'
 import { getOpencode } from './opencode.js'
 import { unwrapOpencodeResult } from './opencode-errors.js'
 import { resolvePackageBin } from './package-bin.js'
-import type { ProjectMcpLiveStatusMap } from './project-config.js'
+import type { McpLiveStatusMap } from './mcp-catalog.js'
 
 type McpAddConfig = {
     type: 'local'
@@ -44,7 +44,7 @@ export async function ensureDotLoaderServer(cwd: string): Promise<{
     const serverName = dotLoaderServerName(cwd)
     const oc = await getOpencode()
     const params = { directory: path.resolve(cwd) }
-    const statusData = unwrapOpencodeResult<ProjectMcpLiveStatusMap>(await oc.mcp.status(params)) || {}
+    const statusData = unwrapOpencodeResult<McpLiveStatusMap>(await oc.mcp.status(params)) || {}
     const existing = statusData[serverName]
 
     if (!existing) {
@@ -63,7 +63,7 @@ export async function ensureDotLoaderServer(cwd: string): Promise<{
         }))
     }
 
-    const refreshedStatusData = unwrapOpencodeResult<ProjectMcpLiveStatusMap>(await oc.mcp.status(params)) || {}
+    const refreshedStatusData = unwrapOpencodeResult<McpLiveStatusMap>(await oc.mcp.status(params)) || {}
     const status = refreshedStatusData[serverName]
 
     if (!status || status.status !== 'connected') {

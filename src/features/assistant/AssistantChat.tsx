@@ -8,12 +8,7 @@ import { buildAssistantChatKey } from '../../store/assistantSlice'
 import { applyAssistantActions } from './assistant-actions'
 import { getAssistantMessageActions } from './assistant-protocol'
 import { showToast } from '../../lib/toast'
-import {
-    selectMessagesForChatKey,
-    selectChatKeyIsLoading,
-    selectSessionIdForChatKey,
-    selectSessionStatus,
-} from '../../store/session'
+import { useChatSession } from '../../store/session/use-chat-session'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 
 // Reuse performer chat rendering components
@@ -47,13 +42,8 @@ export function AssistantChat() {
 
     const workingDir = useStudioStore((state) => state.workingDir)
     const assistantChatKey = useMemo(() => buildAssistantChatKey(workingDir), [workingDir])
-    // Read from entity store with legacy fallback
-    const messages = useStudioStore((state) => selectMessagesForChatKey(state, assistantChatKey))
-    const isLoading = useStudioStore((state) => selectChatKeyIsLoading(state, assistantChatKey))
-    const sessionId = useStudioStore((state) => selectSessionIdForChatKey(state, assistantChatKey))
-    const sessionStatus = useStudioStore((state) => (
-        sessionId ? selectSessionStatus(state, sessionId) : null
-    ))
+    const chatSession = useChatSession(assistantChatKey)
+    const { messages, isLoading, sessionId, status: sessionStatus } = chatSession
 
     const { data: models } = useModels()
     const connectedModels = useMemo(

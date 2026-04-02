@@ -30,7 +30,6 @@ export function createPerformerNode(input: {
     danceDeliveryMode?: DanceDeliveryMode
     planMode?: boolean
     hidden?: boolean
-    activeSessionId?: string
     meta?: {
         derivedFrom?: string | null
         publishBindingUrn?: string | null
@@ -58,7 +57,6 @@ export function createPerformerNode(input: {
         mcpBindingMap: sanitizeMcpBindingMap(input.mcpBindingMap),
         declaredMcpConfig: input.declaredMcpConfig || null,
         danceDeliveryMode: input.danceDeliveryMode || 'auto',
-        ...(input.activeSessionId ? { activeSessionId: input.activeSessionId } : {}),
         ...(input.planMode ? { planMode: input.planMode } : {}),
         ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
         ...(input.meta ? { meta: input.meta } : {}),

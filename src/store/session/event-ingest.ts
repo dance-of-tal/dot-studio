@@ -12,6 +12,7 @@
  */
 import type { StudioState } from '../types'
 import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
+import { logChatDebug } from '../../lib/chat-debug'
 import {
     reduceMessageUpdated,
     reduceMessageRemoved,
@@ -205,6 +206,12 @@ export function createEventIngest(options: EventIngestOptions) {
                 const sessionID = props.sessionID as string | undefined
                 const status = props.status as { type?: string; attempt?: number; message?: string } | undefined
                 if (!sessionID || !status?.type) return
+                logChatDebug('event-ingest', 'apply session.status', {
+                    sessionId: sessionID,
+                    status: status.type,
+                    attempt: status.attempt,
+                    message: status.message,
+                })
                 reduceSessionStatus(
                     sessionID,
                     { type: status.type as 'idle' | 'busy' | 'error' | 'retry', attempt: status.attempt, message: status.message },
@@ -219,6 +226,7 @@ export function createEventIngest(options: EventIngestOptions) {
             case 'session.idle': {
                 const sessionID = props.sessionID as string | undefined
                 if (!sessionID) return
+                logChatDebug('event-ingest', 'apply session.idle', { sessionId: sessionID })
                 reduceSessionStatus(sessionID, { type: 'idle' }, get, set)
                 onSessionIdle?.(sessionID)
                 return
@@ -227,6 +235,7 @@ export function createEventIngest(options: EventIngestOptions) {
             case 'session.compacted': {
                 const sessionID = props.sessionID as string | undefined
                 if (!sessionID) return
+                logChatDebug('event-ingest', 'apply session.compacted', { sessionId: sessionID })
                 onSessionCompacted?.(sessionID)
                 return
             }
@@ -236,6 +245,10 @@ export function createEventIngest(options: EventIngestOptions) {
                 const error = props.error
                 if (!sessionID) return
                 const errorMessage = extractErrorMessage(error)
+                logChatDebug('event-ingest', 'apply session.error', {
+                    sessionId: sessionID,
+                    error: errorMessage,
+                })
                 reduceSessionError(sessionID, errorMessage, get, set)
                 return
             }

@@ -30,6 +30,7 @@ import {
     normalizePath,
 } from './workspace-helpers'
 import { performerIdCounter, markdownEditorIdCounter } from './workspaceSlice'
+import { createEmptyProjectionDirtyState } from './runtime-change-policy'
 
 const TRACKING_WINDOW_ID = 'workspace-tracking-window'
 
@@ -94,13 +95,7 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
                 focusedNodeType: null,
                 focusSnapshot: null,
                 inspectorFocus: null,
-                chats: {},
-                chatPrefixes: {},
                 activeChatPerformerId: null,
-                sessionMap: {},
-                pendingPermissions: {},
-                pendingQuestions: {},
-                todos: {},
                 assistantModel: null,
                 assistantAvailableModels: [],
                 appliedAssistantActionMessageIds: {},
@@ -111,18 +106,19 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
                 sePermissions: {},
                 seQuestions: {},
                 seTodos: {},
+                chatDrafts: {},
+                chatPrefixes: {},
                 chatKeyToSession: {},
                 sessionToChatKey: {},
                 sessionLoading: {},
-                historyCursors: {},
                 sessionReverts: {},
                 sessions: [],
-                loadingPerformerId: null,
                 lspServers: [],
                 lspDiagnostics: {},
                 trackingWindow: null,
                 isTrackingOpen: false,
                 workspaceDirty: true,
+                projectionDirty: createEmptyProjectionDirtyState(),
                 runtimeReloadPending: false,
                 actEditorState: null,
                 actThreads: {},
@@ -154,24 +150,30 @@ export async function saveWorkspace(get: GetFn, set: SetFn) {
     const {
         performers,
         markdownEditors,
-        sessionMap,
+        chatKeyToSession,
+        appliedAssistantActionMessageIds,
+        assistantActionResults,
         workingDir,
         trackingWindow,
     } = get()
     if (!workingDir) return
-    const performersWithSessions = performers.map((a) => {
-        return {
-            ...a,
-            activeSessionId: sessionMap[a.id] || a.activeSessionId,
-            declaredMcpConfig: a.declaredMcpConfig || null,
-            mcpBindingMap: a.mcpBindingMap || {},
-            modelPlaceholder: a.modelPlaceholder || null,
-        }
-    })
+    const normalizedPerformers = performers.map((performer) => ({
+        ...performer,
+        declaredMcpConfig: performer.declaredMcpConfig || null,
+        mcpBindingMap: performer.mcpBindingMap || {},
+        modelPlaceholder: performer.modelPlaceholder || null,
+    }))
+    const chatBindings = Object.fromEntries(
+        Object.entries(chatKeyToSession).filter(([, sessionId]) => !!sessionId),
+    )
     const snapshot: SavedWorkspaceSnapshot = {
-        schemaVersion: 5,
+        schemaVersion: 1,
         workingDir: normalizePath(workingDir),
-        performers: performersWithSessions,
+        performers: normalizedPerformers,
+        chatBindings,
+        assistantModel: get().assistantModel,
+        appliedAssistantActionMessageIds,
+        assistantActionResults,
         markdownEditors,
         canvasTerminals: get().canvasTerminals.map(t => ({
             ...t,
@@ -250,7 +252,6 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
                 danceDeliveryMode: performer.danceDeliveryMode || 'auto',
                 planMode: performer.planMode || false,
                 hidden: performer.hidden || false,
-                activeSessionId: performer.activeSessionId,
                 meta: performer.meta || (performer.sourcePerformerUrn ? { derivedFrom: performer.sourcePerformerUrn } : undefined),
             })
             return {
@@ -277,12 +278,10 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
         })
         markdownEditorIdCounter.value = getMaxMarkdownEditorCounter(loadedMarkdownEditors)
 
-        const rehydratedSessionMap: Record<string, string> = {}
-        if (loadedPerformers) {
-            loadedPerformers.forEach((a: PerformerNode) => {
-                if (a.activeSessionId) rehydratedSessionMap[a.id] = a.activeSessionId
-            })
-        }
+        const rehydratedChatBindings: Record<string, string> = { ...(data.chatBindings || {}) }
+        const rehydratedSessionToChat = Object.fromEntries(
+            Object.entries(rehydratedChatBindings).map(([chatKey, sessionId]) => [sessionId, chatKey]),
+        )
 
         const workingDir = normalizePath(data.workingDir || '')
         setApiWorkingDirContext(workingDir || null)
@@ -305,29 +304,23 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
             focusSnapshot: null,
             inspectorFocus: null,
             activeChatPerformerId: null,
-            chats: {},
             chatPrefixes: {},
-            sessionMap: rehydratedSessionMap,
-            pendingPermissions: {},
-            pendingQuestions: {},
-            todos: {},
-            assistantModel: null,
+            chatDrafts: {},
+            assistantModel: data.assistantModel || null,
             assistantAvailableModels: [],
-            appliedAssistantActionMessageIds: {},
-            assistantActionResults: {},
+            appliedAssistantActionMessageIds: { ...(data.appliedAssistantActionMessageIds || {}) },
+            assistantActionResults: { ...(data.assistantActionResults || {}) },
             seEntities: {},
             seMessages: {},
             seStatuses: {},
             sePermissions: {},
             seQuestions: {},
             seTodos: {},
-            chatKeyToSession: {},
-            sessionToChatKey: {},
+            chatKeyToSession: rehydratedChatBindings,
+            sessionToChatKey: rehydratedSessionToChat,
             sessionLoading: {},
-            historyCursors: {},
             sessionReverts: {},
             sessions: [],
-            loadingPerformerId: null,
             canvasTerminals: (data.canvasTerminals || []).map((t: PersistedCanvasTerminal) => ({
                 id: t.id,
                 title: t.title || 'Terminal',
@@ -350,6 +343,7 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
             lspServers: [],
             lspDiagnostics: {},
             workspaceDirty: false,
+            projectionDirty: createEmptyProjectionDirtyState(),
             runtimeReloadPending: false,
             workingDir,
             actThreads: {},

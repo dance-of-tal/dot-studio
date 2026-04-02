@@ -12,12 +12,13 @@ import {
     Activity,
 } from 'lucide-react'
 import { api } from '../../api'
+import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import './ActBoardView.css'
 
 interface BoardEntry {
     id: string
     key: string
-    kind: 'artifact' | 'fact' | 'task' | 'note'
+    kind: 'artifact' | 'finding' | 'task' | 'note'
     author: string
     content: string
     version: number
@@ -35,12 +36,12 @@ interface ActivityEvent {
     payload: Record<string, unknown>
 }
 
-type FilterKind = 'all' | 'artifact' | 'fact' | 'task'
+type FilterKind = 'all' | 'artifact' | 'finding' | 'task'
 
 const KIND_LABELS: Record<FilterKind, string> = {
     all: 'All',
     artifact: 'Artifacts',
-    fact: 'Facts',
+    finding: 'Findings',
     task: 'Tasks',
 }
 
@@ -55,7 +56,7 @@ function toBoardEntry(raw: Record<string, unknown>): BoardEntry | null {
     return {
         id: typeof raw.id === 'string' ? raw.id : String(raw.key),
         key: raw.key,
-        kind: (['artifact', 'fact', 'task', 'note'].includes(raw.kind as string)
+        kind: (['artifact', 'finding', 'task', 'note'].includes(raw.kind as string)
             ? raw.kind : 'note') as BoardEntry['kind'],
         author: typeof raw.author === 'string' ? raw.author : 'unknown',
         content: raw.content,
@@ -244,7 +245,7 @@ export default function ActBoardView({ actId, threadId }: ActBoardViewProps) {
                 <div className="act-board__cards scroll-area">
                     {filteredEntries.map((entry) => {
                         const isExpanded = expandedKeys.has(entry.key)
-                        const isLong = entry.content.length > 200
+                        const isLong = entry.content.length > 220 || entry.content.split('\n').length > 6
 
                         return (
                             <div key={entry.id} className="act-board__card">
@@ -266,7 +267,7 @@ export default function ActBoardView({ actId, threadId }: ActBoardViewProps) {
                                 <div
                                     className={`act-board__card-content ${isExpanded ? 'act-board__card-content--expanded' : ''}`}
                                 >
-                                    {entry.content}
+                                    <MarkdownRenderer content={entry.content} showThinking={false} />
                                 </div>
                                 {isLong && (
                                     <button

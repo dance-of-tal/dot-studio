@@ -2,20 +2,20 @@ import { extractMcpServerNamesFromConfig } from './mcp-config.js'
 
 export type PerformerMcpPortability = {
     declaredMcpServerNames: string[]
-    projectMcpMatches: string[]
-    projectMcpMissing: string[]
+    matchedMcpServerNames: string[]
+    missingMcpServerNames: string[]
 }
 
 export function resolvePerformerMcpPortability(
     mcpConfig: unknown,
-    projectMcpServerNames: string[],
+    availableMcpServerNames: string[],
 ): PerformerMcpPortability {
     const declaredMcpServerNames = extractMcpServerNamesFromConfig(mcpConfig)
-    const available = new Set(projectMcpServerNames.filter(Boolean))
+    const available = new Set(availableMcpServerNames.filter(Boolean))
 
     return {
         declaredMcpServerNames,
-        projectMcpMatches: declaredMcpServerNames.filter((name) => available.has(name)),
-        projectMcpMissing: declaredMcpServerNames.filter((name) => !available.has(name)),
+        matchedMcpServerNames: declaredMcpServerNames.filter((name) => available.has(name)),
+        missingMcpServerNames: declaredMcpServerNames.filter((name) => !available.has(name)),
     }
 }

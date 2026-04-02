@@ -4,7 +4,7 @@ import type { StudioState } from './store'
 import { api } from './api'
 import { showToast } from './lib/toast'
 import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers'
-import { projectMcpServerNames } from '../shared/project-mcp'
+import { mcpServerNamesFromConfig } from '../shared/mcp-catalog'
 import { extractMcpServerNamesFromConfig } from '../shared/mcp-config'
 import { resolvePerformerMcpPortability } from '../shared/performer-mcp-portability'
 import {
@@ -90,40 +90,40 @@ export async function resolvePerformerAssetForStudio(
     asset: DragAsset,
     showDropWarning: (message: string) => void,
 ): Promise<PerformerAssetPayload> {
-    const projectConfig = await api.config.getProject().catch(() => ({ config: {} }))
-    const projectMcpNames = projectMcpServerNames(projectConfig.config)
+    const globalConfig = await api.config.getGlobal().catch(() => ({}))
+    const availableMcpServerNames = mcpServerNamesFromConfig(globalConfig)
     const runtimeModels = await api.models.list()
     const normalized = normalizeAssetMcpForStudio(
         normalizeAssetModelForStudio(asset, runtimeModels),
-        projectMcpNames,
+        availableMcpServerNames,
     )
     if (!normalized.model && normalized.modelPlaceholder) {
         showDropWarning(`Model ${normalized.modelPlaceholder.provider}/${normalized.modelPlaceholder.modelId} is not available in this Studio runtime. A placeholder was kept so you can pick a replacement.`)
     }
     const portability = (
         Array.isArray(asset.declaredMcpServerNames)
-        && Array.isArray(asset.projectMcpMatches)
-        && Array.isArray(asset.projectMcpMissing)
+        && Array.isArray(asset.matchedMcpServerNames)
+        && Array.isArray(asset.missingMcpServerNames)
     )
         ? {
             declaredMcpServerNames: asset.declaredMcpServerNames,
-            projectMcpMatches: asset.projectMcpMatches,
-            projectMcpMissing: asset.projectMcpMissing,
+            matchedMcpServerNames: asset.matchedMcpServerNames,
+            missingMcpServerNames: asset.missingMcpServerNames,
         }
-        : resolvePerformerMcpPortability(asset.mcpConfig, projectMcpNames)
+        : resolvePerformerMcpPortability(asset.mcpConfig, availableMcpServerNames)
 
     const declaredMcpNames = portability.declaredMcpServerNames.length > 0
         ? portability.declaredMcpServerNames
         : extractMcpServerNamesFromConfig(asset.mcpConfig)
     const unresolvedMcpNames = declaredMcpNames.filter((name) => !(normalized.mcpBindingMap?.[name] || '').trim())
 
-    if (portability.projectMcpMatches.length > 0) {
+    if (portability.matchedMcpServerNames.length > 0) {
         showToast(
-            `Imported performer found project MCP name matches: ${portability.projectMcpMatches.join(', ')}. Review the performer binding after import.`,
+            `Imported performer found matching Studio MCP names: ${portability.matchedMcpServerNames.join(', ')}. Review the performer binding after import.`,
             'info',
             {
-                title: 'MCP matches found',
-                dedupeKey: `performer-import-mcp-match:${asset.urn || asset.name}:${portability.projectMcpMatches.join(',')}`,
+                title: 'Matching MCP names found',
+                dedupeKey: `performer-import-mcp-match:${asset.urn || asset.name}:${portability.matchedMcpServerNames.join(',')}`,
                 durationMs: 5000,
             },
         )
@@ -144,7 +144,7 @@ export async function resolvePerformerAssetForStudio(
             return `• ${name}`
         }).join('\n')
         showToast(
-            `This performer requires the following MCP servers not yet configured in your project:\n${details}\n\nAdd them in Asset Library → MCP.`,
+            `This performer requires MCP servers that are not yet in the Studio MCP library:\n${details}\n\nAdd them in Asset Library → MCP.`,
             'warning',
             {
                 title: 'MCP servers required',

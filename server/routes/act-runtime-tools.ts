@@ -1,18 +1,22 @@
 import { Hono } from 'hono'
+import type { ActDefinition } from '../../shared/act-types.js'
 import type { ConditionExpr } from '../../shared/act-types.js'
-import { parseActSessionOwnerId, resolveSessionExecutionContext } from '../lib/session-execution.js'
 import { getActDefinitionForThread, getActRuntimeService } from '../services/act-runtime/act-runtime-service.js'
+import {
+    parseActSessionOwnershipOwnerId,
+    resolveSessionOwnership,
+} from '../services/session-ownership-service.js'
 import { requestWorkingDir } from './route-errors.js'
 
 const actRuntimeTools = new Hono()
 
 async function resolveActSessionTarget(sessionId: string) {
-    const context = await resolveSessionExecutionContext(sessionId)
+    const context = await resolveSessionOwnership(sessionId)
     if (!context || context.ownerKind !== 'act') {
         return null
     }
 
-    const parsed = parseActSessionOwnerId(context.ownerId)
+    const parsed = parseActSessionOwnershipOwnerId(context.ownerId)
     if (!parsed) {
         return null
     }
@@ -24,13 +28,20 @@ async function resolveActSessionTarget(sessionId: string) {
     }
 }
 
-async function resolveParticipantKeyByName(workingDir: string, threadId: string, recipient: string) {
-    const actDefinition = await getActDefinitionForThread(workingDir, threadId)
+export function resolveParticipantRecipient(
+    actDefinition: ActDefinition | null | undefined,
+    senderKey: string,
+    recipient: string,
+) {
+    const normalizedRecipient = recipient.trim().toLowerCase()
+    if (!normalizedRecipient) {
+        return null
+    }
+
     if (!actDefinition) {
         return recipient
     }
 
-    const normalizedRecipient = recipient.trim().toLowerCase()
     for (const [participantKey, binding] of Object.entries(actDefinition.participants || {})) {
         const displayName = (binding.displayName || participantKey).trim().toLowerCase()
         if (displayName === normalizedRecipient || participantKey.toLowerCase() === normalizedRecipient) {
@@ -38,7 +49,27 @@ async function resolveParticipantKeyByName(workingDir: string, threadId: string,
         }
     }
 
+    for (const relation of actDefinition.relations || []) {
+        if (!relation.between.includes(senderKey)) {
+            continue
+        }
+        if (relation.name.trim().toLowerCase() !== normalizedRecipient) {
+            continue
+        }
+        return relation.between[0] === senderKey ? relation.between[1] : relation.between[0]
+    }
+
     return null
+}
+
+async function resolveParticipantKeyByName(
+    workingDir: string,
+    threadId: string,
+    senderKey: string,
+    recipient: string,
+) {
+    const actDefinition = await getActDefinitionForThread(workingDir, threadId)
+    return resolveParticipantRecipient(actDefinition, senderKey, recipient)
 }
 
 // ── Debug logging middleware for Act tool routes ────
@@ -99,7 +130,12 @@ actRuntimeTools.post('/api/act/session/:sessionId/message-teammate', async (c) =
         tag?: string
     }>()
 
-    const recipientKey = await resolveParticipantKeyByName(target.workingDir, target.threadId, body.recipient)
+    const recipientKey = await resolveParticipantKeyByName(
+        target.workingDir,
+        target.threadId,
+        target.participantKey,
+        body.recipient,
+    )
     if (!recipientKey) {
         return c.json({ ok: false, error: `Unknown teammate "${body.recipient}"` }, 400)
     }
@@ -123,7 +159,7 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/post-to-board', async (c)
     const body = await c.req.json<{
         author: string
         key: string
-        kind: 'artifact' | 'fact' | 'task'
+        kind: 'artifact' | 'finding' | 'task'
         content: string
         updateMode?: 'replace' | 'append'
         metadata?: Record<string, unknown>
@@ -145,7 +181,7 @@ actRuntimeTools.post('/api/act/session/:sessionId/update-shared-board', async (c
 
     const body = await c.req.json<{
         entryKey: string
-        entryType: 'artifact' | 'fact' | 'task'
+        entryType: 'artifact' | 'finding' | 'task'
         content: string
         mode?: 'replace' | 'append'
     }>()

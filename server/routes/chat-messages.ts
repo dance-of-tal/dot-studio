@@ -3,12 +3,12 @@ import type { Context } from 'hono'
 import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import type { ChatSendRequest } from '../../shared/chat-contracts.js'
 import { uniqueAssetRefs } from '../lib/chat-session.js'
-import { resolveSessionExecutionContext } from '../lib/session-execution.js'
 import {
     StudioValidationError,
     jsonOpencodeError,
 } from '../lib/opencode-errors.js'
 import { sendStudioChatMessage } from '../services/chat-service.js'
+import { resolveSessionOwnership } from '../services/session-ownership-service.js'
 import {
     listStudioSessionDiff,
     listStudioSessionMessages,
@@ -118,7 +118,7 @@ chatMessages.get('/api/chat/sessions/:id/diff', async (c) => {
  * (e.g., by wake cascade) into the sessionMap.
  */
 chatMessages.get('/api/chat/sessions/:id/resolve', async (c) => {
-    const context = await resolveSessionExecutionContext(c.req.param('id'))
+    const context = await resolveSessionOwnership(c.req.param('id'))
     if (!context) {
         return c.json({ found: false }, 404)
     }

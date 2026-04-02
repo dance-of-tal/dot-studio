@@ -23,8 +23,8 @@ type PanelAssetSharedFields = {
     modelVariant?: string | null
     mcpConfig?: Record<string, unknown> | null
     declaredMcpServerNames?: string[]
-    projectMcpMatches?: string[]
-    projectMcpMissing?: string[]
+    matchedMcpServerNames?: string[]
+    missingMcpServerNames?: string[]
     participantCount?: number
     participants?: Array<Record<string, unknown>>
     relations?: Array<Record<string, unknown>>
@@ -47,7 +47,6 @@ type PanelAssetSharedFields = {
     tools?: Array<{ name: string; description?: string }>
     resources?: Array<unknown>
     status?: McpServer['status']
-    enabled?: boolean
     defined?: boolean
     configType?: McpServer['configType']
     authStatus?: McpServer['authStatus']

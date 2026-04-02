@@ -58,6 +58,7 @@ export function upsertDraftImpl(
         },
         workspaceDirty: true,
     }))
+    get().recordStudioChange({ kind: 'draft', draftIds: [draft.id] })
 
     if (draft.saveState === 'unsaved') {
         return
@@ -151,6 +152,7 @@ export async function saveMarkdownDraftImpl(
         )),
         workspaceDirty: true,
     }))
+    get().recordStudioChange({ kind: 'draft', draftIds: [saved.id] })
 
     return nextDraft
 }
@@ -195,6 +197,7 @@ export async function savePerformerAsDraftImpl(get: GetState, set: SetState, per
             },
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'draft', draftIds: [draft.id] })
     } catch (error) {
         console.error('Failed to save performer as draft', error)
     }
@@ -278,6 +281,7 @@ export async function saveActAsDraftImpl(get: GetState, set: SetState, actId: st
             },
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'draft', draftIds: [draft.id] })
     } catch (error) {
         console.error('Failed to save act as draft', error)
     }
@@ -331,6 +335,7 @@ export function addPerformerFromDraftImpl(
         inspectorFocus: null,
         workspaceDirty: true,
     }))
+    get().recordStudioChange({ kind: 'performer', performerIds: [id] })
 }
 
 export function importActFromDraftImpl(
@@ -449,6 +454,11 @@ export function importActFromDraftImpl(
         selectedActId: actId,
         workspaceDirty: true,
     }))
+    get().recordStudioChange({
+        kind: 'act',
+        actIds: [actId],
+        performerIds: materializedPerformers.map((performer) => performer.id),
+    })
 }
 
 export function createMarkdownEditorImpl(
@@ -535,6 +545,7 @@ export function createMarkdownEditorImpl(
             workspaceDirty: true,
         }
     })
+    get().recordStudioChange({ kind, draftIds: [draftId] })
 
     return editorId
 }

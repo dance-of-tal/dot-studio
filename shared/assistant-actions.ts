@@ -61,13 +61,23 @@ export interface AssistantActRelationBlueprint {
     sourcePerformerId?: string
     sourcePerformerRef?: string
     sourcePerformerName?: string
+    // Compatibility aliases for model-generated payloads.
+    fromParticipantKey?: string
+    fromPerformerId?: string
+    fromPerformerRef?: string
+    fromPerformerName?: string
     targetParticipantKey?: string
     targetPerformerId?: string
     targetPerformerRef?: string
     targetPerformerName?: string
+    // Compatibility aliases for model-generated payloads.
+    toParticipantKey?: string
+    toPerformerId?: string
+    toPerformerRef?: string
+    toPerformerName?: string
     direction?: AssistantActionDirection
-    name?: string
-    description?: string
+    name: string
+    description: string
 }
 
 // ── Stage context ────────────────────────────────────────────────────────────
@@ -309,13 +319,21 @@ export type AssistantAction =
         sourcePerformerId?: string
         sourcePerformerRef?: string
         sourcePerformerName?: string
+        fromParticipantKey?: string
+        fromPerformerId?: string
+        fromPerformerRef?: string
+        fromPerformerName?: string
         targetParticipantKey?: string
         targetPerformerId?: string
         targetPerformerRef?: string
         targetPerformerName?: string
+        toParticipantKey?: string
+        toPerformerId?: string
+        toPerformerRef?: string
+        toPerformerName?: string
         direction?: AssistantActionDirection
-        name?: string
-        description?: string
+        name: string
+        description: string
     }
     | {
         type: 'updateRelation'

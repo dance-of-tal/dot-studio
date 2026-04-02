@@ -33,28 +33,37 @@ vi.mock('../../lib/api-errors', () => ({
 }))
 
 function createMinimalState(overrides: Partial<StudioState> = {}): StudioState {
-    return {
+    const state = {
         seEntities: {},
         seMessages: {},
         seStatuses: {},
         sePermissions: {},
         seQuestions: {},
         seTodos: {},
+        chatDrafts: {},
+        chatPrefixes: {},
         chatKeyToSession: {},
         sessionToChatKey: {},
         sessionLoading: {},
-        historyCursors: {},
-        chats: {},
-        chatPrefixes: {},
         activeChatPerformerId: null,
-        sessionMap: {},
-        loadingPerformerId: null,
         sessions: [],
-        pendingPermissions: {},
-        pendingQuestions: {},
-        todos: {},
         ...overrides,
     } as StudioState
+
+    state.clearSessionPermission = (sessionId: string) => {
+        delete state.sePermissions[sessionId]
+    }
+    state.setSessionPermission = (sessionId: string, permission) => {
+        state.sePermissions[sessionId] = permission
+    }
+    state.clearSessionQuestion = (sessionId: string) => {
+        delete state.seQuestions[sessionId]
+    }
+    state.setSessionQuestion = (sessionId: string, question) => {
+        state.seQuestions[sessionId] = question
+    }
+
+    return state
 }
 
 describe('chat approvals', () => {
@@ -65,11 +74,10 @@ describe('chat approvals', () => {
         showToastMock.mockReset()
     })
 
-    it('removes permissions from both legacy and entity stores on success', async () => {
+    it('removes permissions from session-owned entity state on success', async () => {
         const sessionId = 'session-1'
         const permission = { id: 'perm-1', sessionID: sessionId, permission: 'file.read', patterns: [], always: [] }
         const state = createMinimalState({
-            pendingPermissions: { [sessionId]: permission },
             sePermissions: { [sessionId]: permission },
         })
         const get = () => state
@@ -81,15 +89,13 @@ describe('chat approvals', () => {
 
         await createChatApprovals(set, get).respondToPermission(sessionId, permission.id, 'once')
 
-        expect(state.pendingPermissions[sessionId]).toBeUndefined()
         expect(state.sePermissions[sessionId]).toBeUndefined()
     })
 
-    it('restores questions into both legacy and entity stores on failure', async () => {
+    it('restores questions into session-owned entity state on failure', async () => {
         const sessionId = 'session-1'
         const question = { id: 'q-1', sessionID: sessionId, questions: [] }
         const state = createMinimalState({
-            pendingQuestions: { [sessionId]: question },
             seQuestions: { [sessionId]: question },
         })
         const get = () => state
@@ -101,7 +107,6 @@ describe('chat approvals', () => {
 
         await createChatApprovals(set, get).respondToQuestion(sessionId, question.id, [])
 
-        expect(state.pendingQuestions[sessionId]).toEqual(question)
         expect(state.seQuestions[sessionId]).toEqual(question)
         expect(showToastMock).toHaveBeenCalled()
     })

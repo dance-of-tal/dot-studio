@@ -135,7 +135,8 @@ export default function ChatMessageContent({
 }) {
     const { showReasoningSummaries } = useUISettings()
     const rawContent = useMemo(() => stripAssistantActionBlock(message.content || ''), [message.content])
-    const displayContent = useDeferredValue(rawContent)
+    const deferredContent = useDeferredValue(rawContent)
+    const displayContent = streaming ? rawContent : deferredContent
     const showThinking = showReasoningSummaries && streaming
 
     return (

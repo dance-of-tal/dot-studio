@@ -3,7 +3,7 @@
  *
  * Derived selectors that read from the normalized session entity store.
  * Each selector resolves chatKey → sessionId then reads the entity table.
- * These replace direct reads from the flat `chats` Record.
+ * These replace direct reads from the old flat chat/session maps.
  *
  * Entity fields use `se` prefix (seMessages, seStatuses, etc.)
  * to coexist with legacy ChatSlice during migration.
@@ -24,7 +24,7 @@ const IDLE_STATUS: SessionStatus = { type: 'idle' }
  * Resolve a chatKey to its sessionId, or null if no binding exists.
  */
 export function selectSessionIdForChatKey(state: StudioState, chatKey: string): string | null {
-    return state.chatKeyToSession[chatKey] || state.sessionMap[chatKey] || null
+    return state.chatKeyToSession[chatKey] || null
 }
 
 /**
@@ -32,15 +32,7 @@ export function selectSessionIdForChatKey(state: StudioState, chatKey: string): 
  */
 export function selectChatKeyForSession(state: StudioState, sessionId: string): string | null {
     const indexed = state.sessionToChatKey[sessionId]
-    if (indexed) {
-        return indexed
-    }
-    for (const [chatKey, mappedSessionId] of Object.entries(state.sessionMap)) {
-        if (mappedSessionId === sessionId) {
-            return chatKey
-        }
-    }
-    return null
+    return indexed || null
 }
 
 // ── Stream target resolution (replaces resolveSessionTarget) ──
@@ -67,15 +59,25 @@ export function selectStreamTarget(state: StudioState, sessionId: string): Sessi
 
 /**
  * Get messages for a chatKey by resolving through the binding index.
- * Falls back to the legacy `chats` Record if not yet migrated.
+ * Returns unbound draft messages until a session binding exists.
  */
 export function selectMessagesForChatKey(state: StudioState, chatKey: string): ChatMessage[] {
     const sessionId = selectSessionIdForChatKey(state, chatKey)
     if (sessionId && state.seMessages[sessionId]) {
         return mergeSystemPrefixMessages(state.chatPrefixes[chatKey], state.seMessages[sessionId])
     }
-    // Legacy fallback: read from old chats record during migration
-    return state.chats[chatKey] || EMPTY_MESSAGES
+    return state.chatDrafts[chatKey] || EMPTY_MESSAGES
+}
+
+export function selectPrefixCountForChatKey(state: StudioState, chatKey: string): number {
+    const prefixes = state.chatPrefixes[chatKey] || EMPTY_MESSAGES
+    const sessionId = selectSessionIdForChatKey(state, chatKey)
+    if (!sessionId) {
+        return (state.chatDrafts[chatKey] || EMPTY_MESSAGES).length
+    }
+
+    const serverIds = new Set((state.seMessages[sessionId] || EMPTY_MESSAGES).map((message) => message.id))
+    return prefixes.filter((prefix) => prefix.role === 'system' && !serverIds.has(prefix.id)).length
 }
 
 /**
@@ -107,50 +109,48 @@ export function selectSessionIsLoading(state: StudioState, sessionId: string): b
  */
 export function selectChatKeyIsLoading(state: StudioState, chatKey: string): boolean {
     const sessionId = selectSessionIdForChatKey(state, chatKey)
-    if (!sessionId) {
-        // Legacy fallback
-        return state.loadingPerformerId === chatKey
-    }
-    return !!state.sessionLoading[sessionId]
+    return !!(sessionId && state.sessionLoading[sessionId])
 }
 
 // ── Dock state ──
 
 /**
  * Get pending permission for a session.
- * Checks both new entity store and legacy pendingPermissions.
  */
 export function selectPendingPermission(state: StudioState, sessionId: string): PermissionRequest | null {
-    return state.sePermissions[sessionId] || state.pendingPermissions[sessionId] || null
+    return state.sePermissions[sessionId] || null
 }
 
 /**
  * Get pending question for a session.
  */
 export function selectPendingQuestion(state: StudioState, sessionId: string): QuestionRequest | null {
-    return state.seQuestions[sessionId] || state.pendingQuestions[sessionId] || null
+    return state.seQuestions[sessionId] || null
 }
 
 /**
  * Get todos for a session.
  */
 export function selectTodos(state: StudioState, sessionId: string): Todo[] {
-    return state.seTodos[sessionId] || state.todos[sessionId] || EMPTY_TODOS
+    return state.seTodos[sessionId] || EMPTY_TODOS
 }
 
-// ── History ──
-
-/**
- * Get cursor for loading older messages.
- */
-export function selectHistoryCursor(state: StudioState, sessionId: string): string | null {
-    return state.historyCursors[sessionId] ?? null
+export function selectSessionRevert(state: StudioState, sessionId: string) {
+    return state.sessionReverts[sessionId] || null
 }
 
-/**
- * Check if more history is available (cursor exists and is not empty).
- */
-export function selectHasMoreHistory(state: StudioState, sessionId: string): boolean {
-    const cursor = state.historyCursors[sessionId]
-    return cursor !== undefined && cursor !== null
+export function selectChatSessionState(state: StudioState, chatKey: string) {
+    const sessionId = selectSessionIdForChatKey(state, chatKey)
+    return {
+        chatKey,
+        sessionId,
+        messages: selectMessagesForChatKey(state, chatKey),
+        prefixCount: selectPrefixCountForChatKey(state, chatKey),
+        isLoading: selectChatKeyIsLoading(state, chatKey),
+        status: sessionId ? selectSessionStatus(state, sessionId) : IDLE_STATUS,
+        permission: sessionId ? selectPendingPermission(state, sessionId) : null,
+        question: sessionId ? selectPendingQuestion(state, sessionId) : null,
+        todos: sessionId ? selectTodos(state, sessionId) : EMPTY_TODOS,
+        revert: sessionId ? selectSessionRevert(state, sessionId) : null,
+    }
 }

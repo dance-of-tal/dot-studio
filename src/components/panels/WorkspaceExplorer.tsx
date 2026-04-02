@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api';
 import { showToast } from '../../lib/toast';
 import { useStudioStore } from '../../store';
+import { bindExistingSession } from '../../store/session';
 import { DropdownMenu } from '../shared/DropdownMenu';
-import { mapSessionMessagesToChatMessages } from '../../lib/chat-messages';
 import { parseStudioSessionTitle, renameStudioSessionTitle } from '../../../shared/session-metadata';
 import {
     Folder,
@@ -73,7 +73,7 @@ export default function WorkspaceExplorer() {
         workspaceList,
         performers,
         sessions,
-        sessionMap,
+        chatKeyToSession,
         editingTarget,
         selectedPerformerId,
         selectedPerformerSessionId,
@@ -138,8 +138,8 @@ export default function WorkspaceExplorer() {
     );
 
     const performerSessionRows = useMemo(() => {
-        return buildPerformerSessionRows(sessions, performers, sessionMap);
-    }, [performers, sessionMap, sessions]);
+        return buildPerformerSessionRows(sessions, performers, chatKeyToSession);
+    }, [chatKeyToSession, performers, sessions]);
 
     const performerSessionsById = useMemo(() => {
         return groupPerformerSessionsById(performerSessionRows);
@@ -263,7 +263,6 @@ export default function WorkspaceExplorer() {
             focusedPerformerId: currentFocusedId,
             focusedNodeType: currentFocusedNodeType,
             performers: currentPerformers,
-            unregisterBinding,
         } = useStudioStore.getState();
 
         // Auto-unhide performer when clicking it in the sidebar
@@ -276,12 +275,6 @@ export default function WorkspaceExplorer() {
 
         closeEditor();
         selectPerformerSession(null);
-        unregisterBinding(performerId);
-        // Clear existing session binding so canvas shows an empty chat
-        useStudioStore.setState((state) => ({
-            sessionMap: { ...state.sessionMap, [performerId]: '' },
-            chats: { ...state.chats, [performerId]: [] },
-        }));
         const shouldSwitchFocus = currentFocusSnapshot && (
             currentFocusedId !== performerId
             || currentFocusedNodeType !== 'performer'
@@ -296,28 +289,10 @@ export default function WorkspaceExplorer() {
     };
 
     const openPerformerSession = async (performerId: string, session: { id: string; title?: string }) => {
-        useStudioStore.getState().registerBinding(performerId, session.id);
-        useStudioStore.setState((state) => ({
-            sessionMap: { ...state.sessionMap, [performerId]: session.id },
-        }));
         try {
-            const response = await api.chat.messages(session.id);
-            const messages = Array.isArray(response) ? response : (response.messages || []);
-            const mapped = mapSessionMessagesToChatMessages(messages);
-            useStudioStore.setState((state) => ({
-                chats: {
-                    ...state.chats,
-                    [performerId]: mapped,
-                },
-            }));
-            useStudioStore.getState().setSessionMessages(session.id, mapped);
-            if (!useStudioStore.getState().seEntities[session.id]) {
-                useStudioStore.getState().upsertSession({
-                    id: session.id,
-                    title: session.title,
-                    status: { type: 'idle' },
-                });
-            }
+            await bindExistingSession(useStudioStore.setState, useStudioStore.getState, performerId, session.id, {
+                title: session.title,
+            });
         } catch (error) {
             console.error('Failed to load session messages', error);
             showToast('Studio could not load messages for that thread.', 'error', {

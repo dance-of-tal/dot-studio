@@ -16,10 +16,17 @@ type Args = {
     runtimeTools: {
         resolvedTools: string[]
         selectedMcpServers: string[]
-        unavailableDetails: Array<{ serverName: string; reason: string }>
+        unavailableDetails: Array<{ serverName: string; reason: string; detail?: string }>
     } | null
     danceAssets: AssetCard[]
     drafts: Record<string, DraftAsset>
+}
+
+function formatUnavailableReason(detail: { serverName: string; reason: string; detail?: string }) {
+    if (detail.reason === 'shadowed_by_project') {
+        return `${detail.serverName} (shadowed by a project MCP definition)`
+    }
+    return `${detail.serverName} (${detail.reason})`
 }
 
 export function usePerformerChatComposerState({
@@ -111,16 +118,16 @@ export function usePerformerChatComposerState({
 
         if (runtimeTools && runtimeTools.selectedMcpServers.length > 0 && runtimeTools.resolvedTools.length === 0 && runtimeTools.unavailableDetails.length > 0) {
             showToast(
-                `Selected MCP servers are unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.`,
+                `Selected MCP servers are unavailable: ${runtimeTools.unavailableDetails.map(formatUnavailableReason).join(', ')}.`,
                 'error',
-                { title: 'MCP tools unavailable', dedupeKey: `performer-mcp-block:${performerId}` },
+                { title: 'MCP servers unavailable', dedupeKey: `performer-mcp-block:${performerId}` },
             )
             return
         }
 
         if (runtimeTools && runtimeTools.resolvedTools.length > 0 && runtimeTools.unavailableDetails.length > 0) {
             showToast(
-                `Some MCP tools are unavailable: ${runtimeTools.unavailableDetails.map((detail) => `${detail.serverName} (${detail.reason})`).join(', ')}.`,
+                `Some selected MCP servers are unavailable: ${runtimeTools.unavailableDetails.map(formatUnavailableReason).join(', ')}.`,
                 'warning',
                 { title: 'Partial MCP availability', dedupeKey: `performer-mcp-warn:${performerId}` },
             )

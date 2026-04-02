@@ -24,7 +24,7 @@ export interface SendMessageParams {
 
 export interface PostToBoardParams {
     entryKey: string
-    entryType: 'artifact' | 'fact' | 'task'
+    entryType: 'artifact' | 'finding' | 'task'
     content: string
     mode?: 'replace' | 'append'
     metadata?: Record<string, unknown>
@@ -71,9 +71,9 @@ export function getStaticActTools(workingDir: string): Array<{ name: string; con
             content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Send a direct message to a teammate. Use this for targeted coordination when only one teammate needs the update.",
+    description: "Send a direct message to a teammate. Use this for targeted coordination when only one teammate needs the update. Pass the teammate display name as recipient, not a relation name.",
     args: {
-        recipient: tool.schema.string().describe("Teammate name to message directly"),
+        recipient: tool.schema.string().describe("Teammate display name to message directly. Do not pass relation names like participant_1_to_participant_2."),
         message: tool.schema.string().describe("Message to send"),
         tag: tool.schema.string().optional().describe("Optional short label for the message"),
     },
@@ -100,11 +100,11 @@ export default tool({
             content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Create or update a shared note for the whole team. Keep entries compact and durable: decisions, findings, task status, and handoffs.",
+    description: "Create or update a shared note for the whole team. Prefer short Markdown summaries for decisions, findings, task status, and handoffs. Do not paste full deliverables or long raw dumps.",
     args: {
         entryKey: tool.schema.string().describe("Stable key for the shared note, such as api-spec or review-report"),
-        entryType: tool.schema.enum(["artifact", "fact", "task"]).describe("Type of shared note"),
-        content: tool.schema.string().describe("Compact entry content. Prefer a fresh summary over a long transcript or raw dump."),
+        entryType: tool.schema.enum(["artifact", "finding", "task"]).describe("Type of shared note"),
+        content: tool.schema.string().describe("Compact Markdown entry content. Prefer a fresh summary over a long transcript or raw dump."),
         mode: tool.schema.enum(["replace", "append"]).optional().describe("How to update an existing shared note. Prefer replace; append is only for short incremental additions."),
     },
     async execute(args, context) {

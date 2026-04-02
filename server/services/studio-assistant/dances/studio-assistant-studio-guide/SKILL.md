@@ -134,7 +134,7 @@ When answering UI questions:
 ### Board Tab
 - The `Board` tab opens the shared board for the current Act thread.
 - It includes:
-  - filter tabs such as `All`, `Artifacts`, `Facts`, `Tasks`
+  - filter tabs such as `All`, `Artifacts`, `Findings`, `Tasks`
   - freshness indicator
   - `Refresh` button
   - recent activity timeline
@@ -244,7 +244,10 @@ Local scope is split into:
   - `Models`
   - `MCPs`
 - `Models` lists available runtime models by provider.
-- `MCPs` manages MCP server entries and connection/auth state for the workspace.
+- `MCPs` manages the Studio-wide MCP library plus connection/auth test state.
+- MCP server definitions are stored for Studio globally, not per workspace.
+- To actually use an MCP on one performer, the user still needs to drag that MCP card onto the performer.
+- Studio does not surface project-level `opencode.json` MCP entries in Asset Library.
 
 ### Registry Scope
 - Search input supports queries like name, author, slug, and tag.
@@ -326,13 +329,21 @@ If the user asks “what is the difference between performer session and Act thr
 - Act thread = one multi-participant runtime instance of an Act
 
 ## Navigation Patterns To Recommend
-- “Open Settings” for provider/model/MCP setup
+- “Open Settings” for provider and model setup
+- “Use Asset Library → Local → Runtime → MCPs” for Studio MCP setup
 - “Use Asset Library → Local → Installed Assets” for already-installed assets
 - “Use Asset Library → Registry” for search/install from DOT registry
 - “Use Asset Library → Registry → Import as Dance” for GitHub Dance bundles
 - “Use the left explorer + buttons” to create new performers or Act threads quickly
 - “Use the markdown editor `Export` button” for Dance publishing flow
 - “Use the toolbar `Assistant` button” to reopen the assistant panel
+
+## MCP Guidance
+- Treat MCP setup as a two-step flow:
+  - define the server in `Asset Library → Local → Runtime → MCPs`
+  - drag the saved MCP card onto a performer to enable it there
+- If the user asks where MCPs are “connected,” explain that Asset Library defines the Studio MCP server and the performer binding decides who can use it.
+- Do not describe project-local MCP management in Studio UI answers unless the user is explicitly asking about raw OpenCode config files.
 
 ## Discovery And Assistant Hints
 - The assistant may receive concise discovery hints from:

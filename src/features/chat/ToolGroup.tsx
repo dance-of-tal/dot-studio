@@ -809,7 +809,7 @@ function TodoInlineList({ input, output }: { input?: Record<string, unknown>; ou
             items = output.split('\n').filter(Boolean).map(line => ({ content: line, status: 'pending' }))
         }
     }
-    const sessionTodos = useStudioStore.getState().todos
+    const sessionTodos = useStudioStore.getState().seTodos
     if (items.length === 0) {
         const allTodos: Todo[] = Object.values(sessionTodos).flat()
         if (allTodos.length > 0) items = allTodos.map(t => ({ content: t.content, status: t.status }))

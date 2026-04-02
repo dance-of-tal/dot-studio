@@ -4,6 +4,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { useState, useCallback, Children, isValidElement } from 'react';
 import { Check, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 import 'highlight.js/styles/github-dark.min.css';
+import './MarkdownRenderer.css';
 
 interface MarkdownRendererProps {
     content: string

@@ -27,13 +27,12 @@ import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
 import PerformerEditPanel from './PerformerEditPanel'
 import PerformerChatPanel from './PerformerChatPanel'
 import PerformerFrameHeaderMeta from './PerformerFrameHeaderMeta'
-import { selectMessagesForChatKey, selectChatKeyIsLoading } from '../../store/session'
+import { useChatSession } from '../../store/session/use-chat-session'
 
 import { Pencil, EyeOff, Maximize2, Minimize2 } from 'lucide-react'
 import './AgentFrame.css'
 import './AgentChat.css'
 import './AgentChatComposer.css'
-import './MarkdownRenderer.css'
 import './AgentInput.css'
 
 /* ── Main Component ── */
@@ -66,7 +65,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
     // ─── Store ────────────────────────────────────────
     const {
         selectedPerformerId, focusedPerformerId, editingTarget,
-        chatPrefixes, setPerformerAgentId,
+        setPerformerAgentId,
         togglePerformerVisibility, closeEditor,
         performers, drafts,
         openDraftEditor,
@@ -75,7 +74,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         setPerformerTalRef, setPerformerDanceDeliveryMode,
         setPerformerModel, setPerformerModelVariant,
         removePerformerMcp, setPerformerMcpBinding, removePerformerDance,
-        sessionMap,
         enterFocusMode, exitFocusMode,
         focusSnapshot,
     } = useStudioStore()
@@ -89,16 +87,16 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
     const isSelected = selectedPerformerId === id
     const focusNodeId = resolveFocusNodeId(focusSnapshot, focusedPerformerId)
     const isFocused = focusSnapshot?.type === 'performer' && focusNodeId === id
-    // Messages and loading from entity store with legacy fallback
-    const messages = useStudioStore((state) => selectMessagesForChatKey(state, id))
-    const isLoading = useStudioStore((state) => selectChatKeyIsLoading(state, id))
-    const prefixCount = useMemo(() => (chatPrefixes[id] || []).length, [chatPrefixes, id])
+    const chatSession = useChatSession(id)
+    const messages = chatSession.messages
+    const isLoading = chatSession.isLoading
+    const prefixCount = chatSession.prefixCount
     const modelConfigured = hasModelConfig(data.model)
     const isEditMode = editingTarget?.type === 'performer' && editingTarget.id === id
     const isActEditMode = !!data.actEditConnectVisible
     const shouldShowEditPanel = isEditMode || isActEditMode
     const performer = performers.find((item) => item.id === id) || null
-    const sessionId = sessionMap[id] || null
+    const sessionId = chatSession.sessionId
     const hasActiveSession = !!sessionId
 
     // ─── Queries ──────────────────────────────────────
@@ -135,14 +133,14 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         [performer?.mcpBindingMap, performerPresentation.declaredMcpServerNames],
     )
     const mcpBindingOptions = useMemo(
-        () => mcpServers.map((server) => ({ name: server.name, disabled: server.enabled === false })),
+        () => mcpServers.map((server) => ({ name: server.name, disabled: false })),
         [mcpServers],
     )
 
     // ─── MCP binding auto-cleanup ─────────────────────
     useEffect(() => {
         if (!performer?.mcpBindingMap) return
-        const validNames = new Set(mcpServers.filter((s) => s.enabled !== false).map((s) => s.name))
+        const validNames = new Set(mcpServers.map((s) => s.name))
         for (const [placeholderName, serverName] of Object.entries(performer.mcpBindingMap)) {
             if (!serverName || validNames.has(serverName)) continue
             setPerformerMcpBinding(id, placeholderName, null)

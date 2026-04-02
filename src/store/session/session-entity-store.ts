@@ -16,6 +16,12 @@ import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/
 
 export const IDLE_STATUS: SessionStatus = { type: 'idle' }
 
+function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+    const next = { ...record }
+    delete next[key]
+    return next
+}
+
 export const createSessionSlice: StateCreator<
     StudioState,
     [],
@@ -29,10 +35,11 @@ export const createSessionSlice: StateCreator<
     sePermissions: {},
     seQuestions: {},
     seTodos: {},
+    chatDrafts: {},
+    chatPrefixes: {},
     chatKeyToSession: {},
     sessionToChatKey: {},
     sessionLoading: {},
-    historyCursors: {},
     sessionReverts: {},
 
     // ── Session CRUD ──
@@ -42,35 +49,26 @@ export const createSessionSlice: StateCreator<
     })),
 
     removeSession: (sessionId: string) => set((state) => {
-        const { [sessionId]: _, ...restEntities } = state.seEntities
-        const { [sessionId]: _m, ...restMessages } = state.seMessages
-        const { [sessionId]: _s, ...restStatuses } = state.seStatuses
-        const { [sessionId]: _p, ...restPermissions } = state.sePermissions
-        const { [sessionId]: _q, ...restQuestions } = state.seQuestions
-        const { [sessionId]: _t, ...restTodos } = state.seTodos
-        const { [sessionId]: _l, ...restLoading } = state.sessionLoading
-        const { [sessionId]: _c, ...restCursors } = state.historyCursors
-
         // Clean up binding index
         const chatKey = state.sessionToChatKey[sessionId]
-        const nextChatKeyToSession = { ...state.chatKeyToSession }
-        const nextSessionToChatKey = { ...state.sessionToChatKey }
-        if (chatKey) {
-            delete nextChatKeyToSession[chatKey]
-        }
-        delete nextSessionToChatKey[sessionId]
+        const nextChatKeyToSession = chatKey ? withoutKey(state.chatKeyToSession, chatKey) : state.chatKeyToSession
+        const nextSessionToChatKey = withoutKey(state.sessionToChatKey, sessionId)
 
         return {
-            seEntities: restEntities,
-            seMessages: restMessages,
-            seStatuses: restStatuses,
-            sePermissions: restPermissions,
-            seQuestions: restQuestions,
-            seTodos: restTodos,
-            sessionLoading: restLoading,
-            historyCursors: restCursors,
+            seEntities: withoutKey(state.seEntities, sessionId),
+            seMessages: withoutKey(state.seMessages, sessionId),
+            seStatuses: withoutKey(state.seStatuses, sessionId),
+            sePermissions: withoutKey(state.sePermissions, sessionId),
+            seQuestions: withoutKey(state.seQuestions, sessionId),
+            seTodos: withoutKey(state.seTodos, sessionId),
+            sessionLoading: withoutKey(state.sessionLoading, sessionId),
+            sessionReverts: withoutKey(state.sessionReverts, sessionId),
             chatKeyToSession: nextChatKeyToSession,
             sessionToChatKey: nextSessionToChatKey,
+            ...(chatKey ? {
+                chatDrafts: withoutKey(state.chatDrafts, chatKey),
+                chatPrefixes: withoutKey(state.chatPrefixes, chatKey),
+            } : {}),
         }
     }),
 
@@ -117,8 +115,7 @@ export const createSessionSlice: StateCreator<
         if (loading) {
             return { sessionLoading: { ...state.sessionLoading, [sessionId]: true } }
         }
-        const { [sessionId]: _, ...rest } = state.sessionLoading
-        return { sessionLoading: rest }
+        return { sessionLoading: withoutKey(state.sessionLoading, sessionId) }
     }),
 
     // ── Dock state ──
@@ -127,94 +124,124 @@ export const createSessionSlice: StateCreator<
         sePermissions: { ...state.sePermissions, [sessionId]: permission },
     })),
 
-    clearSessionPermission: (sessionId: string) => set((state) => {
-        const { [sessionId]: _, ...rest } = state.sePermissions
-        return { sePermissions: rest }
-    }),
+    clearSessionPermission: (sessionId: string) => set((state) => ({
+        sePermissions: withoutKey(state.sePermissions, sessionId),
+    })),
 
     setSessionQuestion: (sessionId: string, question: QuestionRequest) => set((state) => ({
         seQuestions: { ...state.seQuestions, [sessionId]: question },
     })),
 
-    clearSessionQuestion: (sessionId: string) => set((state) => {
-        const { [sessionId]: _, ...rest } = state.seQuestions
-        return { seQuestions: rest }
-    }),
+    clearSessionQuestion: (sessionId: string) => set((state) => ({
+        seQuestions: withoutKey(state.seQuestions, sessionId),
+    })),
 
     setSessionTodos: (sessionId: string, todos: Todo[]) => set((state) => ({
         seTodos: { ...state.seTodos, [sessionId]: todos },
     })),
 
+    setChatDraftMessages: (chatKey: string, messages: ChatMessage[]) => set((state) => ({
+        chatDrafts: { ...state.chatDrafts, [chatKey]: messages },
+    })),
+
+    appendChatDraftMessage: (chatKey: string, message: ChatMessage) => set((state) => ({
+        chatDrafts: {
+            ...state.chatDrafts,
+            [chatKey]: [...(state.chatDrafts[chatKey] || []), message],
+        },
+    })),
+
+    removeChatDraftMessage: (chatKey: string, messageId: string) => set((state) => ({
+        chatDrafts: {
+            ...state.chatDrafts,
+            [chatKey]: (state.chatDrafts[chatKey] || []).filter((message) => message.id !== messageId),
+        },
+    })),
+
+    clearChatDraftMessages: (chatKey: string) => set((state) => ({
+        chatDrafts: withoutKey(state.chatDrafts, chatKey),
+    })),
+
+    setChatPrefixMessages: (chatKey: string, messages: ChatMessage[]) => set((state) => ({
+        chatPrefixes: { ...state.chatPrefixes, [chatKey]: messages },
+    })),
+
+    appendChatPrefixMessage: (chatKey: string, message: ChatMessage) => set((state) => ({
+        chatPrefixes: {
+            ...state.chatPrefixes,
+            [chatKey]: [...(state.chatPrefixes[chatKey] || []), message],
+        },
+    })),
+
+    clearChatPrefixMessages: (chatKey: string) => set((state) => ({
+        chatPrefixes: withoutKey(state.chatPrefixes, chatKey),
+    })),
+
     // ── Binding index ──
 
-    registerBinding: (chatKey: string, sessionId: string) => set((state) => ({
-        chatKeyToSession: { ...state.chatKeyToSession, [chatKey]: sessionId },
-        sessionToChatKey: { ...state.sessionToChatKey, [sessionId]: chatKey },
-    })),
+    registerBinding: (chatKey: string, sessionId: string) => set((state) => {
+        const nextChatKeyToSession = { ...state.chatKeyToSession }
+        const nextSessionToChatKey = { ...state.sessionToChatKey }
+
+        const previousSessionId = nextChatKeyToSession[chatKey]
+        if (previousSessionId && previousSessionId !== sessionId) {
+            delete nextSessionToChatKey[previousSessionId]
+        }
+
+        const previousChatKey = nextSessionToChatKey[sessionId]
+        if (previousChatKey && previousChatKey !== chatKey) {
+            delete nextChatKeyToSession[previousChatKey]
+        }
+
+        nextChatKeyToSession[chatKey] = sessionId
+        nextSessionToChatKey[sessionId] = chatKey
+
+        return {
+            chatKeyToSession: nextChatKeyToSession,
+            sessionToChatKey: nextSessionToChatKey,
+        }
+    }),
 
     unregisterBinding: (chatKey: string) => set((state) => {
         const sessionId = state.chatKeyToSession[chatKey]
-        const nextChatKey = { ...state.chatKeyToSession }
-        const nextSession = { ...state.sessionToChatKey }
-        delete nextChatKey[chatKey]
-        if (sessionId) {
-            delete nextSession[sessionId]
-        }
         return {
-            chatKeyToSession: nextChatKey,
-            sessionToChatKey: nextSession,
+            chatKeyToSession: withoutKey(state.chatKeyToSession, chatKey),
+            sessionToChatKey: sessionId ? withoutKey(state.sessionToChatKey, sessionId) : state.sessionToChatKey,
         }
     }),
 
     unregisterBindingBySession: (sessionId: string) => set((state) => {
         const chatKey = state.sessionToChatKey[sessionId]
-        const nextChatKey = { ...state.chatKeyToSession }
-        const nextSession = { ...state.sessionToChatKey }
-        delete nextSession[sessionId]
-        if (chatKey) {
-            delete nextChatKey[chatKey]
-        }
         return {
-            chatKeyToSession: nextChatKey,
-            sessionToChatKey: nextSession,
+            chatKeyToSession: chatKey ? withoutKey(state.chatKeyToSession, chatKey) : state.chatKeyToSession,
+            sessionToChatKey: withoutKey(state.sessionToChatKey, sessionId),
         }
     }),
-
-    // ── History cursor ──
-
-    setHistoryCursor: (sessionId: string, cursor: string | null) => set((state) => ({
-        historyCursors: { ...state.historyCursors, [sessionId]: cursor },
-    })),
 
     setSessionRevert: (sessionId: string, revert: { messageId: string; partId?: string }) => set((state) => ({
         sessionReverts: { ...state.sessionReverts, [sessionId]: revert },
     })),
 
-    clearSessionRevert: (sessionId: string) => set((state) => {
-        const { [sessionId]: _, ...rest } = state.sessionReverts
-        return { sessionReverts: rest }
-    }),
+    clearSessionRevert: (sessionId: string) => set((state) => ({
+        sessionReverts: withoutKey(state.sessionReverts, sessionId),
+    })),
 
     // ── Bulk clear ──
 
     clearSessionData: (sessionId: string) => set((state) => {
-        const { [sessionId]: _m, ...restMessages } = state.seMessages
-        const { [sessionId]: _s, ...restStatuses } = state.seStatuses
-        const { [sessionId]: _p, ...restPermissions } = state.sePermissions
-        const { [sessionId]: _q, ...restQuestions } = state.seQuestions
-        const { [sessionId]: _t, ...restTodos } = state.seTodos
-        const { [sessionId]: _l, ...restLoading } = state.sessionLoading
-        const { [sessionId]: _c, ...restCursors } = state.historyCursors
-        const { [sessionId]: _r, ...restReverts } = state.sessionReverts
+        const chatKey = state.sessionToChatKey[sessionId]
         return {
-            seMessages: restMessages,
-            seStatuses: restStatuses,
-            sePermissions: restPermissions,
-            seQuestions: restQuestions,
-            seTodos: restTodos,
-            sessionLoading: restLoading,
-            historyCursors: restCursors,
-            sessionReverts: restReverts,
+            seMessages: withoutKey(state.seMessages, sessionId),
+            seStatuses: withoutKey(state.seStatuses, sessionId),
+            sePermissions: withoutKey(state.sePermissions, sessionId),
+            seQuestions: withoutKey(state.seQuestions, sessionId),
+            seTodos: withoutKey(state.seTodos, sessionId),
+            sessionLoading: withoutKey(state.sessionLoading, sessionId),
+            sessionReverts: withoutKey(state.sessionReverts, sessionId),
+            ...(chatKey ? {
+                chatDrafts: withoutKey(state.chatDrafts, chatKey),
+                chatPrefixes: withoutKey(state.chatPrefixes, chatKey),
+            } : {}),
         }
     }),
 })

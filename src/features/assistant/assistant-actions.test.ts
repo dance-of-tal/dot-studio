@@ -184,6 +184,80 @@ describe('assistant-actions', () => {
         })
     })
 
+    it('creates an act when relations use legacy from/to performer refs', async () => {
+        const result = await applyAssistantActions([
+            {
+                type: 'createPerformer',
+                ref: 'macro_analyst',
+                name: 'Macro Analyst',
+            },
+            {
+                type: 'createPerformer',
+                ref: 'equity_researcher',
+                name: 'Equity Researcher',
+            },
+            {
+                type: 'createAct',
+                name: 'Investment Analyst Team',
+                participantPerformerRefs: ['macro_analyst', 'equity_researcher'],
+                relations: [
+                    {
+                        fromPerformerRef: 'macro_analyst',
+                        toPerformerRef: 'equity_researcher',
+                        direction: 'one-way',
+                        name: 'macro handoff',
+                        description: 'Macro Analyst hands regime context to Equity Researcher.',
+                    },
+                ],
+            },
+        ])
+
+        expect(result).toEqual({ applied: 3, failed: 0 })
+
+        const act = useStudioStore.getState().acts[0]
+        expect(act?.name).toBe('Investment Analyst Team')
+        expect(Object.keys(act?.participants || {})).toHaveLength(2)
+        expect(act?.relations).toHaveLength(1)
+        expect(act?.relations[0]).toMatchObject({
+            direction: 'one-way',
+            name: 'macro handoff',
+            description: 'Macro Analyst hands regime context to Equity Researcher.',
+        })
+    })
+
+    it('fails to create a relation when name or description is missing', async () => {
+        const result = await applyAssistantActions([
+            {
+                type: 'createPerformer',
+                ref: 'macro_analyst',
+                name: 'Macro Analyst',
+            },
+            {
+                type: 'createPerformer',
+                ref: 'equity_researcher',
+                name: 'Equity Researcher',
+            },
+            {
+                type: 'createAct',
+                name: 'Investment Analyst Team',
+                participantPerformerRefs: ['macro_analyst', 'equity_researcher'],
+                relations: [
+                    {
+                        sourcePerformerRef: 'macro_analyst',
+                        targetPerformerRef: 'equity_researcher',
+                        direction: 'one-way',
+                        name: 'macro handoff',
+                        description: '',
+                    },
+                ],
+            },
+        ])
+
+        expect(result).toEqual({ applied: 2, failed: 1 })
+
+        expect(useStudioStore.getState().acts).toHaveLength(0)
+    })
+
     it('deletes an act by name', async () => {
         useStudioStore.getState().addAct('Code Review')
 

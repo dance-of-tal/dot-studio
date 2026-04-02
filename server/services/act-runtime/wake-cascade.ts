@@ -216,7 +216,7 @@ async function injectWakeTarget(
         // Use dynamic imports to avoid circular dependencies
         const { getOpencode } = await import('../../lib/opencode.js')
         const oc = await getOpencode()
-        const { resolveSessionExecutionContext } = await import('../../lib/session-execution.js')
+        const { resolveSessionOwnership } = await import('../session-ownership-service.js')
 
         // Resolve performer config from workspace (model, TAL, Dance, MCP)
         const { resolvePerformerForWake } = await import('./wake-performer-resolver.js')
@@ -261,7 +261,7 @@ async function injectWakeTarget(
         }
 
         const sessionContext = sessionId
-            ? await resolveSessionExecutionContext(sessionId)
+            ? await resolveSessionOwnership(sessionId)
             : null
         const executionDir = sessionContext?.workingDir || threadManager.workingDir
 
@@ -280,6 +280,7 @@ async function injectWakeTarget(
 
         let agentName: string | undefined
         let modelOverride: { providerID: string; modelID: string } | undefined
+        let projectedTools: Record<string, boolean> | undefined
 
         if (performerConfig?.model) {
             // Full performer projection — same as sendStudioChatMessage path
@@ -287,7 +288,8 @@ async function injectWakeTarget(
                 const { ensurePerformerProjection } = await import(
                     '../opencode-projection/stage-projection-service.js'
                 )
-                const ensured = await ensurePerformerProjection({
+                const { prepareRuntimeForExecution } = await import('../runtime-preparation-service.js')
+                const prepared = await prepareRuntimeForExecution(threadManager.workingDir, () => ensurePerformerProjection({
                     performerId: participantKey,
                     performerName: performerConfig.performerName,
                     talRef: performerConfig.talRef,
@@ -295,16 +297,21 @@ async function injectWakeTarget(
                     model: performerConfig.model,
                     modelVariant: performerConfig.modelVariant,
                     mcpServerNames: performerConfig.mcpServerNames,
-                    executionDir,
                     workingDir: threadManager.workingDir,
                     scope: 'act',
                     actId: actDefinition.id,
                     collaborationPromptSection,
                     extraTools: actExtraTools,
-                })
+                }))
+                if (prepared.blocked) {
+                    console.warn(`[wake-cascade] Projection update blocked for "${participantKey}" while another session is running`)
+                    return emptyWakeCascadeResult()
+                }
+                const ensured = prepared.payload
                 // Act scope always uses build agent, ignoring performer planMode
                 const buildAgent = ensured.compiled.agentNames[ACT_AGENT_POSTURE]
                 if (buildAgent) agentName = buildAgent
+                projectedTools = ensured.toolMap
                 modelOverride = {
                     providerID: performerConfig.model.provider,
                     modelID: performerConfig.model.modelId,
@@ -334,6 +341,7 @@ async function injectWakeTarget(
             directory: executionDir,
             agent: agentName,
             model: modelOverride,
+            tools: projectedTools,
             parts: [{ type: 'text', text: promptText }],
         })
 

@@ -21,6 +21,7 @@ import {
 } from './act-slice-actions'
 import { buildExitFocusModeState } from './workspace-focus-actions'
 import { resolvePreferredActThreadId } from '../lib/act-threads'
+import { clearChatSessionView } from './session'
 
 function createActEditorState(
     actId: string,
@@ -73,6 +74,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             activeThreadParticipantKey: null,
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [id] })
         return id
     },
 
@@ -94,6 +96,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                 workspaceDirty: true,
             }
         })
+        get().recordStudioChange({ kind: 'act', actIds: [id], workspaceWide: true })
     },
 
     renameAct: (id, name) => {
@@ -101,6 +104,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             acts: s.acts.map((a) => (a.id === id ? { ...a, name } : a)),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [id] })
         scheduleActRuntimeSync(get, set, id)
     },
 
@@ -109,6 +113,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             acts: s.acts.map((a) => (a.id === id ? { ...a, description } : a)),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [id] })
         scheduleActRuntimeSync(get, set, id)
     },
 
@@ -117,6 +122,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             acts: s.acts.map((a) => (a.id === id ? { ...a, actRules: rules } : a)),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [id] })
         scheduleActRuntimeSync(get, set, id)
     },
 
@@ -125,6 +131,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             acts: s.acts.map((a) => (a.id === id ? { ...a, safety } : a)),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [id] })
         scheduleActRuntimeSync(get, set, id)
     },
 
@@ -198,6 +205,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             }),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [actId] })
         scheduleActRuntimeSync(get, set, actId)
         return newKey
     },
@@ -276,6 +284,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             }),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [actId] })
         scheduleActRuntimeSync(get, set, actId)
     },
 
@@ -293,6 +302,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             }),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [actId] })
         scheduleActRuntimeSync(get, set, actId)
     },
 
@@ -392,6 +402,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                 workspaceDirty: true,
             }
         })
+        get().recordStudioChange({ kind: 'act', actIds: [actId] })
         scheduleActRuntimeSync(get, set, actId)
     },
 
@@ -408,6 +419,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             }),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [actId] })
         scheduleActRuntimeSync(get, set, actId)
     },
 
@@ -436,6 +448,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             acts: s.acts.map((a) => (a.id === id ? { ...a, meta: { ...a.meta, ...meta } } : a)),
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'act', actIds: [id] })
     },
 
     importActFromAsset: (asset) => {
@@ -467,35 +480,23 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
 
     deleteThread: async (actId, threadId) => {
         await api.actRuntime.deleteThread(actId, threadId)
+        const threadKeyPrefix = `act:${actId}:thread:${threadId}:participant:`
+        const threadChatKeys = Object.keys(get().chatKeyToSession).filter((key) => key.startsWith(threadKeyPrefix))
         set((state: StudioState) => {
             const threads = (state.actThreads[actId] || []).filter((t) => t.id !== threadId)
             const nextActiveThread = state.activeThreadId === threadId
                 ? resolvePreferredActThreadId(threads, null)
                 : state.activeThreadId
 
-            // Clean up orphaned sessionMap and chats entries for this thread
-            const threadKeyPrefix = `act:${actId}:thread:${threadId}:participant:`
-            const sessionMap = { ...state.sessionMap }
-            const chats = { ...state.chats }
-            for (const key of Object.keys(sessionMap)) {
-                if (key.startsWith(threadKeyPrefix)) {
-                    delete sessionMap[key]
-                }
-            }
-            for (const key of Object.keys(chats)) {
-                if (key.startsWith(threadKeyPrefix)) {
-                    delete chats[key]
-                }
-            }
-
             return {
                 actThreads: { ...state.actThreads, [actId]: threads },
                 activeThreadId: nextActiveThread,
                 activeThreadParticipantKey: nextActiveThread ? state.activeThreadParticipantKey : null,
-                sessionMap,
-                chats,
             }
         })
+        for (const chatKey of threadChatKeys) {
+            clearChatSessionView(get, chatKey)
+        }
     },
 
     renameThread: (actId, threadId, name) => {

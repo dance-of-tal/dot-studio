@@ -62,14 +62,26 @@ import {
 } from './workspace-focus-actions'
 import { buildPerformerDeleteCascade } from './cascade-cleanup'
 import { hasRunningStudioSessions } from './runtime-reload-utils'
+import {
+    classifyStudioChange,
+    clearProjectionDirtyState,
+    createEmptyProjectionDirtyState,
+    mergeProjectionDirtyState,
+} from './runtime-change-policy'
+import { clearChatSessionView } from './session'
 
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
 export const canvasTerminalIdCounter = { value: 0 }
 const TRACKING_WINDOW_ID = 'workspace-tracking-window'
+const RUNTIME_RELOAD_RETRY_MS = 300
 
 function makeId(prefix: string) {
     return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+function sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /** Ensure performer name is unique on the canvas by appending " (N)" suffix if needed. */
@@ -119,15 +131,9 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         inspectorFocus: null,
         workspaceList: [],
         workspaceDirty: false,
+        projectionDirty: createEmptyProjectionDirtyState(),
         runtimeReloadPending: false,
-        chats: {},
-        chatPrefixes: {},
-        sessionMap: {},
-        pendingPermissions: {},
-        pendingQuestions: {},
-        todos: {},
         sessions: [],
-        loadingPerformerId: null,
         activeChatPerformerId: null,
         assistantModel: null,
         assistantAvailableModels: [],
@@ -139,10 +145,11 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         sePermissions: {},
         seQuestions: {},
         seTodos: {},
+        chatDrafts: {},
+        chatPrefixes: {},
         chatKeyToSession: {},
         sessionToChatKey: {},
         sessionLoading: {},
-        historyCursors: {},
         sessionReverts: {},
     }
 }
@@ -168,6 +175,7 @@ export const createWorkspaceSlice: StateCreator<
     inspectorFocus: null,
     workspaceList: [],
     workspaceDirty: false,
+    projectionDirty: createEmptyProjectionDirtyState(),
     runtimeReloadPending: false,
     theme: (localStorage.getItem('dot-theme') as 'light' | 'dark') || 'light',
     workingDir: '',
@@ -209,6 +217,34 @@ export const createWorkspaceSlice: StateCreator<
     setCanvasCenter: (x, y) => set({ canvasCenter: { x, y } }),
     exitActLayoutMode: () => set({ layoutActId: null }),
 
+    markProjectionDirty: (patch) => set((state) => ({
+        projectionDirty: mergeProjectionDirtyState(state.projectionDirty, {
+            kind: 'draft',
+            performerIds: patch.performerIds || [],
+            actIds: patch.actIds || [],
+            draftIds: patch.draftIds || [],
+            workspaceWide: patch.workspaceWide === true,
+        }),
+    })),
+
+    clearProjectionDirty: (patch) => set((state) => ({
+        projectionDirty: clearProjectionDirtyState(state.projectionDirty, patch),
+    })),
+
+    recordStudioChange: (change) => {
+        const changeClass = classifyStudioChange(change)
+        if (changeClass === 'lazy_projection') {
+            set((state) => ({
+                projectionDirty: mergeProjectionDirtyState(state.projectionDirty, change),
+            }))
+            return changeClass
+        }
+        if (changeClass === 'runtime_reload') {
+            get().markRuntimeReloadPending()
+        }
+        return changeClass
+    },
+
     addPerformer: (name, x, y) => {
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
@@ -229,6 +265,7 @@ export const createWorkspaceSlice: StateCreator<
             inspectorFocus: null,
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'performer', performerIds: [id] })
         return id
     },
 
@@ -252,32 +289,38 @@ export const createWorkspaceSlice: StateCreator<
             inspectorFocus: null,
             workspaceDirty: true,
         }))
+        get().recordStudioChange({ kind: 'performer', performerIds: [id] })
     },
 
-    applyPerformerAsset: (performerId, asset) => set((s) => {
-        const normalized = normalizePerformerAssetInput(asset)
-        return {
-            performers: s.performers.map((performer) => {
-                if (performer.id !== performerId) {
-                    return performer
-                }
-                return applyPerformerPatch(performer, {
-                    talRef: normalized.talRef,
-                    danceRefs: normalized.danceRefs,
-                    model: normalized.model,
-                    modelPlaceholder: normalized.modelPlaceholder,
-                    modelVariant: normalized.modelVariant,
-                    mcpServerNames: normalized.mcpServerNames,
-                    mcpBindingMap: normalized.mcpBindingMap,
-                    declaredMcpConfig: normalized.declaredMcpConfig,
-                    meta: normalized.meta,
-                })
-            }),
-            workspaceDirty: true,
-        }
-    }),
+    applyPerformerAsset: (performerId, asset) => {
+        set((s) => {
+            const normalized = normalizePerformerAssetInput(asset)
+            return {
+                performers: s.performers.map((performer) => {
+                    if (performer.id !== performerId) {
+                        return performer
+                    }
+                    return applyPerformerPatch(performer, {
+                        talRef: normalized.talRef,
+                        danceRefs: normalized.danceRefs,
+                        model: normalized.model,
+                        modelPlaceholder: normalized.modelPlaceholder,
+                        modelVariant: normalized.modelVariant,
+                        mcpServerNames: normalized.mcpServerNames,
+                        mcpBindingMap: normalized.mcpBindingMap,
+                        declaredMcpConfig: normalized.declaredMcpConfig,
+                        meta: normalized.meta,
+                    })
+                }),
+                workspaceDirty: true,
+            }
+        })
+        get().recordStudioChange({ kind: 'performer', performerIds: [performerId] })
+    },
 
     removePerformer: (id) => {
+        const sessionId = get().chatKeyToSession[id] || null
+
         set((s) => {
             const focusExit = buildExitFocusModeState(s)
             const baseActs = (focusExit?.acts as StudioState['acts'] | undefined) || s.acts
@@ -295,6 +338,28 @@ export const createWorkspaceSlice: StateCreator<
                 workspaceDirty: true,
             }
         })
+
+        if (sessionId) {
+            clearChatSessionView(get, id)
+            get().removeSession(sessionId)
+            set((state) => ({
+                sessions: state.sessions.filter((session) => session.id !== sessionId),
+            }))
+
+            void api.chat.deleteSession(sessionId)
+                .catch((error) => {
+                    console.error('Failed to delete performer session', error)
+                    showToast('Failed to delete performer session', 'error', {
+                        title: 'Thread delete failed',
+                        dedupeKey: `thread:delete:${sessionId}`,
+                    })
+                })
+                .finally(() => {
+                    void get().listSessions()
+                })
+        }
+
+        get().recordStudioChange({ kind: 'performer', performerIds: [id], workspaceWide: true })
     },
 
     updatePerformerPosition: (id, x, y) => set((s) => ({
@@ -342,6 +407,11 @@ export const createWorkspaceSlice: StateCreator<
                 acts: nextActs,
                 workspaceDirty: true,
             }
+        })
+        get().recordStudioChange({
+            kind: 'performer',
+            performerIds: [id],
+            actIds: affectedActIds,
         })
         for (const actId of affectedActIds) {
             scheduleActRuntimeSync(get, set, actId)
@@ -486,7 +556,15 @@ export const createWorkspaceSlice: StateCreator<
         }
 
         try {
-            const result = await api.opencodeApplyRuntimeReload()
+            let result = await api.opencodeApplyRuntimeReload()
+            if (
+                result.blocked
+                && result.runningSessions > 0
+                && !hasRunningStudioSessions(get())
+            ) {
+                await sleep(RUNTIME_RELOAD_RETRY_MS)
+                result = await api.opencodeApplyRuntimeReload()
+            }
             if (result.applied) {
                 set({ runtimeReloadPending: false })
                 return true

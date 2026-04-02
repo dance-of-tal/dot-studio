@@ -19,8 +19,13 @@ Use this skill for navigation and product-usage questions.
 - Click a performer or Act to inspect it
 - Double-click an Act to enter its choreography view
 - Drag a performer onto an Act to attach it as a participant
-- Open Settings to configure providers, models, and MCP servers
+- Open Settings to configure providers and models
+- Open Asset Library → Local → Runtime → MCPs to define Studio MCP servers
 - Open the Asset Library to browse registry assets
+
+## MCP Guidance
+- Studio MCP servers are managed in the Studio-wide MCP library, not per-workspace through the assistant.
+- After defining an MCP server, drag its card onto a performer to enable it there.
 
 ## Registry and Drafts
 - Registry assets are browsed through the Asset Library

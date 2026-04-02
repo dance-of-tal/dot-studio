@@ -17,6 +17,7 @@ export {
     selectChatKeyForSession,
     selectStreamTarget,
     selectMessagesForChatKey,
+    selectPrefixCountForChatKey,
     selectMessagesForSession,
     selectSessionStatus,
     selectSessionIsLoading,
@@ -24,13 +25,26 @@ export {
     selectPendingPermission,
     selectPendingQuestion,
     selectTodos,
-    selectHistoryCursor,
-    selectHasMoreHistory,
+    selectSessionRevert,
+    selectChatSessionState,
 } from './session-selectors'
 
 export type { SessionStreamTarget } from './session-selectors'
 
 export { createEventIngest } from './event-ingest'
+export {
+    registerSessionBinding,
+    detachChatSession,
+    syncSessionSnapshot,
+    bindExistingSession,
+    createFreshSessionBinding,
+    ensureSession,
+    appendLocalMessage,
+    appendSystemNotice,
+    moveDraftMessageToSession,
+    clearChatSessionView,
+    resolveChatKeySession,
+} from './session-commands'
 
 export {
     reduceMessageUpdated,

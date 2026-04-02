@@ -28,20 +28,13 @@ function createMinimalState(overrides: Partial<StudioState> = {}): StudioState {
         sePermissions: {},
         seQuestions: {},
         seTodos: {},
+        chatDrafts: {},
+        chatPrefixes: {},
         chatKeyToSession: {},
         sessionToChatKey: {},
         sessionLoading: {},
-        historyCursors: {},
-        // Legacy chat slice fields (needed for type compatibility)
-        chats: {},
-        chatPrefixes: {},
         activeChatPerformerId: null,
-        sessionMap: {},
-        loadingPerformerId: null,
         sessions: [],
-        pendingPermissions: {},
-        pendingQuestions: {},
-        todos: {},
         ...overrides,
     } as StudioState
 }
@@ -397,10 +390,10 @@ describe('Event Reducer', () => {
             expect(state.seTodos[SESSION_ID]).toHaveLength(1)
         })
 
-        it('also sets todos for chatKey for UI lookup', () => {
+        it('stores todos only by sessionId', () => {
             reduceTodoUpdated(SESSION_ID, [{ id: 'todo-1', content: 'Fix bug' }] as any, get, set)
 
-            expect(state.seTodos[CHAT_KEY]).toHaveLength(1)
+            expect(state.seTodos[CHAT_KEY]).toBeUndefined()
         })
     })
 

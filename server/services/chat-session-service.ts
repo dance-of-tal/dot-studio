@@ -1,9 +1,9 @@
 import type { QuestionAnswer, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import { getOpencode } from '../lib/opencode.js'
-import { unregisterSessionExecutionContext } from '../lib/session-execution.js'
 import { normalizeIncompleteToolParts, waitForSessionToSettle } from '../lib/chat-session.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { responseData } from './opencode-service.js'
+import { deleteSessionOwnership } from './session-ownership-service.js'
 
 type OpenCodeSessionSummary = {
     id: string
@@ -76,7 +76,7 @@ export async function deleteStudioChatSession(workingDir: string, sessionId: str
         sessionID: sessionId,
         ...directoryQuery,
     }))
-    await unregisterSessionExecutionContext(sessionId)
+    await deleteSessionOwnership(sessionId)
     return { ok: true as const }
 }
 

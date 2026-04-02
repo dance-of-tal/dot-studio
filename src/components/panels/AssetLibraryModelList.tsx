@@ -12,6 +12,7 @@ type Props = {
     assetsLoading: boolean
     filteredInstalledAssets: LibraryAsset[]
     filteredMcps: McpServer[]
+    mcpEmptyMessage: string
     groupedModels: Array<{ key: string; label: string; items: RuntimeModelCatalogEntry[]; connected?: boolean }>
     selectedAsset: AssetPanelAsset | null
     selectedAssetKey: string | null
@@ -29,6 +30,8 @@ type Props = {
     onDeleteDraft: AssetPanelHandler
     onEditDraft?: AssetPanelHandler
     onUninstall?: AssetPanelHandler
+    onEditMcp?: AssetPanelHandler
+    onDeleteMcp?: AssetPanelHandler
 }
 
 export default function AssetLibraryModelList({
@@ -38,6 +41,7 @@ export default function AssetLibraryModelList({
     assetsLoading,
     filteredInstalledAssets,
     filteredMcps,
+    mcpEmptyMessage,
     groupedModels,
     selectedAsset,
     selectedAssetKey,
@@ -55,6 +59,8 @@ export default function AssetLibraryModelList({
     onDeleteDraft,
     onEditDraft,
     onUninstall,
+    onEditMcp,
+    onDeleteMcp,
 }: Props) {
     return (
         <div className="asset-library-body">
@@ -114,13 +120,15 @@ export default function AssetLibraryModelList({
                         })
                 )}
                 {showMcps && (
-                    filteredMcps.length === 0 ? <div className="empty-state">No MCP servers connected.</div> :
-                        filteredMcps.map((mcp) => (
+                    filteredMcps.length === 0 ? <div className="empty-state">{mcpEmptyMessage}</div> :
+                        filteredMcps.map((mcp, index) => (
                             <DraggableMcp
-                                key={mcp.name}
+                                key={`${mcp.name}-${index}`}
                                 mcp={mcp}
                                 selected={selectedAssetKey === getAssetSelectionKey({ kind: 'mcp', ...mcp })}
                                 onSelect={onSelectAsset}
+                                onEdit={onEditMcp}
+                                onDelete={onDeleteMcp}
                             />
                         ))
                 )}
@@ -138,6 +146,8 @@ export default function AssetLibraryModelList({
                 onImportToStage={undefined}
                 onDeleteDraft={onDeleteDraft}
                 onUninstall={onUninstall}
+                onEditMcp={onEditMcp}
+                onDeleteMcp={onDeleteMcp}
             />
         </div>
     )

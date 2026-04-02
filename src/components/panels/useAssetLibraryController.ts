@@ -64,7 +64,6 @@ export function useAssetLibraryController() {
     const [selectedAsset, setSelectedAsset] = useState<AssetPanelAsset | null>(null)
     const [expandedModelProviders, setExpandedModelProviders] = useState<Record<string, boolean>>({})
     const [expandedMcpEntries, setExpandedMcpEntries] = useState<Record<string, boolean>>({})
-    const [showMcpRawConfig, setShowMcpRawConfig] = useState(false)
     const [authoringHint, setAuthoringHint] = useState<string | null>(null)
     const [detailActionStatus, setDetailActionStatus] = useState<string | null>(null)
     const [detailActionLoading, setDetailActionLoading] = useState<AssetPanelAction | null>(null)
@@ -97,9 +96,7 @@ export function useAssetLibraryController() {
         addMcpEntry,
         removeMcpEntry,
         saveMcpCatalog,
-        resetMcpCatalog,
         connectMcpServer,
-        disconnectMcpServer,
         authenticateMcpServer,
         clearMcpAuth,
     } = mcp
@@ -274,6 +271,7 @@ export function useAssetLibraryController() {
                 }
                 return newState
             })
+            useStudioStore.getState().recordStudioChange({ kind: 'draft', workspaceWide: true })
             await invalidateInstalledAssetQueries(asset.kind)
             setSelectedAsset(null)
             setUninstallPlan(null)
@@ -349,6 +347,11 @@ export function useAssetLibraryController() {
                 }
 
                 return newState
+            })
+            useStudioStore.getState().recordStudioChange({
+                kind: 'draft',
+                draftIds: result.deletedIds,
+                workspaceWide: true,
             })
 
             setSelectedAsset(null)
@@ -431,6 +434,7 @@ export function useAssetLibraryController() {
         filteredInstalledAssets,
         groupedModels,
         filteredMcps,
+        liveMcpServers: mcpServers,
         selectedAsset,
         setSelectedAsset,
         selectedAssetKey,
@@ -453,13 +457,9 @@ export function useAssetLibraryController() {
         addMcpEntry,
         removeMcpEntry,
         saveMcpCatalog,
-        resetMcpCatalog,
         connectMcpServer,
-        disconnectMcpServer,
         authenticateMcpServer,
         clearMcpAuth,
-        showMcpRawConfig,
-        setShowMcpRawConfig,
         expandedMcpEntries,
         setExpandedMcpEntries,
         expandedModelProviders,

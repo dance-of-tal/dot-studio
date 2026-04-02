@@ -31,7 +31,7 @@ export default function App() {
   const acts = useStudioStore(s => s.acts);
   const drafts = useStudioStore(s => s.drafts);
   const markdownEditors = useStudioStore(s => s.markdownEditors);
-  const sessionMap = useStudioStore(s => s.sessionMap);
+  const chatKeyToSession = useStudioStore(s => s.chatKeyToSession);
   const canvasTerminals = useStudioStore(s => s.canvasTerminals);
 
   const workspaceDirty = useStudioStore(s => s.workspaceDirty);
@@ -58,7 +58,7 @@ export default function App() {
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [workspaceDirty, performers, acts, drafts, markdownEditors, workingDir, sessionMap, canvasTerminals]);
+  }, [workspaceDirty, performers, acts, drafts, markdownEditors, workingDir, chatKeyToSession, canvasTerminals]);
 
   // Apply theme to HTML root
   useEffect(() => {

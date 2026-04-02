@@ -28,8 +28,8 @@ export interface AssetCard {
     modelVariant?: string | null
     mcpConfig?: Record<string, unknown> | null
     declaredMcpServerNames?: string[]
-    projectMcpMatches?: string[]
-    projectMcpMissing?: string[]
+    matchedMcpServerNames?: string[]
+    missingMcpServerNames?: string[]
     participantCount?: number
     relationCount?: number
     participants?: InstalledActParticipant[]
@@ -156,9 +156,8 @@ export interface McpServer {
     status: 'connected' | 'disconnected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration' | 'unknown'
     tools: Array<{ name: string; description?: string }>
     resources: Array<unknown>
-    enabled?: boolean
     defined?: boolean
-    configType?: 'local' | 'remote' | 'toggle'
+    configType?: 'local' | 'remote'
     authStatus?: 'ready' | 'needs_auth' | 'n/a'
     error?: string
     oauthConfigured?: boolean
@@ -183,7 +182,6 @@ export interface PerformerNode {
     mcpServerNames: string[]
     mcpBindingMap?: Record<string, string>
     declaredMcpConfig?: Record<string, unknown> | null
-    activeSessionId?: string
     danceDeliveryMode: DanceDeliveryMode
     planMode?: boolean
     hidden?: boolean
@@ -284,9 +282,13 @@ export interface CanvasTrackingWindow {
 }
 
 export interface SavedWorkspaceSnapshot {
-    schemaVersion: 5
+    schemaVersion: 1
     workingDir: string
     performers: PerformerNode[]
+    chatBindings?: Record<string, string>
+    assistantModel?: { provider: string; modelId: string } | null
+    appliedAssistantActionMessageIds?: Record<string, true>
+    assistantActionResults?: Record<string, { applied: number; failed: number }>
     acts?: WorkspaceAct[]
     markdownEditors: MarkdownEditorNode[]
     canvasTerminals?: CanvasTerminalNode[]
@@ -319,7 +321,7 @@ export interface RuntimeToolResolution {
     unavailableTools: string[]
     unavailableDetails: Array<{
         serverName: string
-        reason: 'not_defined' | 'disabled' | 'needs_auth' | 'needs_client_registration' | 'connect_failed' | 'connected_but_no_tools_for_model'
+        reason: 'not_defined' | 'shadowed_by_project' | 'needs_auth' | 'needs_client_registration' | 'connect_failed'
         toolId?: string
         detail?: string
     }>

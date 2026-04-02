@@ -9,14 +9,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Send, Square, Workflow, Users, User, Circle, Pencil, Plus, AlertCircle, Clipboard } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { hasModelConfig } from '../../lib/performers'
-import {
-    selectMessagesForChatKey,
-    selectChatKeyIsLoading,
-    selectPendingPermission,
-    selectPendingQuestion,
-    selectSessionIdForChatKey,
-    selectTodos,
-} from '../../store/session'
+import { useChatSession } from '../../store/session/use-chat-session'
 import ThreadBody from '../chat/ThreadBody'
 import ChatMessageContent from '../chat/ChatMessageContent'
 import {
@@ -35,22 +28,15 @@ import { usePermissionInteraction } from '../../hooks/usePermissionInteraction'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
 import { resolveDisplayedActThread } from '../../lib/act-threads'
+import { buildActParticipantChatKey } from '../../../shared/chat-targets'
 import './ActChatPanel.css'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
-const EMPTY_TODOS: never[] = []
 const EMPTY_THREADS: never[] = []
-
 
 interface ActChatPanelProps {
     actId: string
 }
-
-function buildActParticipantChatKey(actId: string, threadId: string, participantKey: string) {
-    return `act:${actId}:thread:${threadId}:participant:${participantKey}`
-}
-
-
 
 export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const {
@@ -93,27 +79,16 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         ? buildActParticipantChatKey(actId, currentThread.id, activeParticipantKey)
         : null
 
-    // Messages from entity store (falls back to legacy chats[chatKey])
-    const messages: ChatMessage[] = useStudioStore((state) => {
-        if (!chatKey) return EMPTY_MESSAGES
-        return selectMessagesForChatKey(state, chatKey)
-    })
-
-    const isLoading = useStudioStore((state) => {
-        if (!chatKey) return false
-        return selectChatKeyIsLoading(state, chatKey)
-    })
-    const sessionId = useStudioStore((state) => chatKey ? selectSessionIdForChatKey(state, chatKey) : null)
-    const actTodos = useStudioStore((state) => {
-        if (!sessionId) return EMPTY_TODOS
-        return selectTodos(state, sessionId)
-    })
-    const permissionRequest = useStudioStore((state) => (
-        sessionId ? selectPendingPermission(state, sessionId) : null
-    ))
-    const questionRequest = useStudioStore((state) => (
-        sessionId ? selectPendingQuestion(state, sessionId) : null
-    ))
+    const chatSession = useChatSession(chatKey)
+    const messages: ChatMessage[] = chatSession.messages || EMPTY_MESSAGES
+    const isLoading = chatSession.isLoading
+    const sessionId = chatSession.sessionId
+    const actTodos = chatSession.todos
+    const permissionRequest = chatSession.permission
+    const questionRequest = chatSession.question
+    const setSessionTodos = useStudioStore((state) => state.setSessionTodos)
+    const chatKeyToSession = useStudioStore((state) => state.chatKeyToSession)
+    const sessionLoading = useStudioStore((state) => state.sessionLoading)
     const hasPendingPermission = !!permissionRequest
     const isTodoLive = isLoading || hasPendingPermission
 
@@ -135,18 +110,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
 
     const handleTodoClear = useCallback(() => {
         if (!sessionId) return
-        useStudioStore.setState((state) => {
-            const next = { ...state.todos }
-            const nextEntity = { ...state.seTodos }
-            delete next[sessionId]
-            if (chatKey) delete next[chatKey]
-            delete nextEntity[sessionId]
-            return {
-                todos: next,
-                seTodos: nextEntity,
-            }
-        })
-    }, [sessionId, chatKey])
+        setSessionTodos(sessionId, [])
+    }, [sessionId, setSessionTodos])
 
     const activeParticipantLabel = useMemo(
         () => activeParticipantKey
@@ -154,10 +119,19 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             : null,
         [act, activeParticipantKey, performers],
     )
+    const participantLoadingStates = useMemo(() => {
+        if (!currentThread) {
+            return new Map<string, boolean>()
+        }
 
-    // Polling removed — entity store is event-driven via dual-write in integrationSlice.
-    // SSE events flow through event-ingest → event-reducer → seMessages,
-    // and selectMessagesForChatKey reads from seMessages with legacy fallback.
+        return new Map(
+            participantKeys.map((key) => {
+                const participantChatKey = buildActParticipantChatKey(actId, currentThread.id, key)
+                const participantSessionId = chatKeyToSession[participantChatKey]
+                return [key, participantSessionId ? !!sessionLoading[participantSessionId] : false]
+            }),
+        )
+    }, [actId, chatKeyToSession, currentThread, participantKeys, sessionLoading])
 
     // Auto-scroll is now handled by ThreadBody's useAutoScroll hook
 
@@ -231,14 +205,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                     </button>
                 ) : participantKeys.map((key) => {
                     const isActive = activeParticipantKey === key
-                    const participantChatKey = currentThread
-                        ? buildActParticipantChatKey(actId, currentThread.id, key)
-                        : null
-                    const isKeyLoading = participantChatKey
-                        ? useStudioStore.getState().chatKeyToSession[participantChatKey]
-                            ? selectChatKeyIsLoading(useStudioStore.getState(), participantChatKey)
-                            : false
-                        : false
+                    const isKeyLoading = participantLoadingStates.get(key) || false
                     return (
                         <button
                             key={key}

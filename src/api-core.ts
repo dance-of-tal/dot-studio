@@ -42,13 +42,11 @@ function withApiBase(url: string) {
     return `${API_BASE}${withWorkingDirQuery(url, resolveWorkingDirContext())}`
 }
 
-export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-    const workingDir = resolveWorkingDirContext()
+export async function fetchApiResponse(url: string, init?: RequestInit): Promise<Response> {
     const res = await fetch(withApiBase(url), {
         ...init,
         headers: {
             'Content-Type': 'application/json',
-            ...(workingDir ? { 'X-DOT-Working-Dir': workingDir } : {}),
             ...init?.headers,
         },
     })
@@ -67,6 +65,11 @@ export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> 
         }
         throw new StudioApiError(payload, res.status)
     }
+    return res
+}
+
+export async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
+    const res = await fetchApiResponse(url, init)
     return res.json()
 }
 

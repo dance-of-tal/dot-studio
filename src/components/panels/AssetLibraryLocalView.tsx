@@ -1,7 +1,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import type { McpServer } from '../../types'
 import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
-import type { ProjectMcpEntryDraft } from '../modals/settings-utils'
+import type { McpEntryDraft } from './mcp-catalog-utils'
 import { Cpu, FolderOpen, HardDrive, Hexagon, Plus, Search, Server, Users, Zap } from 'lucide-react'
 import type {
     AssetScope,
@@ -37,6 +37,7 @@ type Props = {
     filteredInstalledAssets: LibraryAsset[]
     groupedModels: Array<{ key: string; label: string; items: RuntimeModelCatalogEntry[]; connected?: boolean }>
     filteredMcps: McpServer[]
+    liveMcpServers: McpServer[]
     selectedAsset: AssetPanelAsset | null
     selectedAssetKey: string | null
     selectedInstalled: boolean
@@ -56,22 +57,18 @@ type Props = {
     showInstalledAssets: boolean
     showModels: boolean
     showMcps: boolean
-    mcpDraftEntries: ProjectMcpEntryDraft[]
+    mcpDraftEntries: McpEntryDraft[]
     mcpCatalogDirty: boolean
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
     pendingMcpAuthName: string | null
     updateMcpEntry: McpCatalogState['updateMcpEntry']
-    addMcpEntry: () => void
+    addMcpEntry: () => string
     removeMcpEntry: (key: string) => void
-    saveMcpCatalog: () => Promise<void>
-    resetMcpCatalog: () => void
+    saveMcpCatalog: () => Promise<boolean>
     connectMcpServer: (name: string) => Promise<void>
-    disconnectMcpServer: (name: string) => Promise<void>
     authenticateMcpServer: (name: string) => Promise<void>
     clearMcpAuth: (name: string) => Promise<void>
-    showMcpRawConfig: boolean
-    setShowMcpRawConfig: (value: boolean | ((prev: boolean) => boolean)) => void
     expandedMcpEntries: Record<string, boolean>
     setExpandedMcpEntries: Dispatch<SetStateAction<Record<string, boolean>>>
     expandedModelProviders: Record<string, boolean>
@@ -98,6 +95,7 @@ export default function AssetLibraryLocalView({
     filteredInstalledAssets,
     groupedModels,
     filteredMcps,
+    liveMcpServers,
     selectedAsset,
     selectedAssetKey,
     selectedInstalled,
@@ -126,13 +124,9 @@ export default function AssetLibraryLocalView({
     addMcpEntry,
     removeMcpEntry,
     saveMcpCatalog,
-    resetMcpCatalog,
     connectMcpServer,
-    disconnectMcpServer,
     authenticateMcpServer,
     clearMcpAuth,
-    showMcpRawConfig,
-    setShowMcpRawConfig,
     expandedMcpEntries,
     setExpandedMcpEntries,
     expandedModelProviders,
@@ -154,7 +148,7 @@ export default function AssetLibraryLocalView({
     const installedEmptyMessage = `No ${labelForInstalledKind(installedKind).toLowerCase()} assets found.`
 
     return (
-        <>
+        <div className="asset-library-local-view">
             <div className="scope-selector asset-scope-selector">
                 <button className={`scope-btn ${localSection === 'installed' ? 'active' : ''}`} onClick={() => setLocalSection('installed')}>
                     Installed Assets
@@ -241,27 +235,25 @@ export default function AssetLibraryLocalView({
             {authoringHint ? <div className="asset-authoring-hint">{authoringHint}</div> : null}
 
             {showMcps ? (
-                <AssetLibraryMcpManager
-                    filteredMcps={filteredMcps}
-                    mcpDraftEntries={mcpDraftEntries}
-                    mcpCatalogDirty={mcpCatalogDirty}
-                    mcpCatalogStatus={mcpCatalogStatus}
-                    mcpCatalogSaving={mcpCatalogSaving}
-                    pendingMcpAuthName={pendingMcpAuthName}
-                    updateMcpEntry={updateMcpEntry}
-                    addMcpEntry={addMcpEntry}
-                    removeMcpEntry={removeMcpEntry}
-                    saveMcpCatalog={saveMcpCatalog}
-                    resetMcpCatalog={resetMcpCatalog}
-                    connectMcpServer={connectMcpServer}
-                    disconnectMcpServer={disconnectMcpServer}
-                    authenticateMcpServer={authenticateMcpServer}
-                    clearMcpAuth={clearMcpAuth}
-                    showMcpRawConfig={showMcpRawConfig}
-                    setShowMcpRawConfig={setShowMcpRawConfig}
-                    expandedMcpEntries={expandedMcpEntries}
-                    setExpandedMcpEntries={setExpandedMcpEntries}
-                />
+                <div className="asset-library-body asset-library-body--mcp">
+                    <AssetLibraryMcpManager
+                        liveMcps={liveMcpServers}
+                        mcpDraftEntries={mcpDraftEntries}
+                        mcpCatalogDirty={mcpCatalogDirty}
+                        mcpCatalogStatus={mcpCatalogStatus}
+                        mcpCatalogSaving={mcpCatalogSaving}
+                        pendingMcpAuthName={pendingMcpAuthName}
+                        updateMcpEntry={updateMcpEntry}
+                        addMcpEntry={addMcpEntry}
+                        removeMcpEntry={removeMcpEntry}
+                        saveMcpCatalog={saveMcpCatalog}
+                        connectMcpServer={connectMcpServer}
+                        authenticateMcpServer={authenticateMcpServer}
+                        clearMcpAuth={clearMcpAuth}
+                        expandedMcpEntries={expandedMcpEntries}
+                        setExpandedMcpEntries={setExpandedMcpEntries}
+                    />
+                </div>
             ) : null}
 
             {showModels ? (
@@ -274,31 +266,34 @@ export default function AssetLibraryLocalView({
                 </div>
             ) : null}
 
-            <AssetLibraryModelList
-                showInstalledAssets={showInstalledAssets}
-                showModels={showModels}
-                showMcps={showMcps}
-                assetsLoading={assetsLoading}
-                filteredInstalledAssets={filteredInstalledAssets}
-                filteredMcps={filteredMcps}
-                groupedModels={groupedModels}
-                selectedAsset={selectedAsset}
-                selectedAssetKey={selectedAssetKey}
-                selectedInstalled={selectedInstalled}
-                authUser={authUser}
-                detailActionStatus={detailActionStatus}
-                detailActionLoading={detailActionLoading}
-                expandedModelProviders={expandedModelProviders}
-                setExpandedModelProviders={setExpandedModelProviders}
-                installedEmptyMessage={installedEmptyMessage}
-                onSelectAsset={onSelectAsset}
-                onCloseAsset={onCloseAsset}
-                onSaveLocal={onSaveLocal}
-                onPublish={onPublish}
-                onDeleteDraft={onDeleteDraft}
-                onEditDraft={onEditDraft}
-                onUninstall={onUninstall}
-            />
-        </>
+            {!showMcps ? (
+                <AssetLibraryModelList
+                    showInstalledAssets={showInstalledAssets}
+                    showModels={showModels}
+                    showMcps={showMcps}
+                    assetsLoading={assetsLoading}
+                    filteredInstalledAssets={filteredInstalledAssets}
+                    filteredMcps={filteredMcps}
+                    mcpEmptyMessage=""
+                    groupedModels={groupedModels}
+                    selectedAsset={selectedAsset}
+                    selectedAssetKey={selectedAssetKey}
+                    selectedInstalled={selectedInstalled}
+                    authUser={authUser}
+                    detailActionStatus={detailActionStatus}
+                    detailActionLoading={detailActionLoading}
+                    expandedModelProviders={expandedModelProviders}
+                    setExpandedModelProviders={setExpandedModelProviders}
+                    installedEmptyMessage={installedEmptyMessage}
+                    onSelectAsset={onSelectAsset}
+                    onCloseAsset={onCloseAsset}
+                    onSaveLocal={onSaveLocal}
+                    onPublish={onPublish}
+                    onDeleteDraft={onDeleteDraft}
+                    onEditDraft={onEditDraft}
+                    onUninstall={onUninstall}
+                />
+            ) : null}
+        </div>
     )
 }

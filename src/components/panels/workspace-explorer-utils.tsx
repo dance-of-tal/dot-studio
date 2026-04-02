@@ -53,7 +53,7 @@ export function workspaceLabel(workingDir: string) {
 export function buildPerformerSessionRows(
     sessions: PerformerSessionRecord[],
     performers: PerformerNode[],
-    sessionMap: Record<string, string>,
+    chatKeyToSession: Record<string, string>,
 ): PerformerSessionRow[] {
     const rows = sessions
         .map((session) => {
@@ -66,7 +66,7 @@ export function buildPerformerSessionRows(
             return {
                 session,
                 performerId,
-                active: sessionMap[performer.id] === session.id,
+                active: chatKeyToSession[performer.id] === session.id,
             }
         })
         .filter((entry): entry is PerformerSessionRow => !!entry && typeof entry.performerId === 'string')

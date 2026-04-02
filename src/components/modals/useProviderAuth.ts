@@ -8,6 +8,7 @@
 
 import { useMemo, useState } from 'react'
 import { api } from '../../api'
+import { useStudioStore } from '../../store'
 import type {
     ProviderCard,
     ProviderAuthMethod,
@@ -132,6 +133,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
     async function waitForBrowserOauth(providerId: string, methodIndex: number) {
         try {
             await api.provider.oauthCallback(providerId, methodIndex)
+            useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
             const provider = providers.find((entry) => entry.id === providerId)
             await handleAuthSuccess(providerId, provider?.name || providerId)
         } catch (err) {
@@ -213,6 +215,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
 
         try {
             await api.provider.oauthCallback(providerId, flow.methodIndex, flow.code.trim())
+            useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
             const provider = providers.find((entry) => entry.id === providerId)
             await handleAuthSuccess(providerId, provider?.name || providerId)
         } catch (err) {
@@ -242,6 +245,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
                 type: 'api',
                 key: flow.code.trim(),
             })
+            useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
             const provider = providers.find((entry) => entry.id === providerId)
             await handleAuthSuccess(providerId, provider?.name || providerId)
         } catch (err) {
@@ -265,6 +269,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         const isCustomSource = provider?.source === 'custom'
         try {
             await api.provider.clearAuth(providerId)
+            useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
             // For custom-source providers (e.g. OpenCode Zen), also add to disabled_providers
             // to suppress them from the connected list — mirrors OpenCode web's disableProvider flow.
             if (isCustomSource) {
@@ -275,9 +280,10 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
                     ? projectRes.config.disabled_providers
                     : []
                 if (!current.includes(providerId)) {
-                    await api.config.update({
+                    await api.config.updateProject({
                         disabled_providers: [...current, providerId],
                     }).catch(() => { /* best-effort */ })
+                    useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
                 }
             }
             clearProviderFlow(providerId)

@@ -1,7 +1,12 @@
 import type { QuestionAnswer, PermissionRequest } from '@opencode-ai/sdk/v2'
 import type { ChatSendRequest, ChatSessionCreateResponse } from '../../shared/chat-contracts'
-import { createApiEventSource, deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
+import { createApiEventSource, deleteJSON, fetchApiResponse, fetchJSON, postJSON, putJSON } from '../api-core'
 import type { SessionMessageLike } from '../lib/chat-messages'
+
+export type ChatSessionMessagesResponse = {
+    messages: SessionMessageLike[]
+    nextCursor: string | null
+}
 
 export const chatApi = {
     createSession: (performerId: string, performerName: string, configHash: string, actId?: string) =>
@@ -25,7 +30,7 @@ export const chatApi = {
     abort: (id: string) =>
         postJSON<{ ok: boolean }>(`/api/chat/sessions/${id}/abort`),
 
-    messages: (id: string, options?: { limit?: number; before?: string }) => {
+    messages: async (id: string, options?: { limit?: number; before?: string }): Promise<ChatSessionMessagesResponse> => {
         const params = new URLSearchParams()
         if (typeof options?.limit === 'number' && Number.isFinite(options.limit) && options.limit > 0) {
             params.set('limit', String(options.limit))
@@ -34,7 +39,12 @@ export const chatApi = {
             params.set('before', options.before.trim())
         }
         const query = params.toString()
-        return fetchJSON<SessionMessageLike[] | { messages: SessionMessageLike[] }>(`/api/chat/sessions/${id}/messages${query ? `?${query}` : ''}`)
+        const res = await fetchApiResponse(`/api/chat/sessions/${id}/messages${query ? `?${query}` : ''}`)
+        const payload = await res.json() as SessionMessageLike[] | { messages?: SessionMessageLike[] }
+        return {
+            messages: Array.isArray(payload) ? payload : (payload.messages || []),
+            nextCursor: res.headers.get('x-next-cursor')?.trim() || null,
+        }
     },
 
     diff: (id: string) =>

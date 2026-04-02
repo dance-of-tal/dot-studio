@@ -24,15 +24,31 @@ Use this skill when the user is asking about Act structure, relation design, or 
 
 ## Design Rules
 - If an Act has multiple participants, it should also have at least one relation.
+- For workflow or team requests, a participant-only Act is usually incomplete and should be treated as wrong unless the user explicitly asked for an unconnected group.
+- If the user asks for something like a `d2c company`, `investment team`, or `review workflow`, create the Act with participants and relations in the same `createAct` action.
 - For a brand-new Act whose participants are already known, prefer one `createAct` with `participantPerformerRefs`, `participantPerformerIds`, or `participantPerformerNames` instead of follow-up attach actions.
 - Use `attachPerformerToAct` mainly when extending an existing Act.
 - Always give each new relation both a clear `name` and `description`.
+- Use `sourceParticipantKey` / `sourcePerformerId` / `sourcePerformerRef` / `sourcePerformerName` and the matching `target...` fields for new relations.
+- Do not generate `from...` or `to...` relation field names.
 - Treat subscriptions as wake-up filters, not permissions.
 - Use `actRules` for whole-Act instructions that every participant should see.
 - Use `callboardKeys` as the field name even if the UI describes the same surface as shared board or shared notes.
 - Prefer focused Acts over one giant workflow graph.
 - Reuse existing performers when they already match the requested role.
 - Avoid promising legacy relation metadata or runtime-only fields unless the current assistant action surface can actually express them.
+
+## Self-Check
+- End with exactly one raw `<assistant-actions>...</assistant-actions>` block.
+- Do not emit bare JSON or fenced JSON for mutations.
+- If the new Act has multiple participants and represents a workflow/team, include at least one relation.
+- Every new relation must include source, target, direction, name, and description.
+
+Example:
+
+```html
+<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"brand","name":"Brand Strategist"},{"type":"createPerformer","ref":"growth","name":"Growth Marketer"},{"type":"createPerformer","ref":"ops","name":"Ecommerce Operator"},{"type":"createAct","name":"D2C Company","participantPerformerRefs":["brand","growth","ops"],"relations":[{"sourcePerformerRef":"brand","targetPerformerRef":"growth","direction":"one-way","name":"campaign brief","description":"Brand Strategist hands positioning and campaign priorities to Growth Marketer."},{"sourcePerformerRef":"growth","targetPerformerRef":"ops","direction":"one-way","name":"launch handoff","description":"Growth Marketer hands launch requirements and expected volume to Ecommerce Operator."}]}]}</assistant-actions>
+```
 
 ## Legacy Fields To Avoid
 - participant `id`

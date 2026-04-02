@@ -96,6 +96,8 @@
     display: flex;
     align-items: flex-start;
     gap: 8px;
+    min-width: 0;
+    max-width: 100%;
     background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
     border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border-light));
     border-left: 3px solid var(--accent);
@@ -115,8 +117,11 @@
 
 .user-input-text {
     flex: 1;
+    min-width: 0;
     white-space: pre-wrap;
     word-wrap: break-word;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .thread-msg__body-with-actions {

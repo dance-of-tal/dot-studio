@@ -42,11 +42,23 @@ export function buildActContext(
     // ── Collaboration Runtime ────────────────────────
     lines.push('# Coordination Tools')
     lines.push('- Use `message_teammate` for direct coordination with one teammate.')
+    lines.push('- For `message_teammate`, set `recipient` to the teammate display name exactly as shown below. Do not pass relation names like `participant_1_to_participant_2`.')
     lines.push('- Use `update_shared_board` to keep compact shared state: decisions, task status, findings, and handoffs.')
+    lines.push('- Write shared board entries as short Markdown summaries. Use headings, bullets, and checklists when they help teammates scan quickly.')
+    lines.push('- Do not use the shared board as the storage location for full deliverables. Keep final outputs in the working directory or the proper destination, then post a short Markdown handoff or summary.')
     lines.push('- Use `read_shared_board` for the relevant key you need. Avoid reading the full board unless you need a full resync.')
     lines.push('- Prefer replacing stale shared notes with a fresh summary instead of appending long incremental logs.')
     lines.push('- Use `wait_until` when you are blocked on future input. Good self-wake conditions include `board_key_exists`, `message_received`, `timeout`, `all_of`, and `any_of`.')
     lines.push('')
+
+    const teammateNames = Object.entries(actDefinition.participants || {})
+        .filter(([key]) => key !== participantKey)
+        .map(([key, binding]) => binding.displayName || key)
+    if (teammateNames.length > 0) {
+        lines.push('# Valid Teammates')
+        lines.push(`- Use these names as ` + '`recipient`' + ` values: ${teammateNames.join(', ')}`)
+        lines.push('')
+    }
 
     // ── Available Relations ─────────────────────────
     const myRelations = actDefinition.relations.filter(

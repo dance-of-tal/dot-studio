@@ -5,7 +5,7 @@ import { jsonOpencodeError } from '../lib/opencode-errors.js'
 import { listRuntimeModels, listProviderSummaries } from '../lib/model-catalog.js'
 import {
     getLspStatus,
-    getOpenCodeConfig,
+    getGlobalOpenCodeConfig,
     getOpenCodeHealth,
     getOpenCodeUnavailableHealth,
     getProviderAuthStatus,
@@ -15,7 +15,8 @@ import {
     listOpenCodeToolsForModel,
     readProjectConfigSnapshot,
     restartManagedOpenCode,
-    updateOpenCodeConfig,
+    updateGlobalOpenCodeConfig,
+    updateProjectOpenCodeConfig,
 } from '../services/opencode-service.js'
 import { applyStudioRuntimeReload } from '../services/runtime-reload-service.js'
 import { requestWorkingDir } from './route-errors.js'
@@ -112,7 +113,7 @@ opencodeCore.post('/api/runtime/tools', async (c) => {
 
 opencodeCore.get('/api/config', async (c) => {
     try {
-        return c.json(await getOpenCodeConfig(requestWorkingDir(c)))
+        return c.json(await getGlobalOpenCodeConfig())
     } catch (err) {
         return jsonOpencodeError(c, err)
     }
@@ -125,7 +126,16 @@ opencodeCore.get('/api/config/project', async (c) => {
 opencodeCore.put('/api/config', async (c) => {
     const body = await c.req.json()
     try {
-        return c.json(await updateOpenCodeConfig(requestWorkingDir(c), body))
+        return c.json(await updateGlobalOpenCodeConfig(body))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+opencodeCore.put('/api/config/project', async (c) => {
+    const body = await c.req.json()
+    try {
+        return c.json(await updateProjectOpenCodeConfig(requestWorkingDir(c), body))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

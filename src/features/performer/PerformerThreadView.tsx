@@ -16,9 +16,7 @@ import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
 import { SessionReview, collectSessionDiffs } from '../chat/SessionReview'
 import { useStudioStore } from '../../store'
-import { selectPendingPermission, selectSessionIdForChatKey, selectTodos } from '../../store/session'
-
-const EMPTY_TODOS: never[] = []
+import { useChatSession } from '../../store/session/use-chat-session'
 
 type Props = {
     performerId: string
@@ -41,17 +39,10 @@ export default function PerformerThreadView({
     onOpenRevert,
     composer,
 }: Props) {
-    const sessionId = useStudioStore((state) => selectSessionIdForChatKey(state, performerId))
-    const todos = useStudioStore((state) => (
-        sessionId ? selectTodos(state, sessionId) : EMPTY_TODOS
-    ))
-    const revertState = useStudioStore((state) => (
-        sessionId ? state.sessionReverts[sessionId] || null : null
-    ))
-    const pendingPermission = useStudioStore((state) => (
-        sessionId ? !!selectPendingPermission(state, sessionId) : false
-    ))
+    const chatSession = useChatSession(performerId)
+    const { sessionId, todos, revert: revertState, permission } = chatSession
     const restoreRevertedMessage = useStudioStore((state) => state.restoreRevertedMessage)
+    const setSessionTodos = useStudioStore((state) => state.setSessionTodos)
     const [showReview, setShowReview] = useState(false)
 
     const visibleMessages = useMemo(() => {
@@ -76,24 +67,12 @@ export default function PerformerThreadView({
     const hasDiffs = useMemo(() => collectSessionDiffs(visibleMessages).length > 0, [visibleMessages])
 
     // TodoDock lifecycle: live when loading or blocked on permission
-    const isTodoLive = isLoading || pendingPermission
+    const isTodoLive = isLoading || !!permission
 
     const handleTodoClear = useCallback(() => {
-        useStudioStore.setState((state) => {
-            const next = { ...state.todos }
-            const nextEntity = { ...state.seTodos }
-            delete next[performerId]
-            const resolvedSessionId = selectSessionIdForChatKey(state, performerId)
-            if (resolvedSessionId) {
-                delete next[resolvedSessionId]
-                delete nextEntity[resolvedSessionId]
-            }
-            return {
-                todos: next,
-                seTodos: nextEntity,
-            }
-        })
-    }, [performerId])
+        if (!sessionId) return
+        setSessionTodos(sessionId, [])
+    }, [sessionId, setSessionTodos])
 
     const composerWithDock = (
         <>

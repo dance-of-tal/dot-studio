@@ -1,7 +1,9 @@
 import { api } from '../../api'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
+import { logChatDebug, summarizeMessagesForChatDebug } from '../../lib/chat-debug'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers'
-import type { AssetRef } from '../../types'
+import type { AssetRef, ChatMessage } from '../../types'
+import { buildActParticipantChatKey, describeChatTarget } from '../../../shared/chat-targets'
 import {
     addChatMessage,
     appendPerformerSystemMessage,
@@ -11,17 +13,43 @@ import {
     type ChatSet,
 } from './chat-internals'
 import { resolveChatRuntimeTarget } from './chat-runtime-target'
+import {
+    ensureSession,
+    moveDraftMessageToSession,
+    registerSessionBinding,
+    resolveChatKeySession,
+} from '../session'
+import { collectRuntimeDraftIds, preparePendingRuntimeExecution } from '../runtime-execution'
 
-function buildActParticipantChatKey(actId: string, threadId: string, participantKey: string) {
-    return `act:${actId}:thread:${threadId}:participant:${participantKey}`
-}
-
-const SETTLEMENT_FALLBACK_GRACE_MS = 1200
-const SETTLEMENT_FALLBACK_POLL_MS = 1000
-const SETTLEMENT_FALLBACK_MAX_POLLS = 45
+const STREAM_RECOVERY_GRACE_MS = 1200
+const STREAM_RECOVERY_POLL_MS = 1000
+const STREAM_RECOVERY_MAX_POLLS = 45
 
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function buildSnapshotSignature(messages: ChatMessage[]) {
+    return messages
+        .map((message) => `${message.id}:${message.role}:${message.timestamp}:${message.content.length}`)
+        .join('|')
+}
+
+function hasSettledAssistantReply(messages: ChatMessage[]) {
+    let latestUserIndex = -1
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (messages[index].role === 'user') {
+            latestUserIndex = index
+            break
+        }
+    }
+
+    const tail = latestUserIndex >= 0 ? messages.slice(latestUserIndex + 1) : messages
+    return tail.some((message) => (
+        (message.role === 'assistant' || message.role === 'system')
+        && !message.id.startsWith('temp-')
+        && message.content.trim().length > 0
+    ))
 }
 
 export function createChatSendActions(
@@ -33,41 +61,122 @@ export function createChatSendActions(
             resetMessages?: Array<{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }>
             actId?: string
             performerName?: string
+            preserveDraftMessages?: boolean
         },
     ) => Promise<{ sessionId: string | null; runtimeConfig: ReturnType<typeof resolvePerformerRuntimeConfig> }>,
 ) {
-    const scheduleSettlementFallbackSync = (chatKey: string, sessionId: string) => {
+    const activeRecoveryPolls = new Map<string, symbol>()
+
+    const scheduleStreamingRecoverySync = (chatKey: string, sessionId: string) => {
+        const recoveryToken = Symbol(sessionId)
+        activeRecoveryPolls.set(sessionId, recoveryToken)
+
         void (async () => {
-            await sleep(SETTLEMENT_FALLBACK_GRACE_MS)
-
-            for (let attempt = 0; attempt < SETTLEMENT_FALLBACK_MAX_POLLS; attempt++) {
-                const state = get()
-                if (state.sessionMap[chatKey] !== sessionId) {
-                    return
-                }
-                if (!state.sessionLoading[sessionId]) {
+            try {
+                await sleep(STREAM_RECOVERY_GRACE_MS)
+                if (activeRecoveryPolls.get(sessionId) !== recoveryToken) {
                     return
                 }
 
-                try {
-                    const { status } = await api.chat.status(sessionId)
-                    if (status?.type === 'idle' || status?.type === 'error') {
-                        await syncPerformerMessages(set, get, chatKey, sessionId).catch(() => {})
-                        if (get().sessionMap[chatKey] !== sessionId) {
-                            return
-                        }
-                        get().setSessionStatus(sessionId, status)
-                        get().setSessionLoading(sessionId, false)
-                        if (get().loadingPerformerId === chatKey) {
-                            set({ loadingPerformerId: null })
-                        }
+                let lastSnapshotSignature: string | null = null
+                let stableSnapshotPolls = 0
+                logChatDebug('fallback', 'start recovery polling', { chatKey, sessionId })
+
+                for (let attempt = 0; attempt < STREAM_RECOVERY_MAX_POLLS; attempt++) {
+                    if (activeRecoveryPolls.get(sessionId) !== recoveryToken) {
                         return
                     }
-                } catch {
-                    // Ignore fallback polling errors and keep waiting for SSE.
-                }
 
-                await sleep(SETTLEMENT_FALLBACK_POLL_MS)
+                    const state = get()
+                    if (state.chatKeyToSession[chatKey] !== sessionId) {
+                        logChatDebug('fallback', 'stop recovery polling: binding changed', { chatKey, sessionId, attempt })
+                        return
+                    }
+                    const localStatus = state.seStatuses[sessionId]?.type || null
+                    if (localStatus === 'idle' || localStatus === 'error') {
+                        get().setSessionLoading(sessionId, false)
+                        logChatDebug('fallback', 'stop recovery polling: local status settled', {
+                            chatKey,
+                            sessionId,
+                            attempt,
+                            status: localStatus,
+                        })
+                        return
+                    }
+                    if (!state.sessionLoading[sessionId]) {
+                        logChatDebug('fallback', 'stop recovery polling: session not loading', { chatKey, sessionId, attempt })
+                        return
+                    }
+
+                    try {
+                        const { status } = await api.chat.status(sessionId)
+                        const snapshot = await syncPerformerMessages(set, get, chatKey, sessionId).catch(() => null)
+                        if (get().chatKeyToSession[chatKey] !== sessionId) {
+                            return
+                        }
+
+                        if (snapshot) {
+                            const snapshotSignature = buildSnapshotSignature(snapshot.messages)
+                            stableSnapshotPolls = snapshotSignature === lastSnapshotSignature
+                                ? stableSnapshotPolls + 1
+                                : 0
+                            lastSnapshotSignature = snapshotSignature
+                            logChatDebug('fallback', 'polled session snapshot', {
+                                chatKey,
+                                sessionId,
+                                attempt,
+                                status: status?.type || null,
+                                stableSnapshotPolls,
+                                messages: summarizeMessagesForChatDebug(snapshot.messages),
+                            })
+                        }
+
+                        if (status?.type === 'busy' || status?.type === 'retry' || status?.type === 'idle' || status?.type === 'error') {
+                            get().setSessionStatus(sessionId, status)
+                            if (status.type === 'idle' || status.type === 'error') {
+                                get().setSessionLoading(sessionId, false)
+                                logChatDebug('fallback', 'stop recovery polling: status settled', {
+                                    chatKey,
+                                    sessionId,
+                                    attempt,
+                                    status: status.type,
+                                })
+                                return
+                            }
+                        }
+
+                        if (
+                            snapshot
+                            && !status
+                            && stableSnapshotPolls >= 1
+                            && hasSettledAssistantReply(snapshot.messages)
+                        ) {
+                            get().setSessionLoading(sessionId, false)
+                            logChatDebug('fallback', 'stop recovery polling: snapshot heuristic settled', {
+                                chatKey,
+                                sessionId,
+                                attempt,
+                                messages: summarizeMessagesForChatDebug(snapshot.messages),
+                            })
+                            return
+                        }
+                    } catch (error) {
+                        logChatDebug('fallback', 'poll iteration failed', {
+                            chatKey,
+                            sessionId,
+                            attempt,
+                            error: error instanceof Error ? error.message : String(error),
+                        })
+                        // Ignore fallback polling errors and keep waiting for SSE.
+                    }
+
+                    await sleep(STREAM_RECOVERY_POLL_MS)
+                }
+                logChatDebug('fallback', 'recovery polling exhausted', { chatKey, sessionId })
+            } finally {
+                if (activeRecoveryPolls.get(sessionId) === recoveryToken) {
+                    activeRecoveryPolls.delete(sessionId)
+                }
             }
         })()
     }
@@ -79,31 +188,15 @@ export function createChatSendActions(
             attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
             extraDanceRefs: AssetRef[] = [],
         ) => {
-            const removeLegacyMessage = (chatKey: string, messageId: string) => {
-                set((state) => ({
-                    chats: {
-                        ...state.chats,
-                        [chatKey]: (state.chats[chatKey] || []).filter((message) => message.id !== messageId),
-                    },
-                }))
-            }
-
             const rollbackOptimisticMessage = (chatKey: string, messageId: string, sid?: string) => {
-                removeLegacyMessage(chatKey, messageId)
+                get().removeChatDraftMessage(chatKey, messageId)
                 if (sid) {
                     get().removeSessionMessage(sid, messageId)
                     get().setSessionLoading(sid, false)
                 }
             }
 
-            const ensureSessionBinding = (chatKey: string, sid: string) => {
-                get().registerBinding(chatKey, sid)
-                if (!get().seEntities[sid]) {
-                    get().upsertSession({ id: sid, status: { type: 'idle' } })
-                }
-            }
-
-            let sessionId: string | undefined = get().sessionMap[performerId]
+            let sessionId: string | undefined = resolveChatKeySession(get, performerId) || undefined
             const target = resolveChatRuntimeTarget(get, performerId)
             const performer = getPerformerById(get, performerId)
             const runtimeConfig = target?.runtimeConfig || {
@@ -117,18 +210,27 @@ export function createChatSendActions(
                 planMode: false,
             }
             if (!hasModelConfig(runtimeConfig.model)) return
+            logChatDebug('send', 'sendMessage start', {
+                chatKey: performerId,
+                existingSessionId: sessionId || null,
+                textLength: text.length,
+                attachmentCount: attachments?.length || 0,
+            })
 
-            if (get().runtimeReloadPending) {
-                const applied = await get().applyPendingRuntimeReload()
-                if (!applied && get().runtimeReloadPending) {
-                    appendPerformerSystemMessage(
-                        set,
-                        get,
-                        performerId,
-                        'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
-                    )
-                    return
-                }
+            const prepared = await preparePendingRuntimeExecution(get, {
+                performerId,
+                runtimeConfig,
+            })
+            if (prepared.blocked) {
+                appendPerformerSystemMessage(
+                    set,
+                    get,
+                    performerId,
+                    prepared.reason === 'projection_update_pending'
+                        ? 'New chats are blocked until the current run finishes and Studio reapplies the latest projection changes.'
+                        : 'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
+                )
+                return
             }
 
             // Optimistic UI: show user message + loading state immediately
@@ -150,15 +252,12 @@ export function createChatSendActions(
             addChatMessage(set, get, performerId, optimisticMsg)
 
             // Dual-write: entity store
-            const existingSessionId = get().sessionMap[performerId]
+            const existingSessionId = resolveChatKeySession(get, performerId) || undefined
             if (existingSessionId) {
-                ensureSessionBinding(performerId, existingSessionId)
+                registerSessionBinding(set, get, performerId, existingSessionId)
                 get().clearSessionRevert(existingSessionId)
-                get().appendSessionMessage(existingSessionId, optimisticMsg)
                 get().setSessionLoading(existingSessionId, true)
             }
-
-            set({ loadingPerformerId: performerId })
 
             // Ensure SSE is connected before session creation so we receive
             // streaming deltas from the very first assistant response.
@@ -166,31 +265,29 @@ export function createChatSendActions(
 
             if (!sessionId) {
                 try {
-                    const freshSession = await createFreshSession(performerId)
+                    const freshSession = await createFreshSession(performerId, { preserveDraftMessages: true })
                     sessionId = freshSession.sessionId || undefined
-                    // Register binding in entity store
                     if (sessionId) {
-                        ensureSessionBinding(performerId, sessionId)
+                        logChatDebug('send', 'created fresh performer session', { chatKey: performerId, sessionId })
+                        registerSessionBinding(set, get, performerId, sessionId)
                         get().clearSessionRevert(sessionId)
-                        // Write optimistic message to entity store for new session
-                        get().appendSessionMessage(sessionId, optimisticMsg)
+                        moveDraftMessageToSession(set, get, performerId, sessionId, optimisticMsg.id)
                         get().setSessionLoading(sessionId, true)
                     }
                 } catch (error) {
                     console.error('Failed to create session', error)
                     rollbackOptimisticMessage(performerId, optimisticMsg.id)
                     appendPerformerSystemMessage(set, get, performerId, formatStudioApiErrorMessage(error))
-                    set({ loadingPerformerId: null })
                     return
                 }
             }
 
             if (!sessionId) {
-                set({ loadingPerformerId: null })
                 return
             }
 
             try {
+                logChatDebug('send', 'dispatch performer prompt', { chatKey: performerId, sessionId })
                 await api.chat.send(sessionId, {
                     message: text,
                     performer: {
@@ -209,9 +306,22 @@ export function createChatSendActions(
                     attachments,
                     assistantContext: target?.assistantContext || null,
                 })
-                // Settlement detection is now handled by entity store via session.idle SSE events.
-                scheduleSettlementFallbackSync(performerId, sessionId)
+                if (prepared.requiresDispose) {
+                    get().clearProjectionDirty({
+                        performerIds: [performerId],
+                        draftIds: collectRuntimeDraftIds(runtimeConfig),
+                        workspaceWide: true,
+                    })
+                }
+                // Recover from missed streaming events by polling session snapshots
+                // until the turn settles.
+                scheduleStreamingRecoverySync(performerId, sessionId)
             } catch (error) {
+                logChatDebug('send', 'performer prompt failed', {
+                    chatKey: performerId,
+                    sessionId,
+                    error: error instanceof Error ? error.message : String(error),
+                })
                 rollbackOptimisticMessage(performerId, optimisticMsg.id, sessionId)
                 const errorMsg = {
                     id: `msg-${Date.now()}`,
@@ -220,37 +330,18 @@ export function createChatSendActions(
                     timestamp: Date.now(),
                 }
                 addChatMessage(set, get, performerId, errorMsg)
-                // Dual-write: entity store error
                 if (sessionId) {
-                    get().appendSessionMessage(sessionId, errorMsg)
                     get().setSessionLoading(sessionId, false)
                 }
-                set({ loadingPerformerId: null })
             }
         },
 
         sendActMessage: async (actId: string, threadId: string, participantKey: string, text: string) => {
-            const removeLegacyMessage = (chatKey: string, messageId: string) => {
-                set((state) => ({
-                    chats: {
-                        ...state.chats,
-                        [chatKey]: (state.chats[chatKey] || []).filter((message) => message.id !== messageId),
-                    },
-                }))
-            }
-
             const rollbackOptimisticMessage = (chatKey: string, messageId: string, sid?: string) => {
-                removeLegacyMessage(chatKey, messageId)
+                get().removeChatDraftMessage(chatKey, messageId)
                 if (sid) {
                     get().removeSessionMessage(sid, messageId)
                     get().setSessionLoading(sid, false)
-                }
-            }
-
-            const ensureSessionBinding = (chatKey: string, sid: string) => {
-                get().registerBinding(chatKey, sid)
-                if (!get().seEntities[sid]) {
-                    get().upsertSession({ id: sid, status: { type: 'idle' } })
                 }
             }
 
@@ -262,6 +353,13 @@ export function createChatSendActions(
             const participantLabel = binding.displayName || participantKey
 
             const chatKey = buildActParticipantChatKey(actId, threadId, participantKey)
+            logChatDebug('send', 'sendActMessage start', {
+                chatKey,
+                actId,
+                threadId,
+                participantKey,
+                textLength: text.length,
+            })
 
             let performer: ReturnType<typeof getPerformerById> = null
             if (binding.performerRef.kind === 'draft') {
@@ -295,17 +393,21 @@ export function createChatSendActions(
                 return
             }
 
-            if (get().runtimeReloadPending) {
-                const applied = await get().applyPendingRuntimeReload()
-                if (!applied && get().runtimeReloadPending) {
-                    appendPerformerSystemMessage(
-                        set,
-                        get,
-                        chatKey,
-                        'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
-                    )
-                    return
-                }
+            const prepared = await preparePendingRuntimeExecution(get, {
+                performerId: performer.id,
+                actId,
+                runtimeConfig,
+            })
+            if (prepared.blocked) {
+                appendPerformerSystemMessage(
+                    set,
+                    get,
+                    chatKey,
+                    prepared.reason === 'projection_update_pending'
+                        ? 'New chats are blocked until the current run finishes and Studio reapplies the latest projection changes.'
+                        : 'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
+                )
+                return
             }
 
             // Optimistic UI: show user message + loading state immediately
@@ -323,74 +425,42 @@ export function createChatSendActions(
             }
             addChatMessage(set, get, chatKey, optimisticActMsg)
 
-            // Dual-write: entity store
-            const existingActSessionId = get().sessionMap[chatKey]
+            const existingActSessionId = resolveChatKeySession(get, chatKey) || undefined
             if (existingActSessionId) {
-                ensureSessionBinding(chatKey, existingActSessionId)
+                registerSessionBinding(set, get, chatKey, existingActSessionId)
                 get().clearSessionRevert(existingActSessionId)
-                get().appendSessionMessage(existingActSessionId, optimisticActMsg)
                 get().setSessionLoading(existingActSessionId, true)
             }
-
-            set({ loadingPerformerId: chatKey })
 
             // Ensure SSE is connected before session creation so we receive
             // streaming deltas from the very first assistant response.
             get().initRealtimeEvents()
 
-            let sessionId: string | undefined = get().sessionMap[chatKey]
+            let sessionId: string | undefined = resolveChatKeySession(get, chatKey) || undefined
             if (!sessionId) {
                 try {
-                    const result = await api.chat.createSession(
-                        chatKey,
-                        performer?.name || 'Performer',
-                        '',
-                        'direct',
-                        actId,
-                    )
-                    sessionId = result.sessionId
-                    set((state) => ({
-                        sessionMap: { ...state.sessionMap, [chatKey]: result.sessionId },
-                        actThreads: {
-                            ...state.actThreads,
-                            [actId]: (state.actThreads[actId] || []).map((thread) =>
-                                thread.id !== threadId
-                                    ? thread
-                                    : {
-                                        ...thread,
-                                        participantSessions: {
-                                            ...thread.participantSessions,
-                                            [participantKey]: result.sessionId,
-                                        },
-                                    },
-                            ),
-                        },
-                    }))
-                    // Register binding in entity store
-                    ensureSessionBinding(chatKey, result.sessionId)
-                    get().clearSessionRevert(result.sessionId)
-                    get().appendSessionMessage(result.sessionId, optimisticActMsg)
-                    get().setSessionLoading(result.sessionId, true)
+                    sessionId = await ensureSession(set, get, describeChatTarget(chatKey), {
+                        title: performer?.name || 'Performer',
+                        clearDrafts: false,
+                    })
+                    logChatDebug('send', 'created fresh act session', { chatKey, sessionId })
+                    get().clearSessionRevert(sessionId)
+                    moveDraftMessageToSession(set, get, chatKey, sessionId, optimisticActMsg.id)
+                    get().setSessionLoading(sessionId, true)
                     await get().listSessions()
                 } catch (error) {
                     console.error('Failed to create Act session', error)
                     rollbackOptimisticMessage(chatKey, optimisticActMsg.id)
                     appendPerformerSystemMessage(set, get, chatKey, formatStudioApiErrorMessage(error))
-                    set({ loadingPerformerId: null })
                     return
                 }
             }
 
             if (!sessionId) {
-                set({ loadingPerformerId: null })
                 return
             }
 
             try {
-                // Persist workspace before Act send so wake cascade reads latest performer config
-                if (typeof get().saveWorkspace === 'function') {
-                    await get().saveWorkspace()
-                }
                 await api.chat.send(sessionId, {
                     message: text,
                     performer: {
@@ -408,9 +478,22 @@ export function createChatSendActions(
                     actId,
                     actThreadId: threadId,
                 })
+                if (prepared.requiresDispose) {
+                    get().clearProjectionDirty({
+                        performerIds: [performer.id],
+                        actIds: [actId],
+                        draftIds: collectRuntimeDraftIds(runtimeConfig),
+                        workspaceWide: true,
+                    })
+                }
                 // Settlement detection is now handled by entity store via session.idle SSE events.
-                scheduleSettlementFallbackSync(chatKey, sessionId)
+                scheduleStreamingRecoverySync(chatKey, sessionId)
             } catch (error) {
+                logChatDebug('send', 'act prompt failed', {
+                    chatKey,
+                    sessionId,
+                    error: error instanceof Error ? error.message : String(error),
+                })
                 rollbackOptimisticMessage(chatKey, optimisticActMsg.id, sessionId)
                 const errorActMsg = {
                     id: `msg-${Date.now()}`,
@@ -419,21 +502,17 @@ export function createChatSendActions(
                     timestamp: Date.now(),
                 }
                 addChatMessage(set, get, chatKey, errorActMsg)
-                // Dual-write: entity store error
                 if (sessionId) {
-                    get().appendSessionMessage(sessionId, errorActMsg)
                     get().setSessionLoading(sessionId, false)
                 }
-                set({ loadingPerformerId: null })
             }
         },
 
         executeSlashCommand: async (performerId: string, cmd: string) => {
             const state = get()
-            const sessionId = get().sessionMap[performerId]
+            const sessionId = resolveChatKeySession(get, performerId)
             if (!sessionId) return
 
-            set({ loadingPerformerId: performerId })
             get().setSessionLoading(sessionId, true)
             try {
                 if (cmd === '/share') {
@@ -453,7 +532,6 @@ export function createChatSendActions(
                     timestamp: Date.now(),
                 })
             } finally {
-                set({ loadingPerformerId: null })
                 get().setSessionLoading(sessionId, false)
             }
         },

@@ -9,7 +9,7 @@ type OpenCodeSessionStatus = {
     type?: 'idle' | 'busy' | 'retry' | 'error'
 } & Record<string, unknown>
 
-async function countRunningSessions(workingDir: string) {
+export async function countRunningSessions(workingDir: string) {
     const oc = await getOpencode()
     const directories = [workingDir]
 

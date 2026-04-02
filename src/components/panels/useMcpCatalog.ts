@@ -1,50 +1,54 @@
-/**
- * useMcpCatalog – MCP catalog state & operations extracted from AssetLibrary.
- *
- * Manages draft entries, save/reset, connect/disconnect,
- * authentication lifecycle, and query invalidation.
- */
-
-function makeId(prefix: string) {
-    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-}
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { queryKeys, useMcpServers } from '../../hooks/queries'
 import { showToast } from '../../lib/toast'
-import { extractProjectMcpCatalog } from '../../../shared/project-mcp'
-import type { ProjectMcpEntryDraft } from '../modals/settings-utils'
-import { buildProjectMcpDrafts, serializeProjectMcpEntries } from '../modals/settings-utils'
+import {
+    extractMcpCatalog,
+    mergeMcpToolOverrides,
+} from '../../../shared/mcp-catalog'
+import type { McpEntryDraft } from './mcp-catalog-utils'
+import { buildMcpDrafts, getMcpEntryValidationError, serializeMcpEntries } from './mcp-catalog-utils'
 import { useStudioStore } from '../../store'
 
+/**
+ * useMcpCatalog – Studio-wide MCP library state for Asset Library.
+ *
+ * Manages global MCP drafts, persistence, connection tests,
+ * authentication lifecycle, and cache invalidation.
+ */
+
+function makeId(prefix: string) {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+}
+
 export interface McpCatalogState {
-    mcpDraftEntries: ProjectMcpEntryDraft[]
+    mcpDraftEntries: McpEntryDraft[]
+    mcpCatalogLoaded: boolean
     mcpCatalogDirty: boolean
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
     pendingMcpAuthName: string | null
     mcpServers: ReturnType<typeof useMcpServers>['data']
-    updateMcpEntry: (key: string, updater: (entry: ProjectMcpEntryDraft) => ProjectMcpEntryDraft) => void
-    addMcpEntry: () => void
+    updateMcpEntry: (key: string, updater: (entry: McpEntryDraft) => McpEntryDraft) => void
+    addMcpEntry: () => string
     removeMcpEntry: (key: string) => void
-    saveMcpCatalog: () => Promise<void>
-    resetMcpCatalog: () => void
+    saveMcpCatalog: () => Promise<boolean>
     connectMcpServer: (name: string) => Promise<void>
-    disconnectMcpServer: (name: string) => Promise<void>
     authenticateMcpServer: (name: string) => Promise<void>
     clearMcpAuth: (name: string) => Promise<void>
 }
 
 export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalogState {
-    const [mcpDraftEntries, setMcpDraftEntries] = useState<ProjectMcpEntryDraft[]>([])
-    const [mcpDraftSnapshot, setMcpDraftSnapshot] = useState<ProjectMcpEntryDraft[]>([])
+    const [mcpDraftEntries, setMcpDraftEntries] = useState<McpEntryDraft[]>([])
+    const [mcpDraftSnapshot, setMcpDraftSnapshot] = useState<McpEntryDraft[]>([])
+    const [mcpCatalogLoaded, setMcpCatalogLoaded] = useState(false)
     const [mcpCatalogStatus, setMcpCatalogStatus] = useState<string | null>(null)
     const [mcpCatalogSaving, setMcpCatalogSaving] = useState(false)
     const [pendingMcpAuthName, setPendingMcpAuthName] = useState<string | null>(null)
     const mcpAuthDeadlineRef = useRef<number | null>(null)
     const queryClient = useQueryClient()
-    const markRuntimeReloadPending = useStudioStore((state) => state.markRuntimeReloadPending)
+    const recordStudioChange = useStudioStore((state) => state.recordStudioChange)
 
     const { data: mcpServers = [] } = useMcpServers(showMcps)
 
@@ -53,16 +57,19 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         if (!showMcps) {
             return
         }
-        api.config.getProject()
+        setMcpCatalogLoaded(false)
+        api.config.getGlobal()
             .then((result) => {
-                const drafts = buildProjectMcpDrafts(extractProjectMcpCatalog(result?.config))
+                const drafts = buildMcpDrafts(extractMcpCatalog(result))
                 setMcpDraftEntries(drafts)
                 setMcpDraftSnapshot(drafts)
                 setMcpCatalogStatus(null)
+                setMcpCatalogLoaded(true)
             })
             .catch((error) => {
                 console.error('Failed to load MCP catalog', error)
-                setMcpCatalogStatus('Failed to load project MCP catalog.')
+                setMcpCatalogStatus('Failed to load Studio MCP library.')
+                setMcpCatalogLoaded(true)
             })
     }, [showMcps, workingDir])
 
@@ -78,6 +85,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
             mcpAuthDeadlineRef.current = null
             setPendingMcpAuthName(null)
             setMcpCatalogStatus(`Authenticated and connected ${pendingMcpAuthName}.`)
+            recordStudioChange({ kind: 'runtime_config' })
             return
         }
 
@@ -109,7 +117,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
 
     // ── Entry CRUD ──────────────────────────────────────
 
-    const updateMcpEntry = (key: string, updater: (entry: ProjectMcpEntryDraft) => ProjectMcpEntryDraft) => {
+    const updateMcpEntry = (key: string, updater: (entry: McpEntryDraft) => McpEntryDraft) => {
         setMcpDraftEntries((current) => current.map((entry) => entry.key === key ? updater(entry) : entry))
     }
 
@@ -120,7 +128,6 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
             {
                 key,
                 name: '',
-                enabled: true,
                 transport: 'stdio' as const,
                 timeoutText: '',
                 command: '',
@@ -134,6 +141,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
                 oauthScope: '',
             },
         ])
+        return key
     }
 
     const removeMcpEntry = (key: string) => {
@@ -173,33 +181,39 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         setMcpCatalogSaving(true)
         setMcpCatalogStatus(null)
         try {
-            const invalidEntry = mcpDraftEntries.find((entry) => (
-                entry.name.trim() && entry.transport === 'stdio' && !entry.command.trim()
-                    || entry.name.trim() && entry.transport === 'http' && !entry.url.trim()
-            ))
-            if (invalidEntry) {
-                throw new Error(
-                    `MCP '${invalidEntry.name}' needs a ${invalidEntry.transport === 'http' ? 'URL' : 'command'} before saving.`,
-                )
+            const validationError = getMcpEntryValidationError(mcpDraftEntries)
+            if (validationError) {
+                throw new Error(validationError)
             }
 
-            await api.config.update({
-                mcp: serializeProjectMcpEntries(mcpDraftEntries),
+            const nextMcpCatalog = serializeMcpEntries(mcpDraftEntries)
+            const globalConfig = await api.config.getGlobal().catch(() => ({} as Record<string, unknown>))
+            const currentConfig = globalConfig && typeof globalConfig === 'object'
+                ? globalConfig
+                : {}
+            const nextTools = mergeMcpToolOverrides(
+                currentConfig.tools && typeof currentConfig.tools === 'object'
+                    ? currentConfig.tools as Record<string, unknown>
+                    : {},
+                extractMcpCatalog(currentConfig),
+                nextMcpCatalog,
+            )
+
+            await api.config.updateGlobal({
+                mcp: nextMcpCatalog,
+                tools: nextTools,
             })
             setMcpDraftSnapshot(mcpDraftEntries)
-            setMcpCatalogStatus('Saved project MCP catalog.')
-            markRuntimeReloadPending()
+            setMcpCatalogStatus('Saved Studio MCP library. Performers enable servers individually.')
+            recordStudioChange({ kind: 'runtime_config' })
             await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+            return true
         } catch (error: unknown) {
-            setMcpCatalogStatus(error instanceof Error ? error.message : 'Failed to save project MCP catalog.')
+            setMcpCatalogStatus(error instanceof Error ? error.message : 'Failed to save Studio MCP library.')
+            return false
         } finally {
             setMcpCatalogSaving(false)
         }
-    }
-
-    const resetMcpCatalog = () => {
-        setMcpDraftEntries(mcpDraftSnapshot)
-        setMcpCatalogStatus(null)
     }
 
     // ── Server operations ───────────────────────────────
@@ -207,22 +221,11 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
     const connectMcpServer = async (name: string) => runMcpCatalogAction(
         () => api.mcp.connect(name),
         {
-            successMessage: `Connected MCP server ${name}.`,
-            failureMessage: `Failed to connect ${name}.`,
+            successMessage: `Connection test passed for ${name}.`,
+            failureMessage: `Connection test failed for ${name}.`,
             includeRuntimeTools: true,
         },
     )
-
-    const disconnectMcpServer = async (name: string) => {
-        await runMcpCatalogAction(
-            () => api.mcp.disconnect(name),
-            {
-                successMessage: `Disconnected MCP server ${name}.`,
-                failureMessage: `Failed to disconnect ${name}.`,
-                includeRuntimeTools: true,
-            },
-        )
-    }
 
     const authenticateMcpServer = async (name: string) => {
         const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null
@@ -274,6 +277,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
                 successMessage: `Cleared stored authentication for ${name}.`,
                 failureMessage: `Failed to clear authentication for ${name}.`,
                 onSuccess: () => {
+                    recordStudioChange({ kind: 'runtime_config' })
                     if (pendingMcpAuthName === name) {
                         setPendingMcpAuthName(null)
                         mcpAuthDeadlineRef.current = null
@@ -285,6 +289,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
 
     return {
         mcpDraftEntries,
+        mcpCatalogLoaded,
         mcpCatalogDirty,
         mcpCatalogStatus,
         mcpCatalogSaving,
@@ -294,9 +299,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         addMcpEntry,
         removeMcpEntry,
         saveMcpCatalog,
-        resetMcpCatalog,
         connectMcpServer,
-        disconnectMcpServer,
         authenticateMcpServer,
         clearMcpAuth,
     }

@@ -124,17 +124,17 @@ export default function AssetDetailBody({
                                 Declared: {asset.declaredMcpServerNames.join(', ')}
                             </div>
                             <div className="asset-popover__section-item">
-                                Project matches: {Array.isArray(asset.projectMcpMatches) && asset.projectMcpMatches.length > 0
-                                    ? asset.projectMcpMatches.join(', ')
+                                Library matches: {Array.isArray(asset.matchedMcpServerNames) && asset.matchedMcpServerNames.length > 0
+                                    ? asset.matchedMcpServerNames.join(', ')
                                     : 'None'}
                             </div>
                             <div className="asset-popover__section-item">
-                                Needs mapping: {Array.isArray(asset.projectMcpMissing) && asset.projectMcpMissing.length > 0
-                                    ? asset.projectMcpMissing.join(', ')
+                                Needs mapping: {Array.isArray(asset.missingMcpServerNames) && asset.missingMcpServerNames.length > 0
+                                    ? asset.missingMcpServerNames.join(', ')
                                     : 'None'}
                             </div>
                             <div className="asset-detail-panel__note">
-                                Registry and local performer assets keep portable MCP requirements. Exact project-name matches can auto-connect on import, but final MCP binding still belongs to each performer on the stage.
+                                Registry and local performer assets keep portable MCP requirements. Exact Studio-library name matches can auto-connect on import, but final MCP binding still belongs to each performer on the stage.
                             </div>
                         </div>
                     )}
@@ -175,8 +175,7 @@ export default function AssetDetailBody({
                     <div className="asset-popover__section">
                         <div className="section-title">Capabilities</div>
                         <div className="asset-popover__section-item">Status: {asset.status || 'unknown'}</div>
-                        <div className="asset-popover__section-item">{asset.tools?.length || 0} Tools</div>
-                        <div className="asset-popover__section-item">{asset.resources?.length || 0} Resources</div>
+                        {asset.configType && <div className="asset-popover__section-item">Transport: {asset.configType}</div>}
                         {asset.authStatus === 'needs_auth' && <div className="asset-popover__section-item">Authentication required</div>}
                         {asset.clientRegistrationRequired && <div className="asset-popover__section-item">OAuth client registration required</div>}
                         {asset.error && <div className="asset-popover__section-item">{asset.error}</div>}

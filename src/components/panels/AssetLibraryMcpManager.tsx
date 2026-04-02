@@ -1,28 +1,27 @@
 import type { Dispatch, SetStateAction } from 'react'
+import { useMemo } from 'react'
+import { useDraggable } from '@dnd-kit/core'
 import type { McpServer } from '../../types'
-import type { McpKVPair, ProjectMcpEntryDraft } from '../modals/settings-utils'
-import { Plus, Trash2 } from 'lucide-react'
-import { serializeProjectMcpEntries, isRemoteDraft } from '../modals/settings-utils'
+import type { McpEntryDraft, McpKVPair } from './mcp-catalog-utils'
+import { GripVertical, Pencil, Plus, Server, Trash2 } from 'lucide-react'
+import { buildMcpDragPayload } from './asset-library-utils'
+import { isRemoteDraft } from './mcp-catalog-utils'
 import type { McpCatalogState } from './useMcpCatalog'
 
 type Props = {
-    filteredMcps: McpServer[]
-    mcpDraftEntries: ProjectMcpEntryDraft[]
+    liveMcps: McpServer[]
+    mcpDraftEntries: McpEntryDraft[]
     mcpCatalogDirty: boolean
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
     pendingMcpAuthName: string | null
     updateMcpEntry: McpCatalogState['updateMcpEntry']
-    addMcpEntry: () => void
+    addMcpEntry: () => string
     removeMcpEntry: (key: string) => void
-    saveMcpCatalog: () => Promise<void>
-    resetMcpCatalog: () => void
+    saveMcpCatalog: () => Promise<boolean>
     connectMcpServer: (name: string) => Promise<void>
-    disconnectMcpServer: (name: string) => Promise<void>
     authenticateMcpServer: (name: string) => Promise<void>
     clearMcpAuth: (name: string) => Promise<void>
-    showMcpRawConfig: boolean
-    setShowMcpRawConfig: (value: boolean | ((prev: boolean) => boolean)) => void
     expandedMcpEntries: Record<string, boolean>
     setExpandedMcpEntries: Dispatch<SetStateAction<Record<string, boolean>>>
 }
@@ -158,10 +157,10 @@ function McpEntryBody({
     entry,
     updateMcpEntry,
 }: {
-    entry: ProjectMcpEntryDraft
+    entry: McpEntryDraft
     updateMcpEntry: Props['updateMcpEntry']
 }) {
-    const update = (updater: (e: ProjectMcpEntryDraft) => ProjectMcpEntryDraft) =>
+    const update = (updater: (e: McpEntryDraft) => McpEntryDraft) =>
         updateMcpEntry(entry.key, updater)
     const isHttp = entry.transport === 'http'
 
@@ -170,7 +169,7 @@ function McpEntryBody({
             {/* ── Transport tabs ─────────────────────────── */}
             <div className="asset-mcp-tabs">
                 <button
-                    className={`asset-mcp-tab${!isHttp ? ' asset-mcp-tab--active' : ''}`}
+                    className={`asset-mcp-tab${entry.transport === 'stdio' ? ' asset-mcp-tab--active' : ''}`}
                     onClick={() => update((e) => ({ ...e, transport: 'stdio' }))}
                 >
                     STDIO
@@ -183,7 +182,7 @@ function McpEntryBody({
                 </button>
             </div>
 
-            {/* ── Common: Name / Enabled ──────────────────── */}
+            {/* ── Common: Name / Timeout ──────────────────── */}
             <div className="asset-mcp-editor__grid">
                 <label className="asset-mcp-editor__field">
                     <span>Name</span>
@@ -193,17 +192,6 @@ function McpEntryBody({
                         placeholder="MCP server name"
                         onChange={(e) => update((d) => ({ ...d, name: e.target.value }))}
                     />
-                </label>
-                <label className="asset-mcp-editor__field">
-                    <span>Enabled</span>
-                    <select
-                        className="select"
-                        value={entry.enabled ? 'enabled' : 'disabled'}
-                        onChange={(e) => update((d) => ({ ...d, enabled: e.target.value === 'enabled' }))}
-                    >
-                        <option value="enabled">Enabled</option>
-                        <option value="disabled">Disabled</option>
-                    </select>
                 </label>
                 <label className="asset-mcp-editor__field">
                     <span>Timeout (ms)</span>
@@ -217,7 +205,7 @@ function McpEntryBody({
             </div>
 
             {/* ── STDIO fields ────────────────────────────── */}
-            {!isHttp && (
+            {entry.transport === 'stdio' && (
                 <>
                     <div className="asset-mcp-editor__grid">
                         <label className="asset-mcp-editor__field asset-mcp-editor__field--wide">
@@ -225,7 +213,7 @@ function McpEntryBody({
                             <input
                                 className="text-input"
                                 value={entry.command}
-                                placeholder="openai-dev-mcp serve-sqlite"
+                                placeholder="npx"
                                 onChange={(e) => update((d) => ({ ...d, command: e.target.value }))}
                             />
                         </label>
@@ -318,6 +306,208 @@ function McpEntryBody({
                     </div>
                 </>
             )}
+
+        </div>
+    )
+}
+
+type McpEditableCardProps = {
+    entry: McpEntryDraft
+    live: McpServer | null
+    mcpCatalogDirty: boolean
+    pendingMcpAuthName: string | null
+    updateMcpEntry: Props['updateMcpEntry']
+    removeMcpEntry: Props['removeMcpEntry']
+    connectMcpServer: Props['connectMcpServer']
+    authenticateMcpServer: Props['authenticateMcpServer']
+    clearMcpAuth: Props['clearMcpAuth']
+    expandedMcpEntries: Props['expandedMcpEntries']
+    setExpandedMcpEntries: Props['setExpandedMcpEntries']
+    runWithSavedCatalog: (action: () => Promise<void>) => Promise<void>
+}
+
+function describeMcpStatus(status: string) {
+    switch (status) {
+        case 'connected':
+            return 'Connected'
+        case 'needs_auth':
+            return 'Authentication required'
+        case 'needs_client_registration':
+            return 'OAuth client setup required'
+        case 'failed':
+            return 'Connection test failed'
+        case 'disconnected':
+            return 'Ready to test'
+        default:
+            return status
+    }
+}
+
+function McpEditableCard({
+    entry,
+    live,
+    mcpCatalogDirty,
+    pendingMcpAuthName,
+    updateMcpEntry,
+    removeMcpEntry,
+    connectMcpServer,
+    authenticateMcpServer,
+    clearMcpAuth,
+    expandedMcpEntries,
+    setExpandedMcpEntries,
+    runWithSavedCatalog,
+}: McpEditableCardProps) {
+    const liveStatus = live?.status || 'disconnected'
+    const remote = isRemoteDraft(entry)
+    const transportLabel = remote ? 'remote' : 'local'
+    const canAuthenticate = remote && entry.oauthEnabled
+    const canClearAuth = remote && entry.oauthEnabled && !!live
+        && (live.authStatus === 'needs_auth'
+            || live.status === 'connected'
+            || live.status === 'disconnected'
+            || live.status === 'failed')
+    const isExpanded = !!expandedMcpEntries[entry.key]
+    const canDrag = !!entry.name.trim() && !mcpCatalogDirty
+    const dragTitle = !entry.name.trim()
+        ? 'Name and save the server before dragging'
+        : mcpCatalogDirty
+            ? 'Save MCP changes before dragging'
+            : 'Drag onto a performer'
+    const statusCopy = describeMcpStatus(liveStatus)
+    const subtitle = [
+        transportLabel,
+        statusCopy,
+    ].join(' · ')
+    const description = !entry.name.trim()
+        ? 'Name this server, save it, then drag it onto a performer to enable it there.'
+        : live?.error
+        || live?.clientRegistrationRequired
+        || 'Drag onto a performer to enable it there.'
+    const dragPayload = useMemo(() => buildMcpDragPayload({
+        name: entry.name.trim() || 'New MCP Server',
+        status: liveStatus,
+        tools: live?.tools || [],
+        resources: live?.resources || [],
+        enabled: true,
+        defined: !!entry.name.trim(),
+        configType: transportLabel,
+        authStatus: live?.authStatus || (liveStatus === 'connected' ? 'ready' : liveStatus === 'needs_auth' ? 'needs_auth' : 'n/a'),
+        error: live?.error,
+        oauthConfigured: live?.oauthConfigured,
+        clientRegistrationRequired: live?.clientRegistrationRequired,
+    }), [entry.name, live?.authStatus, live?.clientRegistrationRequired, live?.error, live?.oauthConfigured, live?.resources, live?.tools, liveStatus, transportLabel])
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: `mcp-editor-${entry.key}`,
+        data: dragPayload,
+        disabled: !canDrag,
+    })
+    const toggleExpanded = () => {
+        setExpandedMcpEntries((prev) => (
+            prev[entry.key]
+                ? {}
+                : { [entry.key]: true }
+        ))
+    }
+
+    return (
+        <div
+            id={`asset-mcp-editor-${entry.key}`}
+            ref={setNodeRef}
+            className={`asset-card asset-mcp-editor ${isDragging ? 'is-dragging asset-mcp-editor--dragging' : ''} ${isExpanded ? 'is-selected asset-mcp-editor--expanded' : ''}`}
+        >
+            <div className="asset-card__header">
+                <button
+                    className={`asset-mcp-editor__drag-handle${canDrag ? '' : ' is-disabled'}`}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title={dragTitle}
+                    {...attributes}
+                    {...listeners}
+                >
+                    <GripVertical size={10} className="drag-handle" />
+                </button>
+                <Server size={12} className="asset-icon mcp" />
+                <span className="asset-card__name">{entry.name.trim() || 'New MCP Server'}</span>
+                <div className="asset-mcp-editor__header-actions">
+                    <button
+                        className="asset-card__edit-btn"
+                        aria-expanded={isExpanded}
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            toggleExpanded()
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        title={isExpanded ? 'Collapse editor' : 'Edit server'}
+                    >
+                        <Pencil size={11} />
+                    </button>
+                    <button
+                        className="asset-card__delete-btn"
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            removeMcpEntry(entry.key)
+                        }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        title="Remove server"
+                    >
+                        <Trash2 size={11} />
+                    </button>
+                </div>
+            </div>
+            <div className="asset-card__author">
+                <span className={`asset-mcp-editor__status-dot asset-mcp-editor__status-dot--${liveStatus}`} />
+                {subtitle}
+            </div>
+            <div className="asset-card__desc">
+                {description}
+            </div>
+
+            {isExpanded ? (
+                <>
+                    {live?.error ? <div className="asset-authoring-hint">{live.error}</div> : null}
+                    {live?.clientRegistrationRequired ? (
+                        <div className="asset-authoring-hint">
+                            OAuth client registration required. Fill client ID and secret in the Studio MCP library, save, then retry.
+                        </div>
+                    ) : null}
+
+                    <McpEntryBody entry={entry} updateMcpEntry={updateMcpEntry} />
+
+                    <div className="asset-mcp-editor__actions">
+                        <button
+                            className="btn btn--primary"
+                            onClick={() => entry.name.trim() && void runWithSavedCatalog(() => connectMcpServer(entry.name.trim()))}
+                            disabled={!entry.name.trim()}
+                        >
+                            Test Server
+                        </button>
+                        {canAuthenticate ? (
+                            <button
+                                className="btn"
+                                onClick={() => entry.name.trim() && void runWithSavedCatalog(() => authenticateMcpServer(entry.name.trim()))}
+                                disabled={!entry.name.trim()}
+                            >
+                                {pendingMcpAuthName === entry.name.trim()
+                                    ? 'Waiting…'
+                                    : liveStatus === 'connected'
+                                        ? 'Re-authenticate'
+                                        : liveStatus === 'failed'
+                                            ? 'Retry Auth'
+                                            : 'Authenticate'}
+                            </button>
+                        ) : null}
+                        {canClearAuth ? (
+                            <button
+                                className="btn"
+                                onClick={() => entry.name.trim() && void runWithSavedCatalog(() => clearMcpAuth(entry.name.trim()))}
+                                disabled={!entry.name.trim()}
+                            >
+                                Clear Auth
+                            </button>
+                        ) : null}
+                    </div>
+                </>
+            ) : null}
         </div>
     )
 }
@@ -325,7 +515,7 @@ function McpEntryBody({
 // ── Main component ────────────────────────────────────────────
 
 export default function AssetLibraryMcpManager({
-    filteredMcps,
+    liveMcps,
     mcpDraftEntries,
     mcpCatalogDirty,
     mcpCatalogStatus,
@@ -335,112 +525,71 @@ export default function AssetLibraryMcpManager({
     addMcpEntry,
     removeMcpEntry,
     saveMcpCatalog,
-    resetMcpCatalog,
     connectMcpServer,
-    disconnectMcpServer,
     authenticateMcpServer,
     clearMcpAuth,
-    showMcpRawConfig,
-    setShowMcpRawConfig,
     expandedMcpEntries,
     setExpandedMcpEntries,
 }: Props) {
+    const statusMessage = mcpCatalogSaving
+        ? 'Saving MCP changes...'
+        : mcpCatalogStatus
+
+    const runWithSavedCatalog = async (action: () => Promise<void>) => {
+        if (mcpCatalogDirty) {
+            const saved = await saveMcpCatalog()
+            if (!saved) {
+                return
+            }
+        }
+        await action()
+    }
+
     return (
         <div className="asset-mcp-manager">
             <div className="asset-authoring-row">
-                <button className="btn" onClick={() => addMcpEntry()}>
+                <button
+                    className="btn"
+                    onClick={() => {
+                        const key = addMcpEntry()
+                        setExpandedMcpEntries({ [key]: true })
+                    }}
+                >
                     <Plus size={10} /> Add Server
                 </button>
                 <div className="asset-authoring-row__note">
-                    Drag connected servers onto performers.
+                    Define Studio MCP servers here, then drag a saved server card onto a performer to enable it there.
                 </div>
             </div>
 
             {mcpDraftEntries.length > 0 ? (
                 <div className="asset-mcp-editor-list">
                     {mcpDraftEntries.map((entry) => {
-                        const live = filteredMcps.find((server) => server.name === entry.name.trim()) || null
-                        const liveStatus = live?.status || (entry.enabled ? 'disconnected' : 'disabled')
-                        const remote = isRemoteDraft(entry)
-                        const canAuthenticate = remote && (liveStatus === 'needs_auth' || liveStatus === 'failed')
-                        const canClearAuth = remote && !!live && (live.authStatus === 'needs_auth' || live.status === 'connected' || live.status === 'failed')
-                        const isExpanded = !!expandedMcpEntries[entry.key]
-
+                        const live = liveMcps.find((server) => server.name === entry.name.trim()) || null
                         return (
-                            <div key={entry.key} className="asset-mcp-editor">
-                                <div
-                                    className="asset-mcp-editor__header"
-                                    onClick={() => setExpandedMcpEntries((prev) => ({ ...prev, [entry.key]: !prev[entry.key] }))}
-                                >
-                                    <div className="asset-mcp-editor__header-left">
-                                        <span className={`asset-mcp-editor__status-dot asset-mcp-editor__status-dot--${liveStatus}`} />
-                                        <div>
-                                            <div className="asset-mcp-editor__title">{entry.name.trim() || 'New MCP Server'}</div>
-                                            <div className="asset-mcp-editor__meta">
-                                                <span>{remote ? 'remote' : 'local'}</span>
-                                                <span>{live?.tools?.length || 0} tools</span>
-                                                <span>{live?.resources?.length || 0} resources</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <span className={`asset-mcp-editor__status asset-mcp-editor__status--${liveStatus}`}>
-                                        {liveStatus}
-                                    </span>
-                                </div>
-
-                                {isExpanded ? (
-                                    <>
-                                        {live?.error ? <div className="asset-authoring-hint">{live.error}</div> : null}
-                                        {live?.clientRegistrationRequired ? (
-                                            <div className="asset-authoring-hint">
-                                                OAuth client registration required. Fill client ID and secret, save, then retry.
-                                            </div>
-                                        ) : null}
-
-                                        <McpEntryBody entry={entry} updateMcpEntry={updateMcpEntry} />
-
-                                        <div className="asset-mcp-editor__actions">
-                                            <button className="btn btn--primary" onClick={() => entry.name.trim() && void connectMcpServer(entry.name.trim())} disabled={!entry.name.trim() || !entry.enabled}>Connect</button>
-                                            <button className="btn" onClick={() => entry.name.trim() && void disconnectMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>Disconnect</button>
-                                            {canAuthenticate ? (
-                                                <button className="btn" onClick={() => entry.name.trim() && void authenticateMcpServer(entry.name.trim())} disabled={!entry.name.trim()}>
-                                                    {pendingMcpAuthName === entry.name.trim() ? 'Waiting…' : liveStatus === 'failed' ? 'Retry Auth' : 'Authenticate'}
-                                                </button>
-                                            ) : null}
-                                            {canClearAuth ? (
-                                                <button className="btn" onClick={() => entry.name.trim() && void clearMcpAuth(entry.name.trim())} disabled={!entry.name.trim()}>
-                                                    Clear Auth
-                                                </button>
-                                            ) : null}
-                                            <button className="btn btn--danger" onClick={() => removeMcpEntry(entry.key)}>Remove</button>
-                                        </div>
-                                    </>
-                                ) : null}
-                            </div>
+                            <McpEditableCard
+                                key={entry.key}
+                                entry={entry}
+                                live={live}
+                                mcpCatalogDirty={mcpCatalogDirty}
+                                pendingMcpAuthName={pendingMcpAuthName}
+                                updateMcpEntry={updateMcpEntry}
+                                removeMcpEntry={removeMcpEntry}
+                                connectMcpServer={connectMcpServer}
+                                authenticateMcpServer={authenticateMcpServer}
+                                clearMcpAuth={clearMcpAuth}
+                                expandedMcpEntries={expandedMcpEntries}
+                                setExpandedMcpEntries={setExpandedMcpEntries}
+                                runWithSavedCatalog={runWithSavedCatalog}
+                            />
                         )
                     })}
                 </div>
             ) : (
-                <div className="asset-authoring-hint">No MCP servers defined for this project.</div>
+                <div className="asset-authoring-hint">No Studio MCP servers defined yet.</div>
             )}
 
-            <div className="asset-mcp-manager__footer">
-                <button className={`btn${showMcpRawConfig ? ' btn--active' : ''}`} onClick={() => setShowMcpRawConfig((v: boolean) => !v)} title="Show the raw project MCP payload sent to OpenCode">
-                    {showMcpRawConfig ? 'Hide Raw' : 'View Raw'}
-                </button>
-                <button className="btn" onClick={resetMcpCatalog} disabled={!mcpCatalogDirty || mcpCatalogSaving}>Reset</button>
-                <button className="btn" onClick={() => void saveMcpCatalog()} disabled={!mcpCatalogDirty || mcpCatalogSaving}>
-                    {mcpCatalogSaving ? 'Saving…' : 'Save'}
-                </button>
-            </div>
-
-            {showMcpRawConfig ? (
-                <pre className="asset-mcp-editor__raw-config">
-                    {JSON.stringify({ mcp: serializeProjectMcpEntries(mcpDraftEntries) }, null, 2)}
-                </pre>
-            ) : null}
-
-            {mcpCatalogStatus ? <div className="asset-authoring-hint">{mcpCatalogStatus}</div> : null}
+            {statusMessage ? <div className="asset-authoring-hint">{statusMessage}</div> : null}
         </div>
     )
 }

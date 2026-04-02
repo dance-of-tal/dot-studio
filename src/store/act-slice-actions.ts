@@ -67,6 +67,9 @@ export function addActRelationImpl(
         workspaceDirty: true,
     }))
     if (inserted) {
+        get().recordStudioChange({ kind: 'act', actIds: [actId] })
+    }
+    if (inserted) {
         scheduleActRuntimeSync(get, set, actId)
     }
     return inserted ? relation.id : existingRelationId

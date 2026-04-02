@@ -6,6 +6,7 @@ import { assetUrnDisplayName } from '../lib/asset-urn'
 import { resolvePreferredActThreadId } from '../lib/act-threads'
 import { showToast } from '../lib/toast'
 import type { StudioState } from './types'
+import { clearChatSessionView, registerSessionBinding, syncSessionSnapshot } from './session'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
@@ -217,6 +218,11 @@ export function importActFromAssetImpl(
         actEditorState: null,
         workspaceDirty: true,
     }))
+    get().recordStudioChange({
+        kind: 'act',
+        actIds: [id],
+        performerIds: materializedPerformers.map((performer) => performer.id),
+    })
 }
 
 export function buildServerActDefinition(act: WorkspaceAct, performers: StudioState['performers'] = []): ActDefinition {
@@ -314,31 +320,23 @@ export async function loadActThreadsImpl(get: GetState, set: SetState, actId: st
         }
     }
 
-    const sessionsToFetch: Record<string, string> = {}
+    const sessionsToFetch: Array<{ chatKey: string; sessionId: string }> = []
     const removedChatKeys: string[] = []
     set((state: StudioState) => {
-        const sessionMap = { ...state.sessionMap }
-        const chats = { ...state.chats }
         const actThreadPrefix = `act:${actId}:thread:`
 
-        for (const key of Object.keys(sessionMap)) {
+        for (const key of Object.keys(state.chatKeyToSession)) {
             if (!key.startsWith(actThreadPrefix)) continue
             const match = key.match(/^act:[^:]+:thread:([^:]+):participant:/)
             const threadId = match?.[1] || null
             if (!threadId || !nextThreadIds.has(threadId) || !(key in authoritativeSessions)) {
-                delete sessionMap[key]
-                delete chats[key]
                 removedChatKeys.push(key)
             }
         }
 
         for (const [chatKey, sessionId] of Object.entries(authoritativeSessions)) {
-            if (sessionMap[chatKey] !== sessionId) {
-                sessionMap[chatKey] = sessionId
-                delete chats[chatKey]
-                sessionsToFetch[chatKey] = sessionId
-            } else if (!chats[chatKey]) {
-                sessionsToFetch[chatKey] = sessionId
+            if (state.chatKeyToSession[chatKey] !== sessionId || !(state.seMessages[sessionId]?.length)) {
+                sessionsToFetch.push({ chatKey, sessionId })
             }
         }
 
@@ -361,8 +359,6 @@ export async function loadActThreadsImpl(get: GetState, set: SetState, actId: st
                     createdAt: thread.createdAt,
                 })),
             },
-            sessionMap,
-            chats,
             activeThreadId: state.selectedActId === actId
                 ? resolvePreferredActThreadId(result.threads, state.activeThreadId)
                 : state.activeThreadId,
@@ -371,32 +367,16 @@ export async function loadActThreadsImpl(get: GetState, set: SetState, actId: st
     })
 
     for (const chatKey of removedChatKeys) {
-        get().unregisterBinding(chatKey)
+        clearChatSessionView(get, chatKey)
     }
     for (const [chatKey, sessionId] of Object.entries(authoritativeSessions)) {
-        get().registerBinding(chatKey, sessionId)
-        if (!get().seEntities[sessionId]) {
-            get().upsertSession({ id: sessionId, status: { type: 'idle' } })
-        }
+        registerSessionBinding(set, get, chatKey, sessionId)
     }
 
     // Background-fetch messages for restored or changed sessions so participant tabs show chat history
-    if (Object.keys(sessionsToFetch).length > 0) {
-        const { mapSessionMessagesToChatMessages } = await import('../lib/chat-messages')
-        for (const [chatKey, sessionId] of Object.entries(sessionsToFetch)) {
-            api.chat.messages(sessionId).then((response) => {
-                const messages = Array.isArray(response) ? response : (response.messages || [])
-                const mapped = mapSessionMessagesToChatMessages(messages)
-                if (mapped.length > 0) {
-                    set((state: StudioState) => ({
-                        chats: {
-                            ...state.chats,
-                            [chatKey]: mapped,
-                        },
-                    }))
-                    get().setSessionMessages(sessionId, mapped)
-                }
-            }).catch(() => {
+    if (sessionsToFetch.length > 0) {
+        for (const { chatKey, sessionId } of sessionsToFetch) {
+            syncSessionSnapshot(set, get, chatKey, sessionId).catch(() => {
                 // Session may have been deleted — ignore
             })
         }

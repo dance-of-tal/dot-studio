@@ -1,6 +1,6 @@
 import { getOpencode } from '../lib/opencode.js'
-import { resolveSessionExecutionContext } from '../lib/session-execution.js'
 import { sseEncode } from '../lib/sse.js'
+import { resolveSessionOwnership } from './session-ownership-service.js'
 
 const HEARTBEAT_INTERVAL_MS = 30_000
 const EXECUTION_DIRECTORY_REFRESH_MS = 1_000
@@ -92,7 +92,7 @@ export async function buildStudioChatEventStream(workingDir: string, abortSignal
                                         ? event.properties.id
                                         : null
                                     if (sessionID && permissionID) {
-                                        const context = await resolveSessionExecutionContext(sessionID)
+                                        const context = await resolveSessionOwnership(sessionID)
                                         if (context?.ownerKind === 'act') {
                                             try {
                                                 await oc.permission.respond({
@@ -117,7 +117,7 @@ export async function buildStudioChatEventStream(workingDir: string, abortSignal
                                     } | undefined
                                     const sessionID = rawProps?.sessionID || rawProps?.info?.sessionID || rawProps?.part?.sessionID
                                     if (sessionID) {
-                                        const context = await resolveSessionExecutionContext(sessionID)
+                                        const context = await resolveSessionOwnership(sessionID)
                                         if (context) {
                                             enqueueEvent({
                                                 ...event,

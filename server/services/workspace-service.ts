@@ -3,8 +3,12 @@ import path from 'path'
 import { createHash } from 'crypto'
 import { getOpencode } from '../lib/opencode.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
-import { listSessionExecutionContextsForWorkingDir, unregisterSessionExecutionContext } from '../lib/session-execution.js'
 import { workspacesDir, workspaceDir } from '../lib/config.js'
+import { pruneStalePerformerProjections } from './opencode-projection/stage-projection-service.js'
+import {
+    deleteSessionOwnership,
+    listSessionOwnershipsForWorkingDir,
+} from './session-ownership-service.js'
 
 type WorkspaceSessionSummary = { id?: string }
 type WorkspaceLinkedSnapshot = {
@@ -55,7 +59,7 @@ async function purgeLinkedOpencodeData(workspace: WorkspaceLinkedSnapshot) {
         return
     }
 
-    const executionContexts = await listSessionExecutionContextsForWorkingDir(workingDir)
+    const executionContexts = await listSessionOwnershipsForWorkingDir(workingDir)
     const directories = [workingDir]
     const sessionDirectories = new Map<string, string>(
         executionContexts.map((context) => [context.sessionId, context.workingDir]),
@@ -85,7 +89,7 @@ async function purgeLinkedOpencodeData(workspace: WorkspaceLinkedSnapshot) {
             } catch (error) {
                 console.warn('[workspace-service] Failed to delete OpenCode session for workspace delete', { sessionId, directory, error })
             }
-            await unregisterSessionExecutionContext(sessionId).catch(() => {})
+            await deleteSessionOwnership(sessionId).catch(() => {})
         }
     } catch (error) {
         console.warn('[workspace-service] Failed to purge OpenCode data for workspace delete', { workingDir, error })
@@ -164,6 +168,16 @@ export async function saveWorkspaceSnapshot(body: WorkspaceLinkedSnapshot) {
     if (!workingDir) {
         return { ok: false as const, status: 400, error: 'workingDir is required' }
     }
+
+    const performerIds = Array.isArray(body.performers)
+        ? body.performers
+            .map((performer) => (typeof performer?.id === 'string' ? performer.id : ''))
+            .filter(Boolean)
+        : []
+
+    await pruneStalePerformerProjections(workingDir, performerIds).catch((error) => {
+        console.warn('[workspace-service] Failed to prune stale performer projections during save', { workingDir, error })
+    })
 
     const id = workspaceIdForWorkingDir(workingDir)
     const workspace = {

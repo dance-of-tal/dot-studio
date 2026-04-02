@@ -44,6 +44,10 @@ function scheduleActWorkspacePersist(get: GetFn, set: SetFn, performerId: string
     }
 }
 
+function markPerformerProjectionDirty(get: GetFn, performerId: string) {
+    get().recordStudioChange({ kind: 'performer', performerIds: [performerId] })
+}
+
 // ── Tal ─────────────────────────────────────────────────
 
 export function setPerformerTal(set: SetFn, get: GetFn, performerId: string, tal: { urn?: string } | null) {
@@ -56,6 +60,7 @@ export function setPerformerTal(set: SetFn, get: GetFn, performerId: string, tal
         }),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -64,6 +69,7 @@ export function setPerformerTalRef(set: SetFn, get: GetFn, performerId: string, 
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { talRef })),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -80,6 +86,7 @@ export function addPerformerDance(set: SetFn, get: GetFn, performerId: string, d
         ),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -94,6 +101,7 @@ export function addPerformerDanceRef(set: SetFn, get: GetFn, performerId: string
         )),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -104,6 +112,7 @@ export function replacePerformerDanceRef(set: SetFn, get: GetFn, performerId: st
         })),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -123,6 +132,7 @@ export function removePerformerDance(set: SetFn, get: GetFn, performerId: string
         ),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -144,6 +154,7 @@ export function setPerformerModel(set: SetFn, get: GetFn, performerId: string, m
         }),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -152,6 +163,7 @@ export function setPerformerModelVariant(set: SetFn, get: GetFn, performerId: st
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { modelVariant: modelVariant || null })),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -168,6 +180,7 @@ export function setPerformerAgentId(set: SetFn, get: GetFn, performerId: string,
         }),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -176,6 +189,7 @@ export function setPerformerDanceDeliveryMode(set: SetFn, get: GetFn, performerI
         performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { danceDeliveryMode })),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -192,6 +206,7 @@ export function addPerformerMcp(set: SetFn, get: GetFn, performerId: string, mcp
         ),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -210,6 +225,7 @@ export function removePerformerMcp(set: SetFn, get: GetFn, performerId: string, 
         ),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 
@@ -231,6 +247,7 @@ export function setPerformerMcpBinding(set: SetFn, get: GetFn, performerId: stri
         }),
         workspaceDirty: true,
     }))
+    markPerformerProjectionDirty(get, performerId)
     scheduleActWorkspacePersist(get, set, performerId)
 }
 

@@ -54,6 +54,18 @@ export interface SessionEntityState {
     seTodos: Record<string, Todo[]>
 
     /**
+     * chatKey → local draft/placeholder messages shown when no bound session
+     * exists yet (for example optimistic pre-create messages or detached views).
+     */
+    chatDrafts: Record<string, ChatMessage[]>
+
+    /**
+     * chatKey → local system prefix messages shown ahead of server-backed
+     * session history.
+     */
+    chatPrefixes: Record<string, ChatMessage[]>
+
+    /**
      * Bidirectional index: chatKey ↔ sessionId.
      *
      * chatKey is:
@@ -66,9 +78,6 @@ export interface SessionEntityState {
 
     /** Per-session loading state (replaces shared loadingPerformerId) */
     sessionLoading: Record<string, boolean>
-
-    /** Per-session history cursor for pagination */
-    historyCursors: Record<string, string | null>
 
     /** OpenCode revert state: hide rolled-back messages until restored or next prompt cleanup */
     sessionReverts: Record<string, { messageId: string; partId?: string }>
@@ -98,13 +107,19 @@ export interface SessionEntityActions {
     clearSessionQuestion: (sessionId: string) => void
     setSessionTodos: (sessionId: string, todos: Todo[]) => void
 
+    // Local chatKey-scoped view state
+    setChatDraftMessages: (chatKey: string, messages: ChatMessage[]) => void
+    appendChatDraftMessage: (chatKey: string, message: ChatMessage) => void
+    removeChatDraftMessage: (chatKey: string, messageId: string) => void
+    clearChatDraftMessages: (chatKey: string) => void
+    setChatPrefixMessages: (chatKey: string, messages: ChatMessage[]) => void
+    appendChatPrefixMessage: (chatKey: string, message: ChatMessage) => void
+    clearChatPrefixMessages: (chatKey: string) => void
+
     // Binding index
     registerBinding: (chatKey: string, sessionId: string) => void
     unregisterBinding: (chatKey: string) => void
     unregisterBindingBySession: (sessionId: string) => void
-
-    // History cursor
-    setHistoryCursor: (sessionId: string, cursor: string | null) => void
 
     // Revert state
     setSessionRevert: (sessionId: string, revert: { messageId: string; partId?: string }) => void

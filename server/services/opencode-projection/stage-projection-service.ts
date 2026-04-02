@@ -1,16 +1,17 @@
 import fs from 'fs/promises'
 import { createHash } from 'crypto'
 import path from 'path'
-import { getOpencode } from '../../lib/opencode.js'
-import type { ProjectMcpLiveStatusMap } from '../../lib/project-config.js'
 import { resolveRuntimeModel } from '../../lib/model-catalog.js'
 import { resolveRuntimeTools, type RuntimeToolResolution } from '../../lib/runtime-tools.js'
+import { mcpToolPattern } from '../../../shared/mcp-catalog.js'
 import {
     cleanGroupFiles,
+    readManifest,
     toRelativePath,
     updateGitExclude,
     updateManifestGroup,
     resolveAgentIdentity,
+    writeManifest,
 } from './projection-manifest.js'
 import { compileDance, type CompiledSkill } from './dance-compiler.js'
 import { compilePerformer, type CompiledPerformer, type PerformerCompileInput, type Posture } from './performer-compiler.js'
@@ -94,7 +95,9 @@ export interface PerformerProjectionInput {
 export interface EnsuredPerformerProjection {
     compiled: CompiledPerformer
     toolResolution: RuntimeToolResolution
+    toolMap: Record<string, boolean>
     capabilitySnapshot: CapabilitySnapshot
+    changed: boolean
 }
 
 function computeWorkspaceHash(workingDir: string) {
@@ -103,6 +106,34 @@ function computeWorkspaceHash(workingDir: string) {
 
 function groupKey(performerId: string) {
     return `performer:${performerId}`
+}
+
+export async function pruneStalePerformerProjections(workingDir: string, performerIds: string[]) {
+    const manifest = await readManifest(workingDir)
+    if (!manifest) {
+        return false
+    }
+
+    const activeIds = new Set(performerIds)
+    const staleKeys = Object.keys(manifest.groups).filter((key) => {
+        if (!key.startsWith('performer:')) return false
+        const performerId = key.slice('performer:'.length)
+        return !activeIds.has(performerId)
+    })
+
+    if (staleKeys.length === 0) {
+        return false
+    }
+
+    for (const key of staleKeys) {
+        for (const file of manifest.groups[key] || []) {
+            await fs.rm(path.join(workingDir, file), { force: true, recursive: true }).catch(() => {})
+        }
+        delete manifest.groups[key]
+    }
+
+    await writeManifest(workingDir, manifest)
+    return true
 }
 
 async function writeIfChanged(filePath: string, content: string) {
@@ -115,24 +146,12 @@ async function writeIfChanged(filePath: string, content: string) {
     return true
 }
 
-async function allMcpToolIds(cwd: string): Promise<string[]> {
-    const oc = await getOpencode()
-    const res = await oc.mcp.status({ directory: cwd })
-    const statusMap = ((res && typeof res === 'object' && 'data' in res ? res.data : {}) || {}) as ProjectMcpLiveStatusMap
-    return Array.from(
-        new Set(
-            Object.values(statusMap).flatMap((entry) =>
-                (entry?.tools || [])
-                    .map((tool) => (typeof tool?.name === 'string' ? tool.name : ''))
-                    .filter((toolId): toolId is string => toolId.length > 0)
-            )
-        )
+function buildProjectedToolMap(mcpServerNames: string[]) {
+    return Object.fromEntries(
+        Array.from(new Set(mcpServerNames.filter(Boolean)))
+            .sort((left, right) => left.localeCompare(right))
+            .map((serverName) => [mcpToolPattern(serverName), true]),
     )
-}
-
-function buildProjectedToolMap(allToolIds: string[], resolvedToolIds: string[]) {
-    const resolved = new Set(resolvedToolIds)
-    return Object.fromEntries(allToolIds.map((toolId) => [toolId, resolved.has(toolId)]))
 }
 
 async function resolveCapabilitySnapshot(cwd: string, model: ModelSelection): Promise<CapabilitySnapshot> {
@@ -155,10 +174,10 @@ async function resolveCapabilitySnapshot(cwd: string, model: ModelSelection): Pr
 export async function ensurePerformerProjection(input: PerformerProjectionInput): Promise<EnsuredPerformerProjection> {
     const workspaceHash = computeWorkspaceHash(input.workingDir)
     const toolResolution = await resolveRuntimeTools(input.workingDir, input.model, input.mcpServerNames)
-    const toolMap = buildProjectedToolMap(
-        await allMcpToolIds(input.workingDir),
-        toolResolution.resolvedTools,
+    const resolvedServerNames = input.mcpServerNames.filter((serverName) =>
+        toolResolution.resolvedTools.includes(mcpToolPattern(serverName)),
     )
+    const toolMap = buildProjectedToolMap(resolvedServerNames)
 
     if (input.extraTools) {
         for (const tool of input.extraTools) {
@@ -260,15 +279,12 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
     )
     await updateGitExclude(input.workingDir)
 
-    if (changed) {
-        const oc = await getOpencode()
-        await oc.instance.dispose({ directory: input.workingDir }).catch(() => {})
-    }
-
     return {
         compiled,
         toolResolution,
+        toolMap,
         capabilitySnapshot: await resolveCapabilitySnapshot(input.workingDir, input.model),
+        changed,
     }
 }
 

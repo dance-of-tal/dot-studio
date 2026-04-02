@@ -4,11 +4,12 @@ import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/cha
 import { extractNonRetryableSessionError, waitForSessionToSettle } from '../lib/chat-session.js'
 import { describeUnavailableRuntimeTools } from '../lib/runtime-tools.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
-import { registerSessionExecutionContext } from '../lib/session-execution.js'
 import { resolveActSessionPolicy, ACT_AGENT_POSTURE } from '../lib/act-session-policy.js'
 import { ensurePerformerProjection } from './opencode-projection/stage-projection-service.js'
 import { projectActTools } from './act-runtime/act-tool-projection.js'
 import { getActDefinitionForThread, getActRuntimeService } from './act-runtime/act-runtime-service.js'
+import { prepareRuntimeForExecution, throwIfRuntimePreparationBlocked } from './runtime-preparation-service.js'
+import { createSessionOwnership } from './session-ownership-service.js'
 
 function isAssistantOwnerId(ownerId: string) {
     return ownerId === 'studio-assistant' || ownerId.startsWith('studio-assistant--')
@@ -29,7 +30,7 @@ export async function createStudioChatSession(
         directory: cwd,
         title: buildStudioSessionTitle(request.performerId, request.performerName, request.configHash),
     }))
-    await registerSessionExecutionContext({
+    await createSessionOwnership({
         sessionId: session.id,
         ownerKind,
         ownerId: contextOwnerId,
@@ -134,20 +135,21 @@ export async function sendStudioChatMessage(
             discoveryPrompt,
         ].filter(Boolean).join('\n\n')
     } else {
-        ensured = await ensurePerformerProjection({
+        const prepared = await prepareRuntimeForExecution(workingDir, () => ensurePerformerProjection({
             performerId: rawPerformerId,
             performerName: performer.performerName,
             talRef: performer.talRef,
             danceRefs: [...(performer.danceRefs || []), ...(performer.extraDanceRefs || [])],
-            model: performer.model,
+            model: performer.model!,
             modelVariant: performer.modelVariant || null,
             mcpServerNames: performer.mcpServerNames || [],
             workingDir,
             ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
             ...(collaborationPromptSection ? { collaborationPromptSection } : {}),
-            // Pass Act runtime tools as extraTools so they're included in projection
             ...(actExtraTools.length > 0 ? { extraTools: actExtraTools } : {}),
-        })
+        }))
+        throwIfRuntimePreparationBlocked(prepared)
+        ensured = prepared.payload
         capabilitySnapshot = ensured.capabilitySnapshot
         toolResolution = ensured.toolResolution
     }
@@ -209,6 +211,7 @@ export async function sendStudioChatMessage(
                 modelID: performer.model.modelId,
             } : undefined,
             system: isAssistant ? (assistantContextPrefix || undefined) : undefined,
+            tools: isAssistant ? undefined : ensured?.toolMap,
             parts,
         }))
     } catch (error) {

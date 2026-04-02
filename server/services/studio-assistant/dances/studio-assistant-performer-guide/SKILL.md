@@ -8,6 +8,11 @@ compatibility: Designed for the DOT Studio built-in assistant projection.
 
 Use this skill when you need the exact current mutation surface.
 
+## Output Shape
+- For stage mutations, always end with exactly one raw `<assistant-actions>...</assistant-actions>` block.
+- Do not emit bare JSON or fenced JSON for stage mutations.
+- Validate the whole block before sending it. One invalid action can cause the entire block to be ignored.
+
 ## Action Ordering
 - Actions are applied sequentially in array order.
 - Use same-block `ref` values for cascade flows where a later action depends on something created earlier in the same block.
@@ -44,6 +49,8 @@ Rules:
 - If a new Performer needs new Dance drafts, prefer inline `addDanceDrafts` on `createPerformer`.
 - If the drafts are created earlier in the same block, use `talDraftRef` and `addDanceDraftRefs`.
 - Prefer one dependency-complete `createPerformer` over `createPerformer` followed by `updatePerformer` when the required Tal or Dance is already known.
+- `addMcpServerNames` and `removeMcpServerNames` only reference existing Studio MCP library server names.
+- Do not invent MCP server names and do not treat Performer actions as a way to create or edit Studio MCP library entries.
 
 ## Act Fields
 `createAct` supports:
@@ -69,6 +76,10 @@ For inline relations and `connectPerformers`, prefer:
 Rules:
 - `actRules` must be a string array, not a single string.
 - When the Act participants are already known at creation time, prefer `participantPerformerRefs`, `participantPerformerIds`, or `participantPerformerNames` on `createAct`.
+- For team or workflow requests, a new Act with multiple participants but no relations is usually wrong.
+- For team or workflow requests such as `d2c company`, `investment team`, or `review flow`, include at least one relation in the same `createAct`.
+- Use `source...` and `target...` relation fields, not `from...` or `to...`.
+- Every new relation must include both a non-empty `name` and non-empty `description`.
 - Never invent ids such as `performer-1` or `act-1`. Use ids from the snapshot or same-block refs.
 
 ## Participant Subscriptions
@@ -160,4 +171,10 @@ Cascade performers into an Act in one block:
 
 ```html
 <assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"macro","name":"Macro Researcher"},{"type":"createPerformer","ref":"portfolio","name":"Portfolio Strategist"},{"type":"createAct","name":"Investment Advisory Team","actRules":["Always cite evidence.","Surface uncertainty and risk."],"participantPerformerRefs":["macro","portfolio"]}]}</assistant-actions>
+```
+
+Create a D2C company Act with connected participants:
+
+```html
+<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"brand","name":"Brand Strategist"},{"type":"createPerformer","ref":"growth","name":"Growth Marketer"},{"type":"createPerformer","ref":"ops","name":"Ecommerce Operator"},{"type":"createAct","name":"D2C Company","participantPerformerRefs":["brand","growth","ops"],"actRules":["Separate assumptions from evidence.","Flag channel risk early."],"relations":[{"sourcePerformerRef":"brand","targetPerformerRef":"growth","direction":"one-way","name":"campaign brief","description":"Brand Strategist hands positioning and campaign priorities to Growth Marketer."},{"sourcePerformerRef":"growth","targetPerformerRef":"ops","direction":"one-way","name":"launch handoff","description":"Growth Marketer hands launch requirements and expected volume to Ecommerce Operator."}]}]}</assistant-actions>
 ```

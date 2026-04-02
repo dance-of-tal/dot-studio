@@ -68,10 +68,11 @@ function hasPerformerLocator(action: Record<string, unknown>) {
 }
 
 function hasParticipantLocator(prefix: 'source' | 'target', action: Record<string, unknown>) {
-    const participantKey = action[`${prefix}ParticipantKey`]
-    const performerId = action[`${prefix}PerformerId`]
-    const performerRef = action[`${prefix}PerformerRef`]
-    const performerName = action[`${prefix}PerformerName`]
+    const aliasPrefix = prefix === 'source' ? 'from' : 'to'
+    const participantKey = action[`${prefix}ParticipantKey`] ?? action[`${aliasPrefix}ParticipantKey`]
+    const performerId = action[`${prefix}PerformerId`] ?? action[`${aliasPrefix}PerformerId`]
+    const performerRef = action[`${prefix}PerformerRef`] ?? action[`${aliasPrefix}PerformerRef`]
+    const performerName = action[`${prefix}PerformerName`] ?? action[`${aliasPrefix}PerformerName`]
 
     return (
         isNonEmptyString(participantKey)
@@ -106,8 +107,8 @@ function isActRelationBlueprint(value: unknown) {
         hasParticipantLocator('source', value)
         && hasParticipantLocator('target', value)
         && (value.direction === undefined || value.direction === 'both' || value.direction === 'one-way')
-        && (value.name === undefined || isNonEmptyString(value.name))
-        && (value.description === undefined || isNonEmptyString(value.description))
+        && isNonEmptyString(value.name)
+        && isNonEmptyString(value.description)
     )
 }
 
@@ -190,8 +191,8 @@ function isValidAssistantAction(action: unknown): action is AssistantAction {
                 && hasParticipantLocator('source', action)
                 && hasParticipantLocator('target', action)
                 && (action.direction === undefined || action.direction === 'both' || action.direction === 'one-way')
-                && (action.name === undefined || isNonEmptyString(action.name))
-                && (action.description === undefined || isNonEmptyString(action.description))
+                && isNonEmptyString(action.name)
+                && isNonEmptyString(action.description)
             )
         case 'updateRelation':
         case 'removeRelation':
@@ -226,21 +227,31 @@ function normalizeEnvelope(input: unknown): AssistantActionEnvelope | null {
     }
 }
 
+function parseAssistantActionEnvelopeJson(raw: string): AssistantActionEnvelope | null {
+    try {
+        return normalizeEnvelope(JSON.parse(raw))
+    } catch {
+        return null
+    }
+}
+
 export function extractAssistantActionEnvelope(content: string): {
     content: string
     envelope: AssistantActionEnvelope | null
 } {
     const match = content.match(ACTION_BLOCK_PATTERN)
     if (!match) {
-        return { content: content.trim(), envelope: null }
+        const trimmed = content.trim()
+        const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
+        const candidate = fenced?.[1]?.trim() || trimmed
+        const envelope = parseAssistantActionEnvelopeJson(candidate)
+        return {
+            content: envelope ? '' : trimmed,
+            envelope,
+        }
     }
 
-    let envelope: AssistantActionEnvelope | null = null
-    try {
-        envelope = normalizeEnvelope(JSON.parse(match[1]))
-    } catch {
-        envelope = null
-    }
+    const envelope = parseAssistantActionEnvelopeJson(match[1])
 
     const cleaned = content.replace(ACTION_BLOCK_PATTERN, '').trim()
     return {
