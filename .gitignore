@@ -18,10 +18,14 @@ tmp-client-sourcemap/
 !.env.example
 *.local
 .DS_Store
+.agent/
+.opencode/
 
 # Editor files
 .idea/
 .vscode/
+*.swp
+*.swo
 
 # Logs
 logs/
@@ -44,5 +48,5 @@ config.json
 tsc-results.txt
 fork-error.json
 
-#opencode-source
+# opencode-source
 .opencode-source/

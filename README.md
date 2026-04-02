@@ -173,8 +173,6 @@ If your change affects packaging or installation:
 npm run pack:check
 ```
 
-For contributors working inside this repository, there is also internal agent guidance under `.agent/`.
-
 ## Related Packages
 
 - [`dance-of-tal`](https://www.npmjs.com/package/dance-of-tal)
