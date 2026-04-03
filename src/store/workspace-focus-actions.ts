@@ -1,7 +1,7 @@
 import { api, setApiWorkingDirContext } from '../api'
 import { resolveActExpandedHeight } from '../lib/act-layout'
 import { getCanvasViewportSize, resolveFocusNodeId } from '../lib/focus-utils'
-import { normalizePath, mapCanvasTerminals } from './workspace-helpers'
+import { normalizePath, mapCanvasTerminals, resolveCanvasSpawnPosition } from './workspace-helpers'
 import type { StudioState } from './types'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
@@ -294,6 +294,7 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
         chatKeyToSession: {},
         sessionToChatKey: {},
         sessionLoading: {},
+        sessionMutationPending: {},
         sessionReverts: {},
         sessions: [],
         inspectorFocus: null,
@@ -314,22 +315,27 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
 }
 
 export function addCanvasTerminalImpl(
+    get: GetState,
     set: SetState,
     canvasTerminalIdCounter: { value: number },
 ) {
     canvasTerminalIdCounter.value++
     const id = `canvas-term-${canvasTerminalIdCounter.value}`
     const title = `Terminal ${canvasTerminalIdCounter.value}`
+    const state = get()
+    const spawnPosition = resolveCanvasSpawnPosition({
+        canvasCenter: state.canvasCenter,
+        existingCount: state.canvasTerminals.length,
+        width: 600,
+        height: 400,
+    })
     set((state: StudioState) => ({
         canvasTerminals: [
             ...state.canvasTerminals,
             {
                 id,
                 title,
-                position: {
-                    x: 200 + (state.canvasTerminals.length * 30),
-                    y: 200 + (state.canvasTerminals.length * 20),
-                },
+                position: spawnPosition,
                 width: 600,
                 height: 400,
                 sessionId: null,

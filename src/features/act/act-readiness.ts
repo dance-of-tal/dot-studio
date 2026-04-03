@@ -6,6 +6,7 @@
  */
 import type { WorkspaceAct, PerformerNode } from '../../types'
 import { hasModelConfig } from '../../lib/performers'
+import { resolvePerformerFromActBinding } from '../../lib/act-participants'
 
 export type ActReadinessIssueSeverity = 'error' | 'warning'
 
@@ -25,23 +26,6 @@ export interface ActReadinessIssue {
 export interface ActReadinessResult {
     runnable: boolean
     issues: ActReadinessIssue[]
-}
-
-/**
- * Resolve the studio PerformerNode that backs a participant binding.
- * Returns null if no matching performer is found on the canvas.
- */
-function resolvePerformer(
-    performerRef: WorkspaceAct['participants'][string]['performerRef'],
-    performers: PerformerNode[],
-): PerformerNode | null {
-    if (performerRef.kind === 'draft') {
-        return performers.find((p) =>
-            p.id === performerRef.draftId
-            || p.meta?.derivedFrom === `draft:${performerRef.draftId}`,
-        ) ?? null
-    }
-    return performers.find((p) => p.meta?.derivedFrom === performerRef.urn) ?? null
 }
 
 /**
@@ -105,7 +89,7 @@ export function evaluateActReadiness(
         const binding = act.participants[key]
 
         // 4. Performer ref cannot resolve
-        const performer = resolvePerformer(binding.performerRef, performers)
+        const performer = resolvePerformerFromActBinding(performers, binding)
         if (!performer) {
             issues.push({
                 code: 'unresolved-performer',
@@ -154,7 +138,7 @@ export function evaluateActReadiness(
             const binding = act.participants[key]
 
             // Skip if performer can't be resolved — already covered by check #4
-            const performer = resolvePerformer(binding.performerRef, performers)
+            const performer = resolvePerformerFromActBinding(performers, binding)
             if (!performer) continue
 
             const subs = binding.subscriptions

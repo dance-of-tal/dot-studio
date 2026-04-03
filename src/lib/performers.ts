@@ -37,6 +37,8 @@ export {
 } from './performers-model'
 
 export {
+    PERFORMER_DEFAULT_HEIGHT,
+    PERFORMER_DEFAULT_WIDTH,
     createPerformerNode,
     createPerformerNodeFromAsset,
     clonePerformerNode,

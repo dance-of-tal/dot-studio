@@ -42,6 +42,10 @@ export default function App() {
 
   const isInitialMount = useRef(true);
 
+  const isStudioTheme = (value: string | undefined): value is 'light' | 'dark' => (
+    value === 'light' || value === 'dark'
+  );
+
   // Auto-save Workspace configuration (debounced 2 seconds)
   useEffect(() => {
     if (isInitialMount.current) {
@@ -74,7 +78,7 @@ export default function App() {
     api.studio.getConfig()
       .then((config) => {
         setApiWorkingDirContext(config.projectDir || null);
-        if (config.theme && config.theme !== useStudioStore.getState().theme) {
+        if (isStudioTheme(config.theme) && config.theme !== useStudioStore.getState().theme) {
           useStudioStore.setState({ theme: config.theme });
           localStorage.setItem('dot-theme', config.theme);
         }

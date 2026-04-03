@@ -14,7 +14,7 @@ function canonicalAssetPath(asset: AssetPanelAsset | null): string | null {
         : null
 }
 
-function isFetchableAsset(asset: AssetPanelAsset | null): asset is LibraryAsset {
+function isFetchableAsset(asset: AssetPanelAsset | null): asset is LibraryAsset & { author: string } {
     return !!asset
         && (asset.kind === 'tal' || asset.kind === 'dance' || asset.kind === 'performer' || asset.kind === 'act')
         && asset.source !== 'draft'

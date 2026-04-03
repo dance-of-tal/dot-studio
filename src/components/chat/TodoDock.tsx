@@ -86,6 +86,9 @@ export function TodoDock({ todos, isLive = false, onClear }: TodoDockProps) {
 
     // Lifecycle state machine
     const visibility = computeDockState(total, allDone, isLive)
+    const scheduleDockUpdate = useCallback((callback: () => void) => {
+        queueMicrotask(callback)
+    }, [])
 
     useEffect(() => {
         // Clear any pending timer
@@ -96,15 +99,21 @@ export function TodoDock({ todos, isLive = false, onClear }: TodoDockProps) {
 
         switch (visibility) {
             case 'hide':
-                setDockVisible(false)
+                scheduleDockUpdate(() => {
+                    setDockVisible(false)
+                })
                 break
             case 'clear':
-                setDockVisible(false)
+                scheduleDockUpdate(() => {
+                    setDockVisible(false)
+                })
                 onClear?.()
                 break
             case 'open':
-                setDockVisible(true)
-                setCollapsed(false)
+                scheduleDockUpdate(() => {
+                    setDockVisible(true)
+                    setCollapsed(false)
+                })
                 break
             case 'close':
                 // All done → close after delay
@@ -120,7 +129,7 @@ export function TodoDock({ todos, isLive = false, onClear }: TodoDockProps) {
                 window.clearTimeout(closeTimerRef.current)
             }
         }
-    }, [visibility, onClear])
+    }, [visibility, onClear, scheduleDockUpdate])
 
     const active = useMemo(() =>
         todos.find(t => t.status === 'in_progress')

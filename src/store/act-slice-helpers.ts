@@ -1,11 +1,14 @@
 import { nanoid } from 'nanoid'
-import type { ActDefinition, AssetCard, WorkspaceAct, WorkspaceActParticipantBinding, ActRelation } from '../types'
+import type { ActDefinition, AssetCard, AssetRef, PerformerNode, WorkspaceAct, WorkspaceActParticipantBinding, ActRelation } from '../types'
 import { api } from '../api'
 import { parseActAsset } from 'dance-of-tal/contracts'
 import { assetUrnDisplayName } from '../lib/asset-urn'
+import { resolvePerformerFromActBinding } from '../lib/act-participants'
 import { resolvePreferredActThreadId } from '../lib/act-threads'
+import { PERFORMER_DEFAULT_HEIGHT, PERFORMER_DEFAULT_WIDTH } from '../lib/performers'
 import { showToast } from '../lib/toast'
-import type { StudioState } from './types'
+import { buildActParticipantChatKey, parseActParticipantChatKey } from '../../shared/chat-targets'
+import type { ActEditorState, StudioState } from './types'
 import { clearChatSessionView, registerSessionBinding, syncSessionSnapshot } from './session'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
@@ -44,17 +47,254 @@ export function fallbackParticipantLabel(performerRef: WorkspaceActParticipantBi
     return assetUrnDisplayName(performerRef.urn)
 }
 
+export function sameActParticipantRef(left: AssetRef, right: AssetRef) {
+    return (left.kind === 'draft' && right.kind === 'draft' && left.draftId === right.draftId)
+        || (left.kind === 'registry' && right.kind === 'registry' && left.urn === right.urn)
+}
+
+export function performerNodeToActRef(performer: PerformerNode): AssetRef {
+    const derivedFrom = performer.meta?.derivedFrom?.trim()
+    if (!derivedFrom) {
+        return { kind: 'draft', draftId: performer.id }
+    }
+    if (derivedFrom.startsWith('draft:')) {
+        return { kind: 'draft', draftId: derivedFrom.slice('draft:'.length) }
+    }
+    return { kind: 'registry', urn: derivedFrom }
+}
+
+export function resolveActParticipantName(
+    performers: PerformerNode[],
+    binding: WorkspaceActParticipantBinding | null | undefined,
+    fallbackKey: string,
+) {
+    const performer = resolvePerformerFromActBinding(performers, binding)
+    return performer?.name || resolveBindingDisplayName(binding, fallbackKey)
+}
+
+export function findExistingParticipantKey(
+    act: WorkspaceAct,
+    performerRef: AssetRef,
+) {
+    const existing = Object.entries(act.participants).find(([, binding]) => sameActParticipantRef(binding.performerRef, performerRef))
+    return existing?.[0] || null
+}
+
+export function createActParticipantBinding(params: {
+    act: WorkspaceAct
+    performers: PerformerNode[]
+    performerRef: AssetRef
+}) {
+    const { act, performers, performerRef } = params
+    const participantCount = Object.keys(act.participants).length
+    const displayName = performerRef.kind === 'registry'
+        ? performers.find((performer) => performer.meta?.derivedFrom === performerRef.urn)?.name
+            || assetUrnDisplayName(performerRef.urn)
+            || `Participant ${participantCount + 1}`
+        : performers.find((performer) => performer.id === performerRef.draftId)?.name
+            || `Participant ${participantCount + 1}`
+
+    return {
+        key: createActParticipantKey(),
+        binding: {
+            performerRef,
+            displayName,
+            position: { x: participantCount * 300, y: 100 },
+        } satisfies WorkspaceActParticipantBinding,
+    }
+}
+
+export function buildActSelectionState(state: StudioState, actId: string) {
+    return {
+        selectedActId: actId,
+        selectedPerformerId: null,
+        selectedPerformerSessionId: null,
+        actEditorState: state.actEditorState?.actId === actId ? state.actEditorState : null,
+    }
+}
+
+export function buildActEditorSelectionState(
+    state: StudioState,
+    actId: string,
+    actEditorState: ActEditorState,
+) {
+    return {
+        ...buildActSelectionState(state, actId),
+        actEditorState,
+    }
+}
+
+export function createActEditorState(
+    actId: string,
+    mode: ActEditorState['mode'],
+    options: { participantKey?: string | null; relationId?: string | null } = {},
+): ActEditorState {
+    return {
+        actId,
+        mode,
+        participantKey: options.participantKey ?? null,
+        relationId: options.relationId ?? null,
+    }
+}
+
+export function resolveActEditorStateAfterRelationRemoval(
+    actEditorState: ActEditorState | null,
+    actId: string,
+    relationId: string,
+    nextParticipants: Record<string, unknown>,
+) {
+    if (actEditorState?.actId !== actId) {
+        return actEditorState
+    }
+
+    if (
+        actEditorState.mode === 'participant'
+        && actEditorState.participantKey
+        && !nextParticipants[actEditorState.participantKey]
+    ) {
+        return createActEditorState(actId, 'act')
+    }
+
+    if (
+        actEditorState.mode === 'relation'
+        && actEditorState.relationId === relationId
+    ) {
+        return createActEditorState(actId, 'act')
+    }
+
+    return actEditorState
+}
+
+function resolveValidActParticipantSelection(
+    state: StudioState,
+    actId: string,
+    participantKey: string | null,
+) {
+    if (!participantKey) {
+        return null
+    }
+
+    const act = state.acts.find((entry) => entry.id === actId)
+    return act?.participants[participantKey] ? participantKey : null
+}
+
+export function buildSelectActState(state: StudioState, actId: string | null) {
+    if (actId === null) {
+        return {
+            selectedActId: null,
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            actEditorState: null,
+            focusedPerformerId: state.focusSnapshot ? state.focusedPerformerId : null,
+            focusedNodeType: state.focusSnapshot ? state.focusedNodeType : null,
+        }
+    }
+
+    const nextThreads = state.actThreads[actId] || []
+    const nextActiveThreadId = resolvePreferredActThreadId(nextThreads, state.activeThreadId)
+    const shouldPreserveParticipantSelection = (
+        state.selectedActId === actId
+        && nextActiveThreadId === state.activeThreadId
+    )
+
+    return {
+        ...buildActSelectionState(state, actId),
+        activeThreadId: nextActiveThreadId,
+        activeThreadParticipantKey: shouldPreserveParticipantSelection
+            ? resolveValidActParticipantSelection(state, actId, state.activeThreadParticipantKey)
+            : null,
+        focusedPerformerId: state.focusSnapshot ? state.focusedPerformerId : null,
+        focusedNodeType: state.focusSnapshot ? state.focusedNodeType : null,
+    }
+}
+
+export function resolveSelectedActThreadState(
+    state: StudioState,
+    actId: string,
+    threads: Array<{ id: string; createdAt: number }>,
+    preferredThreadId: string | null = state.activeThreadId,
+) {
+    if (state.selectedActId !== actId) {
+        return {
+            activeThreadId: state.activeThreadId,
+            activeThreadParticipantKey: state.activeThreadParticipantKey,
+        }
+    }
+
+    const nextActiveThreadId = resolvePreferredActThreadId(threads, preferredThreadId)
+    return {
+        activeThreadId: nextActiveThreadId,
+        activeThreadParticipantKey: nextActiveThreadId
+            ? resolveValidActParticipantSelection(state, actId, state.activeThreadParticipantKey)
+            : null,
+    }
+}
+
+export function buildActThreadSelectionState(
+    state: StudioState,
+    actId: string,
+    threadId: string | null,
+    participantKey: string | null = null,
+) {
+    return {
+        ...buildActSelectionState(state, actId),
+        activeThreadId: threadId,
+        activeThreadParticipantKey: resolveValidActParticipantSelection(state, actId, participantKey),
+    }
+}
+
+export function buildDeletedActThreadState(
+    state: StudioState,
+    actId: string,
+    threadId: string,
+) {
+    const remainingThreads = (state.actThreads[actId] || []).filter((thread) => thread.id !== threadId)
+
+    return {
+        actThreads: { ...state.actThreads, [actId]: remainingThreads },
+        ...resolveSelectedActThreadState(
+            state,
+            actId,
+            remainingThreads,
+            state.selectedActId === actId && state.activeThreadId === threadId
+                ? null
+                : state.activeThreadId,
+        ),
+    }
+}
+
+export function collectRemovedActParticipantChatKeys(
+    state: Pick<StudioState, 'chatKeyToSession'>,
+    actId: string,
+    nextThreadIds: Set<string>,
+    authoritativeSessions: Record<string, string>,
+) {
+    return Object.keys(state.chatKeyToSession).filter((key) => {
+        const parsed = parseActParticipantChatKey(key)
+        if (!parsed || parsed.actId !== actId) {
+            return false
+        }
+
+        return !nextThreadIds.has(parsed.threadId) || !(key in authoritativeSessions)
+    })
+}
+
+export function listActThreadChatKeys(
+    state: Pick<StudioState, 'chatKeyToSession'>,
+    actId: string,
+    threadId: string,
+) {
+    return Object.keys(state.chatKeyToSession).filter((key) => {
+        const parsed = parseActParticipantChatKey(key)
+        return parsed?.actId === actId && parsed.threadId === threadId
+    })
+}
+
 function resolveParticipantDescription(
     binding: WorkspaceActParticipantBinding,
     performers: StudioState['performers'],
 ) {
-    const ref = binding.performerRef
-    const performer = ref.kind === 'draft'
-        ? (
-            performers.find((entry) => entry.id === ref.draftId)
-            || performers.find((entry) => entry.meta?.derivedFrom === `draft:${ref.draftId}`)
-        )
-        : performers.find((entry) => entry.meta?.derivedFrom === ref.urn)
+    const performer = resolvePerformerFromActBinding(performers, binding)
     const description = performer?.meta?.authoring?.description?.trim()
     return description ? description : undefined
 }
@@ -190,8 +430,8 @@ export function importActFromAssetImpl(
                 x: (center?.x ?? 400) + materializedPerformers.length * 340,
                 y: (center?.y ?? 300) + 350,
             },
-            width: 320,
-            height: 400,
+            width: PERFORMER_DEFAULT_WIDTH,
+            height: PERFORMER_DEFAULT_HEIGHT,
             scope: 'shared',
             model: null,
             talRef: null,
@@ -296,11 +536,7 @@ export async function createActThreadImpl(get: GetState, set: SetState, actId: s
     const thread = result.thread
 
     // Set active thread immediately for responsiveness
-    set({
-        selectedActId: actId,
-        activeThreadId: thread.id,
-        activeThreadParticipantKey: null,
-    })
+    set((state) => buildActThreadSelectionState(state, actId, thread.id))
 
     // Reload threads from server to get authoritative list (avoids duplication)
     await loadActThreadsImpl(get, set, actId)
@@ -316,35 +552,20 @@ export async function loadActThreadsImpl(get: GetState, set: SetState, actId: st
     for (const thread of result.threads) {
         for (const [participantKey, sessionId] of Object.entries(thread.participantSessions || {})) {
             if (!sessionId) continue
-            authoritativeSessions[`act:${actId}:thread:${thread.id}:participant:${participantKey}`] = sessionId
+            authoritativeSessions[buildActParticipantChatKey(actId, thread.id, participantKey)] = sessionId
         }
     }
 
     const sessionsToFetch: Array<{ chatKey: string; sessionId: string }> = []
     const removedChatKeys: string[] = []
     set((state: StudioState) => {
-        const actThreadPrefix = `act:${actId}:thread:`
-
-        for (const key of Object.keys(state.chatKeyToSession)) {
-            if (!key.startsWith(actThreadPrefix)) continue
-            const match = key.match(/^act:[^:]+:thread:([^:]+):participant:/)
-            const threadId = match?.[1] || null
-            if (!threadId || !nextThreadIds.has(threadId) || !(key in authoritativeSessions)) {
-                removedChatKeys.push(key)
-            }
-        }
+        removedChatKeys.push(
+            ...collectRemovedActParticipantChatKeys(state, actId, nextThreadIds, authoritativeSessions),
+        )
 
         for (const [chatKey, sessionId] of Object.entries(authoritativeSessions)) {
             if (state.chatKeyToSession[chatKey] !== sessionId || !(state.seMessages[sessionId]?.length)) {
                 sessionsToFetch.push({ chatKey, sessionId })
-            }
-        }
-
-        let nextActiveThreadParticipantKey = state.activeThreadParticipantKey
-        if (state.selectedActId === actId && state.activeThreadParticipantKey) {
-            const selectedAct = state.acts.find((entry) => entry.id === actId)
-            if (!selectedAct?.participants[state.activeThreadParticipantKey]) {
-                nextActiveThreadParticipantKey = null
             }
         }
 
@@ -359,10 +580,7 @@ export async function loadActThreadsImpl(get: GetState, set: SetState, actId: st
                     createdAt: thread.createdAt,
                 })),
             },
-            activeThreadId: state.selectedActId === actId
-                ? resolvePreferredActThreadId(result.threads, state.activeThreadId)
-                : state.activeThreadId,
-            activeThreadParticipantKey: nextActiveThreadParticipantKey,
+            ...resolveSelectedActThreadState(state, actId, result.threads),
         }
     })
 

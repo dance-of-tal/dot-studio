@@ -11,6 +11,8 @@ Use this skill when the user wants help designing a performer team or workflow s
 ## Default Build Strategy
 - Reuse existing performers whenever they already satisfy the role.
 - Create only the missing performers, then create or update the Act.
+- The created Performers should reflect the user's requested role, responsibility, and working style rather than generic placeholders.
+- If the user intent implies a Tal, Dance, or model choice, carry that into the cascaded Performer creation unless the user explicitly asked to omit it.
 - When creating a new performer, prefer creating its Tal or Dance dependencies in the same block instead of leaving a partial performer behind.
 - If the user asked for a workflow or team, do not stop after creating performers alone.
 - If the new Act participants were created in the same reply, prefer `participantPerformerRefs` directly on `createAct`.
@@ -45,5 +47,7 @@ Use this skill when the user wants help designing a performer team or workflow s
 ## Response Strategy
 - State the intended structure briefly.
 - If the request is underspecified, ask the smallest clarifying question needed.
+- Asset creation can be conversational. Use a short question-and-answer flow when the correct Performer or Act shape depends on missing intent.
 - When Tal, Dance, or Performer setup can be done in more than one reasonable way, present the shortest useful option set first.
 - If the request is specific enough, create the concrete performer and Act structure directly.
+- Before finalizing a non-trivial mutation block, run `node scripts/typecheck-assistant-actions.mjs <path-or->` so same-block refs, draft kinds, and missing workflow relations are checked first.

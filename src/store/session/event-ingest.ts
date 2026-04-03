@@ -37,6 +37,40 @@ interface SSEEvent {
     properties?: Record<string, unknown>
 }
 
+type MessageInfoRecord = {
+    sessionID?: string
+    sessionId?: string
+    id?: string
+    role?: string
+    time?: { created?: number }
+}
+
+type MessagePartRecord = {
+    sessionID?: string
+    sessionId?: string
+    messageID?: string
+    messageId?: string
+    id?: string
+    type?: string
+    text?: string
+    tool?: string
+    callID?: string
+    callId?: string
+    state?: {
+        status?: 'pending' | 'running' | 'completed' | 'error'
+        title?: string
+        input?: unknown
+        output?: unknown
+        error?: unknown
+        time?: { start: number; end?: number }
+    }
+    reason?: string
+    cost?: unknown
+    tokens?: unknown
+    auto?: boolean
+    overflow?: unknown
+}
+
 // ── Ingest Pipeline ──
 
 interface EventIngestOptions {
@@ -51,6 +85,37 @@ interface EventIngestOptions {
 }
 
 const HEARTBEAT_TIMEOUT_MS = 30_000
+
+function readSessionId(record: Record<string, unknown> | null | undefined): string | undefined {
+    const sessionId = record?.sessionID ?? record?.sessionId
+    return typeof sessionId === 'string' && sessionId ? sessionId : undefined
+}
+
+function readMessageId(record: Record<string, unknown> | null | undefined): string | undefined {
+    const messageId = record?.messageID ?? record?.messageId
+    return typeof messageId === 'string' && messageId ? messageId : undefined
+}
+
+function readPartId(record: Record<string, unknown> | null | undefined): string | undefined {
+    const partId = record?.partID ?? record?.partId
+    return typeof partId === 'string' && partId ? partId : undefined
+}
+
+function readMessageInfo(props: Record<string, unknown>): MessageInfoRecord | undefined {
+    const info = props.info
+    if (!info || typeof info !== 'object') {
+        return undefined
+    }
+    return info as MessageInfoRecord
+}
+
+function readMessagePart(props: Record<string, unknown>): MessagePartRecord | undefined {
+    const part = props.part
+    if (!part || typeof part !== 'object') {
+        return undefined
+    }
+    return part as MessagePartRecord
+}
 
 export function createEventIngest(options: EventIngestOptions) {
     const { get, set, onHeartbeatTimeout, onSessionIdle, onSessionCompacted } = options
@@ -88,13 +153,23 @@ export function createEventIngest(options: EventIngestOptions) {
         // Track contiguous deltas per part key for concatenation
         const deltaAccum = new Map<string, { idx: number; delta: string }>()
 
+        const flushDeltaAccum = () => {
+            for (const [, { idx, delta }] of deltaAccum) {
+                const event = result[idx]
+                if (event && event.type === 'message.part.delta' && event.properties) {
+                    event.properties.delta = delta
+                }
+            }
+            deltaAccum.clear()
+        }
+
         for (let i = 0; i < events.length; i++) {
             const event = events[i]
             const type = event.type
 
             // Coalesce session.status: only keep last per session
             if (type === 'session.status') {
-                const sessionId = (event.properties?.sessionID ?? event.properties?.sessionId) as string | undefined
+                const sessionId = readSessionId(event.properties)
                 if (sessionId) {
                     const prevIdx = lastStatusIndex.get(sessionId)
                     if (prevIdx !== undefined) {
@@ -108,7 +183,7 @@ export function createEventIngest(options: EventIngestOptions) {
             // Coalesce message.part.delta: concatenate contiguous deltas for same part
             if (type === 'message.part.delta') {
                 const props = event.properties || {}
-                const partKey = `${props.sessionID}:${props.messageID}:${props.partID}`
+                const partKey = `${readSessionId(props)}:${readMessageId(props)}:${readPartId(props)}`
                 const existing = deltaAccum.get(partKey)
                 if (existing !== undefined) {
                     // Extend the accumulated delta
@@ -120,19 +195,14 @@ export function createEventIngest(options: EventIngestOptions) {
                 deltaAccum.set(partKey, { idx: result.length, delta: (props.delta as string) || '' })
             } else {
                 // Non-delta event breaks contiguity for all parts
-                deltaAccum.clear()
+                flushDeltaAccum()
             }
 
             result.push(event)
         }
 
         // Apply concatenated deltas back
-        for (const [, { idx, delta }] of deltaAccum) {
-            const event = result[idx]
-            if (event && event.type === 'message.part.delta' && event.properties) {
-                event.properties.delta = delta
-            }
-        }
+        flushDeltaAccum()
 
         // Filter out null entries (coalesced away)
         return result.filter(Boolean)
@@ -160,50 +230,62 @@ export function createEventIngest(options: EventIngestOptions) {
 
         switch (type) {
             case 'message.updated': {
-                const info = props.info as { sessionID?: string; id?: string; role?: string; time?: { created?: number } } | undefined
-                if (!info?.sessionID || !info?.id || typeof info.role !== 'string') return
-                reduceMessageUpdated(info.sessionID, info.id, info.role, info.time?.created, get, set)
+                const info = readMessageInfo(props)
+                const sessionId = readSessionId(info as Record<string, unknown> | undefined)
+                if (!sessionId || !info?.id || typeof info.role !== 'string') return
+                reduceMessageUpdated(sessionId, info.id, info.role, info.time?.created, get, set)
                 return
             }
 
             case 'message.removed': {
-                const sessionID = props.sessionID as string | undefined
-                const messageID = props.messageID as string | undefined
+                const sessionID = readSessionId(props)
+                const messageID = readMessageId(props)
                 if (!sessionID || !messageID) return
                 reduceMessageRemoved(sessionID, messageID, get, set)
                 return
             }
 
             case 'message.part.updated': {
-                const part = props.part as {
-                    sessionID?: string; messageID?: string; id?: string
-                    type?: string; text?: string; tool?: string; callID?: string
-                    state?: { status?: 'pending' | 'running' | 'completed' | 'error'; title?: string; input?: unknown; output?: unknown; error?: unknown; time?: { start: number; end?: number } }
-                    reason?: string; cost?: unknown; tokens?: unknown; auto?: boolean; overflow?: unknown
-                } | undefined
-                if (!part?.sessionID || !part?.messageID || !part?.id) return
-                reduceMessagePartUpdated(part.sessionID, part.messageID, { ...part, id: part.id }, get, set)
+                const part = readMessagePart(props)
+                const sessionId = readSessionId(part as Record<string, unknown> | undefined)
+                const messageId = readMessageId(part as Record<string, unknown> | undefined)
+                if (!sessionId || !messageId || !part?.id) return
+                reduceMessagePartUpdated(
+                    sessionId,
+                    messageId,
+                    {
+                        ...part,
+                        id: part.id,
+                        callID: part.callID ?? part.callId,
+                    },
+                    get,
+                    set,
+                )
                 return
             }
 
             case 'message.part.delta': {
-                const { sessionID, messageID, partID, field, delta } = props as {
-                    sessionID?: string; messageID?: string; partID?: string; field?: string; delta?: string
-                }
+                const sessionID = readSessionId(props)
+                const messageID = readMessageId(props)
+                const partID = readPartId(props)
+                const field = props.field as string | undefined
+                const delta = props.delta as string | undefined
                 if (!sessionID || !messageID || !partID || field !== 'text' || typeof delta !== 'string') return
                 reduceMessagePartDelta(sessionID, messageID, partID, delta, get, set)
                 return
             }
 
             case 'message.part.removed': {
-                const { sessionID, messageID, partID } = props as { sessionID?: string; messageID?: string; partID?: string }
+                const sessionID = readSessionId(props)
+                const messageID = readMessageId(props)
+                const partID = readPartId(props)
                 if (!sessionID || !messageID || !partID) return
                 reduceMessagePartRemoved(sessionID, messageID, partID, get, set)
                 return
             }
 
             case 'session.status': {
-                const sessionID = props.sessionID as string | undefined
+                const sessionID = readSessionId(props)
                 const status = props.status as { type?: string; attempt?: number; message?: string } | undefined
                 if (!sessionID || !status?.type) return
                 logChatDebug('event-ingest', 'apply session.status', {
@@ -224,7 +306,7 @@ export function createEventIngest(options: EventIngestOptions) {
             }
 
             case 'session.idle': {
-                const sessionID = props.sessionID as string | undefined
+                const sessionID = readSessionId(props)
                 if (!sessionID) return
                 logChatDebug('event-ingest', 'apply session.idle', { sessionId: sessionID })
                 reduceSessionStatus(sessionID, { type: 'idle' }, get, set)
@@ -233,7 +315,7 @@ export function createEventIngest(options: EventIngestOptions) {
             }
 
             case 'session.compacted': {
-                const sessionID = props.sessionID as string | undefined
+                const sessionID = readSessionId(props)
                 if (!sessionID) return
                 logChatDebug('event-ingest', 'apply session.compacted', { sessionId: sessionID })
                 onSessionCompacted?.(sessionID)
@@ -241,7 +323,7 @@ export function createEventIngest(options: EventIngestOptions) {
             }
 
             case 'session.error': {
-                const sessionID = props.sessionID as string | undefined
+                const sessionID = readSessionId(props)
                 const error = props.error
                 if (!sessionID) return
                 const errorMessage = extractErrorMessage(error)
@@ -255,38 +337,41 @@ export function createEventIngest(options: EventIngestOptions) {
 
             case 'permission.asked': {
                 const request = props as unknown as PermissionRequest
-                if (!request?.sessionID || !request?.id) return
-                reducePermissionAsked(request.sessionID, request, get, set)
+                const sessionId = readSessionId(request as Record<string, unknown> | undefined)
+                if (!sessionId || !request?.id) return
+                reducePermissionAsked(sessionId, request, get, set)
                 return
             }
 
             case 'permission.replied': {
-                const replyInfo = props as { sessionID?: string }
-                if (!replyInfo?.sessionID) return
-                reducePermissionReplied(replyInfo.sessionID, get, set)
+                const sessionId = readSessionId(props)
+                if (!sessionId) return
+                reducePermissionReplied(sessionId, get, set)
                 return
             }
 
             case 'question.asked': {
                 const request = props as unknown as QuestionRequest
-                if (!request?.sessionID || !request?.id) return
-                reduceQuestionAsked(request.sessionID, request, get, set)
+                const sessionId = readSessionId(request as Record<string, unknown> | undefined)
+                if (!sessionId || !request?.id) return
+                reduceQuestionAsked(sessionId, request, get, set)
                 return
             }
 
             case 'question.replied':
             case 'question.rejected': {
-                const replyInfo = props as { sessionID?: string }
-                if (!replyInfo?.sessionID) return
+                const sessionId = readSessionId(props)
+                if (!sessionId) return
                 set((state) => {
-                    const { [replyInfo.sessionID!]: _, ...rest } = state.seQuestions
+                    const rest = { ...state.seQuestions }
+                    delete rest[sessionId]
                     return { seQuestions: rest }
                 })
                 return
             }
 
             case 'todo.updated': {
-                const sessionID = props.sessionID as string | undefined
+                const sessionID = readSessionId(props)
                 const todos = props.todos as Todo[] | undefined
                 if (!sessionID || !todos) return
                 reduceTodoUpdated(sessionID, todos, get, set)

@@ -132,14 +132,14 @@ export function usePublishModalController(open: boolean) {
         if (selectedAct) {
             const actBlockReasons = [
                 ...getActPublishBlockReasons(selectedAct),
-                ...getActPublishDependencyIssues(selectedAct, drafts),
+                ...getActPublishDependencyIssues(selectedAct, performers, drafts),
             ]
             if (actBlockReasons.length > 0) {
                 return actBlockReasons.join(' ')
             }
         }
         return null
-    }, [drafts, performer, selectedAct])
+    }, [drafts, performer, performers, selectedAct])
 
     const canSaveLocal = !!target
         && !!slug.trim()
@@ -284,6 +284,7 @@ export function usePublishModalController(open: boolean) {
             if (target.kind === 'act' && selectedAct) {
                 const publishInput = buildActPublishPayload(selectedAct, { slug, description, tags }, {
                     drafts,
+                    performers,
                     username: authUser?.username || '',
                     workingDir,
                 })

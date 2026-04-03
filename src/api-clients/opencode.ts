@@ -1,7 +1,24 @@
 import type { RuntimeModelCatalogEntry } from '../../shared/model-variants'
 import type { AdapterViewActionRequest, AdapterViewProjection } from '../../shared/adapter-view'
-import type { ModelConfig, LspServerInfo } from '../types'
+import type { McpCatalog } from '../../shared/mcp-catalog'
+import type { FileStatus, ModelConfig, LspServerInfo } from '../types'
 import { createApiEventSource, deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
+
+type ProviderOauthResponse = {
+    method: 'auto' | 'code' | 'api'
+    url?: string
+    instructions?: string
+}
+
+type ProviderAuthMethod = {
+    type: 'oauth' | 'api'
+    label: string
+}
+
+type ProviderConnection = {
+    connected: boolean
+    authType?: string
+}
 
 export const opencodeApi = {
     health: () =>
@@ -31,6 +48,8 @@ export const opencodeApi = {
     },
 
     mcp: {
+        getCatalog: () => fetchJSON<McpCatalog>('/api/mcp/catalog'),
+        updateCatalog: (catalog: McpCatalog) => putJSON<McpCatalog>('/api/mcp/catalog', catalog),
         list: () => fetchJSON<import('../types').McpServer[]>('/api/mcp/servers'),
         authStart: (name: string) => postJSON<{ authorizationUrl: string }>(`/api/mcp/${name}/auth/start`),
         authCallback: (name: string, code: string) => postJSON<unknown>(`/api/mcp/${name}/auth/callback`, { code }),
@@ -98,9 +117,10 @@ export const opencodeApi = {
     },
 
     provider: {
-        auth: () => fetchJSON<Record<string, unknown>>('/api/provider/auth'),
-        oauthAuthorize: (providerId: string, method: number) => postJSON<unknown>(`/api/provider/${providerId}/oauth/authorize`, { method }),
-        oauthCallback: (providerId: string, method: number, code?: string) => postJSON<unknown>(`/api/provider/${providerId}/oauth/callback`, code ? { method, code } : { method }),
+        authMethods: () => fetchJSON<Record<string, ProviderAuthMethod[]>>('/api/provider/auth'),
+        connections: () => fetchJSON<Record<string, ProviderConnection>>('/api/provider/connections'),
+        oauthAuthorize: (providerId: string, method: number) => postJSON<ProviderOauthResponse>(`/api/provider/${providerId}/oauth/authorize`, { method }),
+        oauthCallback: (providerId: string, method: number, code?: string) => postJSON<ProviderOauthResponse>(`/api/provider/${providerId}/oauth/callback`, code ? { method, code } : { method }),
         setAuth: (
             providerId: string,
             auth:
@@ -114,7 +134,7 @@ export const opencodeApi = {
     file: {
         list: (path = '.') => fetchJSON<Array<Record<string, unknown>>>(`/api/file/list?path=${encodeURIComponent(path)}`),
         read: (path: string) => fetchJSON<unknown>(`/api/file/read?path=${encodeURIComponent(path)}`),
-        status: () => fetchJSON<Array<Record<string, unknown>>>('/api/file/status'),
+        status: () => fetchJSON<FileStatus[]>('/api/file/status'),
     },
 
     find: {

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { addActRelationImpl } from './act-slice-actions'
+import type { StudioState } from './types'
 
 describe('addActRelationImpl', () => {
     it('allows opposite one-way relations for the same participant pair', () => {
-        let state: any = {
+        let state: StudioState = {
             acts: [
                 {
                     id: 'act-1',
@@ -24,12 +25,13 @@ describe('addActRelationImpl', () => {
                 },
             ],
             performers: [],
-        }
+            recordStudioChange: () => 'none',
+        } as unknown as StudioState
 
         const get = () => state
-        const set = (partial: any) => {
+        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
             const next = typeof partial === 'function' ? partial(state) : partial
-            state = { ...state, ...next }
+            state = { ...state, ...next } as StudioState
         }
 
         const relationId = addActRelationImpl(get, set, 'act-1', ['Reviewer', 'Coder'], 'one-way')
@@ -40,7 +42,7 @@ describe('addActRelationImpl', () => {
     })
 
     it('blocks duplicate exact one-way relations', () => {
-        let state: any = {
+        let state: StudioState = {
             acts: [
                 {
                     id: 'act-1',
@@ -60,12 +62,13 @@ describe('addActRelationImpl', () => {
                 },
             ],
             performers: [],
-        }
+            recordStudioChange: () => 'none',
+        } as unknown as StudioState
 
         const get = () => state
-        const set = (partial: any) => {
+        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
             const next = typeof partial === 'function' ? partial(state) : partial
-            state = { ...state, ...next }
+            state = { ...state, ...next } as StudioState
         }
 
         const relationId = addActRelationImpl(get, set, 'act-1', ['Coder', 'Reviewer'], 'one-way')

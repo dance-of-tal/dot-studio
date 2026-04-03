@@ -355,7 +355,7 @@ export async function getStudioAsset(cwd: string, kind: string, author: string, 
     return normalizeAsset(parsed, source, availableMcpServerNames, true)
 }
 
-export async function getRegistryAssetDetail(cwd: string, kind: string, author: string, assetPath: string) {
+export async function getRegistryAssetDetail(_cwd: string, kind: string, author: string, assetPath: string) {
     const { stage, name } = parseCanonicalAssetPath(assetPath)
     const pkg = await getRegistryPackage(kind, author, stage, name) as unknown as Record<string, unknown>
     const parsed = parseDotAsset(pkg.payload) as ParsedInstalledAsset

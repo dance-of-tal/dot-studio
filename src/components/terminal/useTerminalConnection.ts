@@ -32,6 +32,55 @@ const termTheme = {
     brightWhite: '#ffffff',
 }
 
+const ESC = String.fromCharCode(27)
+const BEL = String.fromCharCode(7)
+
+function stripTerminalNoise(value: string) {
+    let result = ''
+
+    for (let index = 0; index < value.length; index += 1) {
+        const char = value[index]
+
+        if (char === ESC) {
+            const next = value[index + 1]
+
+            if (next === ']') {
+                index += 2
+                while (index < value.length) {
+                    if (value[index] === BEL) {
+                        break
+                    }
+                    if (value[index] === ESC && value[index + 1] === '\\') {
+                        index += 1
+                        break
+                    }
+                    index += 1
+                }
+                continue
+            }
+
+            if (next === '[') {
+                index += 2
+                while (index < value.length && !/[A-Za-z]/.test(value[index])) {
+                    index += 1
+                }
+                continue
+            }
+
+            index += 1
+            continue
+        }
+
+        if (char !== '\r' && char !== '\n' && char.charCodeAt(0) < 32) {
+            continue
+        }
+
+        result += char
+    }
+
+    return result
+}
+
 function buildTerminalWebSocketUrl(action: 'create' | 'attach', workingDir: string | null, targetId?: string) {
     const url = new URL('/ws/terminal', window.location.href)
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -103,10 +152,7 @@ export function useTerminalConnection(
                 switch (msg.type) {
                     case 'output': {
                         if (!initialized.current) {
-                            const stripped = msg.data
-                                .replace(/\x1b\][^\x07]*(\x07|\x1b\\)/g, '')
-                                .replace(/\x1b\[[^a-zA-Z]*[a-zA-Z]/g, '')
-                                .replace(/\x1b[^[\]].?/g, '')
+                            const stripped = stripTerminalNoise(msg.data)
                                 .replace(/[\r\n]/g, '')
                                 .trim()
                             if (!stripped || /\{"cursor":\d+\}/.test(stripped) || /^%+$/.test(stripped)) {
@@ -150,24 +196,28 @@ export function useTerminalConnection(
         }
 
         ws.onclose = () => { }
-    }, [workingDir])
+    }, [workingDir, activeId])
 
     useEffect(() => {
         if (!activeId) return
         if (sessions.length === 0) {
-            setActiveId('')
-            onToggle()
+            queueMicrotask(() => {
+                setActiveId('')
+                onToggle()
+            })
             return
         }
         const activeExists = sessions.some(s => s.id === activeId)
         if (!activeExists) {
             const next = sessions[0]
-            setActiveId(next.id)
-            if (xtermRef.current) {
-                xtermRef.current.clear()
-                xtermRef.current.reset()
-            }
-            connect('attach', next.id)
+            queueMicrotask(() => {
+                setActiveId(next.id)
+                if (xtermRef.current) {
+                    xtermRef.current.clear()
+                    xtermRef.current.reset()
+                }
+                connect('attach', next.id)
+            })
         }
     }, [sessions, activeId, connect, onToggle])
 
@@ -233,8 +283,10 @@ export function useTerminalConnection(
         }
 
         lastWorkspaceRef.current = workingDir
-        setSessions([])
-        setActiveId('')
+        queueMicrotask(() => {
+            setSessions([])
+            setActiveId('')
+        })
 
         if (wsRef.current) {
             wsRef.current.close()

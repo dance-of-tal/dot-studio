@@ -551,6 +551,98 @@
     border-top: 1px solid var(--border-main);
 }
 
+/* ── MCP Impact Dialog ──────────────────────────────── */
+.mcp-impact-dialog {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-lg, 8px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.32);
+    width: min(440px, calc(100vw - 24px));
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10001;
+}
+
+.mcp-impact-dialog__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-main);
+    font-weight: 700;
+    font-size: var(--font-md);
+    color: var(--text-primary);
+}
+
+.mcp-impact-dialog__body {
+    padding: 14px 16px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.mcp-impact-dialog__summary {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.mcp-impact-dialog__section {
+    margin-top: 14px;
+}
+
+.mcp-impact-dialog__section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--font-sm);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.mcp-impact-dialog__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mcp-impact-dialog__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+    font-size: var(--font-sm);
+    color: var(--text-primary);
+}
+
+.mcp-impact-dialog__note {
+    font-size: var(--font-sm);
+    color: var(--text-secondary);
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-light);
+    line-height: 1.4;
+}
+
+.mcp-impact-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-main);
+}
+
 /* ── Dance GitHub Add ────────────────────────────────── */
 .dance-github-add {
     display: flex;

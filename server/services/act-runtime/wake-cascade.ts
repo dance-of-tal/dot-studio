@@ -23,7 +23,9 @@ function errorMessage(error: unknown) {
 // Module-level session queue (one per thread)
 const sessionQueues: Map<string, SessionQueue> = new Map()
 const participantCircuits = new Map<string, Map<string, { openUntil: number; reason: string }>>()
+const blockedWakeRetries = new Map<string, Set<string>>()
 const PARTICIPANT_CIRCUIT_BREAK_MS = 5 * 60_000
+const BLOCKED_WAKE_RETRY_POLL_MS = 500
 
 function getSessionQueue(threadId: string): SessionQueue {
     if (!sessionQueues.has(threadId)) {
@@ -83,6 +85,83 @@ export function clearParticipantCircuit(threadId: string, participantKey: string
     if (byThread.size === 0) {
         participantCircuits.delete(threadId)
     }
+}
+
+function markBlockedWakeRetryActive(threadId: string, participantKey: string): boolean {
+    const byThread = blockedWakeRetries.get(threadId) || new Set<string>()
+    if (byThread.has(participantKey)) {
+        blockedWakeRetries.set(threadId, byThread)
+        return false
+    }
+    byThread.add(participantKey)
+    blockedWakeRetries.set(threadId, byThread)
+    return true
+}
+
+function clearBlockedWakeRetryActive(threadId: string, participantKey: string) {
+    const byThread = blockedWakeRetries.get(threadId)
+    if (!byThread) {
+        return
+    }
+    byThread.delete(participantKey)
+    if (byThread.size === 0) {
+        blockedWakeRetries.delete(threadId)
+    }
+}
+
+function sleep(ms: number) {
+    return new Promise<void>((resolve) => {
+        setTimeout(resolve, ms)
+    })
+}
+
+function scheduleBlockedWakeRetry(
+    participantKey: string,
+    actDefinition: ActDefinition,
+    mailbox: Mailbox,
+    threadManager: ThreadManager,
+    threadId: string,
+    workingDir: string,
+) {
+    if (!markBlockedWakeRetryActive(threadId, participantKey)) {
+        return
+    }
+
+    void (async () => {
+        try {
+            const { countRunningSessions } = await import('../runtime-reload-service.js')
+
+            while (getSessionQueue(threadId).getQueueDepth(participantKey) > 0) {
+                if (getSessionQueue(threadId).isRunning(participantKey)) {
+                    return
+                }
+
+                try {
+                    const { runningSessions } = await countRunningSessions(workingDir)
+                    if (runningSessions === 0) {
+                        await drainParticipantQueueAfterSettlement(
+                            participantKey,
+                            actDefinition,
+                            mailbox,
+                            threadManager,
+                            threadId,
+                            workingDir,
+                        )
+                        return
+                    }
+                } catch (error) {
+                    console.warn(
+                        `[wake-cascade] Failed checking running sessions for deferred wake "${participantKey}":`,
+                        error,
+                    )
+                }
+
+                await sleep(BLOCKED_WAKE_RETRY_POLL_MS)
+            }
+        } finally {
+            clearBlockedWakeRetryActive(threadId, participantKey)
+        }
+    })()
 }
 
 export async function drainParticipantQueueAfterSettlement(
@@ -206,9 +285,6 @@ async function injectWakeTarget(
     // Build wake-up prompt
     const prompt = buildWakePrompt(target, mailbox, actDefinition)
 
-    // Mark messages as delivered
-    markMessagesDelivered(mailbox, participantKey)
-
     // Mark as executing
     markParticipantQueueRunning(threadId, participantKey)
 
@@ -304,8 +380,19 @@ async function injectWakeTarget(
                     extraTools: actExtraTools,
                 }))
                 if (prepared.blocked) {
-                    console.warn(`[wake-cascade] Projection update blocked for "${participantKey}" while another session is running`)
-                    return emptyWakeCascadeResult()
+                    console.warn(`[wake-cascade] Projection update blocked for "${participantKey}" while another working-dir session is running`)
+                    clearParticipantQueueRunning(threadId, participantKey)
+                    getSessionQueue(threadId).enqueue(participantKey, target)
+                    result.queued.push(participantKey)
+                    scheduleBlockedWakeRetry(
+                        participantKey,
+                        actDefinition,
+                        mailbox,
+                        threadManager,
+                        threadId,
+                        workingDir,
+                    )
+                    return result
                 }
                 const ensured = prepared.payload
                 // Act scope always uses build agent, ignoring performer planMode
@@ -344,6 +431,7 @@ async function injectWakeTarget(
             tools: projectedTools,
             parts: [{ type: 'text', text: promptText }],
         })
+        markMessagesDelivered(mailbox, participantKey)
 
         result.injected.push(participantKey)
 
@@ -476,9 +564,9 @@ export async function processWakeCascade(
     for (const target of targets) {
         const participantKey = target.participantKey
 
-        // Serialize participant wake-ups per thread so a tool-triggered handoff
-        // never starts another participant session while one is still running.
-        if (queue.hasRunning()) {
+        // Serialize only same-participant wake-ups.
+        // Different participants may run concurrently within the same thread.
+        if (queue.isRunning(participantKey)) {
             queue.enqueue(participantKey, target)
             result.queued.push(participantKey)
             continue

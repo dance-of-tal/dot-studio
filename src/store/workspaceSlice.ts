@@ -7,10 +7,13 @@ import {
     createPerformerNode,
     createPerformerNodeFromAsset,
     normalizePerformerAssetInput,
+    PERFORMER_DEFAULT_HEIGHT,
+    PERFORMER_DEFAULT_WIDTH,
 } from '../lib/performers'
 import {
     applyPerformerPatch,
     mapMarkdownEditors,
+    resolveCanvasSpawnPosition,
 } from './workspace-helpers'
 import {
     newWorkspace as newWorkspaceImpl,
@@ -150,6 +153,7 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         chatKeyToSession: {},
         sessionToChatKey: {},
         sessionLoading: {},
+        sessionMutationPending: {},
         sessionReverts: {},
     }
 }
@@ -191,13 +195,19 @@ export const createWorkspaceSlice: StateCreator<
     setTerminalOpen: (open) => set({ isTerminalOpen: open }),
     setTrackingOpen: (open) => set((state) => {
         const created = open && !state.trackingWindow
+        const trackingPosition = resolveCanvasSpawnPosition({
+            canvasCenter: state.canvasCenter,
+            existingCount: state.canvasTerminals.length,
+            width: 420,
+            height: 360,
+        })
         return {
             isTrackingOpen: open,
             trackingWindow: open
                 ? (state.trackingWindow || {
                     id: TRACKING_WINDOW_ID,
                     title: 'Workspace Tracking',
-                    position: { x: 260, y: 180 },
+                    position: trackingPosition,
                     width: 420,
                     height: 360,
                 })
@@ -233,7 +243,7 @@ export const createWorkspaceSlice: StateCreator<
 
     recordStudioChange: (change) => {
         const changeClass = classifyStudioChange(change)
-        if (changeClass === 'lazy_projection') {
+        if (changeClass === 'lazy_projection' && change.kind !== 'ui' && change.kind !== 'runtime_config') {
             set((state) => ({
                 projectionDirty: mergeProjectionDirtyState(state.projectionDirty, change),
             }))
@@ -248,12 +258,18 @@ export const createWorkspaceSlice: StateCreator<
     addPerformer: (name, x, y) => {
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
-        const count = get().performers.length
-        const offset = count * 40
-        const safeName = uniquePerformerName(name, get().performers.map(p => p.name))
+        const state = get()
+        const count = state.performers.length
+        const safeName = uniquePerformerName(name, state.performers.map(p => p.name))
+        const spawnPosition = resolveCanvasSpawnPosition({
+            canvasCenter: state.canvasCenter,
+            existingCount: count,
+            width: PERFORMER_DEFAULT_WIDTH,
+            height: PERFORMER_DEFAULT_HEIGHT,
+        })
 
-        const finalX = x ?? ((get().canvasCenter?.x ?? 60) + offset)
-        const finalY = y ?? ((get().canvasCenter?.y ?? 60) + offset)
+        const finalX = x ?? spawnPosition.x
+        const finalY = y ?? spawnPosition.y
 
         set((s) => ({
             performers: [...s.performers, createPerformerNode({ id, name: safeName, x: finalX, y: finalY })],
@@ -272,12 +288,18 @@ export const createWorkspaceSlice: StateCreator<
     addPerformerFromAsset: (asset, x, y) => {
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
-        const count = get().performers.length
-        const offset = count * 40
-        const safeName = uniquePerformerName(asset.name, get().performers.map(p => p.name))
+        const state = get()
+        const count = state.performers.length
+        const safeName = uniquePerformerName(asset.name, state.performers.map(p => p.name))
+        const spawnPosition = resolveCanvasSpawnPosition({
+            canvasCenter: state.canvasCenter,
+            existingCount: count,
+            width: PERFORMER_DEFAULT_WIDTH,
+            height: PERFORMER_DEFAULT_HEIGHT,
+        })
 
-        const finalX = x ?? ((get().canvasCenter?.x ?? 60) + offset)
-        const finalY = y ?? ((get().canvasCenter?.y ?? 60) + offset)
+        const finalX = x ?? spawnPosition.x
+        const finalY = y ?? spawnPosition.y
 
         set((s) => ({
             performers: [...s.performers, createPerformerNodeFromAsset({ id, asset: { ...asset, name: safeName }, x: finalX, y: finalY })],
@@ -320,12 +342,16 @@ export const createWorkspaceSlice: StateCreator<
 
     removePerformer: (id) => {
         const sessionId = get().chatKeyToSession[id] || null
+        const performer = get().performers.find((entry) => entry.id === id)
+        if (!performer) {
+            return
+        }
 
         set((s) => {
             const focusExit = buildExitFocusModeState(s)
             const baseActs = (focusExit?.acts as StudioState['acts'] | undefined) || s.acts
             const basePerformers = (focusExit?.performers as StudioState['performers'] | undefined) || s.performers
-            const actCascade = buildPerformerDeleteCascade(id, baseActs)
+            const actCascade = buildPerformerDeleteCascade(performer, baseActs)
             return {
                 ...focusExit,
                 performers: basePerformers.filter(a => a.id !== id),
@@ -409,7 +435,7 @@ export const createWorkspaceSlice: StateCreator<
             }
         })
         get().recordStudioChange({
-            kind: 'performer',
+            kind: 'act',
             performerIds: [id],
             actIds: affectedActIds,
         })
@@ -622,7 +648,7 @@ export const createWorkspaceSlice: StateCreator<
     updatePerformerAuthoringMeta: (performerId, patch) => updatePerformerAuthoringMetaImpl(set, get, performerId, patch),
 
     togglePerformerVisibility: (id) => togglePerformerVisibilityImpl(set, get, id),
-    addCanvasTerminal: () => addCanvasTerminalImpl(set, canvasTerminalIdCounter),
+    addCanvasTerminal: () => addCanvasTerminalImpl(get, set, canvasTerminalIdCounter),
 
     removeCanvasTerminal: (id) => removeCanvasTerminalImpl(set, id),
 

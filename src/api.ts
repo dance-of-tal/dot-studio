@@ -129,8 +129,10 @@ export const api = {
             ),
         getThread: (actId: string, threadId: string) =>
             fetchJSON<{ ok: boolean; thread: Record<string, unknown> }>(`/api/act/${actId}/thread/${threadId}`),
-        events: (actId: string, threadId: string, count = 50) =>
-            fetchJSON<{ ok: boolean; events: Array<Record<string, unknown>> }>(`/api/act/${actId}/thread/${threadId}/events?count=${count}`),
+        events: (actId: string, threadId: string, count = 50, before = 0) =>
+            fetchJSON<{ ok: boolean; events: Array<Record<string, unknown>>; total: number; hasMore: boolean; nextBefore: number }>(
+                `/api/act/${actId}/thread/${threadId}/events?count=${count}&before=${before}`,
+            ),
         deleteThread: (actId: string, threadId: string) =>
             deleteJSON<{ ok: boolean }>(`/api/act/${actId}/thread/${threadId}`),
         readBoard: (actId: string, threadId: string, key?: string) =>

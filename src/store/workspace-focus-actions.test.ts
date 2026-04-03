@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { ACT_DEFAULT_WIDTH } from '../lib/act-layout'
+import {
+    ACT_DEFAULT_EXPANDED_HEIGHT,
+    ACT_DEFAULT_WIDTH,
+} from '../lib/act-layout'
 import { createPerformerNode } from '../lib/performers'
 import {
     buildExitFocusModeState,
@@ -67,7 +70,7 @@ function createTestState(): StudioState {
         assistantAvailableModels: [],
         appliedAssistantActionMessageIds: {},
         assistantActionResults: {},
-    } as StudioState
+    } as unknown as StudioState
 }
 
 function createStateHarness(initialState = createTestState()) {
@@ -154,7 +157,7 @@ describe('workspace focus actions', () => {
                 name: 'Control',
                 position: { x: 220, y: 160 },
                 width: ACT_DEFAULT_WIDTH,
-                height: 420,
+                height: ACT_DEFAULT_EXPANDED_HEIGHT,
                 participants: {},
                 relations: [],
                 createdAt: Date.now(),
@@ -180,7 +183,7 @@ describe('workspace focus actions', () => {
             hidden: false,
             position: { x: 220, y: 160 },
             width: ACT_DEFAULT_WIDTH,
-            height: 420,
+            height: ACT_DEFAULT_EXPANDED_HEIGHT,
         })
     })
 

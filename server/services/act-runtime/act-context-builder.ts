@@ -2,7 +2,7 @@
  * act-context-builder.ts — Collaboration context injection
  *
  * PRD §9: Stable collaboration context is injected at the agent/system level.
- * Includes: goal, participants, collaboration tools, relations, subscriptions, and rules.
+ * Includes: goal, participants, collaboration tools, relations, coordination signals, and rules.
  */
 
 import type { ActDefinition } from '../../../shared/act-types.js'
@@ -16,6 +16,40 @@ function participantDescription(actDefinition: ActDefinition, participantKey: st
     return description ? description : null
 }
 
+function directConnectionKeys(actDefinition: ActDefinition, participantKey: string): string[] {
+    const partners = new Set<string>()
+
+    for (const rel of actDefinition.relations) {
+        if (!rel.between.includes(participantKey)) continue
+        const partner = rel.between[0] === participantKey ? rel.between[1] : rel.between[0]
+        if (partner) partners.add(partner)
+    }
+
+    return [...partners]
+}
+
+function coordinationSignalLines(
+    actDefinition: ActDefinition,
+    participantKeys: string[],
+): string[] {
+    const lines: string[] = []
+
+    for (const partnerKey of participantKeys) {
+        const partnerName = participantDisplayName(actDefinition, partnerKey)
+        const subscriptions = actDefinition.participants[partnerKey]?.subscriptions
+        if (!subscriptions) continue
+
+        if (subscriptions.messageTags?.length) {
+            lines.push(`- Message tags for ${partnerName}: ${subscriptions.messageTags.join(', ')}`)
+        }
+        if (subscriptions.callboardKeys?.length) {
+            lines.push(`- Shared note keys for ${partnerName}: ${subscriptions.callboardKeys.join(', ')}`)
+        }
+    }
+
+    return lines
+}
+
 /**
  * Build markdown Act context for a participant's agent prompt.
  */
@@ -25,6 +59,7 @@ export function buildActContext(
 ): string {
     const lines: string[] = []
     const selfName = participantDisplayName(actDefinition, participantKey)
+    const directPartners = directConnectionKeys(actDefinition, participantKey)
 
     // ── Header ──────────────────────────────────────
     lines.push('# Collaboration Context')
@@ -47,13 +82,12 @@ export function buildActContext(
     lines.push('- Write shared board entries as short Markdown summaries. Use headings, bullets, and checklists when they help teammates scan quickly.')
     lines.push('- Do not use the shared board as the storage location for full deliverables. Keep final outputs in the working directory or the proper destination, then post a short Markdown handoff or summary.')
     lines.push('- Use `read_shared_board` for the relevant key you need. Avoid reading the full board unless you need a full resync.')
+    lines.push('- Before acting, check only the sender or shared note key relevant to the current event.')
     lines.push('- Prefer replacing stale shared notes with a fresh summary instead of appending long incremental logs.')
-    lines.push('- Use `wait_until` when you are blocked on future input. Good self-wake conditions include `board_key_exists`, `message_received`, `timeout`, `all_of`, and `any_of`.')
+    lines.push('- Use `wait_until` when you are blocked on future input instead of polling the full shared board. Good self-wake conditions include `board_key_exists`, `message_received`, `timeout`, `all_of`, and `any_of`.')
     lines.push('')
 
-    const teammateNames = Object.entries(actDefinition.participants || {})
-        .filter(([key]) => key !== participantKey)
-        .map(([key, binding]) => binding.displayName || key)
+    const teammateNames = directPartners.map((key) => participantDisplayName(actDefinition, key))
     if (teammateNames.length > 0) {
         lines.push('# Valid Teammates')
         lines.push(`- Use these names as ` + '`recipient`' + ` values: ${teammateNames.join(', ')}`)
@@ -61,9 +95,7 @@ export function buildActContext(
     }
 
     // ── Available Relations ─────────────────────────
-    const myRelations = actDefinition.relations.filter(
-        (rel) => rel.between.includes(participantKey),
-    )
+    const myRelations = actDefinition.relations.filter((rel) => rel.between.includes(participantKey))
     if (myRelations.length > 0) {
         lines.push('# Direct Connections')
         for (const rel of myRelations) {
@@ -85,23 +117,11 @@ export function buildActContext(
         lines.push('')
     }
 
-    // ── Subscriptions ───────────────────────────────
-    const binding = actDefinition.participants[participantKey]
-    if (binding?.subscriptions) {
-        const subs = binding.subscriptions
-        lines.push('# Notifications You Receive')
-        if (subs.messagesFrom?.length) {
-            lines.push(`- Direct messages from: ${subs.messagesFrom.map((key) => participantDisplayName(actDefinition, key)).join(', ')}`)
-        }
-        if (subs.messageTags?.length) {
-            lines.push(`- Message labels: ${subs.messageTags.join(', ')}`)
-        }
-        if (subs.callboardKeys?.length) {
-            lines.push(`- Shared note keys: ${subs.callboardKeys.join(', ')}`)
-        }
-        if (subs.eventTypes?.length) {
-            lines.push(`- System updates: ${subs.eventTypes.join(', ')}`)
-        }
+    // ── Coordination Signals ────────────────────────
+    const signalLines = coordinationSignalLines(actDefinition, directPartners)
+    if (signalLines.length > 0) {
+        lines.push('# Coordination Signals')
+        lines.push(...signalLines)
         lines.push('')
     }
 

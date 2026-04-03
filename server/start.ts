@@ -14,7 +14,7 @@ async function main() {
 
     try {
         await result;
-    } catch (err) {
+    } catch {
         console.error('One or more processes exited with an error');
         process.exit(1);
     }

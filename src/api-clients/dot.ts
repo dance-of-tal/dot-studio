@@ -9,6 +9,7 @@ import type {
     DotSaveLocalRequest,
     DotStatusResponse,
 } from '../../shared/dot-contracts'
+import type { AssetListItem } from '../../shared/asset-contracts'
 import { fetchJSON, postJSON, putJSON, deleteJSON } from '../api-core'
 
 type DotPerformerResponse = Record<string, unknown>
@@ -73,7 +74,7 @@ export const dotApi = {
         }>('/api/dot/assets/publish', { kind, slug, payload, tags, providedAssets, acknowledgedTos } satisfies DotPublishRequest),
 
     search: (query: string, kind?: string, limit?: number) =>
-        fetchJSON<Array<{ kind: string; name: string; author: string; slug: string; description: string; tags: string[] }>>(
+        fetchJSON<AssetListItem[]>(
             `/api/dot/search?q=${encodeURIComponent(query)}${kind ? `&kind=${kind}` : ''}${limit ? `&limit=${limit}` : ''}`,
         ),
 

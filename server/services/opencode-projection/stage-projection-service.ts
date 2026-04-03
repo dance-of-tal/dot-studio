@@ -6,6 +6,7 @@ import { resolveRuntimeTools, type RuntimeToolResolution } from '../../lib/runti
 import { mcpToolPattern } from '../../../shared/mcp-catalog.js'
 import {
     cleanGroupFiles,
+    markProjectionRuntimePending,
     readManifest,
     toRelativePath,
     updateGitExclude,
@@ -278,6 +279,9 @@ export async function ensurePerformerProjection(input: PerformerProjectionInput)
         compiled.allFiles,
     )
     await updateGitExclude(input.workingDir)
+    if (changed) {
+        await markProjectionRuntimePending(input.workingDir, workspaceHash)
+    }
 
     return {
         compiled,

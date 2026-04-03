@@ -21,6 +21,7 @@ type PerformerChatPanelProps = {
     messages: ChatMessage[]
     prefixCount: number
     isLoading: boolean
+    canAbort: boolean
     sessionId: string | null
     hasActiveSession: boolean
     modelConfigured: boolean
@@ -45,6 +46,7 @@ export default function PerformerChatPanel({
     messages,
     prefixCount,
     isLoading,
+    canAbort,
     sessionId,
     hasActiveSession,
     modelConfigured,
@@ -68,6 +70,7 @@ export default function PerformerChatPanel({
     } = useStudioStore()
 
     const [revertTarget, setRevertTarget] = useState<{ performerId: string; messageId: string; messageContent: string } | null>(null)
+    const [isRevertConfirming, setIsRevertConfirming] = useState(false)
     const composerState = usePerformerChatComposerState({
         performerId,
         performer,
@@ -101,6 +104,7 @@ export default function PerformerChatPanel({
                         input={composerState.input}
                         setInput={composerState.setInput}
                         isLoading={isLoading}
+                        canAbort={canAbort}
                         modelConfigured={modelConfigured}
                         sessionId={sessionId}
                         selectedAgentId={selectedAgentId}
@@ -147,14 +151,23 @@ export default function PerformerChatPanel({
             {revertTarget ? (
                 <RevertConfirmModal
                     messagePreview={revertTarget.messageContent}
+                    submitting={isRevertConfirming}
                     onConfirm={async () => {
                         const content = revertTarget.messageContent
-                        await revertSession(revertTarget.performerId, revertTarget.messageId)
-                        setRevertTarget(null)
-                        composerState.setInput(content)
-                        setTimeout(() => composerState.composerInputRef.current?.focus(), 50)
+                        setIsRevertConfirming(true)
+                        try {
+                            await revertSession(revertTarget.performerId, revertTarget.messageId)
+                            setRevertTarget(null)
+                            composerState.setInput(content)
+                            setTimeout(() => composerState.composerInputRef.current?.focus(), 50)
+                        } finally {
+                            setIsRevertConfirming(false)
+                        }
                     }}
-                    onCancel={() => setRevertTarget(null)}
+                    onCancel={() => {
+                        if (isRevertConfirming) return
+                        setRevertTarget(null)
+                    }}
                 />
             ) : null}
         </>

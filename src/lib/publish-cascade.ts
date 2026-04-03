@@ -1,6 +1,6 @@
-import type { PerformerDraftContent } from '../../shared/draft-contracts'
 import { buildCanonicalStudioAssetUrn, stageFromWorkingDir } from '../../shared/publish-stage'
 import type { DraftAsset, PerformerNode, WorkspaceAct } from '../types'
+import { resolvePerformerFromActBinding } from './act-participants'
 import { performerMcpConfigForAsset, slugifyAssetName } from './performers-publish'
 
 type PublishableKind = 'tal' | 'performer' | 'act'
@@ -17,10 +17,19 @@ export type PublishCascadeResult = {
     providedAssets: ProvidedPublishAsset[]
 }
 
-type PublishDraftContext = {
+type PublishContext = {
     drafts: Record<string, DraftAsset>
     username: string
     workingDir: string
+}
+
+type ActPublishContext = PublishContext & {
+    performers: PerformerNode[]
+}
+
+type PromotedAsset = {
+    urn: string
+    payload: Record<string, unknown>
 }
 
 function filterTags(tags: string[] | undefined | null) {
@@ -31,10 +40,6 @@ function draftGuidanceForDance(scope: 'performer' | 'act') {
     return scope === 'performer'
         ? 'Draft Dance refs are still attached. Export them, upload them to GitHub, import them from Asset Library, and re-apply them before publishing this performer.'
         : 'Draft Dance refs are still attached inside this act. Export them, upload them to GitHub, import them from Asset Library, and re-apply them before publishing this act.'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 function pushProvidedAsset(
@@ -117,16 +122,9 @@ function talPayloadFromDraft(urn: string, draft: DraftAsset) {
     }
 }
 
-function resolvePerformerDraftContent(draft: DraftAsset): PerformerDraftContent {
-    if (!isRecord(draft.content)) {
-        throw new Error(`Performer draft '${draft.name || draft.id}' is malformed.`)
-    }
-    return draft.content as unknown as PerformerDraftContent
-}
-
 function promoteTalDraft(
     draftId: string,
-    context: PublishDraftContext,
+    context: PublishContext,
     collector: Map<string, ProvidedPublishAsset>,
 ) {
     const draft = context.drafts[draftId]
@@ -146,54 +144,75 @@ function promoteTalDraft(
     return urn
 }
 
-function promotePerformerDraft(
-    draftId: string,
-    context: PublishDraftContext,
+function promotePerformerNode(
+    performer: Pick<PerformerNode, 'name' | 'talRef' | 'danceRefs' | 'model' | 'modelVariant' | 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig' | 'meta'>,
+    options: {
+        slug: string
+        description?: string
+        tags?: string[]
+        scope: 'performer' | 'act'
+        includeProvidedAsset?: boolean
+    },
+    context: PublishContext,
     collector: Map<string, ProvidedPublishAsset>,
-) {
-    const draft = context.drafts[draftId]
-    if (!draft || draft.kind !== 'performer') {
-        throw new Error(`Performer draft '${draftId}' is missing. Reconnect it from Asset Library before publishing.`)
-    }
-
-    const content = resolvePerformerDraftContent(draft)
+): PromotedAsset {
     const stage = stageFromWorkingDir(context.workingDir)
-    const slug = draft.slug || slugifyAssetName(draft.name || draftId)
-    const urn = buildCanonicalStudioAssetUrn('performer', context.username, stage, slug)
-    const talUrn = content.talRef?.kind === 'registry'
-        ? content.talRef.urn
-        : content.talRef?.kind === 'draft'
-            ? promoteTalDraft(content.talRef.draftId, context, collector)
+    const urn = buildCanonicalStudioAssetUrn('performer', context.username, stage, options.slug)
+    const talUrn = performer.talRef?.kind === 'registry'
+        ? performer.talRef.urn
+        : performer.talRef?.kind === 'draft'
+            ? promoteTalDraft(performer.talRef.draftId, context, collector)
             : undefined
-    const danceUrns = (content.danceRefs || []).map((ref) => {
+    const danceUrns = (performer.danceRefs || []).map((ref) => {
         if (ref.kind === 'draft') {
-            throw new Error(draftGuidanceForDance('act'))
+            throw new Error(draftGuidanceForDance(options.scope))
         }
         return ref.urn
     })
 
+    if (!talUrn && danceUrns.length === 0) {
+        throw new Error('A performer asset requires at least one Tal or Dance reference.')
+    }
+
     const payload = performerPayloadFromResolvedRefs({
         urn,
-        description: draft.description?.trim() || draft.name.trim(),
-        tags: filterTags(draft.tags),
+        description: options.description?.trim() || performer.name.trim(),
+        tags: filterTags(options.tags),
         ...(talUrn ? { talUrn } : {}),
         ...(danceUrns.length > 0 ? { danceUrns } : {}),
-        model: content.model || null,
-        modelVariant: content.modelVariant || null,
-        mcpConfig: performerMcpConfigForAsset({
-            mcpServerNames: content.mcpServerNames || [],
-            mcpBindingMap: content.mcpBindingMap || {},
-            declaredMcpConfig: null,
-        }),
+        model: performer.model || null,
+        modelVariant: performer.modelVariant || null,
+        mcpConfig: performerMcpConfigForAsset(performer),
     })
 
-    pushProvidedAsset(collector, {
-        kind: 'performer',
+    if (options.includeProvidedAsset) {
+        pushProvidedAsset(collector, {
+            kind: 'performer',
+            urn,
+            payload,
+            tags: filterTags(options.tags),
+        })
+    }
+    return {
         urn,
         payload,
-        tags: filterTags(draft.tags),
-    })
-    return urn
+    }
+}
+
+function participantPublishLabel(participantKey: string, participant: WorkspaceAct['participants'][string]) {
+    return participant.displayName?.trim() || participantKey
+}
+
+function requireDraftParticipantPerformer(
+    participantKey: string,
+    participant: WorkspaceAct['participants'][string],
+    performers: PerformerNode[],
+) {
+    const performer = resolvePerformerFromActBinding(performers, participant)
+    if (!performer) {
+        throw new Error(`Participant "${participantPublishLabel(participantKey, participant)}" is missing its performer on the canvas. Re-attach the performer before publishing this act.`)
+    }
+    return performer
 }
 
 export function getPerformerPublishBlockReasons(
@@ -215,26 +234,32 @@ export function getPerformerPublishBlockReasons(
 
 export function getActPublishDependencyIssues(
     act: WorkspaceAct,
+    performers: PerformerNode[],
     drafts: Record<string, DraftAsset>,
 ) {
     const reasons: string[] = []
 
-    for (const participant of Object.values(act.participants)) {
+    for (const [participantKey, participant] of Object.entries(act.participants)) {
         if (participant.performerRef.kind !== 'draft') continue
-        const performerDraft = drafts[participant.performerRef.draftId]
-        if (!performerDraft || performerDraft.kind !== 'performer') {
-            reasons.push(`Participant performer draft '${participant.performerRef.draftId}' is missing. Reconnect it from Asset Library before publishing this act.`)
+
+        const performer = resolvePerformerFromActBinding(performers, participant)
+        const label = participantPublishLabel(participantKey, participant)
+        if (!performer) {
+            reasons.push(`Participant "${label}" is missing its performer on the canvas. Re-attach the performer before publishing this act.`)
             continue
         }
 
-        const content = resolvePerformerDraftContent(performerDraft)
-        if (content.talRef?.kind === 'draft') {
-            const talDraft = drafts[content.talRef.draftId]
+        if (!performer.talRef && (performer.danceRefs || []).length === 0) {
+            reasons.push(`Participant "${label}" needs at least one Tal or Dance before publishing this act.`)
+        }
+
+        if (performer.talRef?.kind === 'draft') {
+            const talDraft = drafts[performer.talRef.draftId]
             if (!talDraft || talDraft.kind !== 'tal') {
-                reasons.push(`Tal draft '${content.talRef.draftId}' is missing. Reconnect it from Asset Library before publishing this act.`)
+                reasons.push(`Participant "${label}" is missing Tal draft '${performer.talRef.draftId}'. Recreate it before publishing this act.`)
             }
         }
-        if ((content.danceRefs || []).some((ref) => ref.kind === 'draft')) {
+        if ((performer.danceRefs || []).some((ref) => ref.kind === 'draft')) {
             reasons.push(draftGuidanceForDance('act'))
         }
     }
@@ -250,38 +275,22 @@ export function buildPerformerPublishPayload(
         description?: string
         tags?: string[]
     },
-    context: PublishDraftContext,
+    context: PublishContext,
 ): PublishCascadeResult {
     const collector = new Map<string, ProvidedPublishAsset>()
-    const stage = stageFromWorkingDir(context.workingDir)
-    const urn = buildCanonicalStudioAssetUrn('performer', context.username, stage, options.slug)
-    const talUrn = performer.talRef?.kind === 'registry'
-        ? performer.talRef.urn
-        : performer.talRef?.kind === 'draft'
-            ? promoteTalDraft(performer.talRef.draftId, context, collector)
-            : undefined
-    const danceUrns = (performer.danceRefs || []).map((ref) => {
-        if (ref.kind === 'draft') {
-            throw new Error(draftGuidanceForDance('performer'))
-        }
-        return ref.urn
-    })
-
-    if (!talUrn && danceUrns.length === 0) {
-        throw new Error('A performer asset requires at least one Tal or Dance reference.')
-    }
+    const promoted = promotePerformerNode({
+        ...performer,
+        name: options.name,
+    }, {
+        slug: options.slug,
+        description: options.description || options.name,
+        tags: options.tags,
+        scope: 'performer',
+        includeProvidedAsset: false,
+    }, context, collector)
 
     return {
-        payload: performerPayloadFromResolvedRefs({
-            urn,
-            description: options.description?.trim() || options.name.trim(),
-            tags: filterTags(options.tags),
-            ...(talUrn ? { talUrn } : {}),
-            ...(danceUrns.length > 0 ? { danceUrns } : {}),
-            model: performer.model || null,
-            modelVariant: performer.modelVariant || null,
-            mcpConfig: performerMcpConfigForAsset(performer),
-        }),
+        payload: promoted.payload,
         providedAssets: Array.from(collector.values()),
     }
 }
@@ -293,7 +302,7 @@ export function buildActPublishPayload(
         description?: string
         tags?: string[]
     },
-    context: PublishDraftContext,
+    context: ActPublishContext,
 ): PublishCascadeResult {
     const displayNameByKey = Object.fromEntries(
         Object.entries(act.participants).map(([key, binding]) => [key, binding.displayName?.trim() || key]),
@@ -312,24 +321,51 @@ export function buildActPublishPayload(
     const stage = stageFromWorkingDir(context.workingDir)
     const urn = buildCanonicalStudioAssetUrn('act', context.username, stage, options.slug)
 
-    const participants = Object.entries(act.participants).map(([key, binding]) => ({
-        key: displayNameByKey[key] || key,
-        performer: binding.performerRef.kind === 'registry'
-            ? binding.performerRef.urn
-            : promotePerformerDraft(binding.performerRef.draftId, context, collector),
-        ...(binding.subscriptions
-            ? {
-                subscriptions: {
-                    ...binding.subscriptions,
-                    ...(binding.subscriptions.messagesFrom
-                        ? {
-                            messagesFrom: binding.subscriptions.messagesFrom.map((entry) => displayNameByKey[entry] || entry),
-                        }
-                        : {}),
-                },
+    const participants = Object.entries(act.participants).map(([key, binding]) => {
+        if (binding.performerRef.kind === 'registry') {
+            return {
+                key: displayNameByKey[key] || key,
+                performer: binding.performerRef.urn,
+                ...(binding.subscriptions
+                    ? {
+                        subscriptions: {
+                            ...binding.subscriptions,
+                            ...(binding.subscriptions.messagesFrom
+                                ? {
+                                    messagesFrom: binding.subscriptions.messagesFrom.map((entry) => displayNameByKey[entry] || entry),
+                                }
+                                : {}),
+                        },
+                    }
+                    : {}),
             }
-            : {}),
-    }))
+        }
+
+        const performer = requireDraftParticipantPerformer(key, binding, context.performers)
+
+        return {
+            key: displayNameByKey[key] || key,
+            performer: promotePerformerNode(performer, {
+                slug: performer.meta?.authoring?.slug || slugifyAssetName(performer.name || binding.performerRef.draftId),
+                description: performer.meta?.authoring?.description || performer.name,
+                tags: performer.meta?.authoring?.tags,
+                scope: 'act',
+                includeProvidedAsset: true,
+            }, context, collector).urn,
+            ...(binding.subscriptions
+                ? {
+                    subscriptions: {
+                        ...binding.subscriptions,
+                        ...(binding.subscriptions.messagesFrom
+                            ? {
+                                messagesFrom: binding.subscriptions.messagesFrom.map((entry) => displayNameByKey[entry] || entry),
+                            }
+                            : {}),
+                    },
+                }
+                : {}),
+        }
+    })
 
     const relations = act.relations.map((relation) => ({
         ...relation,

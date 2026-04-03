@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * workspace-explorer-utils.ts – Pure helpers, types, and sub-components
  * extracted from WorkspaceExplorer.tsx.

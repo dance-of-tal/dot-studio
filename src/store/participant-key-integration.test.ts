@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest'
 
 import { resolveActParticipantLabel } from '../features/act/participant-labels'
 import { buildActAssetPayload } from '../lib/performers-publish'
-import type { PerformerNode, WorkspaceAct, WorkspaceActParticipantBinding } from '../types'
+import type { PerformerNode, WorkspaceAct } from '../types'
 
 function makePerformer(id: string, name: string, derivedFrom?: string): PerformerNode {
     return {

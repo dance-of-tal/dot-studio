@@ -31,9 +31,6 @@ type ChatEvent = {
     properties?: Record<string, unknown>
 }
 
-type SliceSet = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
-type SliceGet = () => StudioState
-
 const CHAT_EVENT_TYPES = new Set([
     'message.updated', 'message.removed',
     'message.part.updated', 'message.part.delta', 'message.part.removed',
@@ -45,6 +42,36 @@ const CHAT_EVENT_TYPES = new Set([
 
 const FAILED_RESOLVE_RETRY_MS = 2_000
 const SESSION_SYNC_DEBOUNCE_MS = 1_000
+const MAX_PENDING_EVENTS_PER_SESSION = 200
+
+function readSessionIdFromEventProperties(properties: Record<string, unknown> | undefined): string | undefined {
+    if (!properties) return undefined
+
+    const directSessionId = properties.sessionID ?? properties.sessionId
+    if (typeof directSessionId === 'string' && directSessionId) {
+        return directSessionId
+    }
+
+    const info = properties.info
+    if (info && typeof info === 'object') {
+        const nestedSessionId = (info as { sessionID?: string; sessionId?: string }).sessionID
+            ?? (info as { sessionID?: string; sessionId?: string }).sessionId
+        if (typeof nestedSessionId === 'string' && nestedSessionId) {
+            return nestedSessionId
+        }
+    }
+
+    const part = properties.part
+    if (part && typeof part === 'object') {
+        const nestedSessionId = (part as { sessionID?: string; sessionId?: string }).sessionID
+            ?? (part as { sessionID?: string; sessionId?: string }).sessionId
+        if (typeof nestedSessionId === 'string' && nestedSessionId) {
+            return nestedSessionId
+        }
+    }
+
+    return undefined
+}
 
 function resolveSessionTarget(state: StudioState, sessionId: string): SessionStreamTarget | null {
     return selectStreamTarget(state, sessionId)
@@ -64,6 +91,7 @@ export const createIntegrationSlice: StateCreator<
     const pendingResolves = new Set<string>()
     const failedResolves = new Map<string, number>()
     const lastSyncedAt = new Map<string, number>()
+    const pendingSessionEvents = new Map<string, ChatEvent[]>()
 
     let eventSourceInstance: EventSource | null = null
     let eventSourceWorkingDir: string | null = null
@@ -94,6 +122,30 @@ export const createIntegrationSlice: StateCreator<
 
     function registerResolvedSessionBinding(sessionId: string, ownerId: string) {
         registerSessionBinding(set, get, ownerId, sessionId)
+    }
+
+    function bufferPendingSessionEvent(sessionId: string, event: ChatEvent) {
+        const queue = pendingSessionEvents.get(sessionId) || []
+        queue.push(event)
+        if (queue.length > MAX_PENDING_EVENTS_PER_SESSION) {
+            queue.splice(0, queue.length - MAX_PENDING_EVENTS_PER_SESSION)
+        }
+        pendingSessionEvents.set(sessionId, queue)
+    }
+
+    function flushPendingSessionEvents(sessionId: string) {
+        const queue = pendingSessionEvents.get(sessionId)
+        if (!queue?.length) {
+            return
+        }
+        pendingSessionEvents.delete(sessionId)
+        logChatDebug('integration', 'flush buffered session events', {
+            sessionId,
+            count: queue.length,
+        })
+        for (const bufferedEvent of queue) {
+            eventIngest.enqueue(bufferedEvent)
+        }
     }
 
     function repairKnownSessionBinding(sessionId: string): SessionStreamTarget | null {
@@ -207,7 +259,7 @@ export const createIntegrationSlice: StateCreator<
                     ownerKind: result.ownerKind,
                 })
                 registerResolvedSessionBinding(sessionId, result.ownerId)
-
+                flushPendingSessionEvents(sessionId)
                 const target = repairKnownSessionBinding(sessionId) || resolveSessionTarget(get(), sessionId)
                 if (target) {
                     void syncSessionMessages(target, sessionId, { reason: 'lazy-resolve' })
@@ -257,11 +309,12 @@ export const createIntegrationSlice: StateCreator<
 
                 const rawProps = event.properties as {
                     sessionID?: string
+                    sessionId?: string
                     ownerId?: string
-                    info?: { sessionID?: string }
-                    part?: { sessionID?: string }
+                    info?: { sessionID?: string; sessionId?: string }
+                    part?: { sessionID?: string; sessionId?: string }
                 } | undefined
-                const sessionID = rawProps?.sessionID || rawProps?.info?.sessionID || rawProps?.part?.sessionID
+                const sessionID = readSessionIdFromEventProperties(rawProps)
                 if (event.type && CHAT_EVENT_TYPES.has(event.type) && event.type !== 'message.part.delta') {
                     logChatDebug('integration', 'received chat event', {
                         type: event.type,
@@ -283,8 +336,13 @@ export const createIntegrationSlice: StateCreator<
                             type: event.type,
                             sessionId: sessionID,
                         })
+                        if (event.type && CHAT_EVENT_TYPES.has(event.type)) {
+                            bufferPendingSessionEvent(sessionID, event)
+                        }
                         tryLazyResolveSession(sessionID)
+                        return
                     }
+                    flushPendingSessionEvents(sessionID)
                 }
 
                 if (event.type && CHAT_EVENT_TYPES.has(event.type)) {
@@ -415,6 +473,7 @@ export const createIntegrationSlice: StateCreator<
             pendingResolves.clear()
             failedResolves.clear()
             lastSyncedAt.clear()
+            pendingSessionEvents.clear()
         },
 
         compilePrompt: async (performerId) => {

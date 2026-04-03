@@ -1,5 +1,9 @@
 import { getOpencode } from '../lib/opencode.js'
 import { StudioValidationError } from '../lib/opencode-errors.js'
+import {
+    clearProjectionRuntimePending,
+    hasPendingProjectionRuntimeAdoption,
+} from './opencode-projection/projection-manifest.js'
 import { countRunningSessions } from './runtime-reload-service.js'
 
 export type PreparedRuntimeResult<T> = {
@@ -15,7 +19,8 @@ export async function prepareRuntimeForExecution<T extends { changed?: boolean }
     buildPayload: () => Promise<T>,
 ): Promise<PreparedRuntimeResult<T>> {
     const payload = await buildPayload()
-    const requiresDispose = payload.changed === true
+    const hasPendingProjectionAdoption = await hasPendingProjectionRuntimeAdoption(workingDir)
+    const requiresDispose = payload.changed === true || hasPendingProjectionAdoption
 
     if (!requiresDispose) {
         return {
@@ -40,6 +45,7 @@ export async function prepareRuntimeForExecution<T extends { changed?: boolean }
 
     const oc = await getOpencode()
     await oc.instance.dispose({ directory: workingDir }).catch(() => {})
+    await clearProjectionRuntimePending(workingDir).catch(() => {})
     return {
         appliedReload: true,
         requiresDispose: true,

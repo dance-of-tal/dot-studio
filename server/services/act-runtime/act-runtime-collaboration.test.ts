@@ -5,7 +5,7 @@ import { buildActContext } from './act-context-builder.js'
 import { getStaticActTools } from './act-tools.js'
 import { Mailbox } from './mailbox.js'
 import type { WakeUpTarget } from './event-router.js'
-import { buildWakePrompt } from './wake-prompt-builder.js'
+import { buildWakePrompt, resolveWakePrompt } from './wake-prompt-builder.js'
 
 const actDefinition: ActDefinition = {
     id: 'act-review',
@@ -17,13 +17,25 @@ const actDefinition: ActDefinition = {
             performerRef: { kind: 'draft', draftId: 'lead-performer' },
             subscriptions: {
                 messagesFrom: ['Researcher'],
-                messageTags: ['handoff'],
-                callboardKeys: ['review-*'],
+                messageTags: ['lead-alert'],
+                callboardKeys: ['lead/private'],
                 eventTypes: ['runtime.idle'],
             },
         },
         Researcher: {
             performerRef: { kind: 'draft', draftId: 'researcher-performer' },
+            subscriptions: {
+                messageTags: ['handoff', 'clarification'],
+                callboardKeys: ['review-*'],
+            },
+        },
+        Observer: {
+            performerRef: { kind: 'draft', draftId: 'observer-performer' },
+            subscriptions: {
+                messageTags: ['observer-tag'],
+                callboardKeys: ['observer/*'],
+                eventTypes: ['runtime.idle'],
+            },
         },
     },
     relations: [
@@ -48,9 +60,23 @@ describe('collaboration context rewrite', () => {
         expect(context).toContain('Do not pass relation names like `participant_1_to_participant_2`.')
         expect(context).toContain('# Valid Teammates')
         expect(context).toContain('Use these names as `recipient` values: Researcher')
+        expect(context).not.toContain('Observer')
         expect(context).toContain('update_shared_board')
         expect(context).toContain('short Markdown summaries')
         expect(context).toContain('Do not use the shared board as the storage location for full deliverables.')
+        expect(context).toContain('# Coordination Signals')
+        expect(context).toContain('Message tags for Researcher: handoff, clarification')
+        expect(context).toContain('Shared note keys for Researcher: review-*')
+        expect(context.indexOf('# Direct Connections')).toBeLessThan(context.indexOf('# Coordination Signals'))
+        expect(context).toContain('check only the sender or shared note key relevant to the current event')
+        expect(context).toContain('instead of polling the full shared board')
+        expect(context).not.toContain('# Notifications You Receive')
+        expect(context).not.toContain('lead-alert')
+        expect(context).not.toContain('lead/private')
+        expect(context).not.toContain('observer-tag')
+        expect(context).not.toContain('observer/*')
+        expect(context).not.toContain('runtime.idle')
+        expect(context).not.toContain('System updates:')
         expect(context).not.toContain('Act ID')
         expect(context).not.toContain('Thread ID')
         expect(context).not.toContain('participant key')
@@ -89,11 +115,62 @@ describe('collaboration context rewrite', () => {
         const prompt = buildWakePrompt(target, mailbox)
 
         expect(prompt).toContain('[Direct Message]')
-        expect(prompt).toContain('Researcher sent you a direct message. label: handoff')
-        expect(prompt).toContain('Pending Direct Messages (1)')
+        expect(prompt).toContain('From: Researcher [handoff]')
+        expect(prompt).toContain('I uploaded the review summary.')
+        expect(prompt).not.toContain('sent you a direct message')
+        expect(prompt).not.toContain('Pending Direct Messages')
         expect(prompt).not.toContain('# Collaboration Context')
         expect(prompt).not.toContain('Team: Review Team')
         expect(prompt).not.toContain('message_teammate')
+        expect(prompt).not.toContain('relevant to the current event')
+        expect(prompt).not.toContain('save a self-wake with `wait_until`')
+    })
+
+    it('separates wake cause from delivered message content', () => {
+        const mailbox = new Mailbox()
+        mailbox.addMessage({
+            from: 'Researcher',
+            to: 'Lead',
+            content: 'Review summary is ready.',
+            tag: 'handoff',
+            threadId: 'thread-1',
+        })
+
+        const target: WakeUpTarget = {
+            participantKey: 'Lead',
+            triggerEvent: {
+                id: 'evt-2',
+                type: 'message.sent',
+                sourceType: 'performer',
+                source: 'Researcher',
+                timestamp: Date.now(),
+                payload: {
+                    from: 'Researcher',
+                    to: 'Lead',
+                    tag: 'handoff',
+                    threadId: 'thread-1',
+                },
+            },
+            reason: 'subscription',
+        }
+
+        expect(resolveWakePrompt(target, mailbox)).toEqual({
+            cause: 'subscription',
+            trigger: {
+                kind: 'direct-message',
+                source: 'Researcher',
+                tag: 'handoff',
+            },
+            deliveries: {
+                messages: [
+                    {
+                        from: 'Researcher',
+                        tag: 'handoff',
+                        content: 'Review summary is ready.',
+                    },
+                ],
+            },
+        })
     })
 
     it('generates session-bound collaboration tools', () => {

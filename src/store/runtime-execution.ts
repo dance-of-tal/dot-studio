@@ -1,9 +1,6 @@
 import type { AssetRef } from '../types'
 import type { StudioState } from './types'
-import {
-    hasConflictingRunningStudioSessions,
-    hasRunningStudioSessions,
-} from './runtime-reload-utils'
+import { hasRunningStudioSessions } from './runtime-reload-utils'
 
 type GetState = () => StudioState
 
@@ -92,9 +89,7 @@ export async function preparePendingRuntimeExecution(
         await state.saveWorkspace()
     }
 
-    const hasRunningConflict = state.projectionDirty.workspaceWide
-        ? hasRunningStudioSessions(state)
-        : hasConflictingRunningStudioSessions(state, options)
+    const hasRunningConflict = hasRunningStudioSessions(state)
 
     if (requiresDispose && hasRunningConflict) {
         return {

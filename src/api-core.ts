@@ -1,4 +1,5 @@
 import { StudioApiError } from './lib/api-errors'
+import type { StudioApiErrorPayload } from './lib/api-errors'
 
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
 let workingDirContext: string | null = null
@@ -52,12 +53,17 @@ export async function fetchApiResponse(url: string, init?: RequestInit): Promise
     })
     if (!res.ok) {
         const raw = await res.text().catch(() => '')
-        let payload: { error?: string } & Record<string, unknown> = { error: raw || res.statusText }
+        let payload: StudioApiErrorPayload & Record<string, unknown> = { error: raw || res.statusText }
         if (raw) {
             try {
                 const parsed = JSON.parse(raw)
                 payload = parsed && typeof parsed === 'object'
-                    ? parsed as { error?: string } & Record<string, unknown>
+                    ? {
+                        ...(parsed as Record<string, unknown>),
+                        error: typeof (parsed as { error?: unknown }).error === 'string'
+                            ? (parsed as { error: string }).error
+                            : raw || res.statusText,
+                    }
                     : { error: raw }
             } catch {
                 payload = { error: raw }

@@ -61,13 +61,14 @@ type Props = {
     mcpCatalogDirty: boolean
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
+    runtimeReloadPending: boolean
     pendingMcpAuthName: string | null
     updateMcpEntry: McpCatalogState['updateMcpEntry']
     addMcpEntry: () => string
     removeMcpEntry: (key: string) => void
     saveMcpCatalog: () => Promise<boolean>
     connectMcpServer: (name: string) => Promise<void>
-    authenticateMcpServer: (name: string) => Promise<void>
+    startMcpAuthFlow: (name: string) => Promise<void>
     clearMcpAuth: (name: string) => Promise<void>
     expandedMcpEntries: Record<string, boolean>
     setExpandedMcpEntries: Dispatch<SetStateAction<Record<string, boolean>>>
@@ -119,13 +120,14 @@ export default function AssetLibraryLocalView({
     mcpCatalogDirty,
     mcpCatalogStatus,
     mcpCatalogSaving,
+    runtimeReloadPending,
     pendingMcpAuthName,
     updateMcpEntry,
     addMcpEntry,
     removeMcpEntry,
     saveMcpCatalog,
     connectMcpServer,
-    authenticateMcpServer,
+    startMcpAuthFlow,
     clearMcpAuth,
     expandedMcpEntries,
     setExpandedMcpEntries,
@@ -242,13 +244,14 @@ export default function AssetLibraryLocalView({
                         mcpCatalogDirty={mcpCatalogDirty}
                         mcpCatalogStatus={mcpCatalogStatus}
                         mcpCatalogSaving={mcpCatalogSaving}
+                        runtimeReloadPending={runtimeReloadPending}
                         pendingMcpAuthName={pendingMcpAuthName}
                         updateMcpEntry={updateMcpEntry}
                         addMcpEntry={addMcpEntry}
                         removeMcpEntry={removeMcpEntry}
                         saveMcpCatalog={saveMcpCatalog}
                         connectMcpServer={connectMcpServer}
-                        authenticateMcpServer={authenticateMcpServer}
+                        startMcpAuthFlow={startMcpAuthFlow}
                         clearMcpAuth={clearMcpAuth}
                         expandedMcpEntries={expandedMcpEntries}
                         setExpandedMcpEntries={setExpandedMcpEntries}

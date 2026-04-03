@@ -112,6 +112,10 @@ describe('ensurePerformerProjection source boundaries', () => {
             }),
             expect.any(Array),
         )
+        const manifest = JSON.parse(await fs.readFile(path.join(workingDir, '.opencode', 'dot-studio.manifest.json'), 'utf-8'))
+        expect(manifest.runtime).toEqual(expect.objectContaining({
+            projectionPending: true,
+        }))
     })
 
     it('projects performer MCP access as server glob patterns', async () => {

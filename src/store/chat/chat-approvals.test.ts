@@ -76,18 +76,15 @@ describe('chat approvals', () => {
 
     it('removes permissions from session-owned entity state on success', async () => {
         const sessionId = 'session-1'
-        const permission = { id: 'perm-1', sessionID: sessionId, permission: 'file.read', patterns: [], always: [] }
+        const permission = { id: 'perm-1', sessionID: sessionId, permission: 'file.read', patterns: [], always: [], metadata: {} }
         const state = createMinimalState({
             sePermissions: { [sessionId]: permission },
         })
         const get = () => state
-        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
-            Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
-        }
 
         respondPermissionMock.mockResolvedValue(undefined)
 
-        await createChatApprovals(set, get).respondToPermission(sessionId, permission.id, 'once')
+        await createChatApprovals(get).respondToPermission(sessionId, permission.id, 'once')
 
         expect(state.sePermissions[sessionId]).toBeUndefined()
     })
@@ -99,13 +96,10 @@ describe('chat approvals', () => {
             seQuestions: { [sessionId]: question },
         })
         const get = () => state
-        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
-            Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
-        }
 
         respondQuestionMock.mockRejectedValue(new Error('boom'))
 
-        await createChatApprovals(set, get).respondToQuestion(sessionId, question.id, [])
+        await createChatApprovals(get).respondToQuestion(sessionId, question.id, [])
 
         expect(state.seQuestions[sessionId]).toEqual(question)
         expect(showToastMock).toHaveBeenCalled()

@@ -129,6 +129,13 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         el.style.overflowAnchor = userScrolled ? 'auto' : 'none'
     }, [userScrolled])
 
+    const isScrollableBoundary = useCallback((el: Element | null) => {
+        if (!(el instanceof HTMLElement)) {
+            return false
+        }
+        return (el.scrollHeight - el.clientHeight > 1) || (el.scrollWidth - el.clientWidth > 1)
+    }, [])
+
     // Scroll event handler
     const handleScroll = useCallback(() => {
         const el = scrollElRef.current
@@ -171,13 +178,13 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
             // Don't treat nested scrollable regions as leaving follow mode
             const target = e.target instanceof Element ? e.target : undefined
             const nested = target?.closest('[data-scrollable]')
-            if (nested && nested !== el) return
+            if (nested && nested !== el && isScrollableBoundary(nested)) return
             stop()
         }
 
         el.addEventListener('wheel', handleWheel, { passive: true })
         wheelCleanupRef.current = () => el.removeEventListener('wheel', handleWheel)
-    }, [updateOverflowAnchor, stop])
+    }, [updateOverflowAnchor, stop, isScrollableBoundary])
 
     // contentRef callback — setup ResizeObserver
     const contentRef = useCallback((el: HTMLElement | null) => {
@@ -211,7 +218,11 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         settleTimerRef.current = undefined
 
         if (working) {
-            if (!userScrolled) scrollToBottom(true)
+            if (!userScrolled) {
+                queueMicrotask(() => {
+                    scrollToBottom(true)
+                })
+            }
             return
         }
 

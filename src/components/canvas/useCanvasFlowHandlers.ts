@@ -3,6 +3,7 @@ import type { Connection, Node, NodeChange, ReactFlowInstance } from '@xyflow/re
 import type { WorkspaceSlice } from '../../store/types'
 import type { WorkspaceActParticipantBinding, PerformerNode } from '../../types'
 import { useStudioStore } from '../../store'
+import { resolveCanvasCenterPosition } from '../../store/workspace-helpers'
 import { routeActConnection } from './act-connect-router'
 import {
     resolveCanvasDragStop,
@@ -281,18 +282,19 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         updatePerformerSize,
     ])
 
-    const onMoveEnd = useCallback(() => {
+    const syncCanvasCenter = useCallback(() => {
         if (!reactFlowInstance || !canvasAreaRef.current) {
             return
         }
 
-        const rect = canvasAreaRef.current.getBoundingClientRect()
-        const center = reactFlowInstance.screenToFlowPosition({
-            x: rect.left + rect.width / 2,
-            y: rect.top + rect.height / 2,
-        })
-        setCanvasCenter(Math.round(center.x), Math.round(center.y))
+        const center = resolveCanvasCenterPosition(
+            canvasAreaRef.current,
+            reactFlowInstance.screenToFlowPosition,
+        )
+        setCanvasCenter(center.x, center.y)
     }, [reactFlowInstance, canvasAreaRef, setCanvasCenter])
+
+    const onMoveEnd = syncCanvasCenter
 
     return {
         onEdgeClick,
@@ -302,5 +304,6 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         onConnect,
         handleNodesChange,
         onMoveEnd,
+        syncCanvasCenter,
     }
 }

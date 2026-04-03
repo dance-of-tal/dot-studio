@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { SafetyGuard } from '../../server/services/act-runtime/safety-guard.js'
+import type { ActThread } from '../types'
 
 describe('SafetyGuard thread timeout', () => {
     it('uses the current user turn as the timeout baseline', () => {
         const guard = new SafetyGuard()
-        const thread = {
+        const thread: ActThread = {
             id: 'thread-1',
             actId: 'act-1',
             mailbox: {
@@ -15,7 +16,7 @@ describe('SafetyGuard thread timeout', () => {
             participantSessions: {},
             createdAt: Date.now() - (3 * 60 * 60 * 1000),
             status: 'active',
-        } as const
+        }
 
         guard.reset(Date.now())
         expect(guard.checkTimeout(thread)).toEqual({ ok: true })
@@ -23,7 +24,7 @@ describe('SafetyGuard thread timeout', () => {
 
     it('respects an explicit thread timeout from act safety', () => {
         const guard = SafetyGuard.fromActSafety({ threadTimeoutMs: 1_000 })
-        const thread = {
+        const thread: ActThread = {
             id: 'thread-1',
             actId: 'act-1',
             mailbox: {
@@ -34,7 +35,7 @@ describe('SafetyGuard thread timeout', () => {
             participantSessions: {},
             createdAt: Date.now() - 2_000,
             status: 'active',
-        } as const
+        }
 
         guard.reset(Date.now() - 2_000)
         const result = guard.checkTimeout(thread)

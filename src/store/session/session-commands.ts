@@ -4,13 +4,14 @@ import type { StudioState } from '../types'
 import { logChatDebug, summarizeMessagesForChatDebug } from '../../lib/chat-debug'
 import {
     mapSessionMessagesToChatMessages,
-    mergePendingOptimisticUserMessages,
+    mergeLiveSessionSnapshot,
 } from '../../lib/chat-messages'
 import {
     describeChatTarget,
     type ChatTargetDescriptor,
 } from '../../../shared/chat-targets'
 import { selectMessagesForChatKey } from './session-selectors'
+import { isSessionTransportActive } from './session-activity'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
@@ -132,7 +133,17 @@ export async function syncSessionSnapshot(
     const response = await api.chat.messages(sessionId)
     const mapped = mapSessionMessagesToChatMessages(response.messages)
     const currentMessages = get().seMessages[sessionId] || []
-    const nextMessages = mergePendingOptimisticUserMessages(mapped, currentMessages, !!get().sessionLoading[sessionId])
+    const isSessionInFlight = isSessionTransportActive({
+        loading: !!get().sessionLoading[sessionId],
+        status: get().seStatuses[sessionId],
+        messages: currentMessages,
+        permission: get().sePermissions[sessionId] || null,
+        question: get().seQuestions[sessionId] || null,
+    })
+    const nextMessages = mergeLiveSessionSnapshot(mapped, currentMessages, {
+        preserveOptimisticUserMessages: isSessionInFlight,
+        preserveStreamingAssistantMessages: isSessionInFlight,
+    })
 
     registerSessionBinding(_set, get, chatKey, sessionId)
     get().setSessionMessages(sessionId, nextMessages)

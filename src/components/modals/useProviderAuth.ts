@@ -55,8 +55,7 @@ interface UseProviderAuthOptions {
     setPerformerModel: (id: string, model: { provider: string; modelId: string }) => void
     refreshProviderState: () => Promise<ProviderCard[]>
     setError: (msg: string | null) => void
-    setProjectMessage: (msg: string | null) => void
-    setActiveTab: (tab: string) => void
+    setStatusMessage: (msg: string | null) => void
 }
 
 export function useProviderAuth(options: UseProviderAuthOptions) {
@@ -66,8 +65,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         setPerformerModel,
         refreshProviderState,
         setError,
-        setProjectMessage,
-        setActiveTab,
+        setStatusMessage,
     } = options
 
     const [oauthFlows, setOauthFlows] = useState<Record<string, OauthFlow>>({})
@@ -167,8 +165,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
 
     async function handleAuthMethod(provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) {
         setError(null)
-        setProjectMessage(null)
-        setActiveTab('providers')
+        setStatusMessage(null)
 
         if (method.type === 'api') {
             openApiKeyFlow(provider, methodIndex, method.label)
@@ -264,7 +261,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
 
     async function disconnectProvider(providerId: string, providerName: string) {
         setError(null)
-        setProjectMessage(null)
+        setStatusMessage(null)
         const provider = providers.find((p) => p.id === providerId)
         const isCustomSource = provider?.source === 'custom'
         try {
@@ -289,7 +286,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
             clearProviderFlow(providerId)
             setModelPicker((current) => current?.providerId === providerId ? null : current)
             await refreshProviderState()
-            setProjectMessage(`${providerName} credentials cleared from OpenCode auth store.`)
+            setStatusMessage(`${providerName} credentials cleared from OpenCode auth store.`)
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err))
         }
@@ -303,7 +300,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
             provider: model.provider,
             modelId: model.id,
         })
-        setProjectMessage(`${model.name || model.id} applied to ${modelPicker.performerName || 'the selected performer'}.`)
+        setStatusMessage(`${model.name || model.id} applied to ${modelPicker.performerName || 'the selected performer'}.`)
         setModelPicker(null)
     }
 

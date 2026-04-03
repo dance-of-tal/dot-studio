@@ -32,6 +32,12 @@ Use this skill when you need the exact current mutation surface.
 - `addMcpServerNames`
 - `removeMcpServerNames`
 
+Rules:
+- A new Performer should reflect the user's requested role and working style, not a generic placeholder.
+- If the user request implies a concrete Tal, Dance, or model choice, include it in the Performer setup.
+- If the user explicitly asks to omit Tal, Dance, or model setup, honor that omission.
+- If more than one reasonable Tal/Dance/model setup is possible, ask a short clarifying question before creating the Performer.
+
 ## Act Fields
 `createAct` supports:
 - `name`
@@ -50,6 +56,8 @@ For inline relations and `connectPerformers`, prefer:
 
 Rules:
 - `actRules` must be an array of strings.
+- The Act should reflect the user request in its participant set, role split, workflow shape, and actRules when requested.
+- If the Act needs missing participants, create those Performers first in cascade and make sure they also match the user intent.
 - For team or workflow requests, a new Act with multiple participants but no relations is usually wrong.
 - If the user asks for something like a `d2c company`, include at least one relation in the same `createAct`.
 - Use `source...` and `target...` relation fields, not `from...` or `to...`.
@@ -85,3 +93,7 @@ Create a D2C company Act with connected participants:
 ```html
 <assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"brand","name":"Brand Strategist"},{"type":"createPerformer","ref":"growth","name":"Growth Marketer"},{"type":"createPerformer","ref":"ops","name":"Ecommerce Operator"},{"type":"createAct","name":"D2C Company","participantPerformerRefs":["brand","growth","ops"],"relations":[{"sourcePerformerRef":"brand","targetPerformerRef":"growth","direction":"one-way","name":"campaign brief","description":"Brand Strategist hands positioning and campaign priorities to Growth Marketer."},{"sourcePerformerRef":"growth","targetPerformerRef":"ops","direction":"one-way","name":"launch handoff","description":"Growth Marketer hands launch requirements and expected volume to Ecommerce Operator."}]}]}</assistant-actions>
 ```
+
+## Asset Dialog
+- For Performer or Act creation requests, it is valid to use a short question-and-answer flow before mutating when important design choices are missing.
+- Ask only the smallest high-value questions needed to determine the correct asset shape.

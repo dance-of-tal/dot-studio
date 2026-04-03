@@ -6,7 +6,7 @@
  * then optionally transitions to model picker on success.
  */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { X, Key, ExternalLink } from 'lucide-react'
 import type { ProviderCard, ProviderAuthMethod, OauthFlow, ConnectedModel, ModelPickerState } from './settings-utils'
 import { providerSupportsApiKey, labelForAuthMethod } from './settings-utils'
@@ -53,23 +53,20 @@ export default function ProviderConnectModal({
         .filter(({ method }) => method.type === 'oauth')
 
     // Determine current step
-    const [step, setStep] = useState<Step>(() => {
+    const [selectedStep, setSelectedStep] = useState<Step | null>(null)
+    const baseStep = useMemo<Step>(() => {
         // If only one auth method, skip method chooser
         if (supportsApi && oauthMethods.length === 0) return 'api'
         if (!supportsApi && oauthMethods.length === 1) return 'oauth'
         return 'choose'
-    })
+    }, [oauthMethods.length, supportsApi])
 
-    // Auto-transition: when flow starts (user clicked a method), move to the right step
-    useEffect(() => {
-        if (flow?.mode === 'api') setStep('api')
-        else if (flow?.mode === 'code' || flow?.mode === 'auto') setStep('oauth')
-    }, [flow?.mode])
-
-    // Auto-transition: when modelPicker appears, move to pick-model
-    useEffect(() => {
-        if (modelPicker) setStep('pick-model')
-    }, [modelPicker])
+    const step: Step = useMemo(() => {
+        if (modelPicker) return 'pick-model'
+        if (flow?.mode === 'api') return 'api'
+        if (flow?.mode === 'code' || flow?.mode === 'auto') return 'oauth'
+        return selectedStep ?? baseStep
+    }, [baseStep, flow?.mode, modelPicker, selectedStep])
 
     // If step is 'api' and no flow yet, open it
     useEffect(() => {
@@ -85,6 +82,7 @@ export default function ProviderConnectModal({
     }
 
     function handleMethodClick(methodIndex: number, method: ProviderAuthMethod) {
+        setSelectedStep(method.type === 'api' ? 'api' : 'oauth')
         if (method.type === 'api') {
             openApiKeyFlow(provider)
         } else {

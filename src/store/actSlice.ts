@@ -1,40 +1,36 @@
 import { nanoid } from 'nanoid'
 import type { StateCreator } from 'zustand'
-import type { StudioState, ActEditorState, ActSlice } from './types'
-import type { WorkspaceAct, WorkspaceActParticipantBinding } from '../types'
+import type { StudioState, ActSlice } from './types'
+import type { WorkspaceAct } from '../types'
 import { api } from '../api'
 import {
     ACT_DEFAULT_EXPANDED_HEIGHT,
     ACT_DEFAULT_WIDTH,
 } from '../lib/act-layout'
-import { assetUrnDisplayName } from '../lib/asset-urn'
 import {
     autoLayoutBindings,
-    createActParticipantKey,
+    buildActEditorSelectionState,
+    buildActSelectionState,
+    buildActThreadSelectionState,
+    buildDeletedActThreadState,
+    buildSelectActState,
+    createActEditorState,
+    createActParticipantBinding,
     createActThreadImpl,
+    findExistingParticipantKey,
     importActFromAssetImpl,
+    listActThreadChatKeys,
     loadActThreadsImpl,
+    performerNodeToActRef,
+    resolveActEditorStateAfterRelationRemoval,
     scheduleActRuntimeSync,
 } from './act-slice-helpers'
 import {
     addActRelationImpl,
 } from './act-slice-actions'
 import { buildExitFocusModeState } from './workspace-focus-actions'
-import { resolvePreferredActThreadId } from '../lib/act-threads'
+import { resolveCanvasSpawnPosition } from './workspace-helpers'
 import { clearChatSessionView } from './session'
-
-function createActEditorState(
-    actId: string,
-    mode: ActEditorState['mode'],
-    options: { participantKey?: string | null; relationId?: string | null } = {},
-): ActEditorState {
-    return {
-        actId,
-        mode,
-        participantKey: options.participantKey ?? null,
-        relationId: options.relationId ?? null,
-    }
-}
 
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
     acts: [],
@@ -50,15 +46,16 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
 
     addAct: (name) => {
         const id = nanoid(12)
-        const center = get().canvasCenter
-        const existingCount = get().acts.length
-        const offset = existingCount * 40
+        const spawnPosition = resolveCanvasSpawnPosition({
+            canvasCenter: get().canvasCenter,
+            existingCount: get().acts.length,
+            width: ACT_DEFAULT_WIDTH,
+            height: ACT_DEFAULT_EXPANDED_HEIGHT,
+        })
         const act: WorkspaceAct = {
             id,
             name,
-            position: center
-                ? { x: center.x + offset, y: center.y + 200 + offset }
-                : { x: 200 + offset, y: 200 + offset },
+            position: spawnPosition,
             width: ACT_DEFAULT_WIDTH,
             height: ACT_DEFAULT_EXPANDED_HEIGHT,
             participants: {},
@@ -136,26 +133,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     },
 
     selectAct: (id) => {
-        const state = get()
-        const nextThreads = id ? (state.actThreads[id] || []) : []
-        const nextActiveThreadId = id
-            ? resolvePreferredActThreadId(nextThreads, state.activeThreadId)
-            : state.activeThreadId
-        set((s) => ({
-            selectedActId: id,
-            selectedPerformerId: null,
-            selectedPerformerSessionId: null,
-            actEditorState: state.actEditorState?.actId === id ? state.actEditorState : null,
-            activeThreadId: nextActiveThreadId,
-            activeThreadParticipantKey: id === null
-                ? state.activeThreadParticipantKey
-                : (state.selectedActId === id && nextActiveThreadId === state.activeThreadId
-                    ? state.activeThreadParticipantKey
-                    : null),
-            // Clear stale focus when not in focus mode; preserve when in focus
-            focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
-            focusedNodeType: s.focusSnapshot ? s.focusedNodeType : null,
-        }))
+        set((state) => buildSelectActState(state, id))
         if (id) {
             void get().loadThreads(id)
         }
@@ -178,23 +156,16 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
 
     bindPerformerToAct: (actId, performerRef) => {
         const state = get()
-        let displayName: string | null = null
-        if (performerRef.kind === 'draft') {
-            displayName = state.performers.find(p => p.id === performerRef.draftId)?.name ?? null
-        } else if (performerRef.kind === 'registry') {
-            displayName = state.performers.find(p => p.meta?.derivedFrom === performerRef.urn)?.name
-                ?? assetUrnDisplayName(performerRef.urn) ?? null
+        const act = state.acts.find((entry) => entry.id === actId)
+        if (!act) {
+            return null
         }
-        if (!displayName) displayName = `Participant ${Object.keys(state.acts.find((a) => a.id === actId)?.participants || {}).length + 1}`
-        const newKey = createActParticipantKey()
-        const existingKeys = Object.keys(state.acts.find((a) => a.id === actId)?.participants || {})
 
-        const newPos = { x: existingKeys.length * 300, y: 100 }
-        const binding: WorkspaceActParticipantBinding = {
+        const { key: newKey, binding } = createActParticipantBinding({
+            act,
+            performers: state.performers,
             performerRef,
-            displayName,
-            position: newPos,
-        }
+        })
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
@@ -217,27 +188,15 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             return null
         }
 
-        const existing = Object.entries(act.participants).find(([, binding]) => (
-            (binding.performerRef.kind === 'draft' && performerRef.kind === 'draft' && binding.performerRef.draftId === performerRef.draftId)
-            || (binding.performerRef.kind === 'registry' && performerRef.kind === 'registry' && binding.performerRef.urn === performerRef.urn)
-        ))
-
-        if (existing) {
-            set({
-                selectedActId: actId,
-                selectedPerformerId: null,
-                actEditorState: state.actEditorState?.actId === actId ? state.actEditorState : null,
-            })
-            return existing[0]
+        const existingParticipantKey = findExistingParticipantKey(act, performerRef)
+        if (existingParticipantKey) {
+            set(buildActSelectionState(state, actId))
+            return existingParticipantKey
         }
 
         const newKey = get().bindPerformerToAct(actId, performerRef)
         get().autoLayoutActParticipants(actId)
-        set({
-            selectedActId: actId,
-            selectedPerformerId: null,
-            actEditorState: state.actEditorState?.actId === actId ? state.actEditorState : null,
-        })
+        set(buildActSelectionState(state, actId))
         return newKey
     },
 
@@ -249,12 +208,7 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             return null
         }
 
-        const derivedFrom = performer.meta?.derivedFrom?.trim()
-        const performerRef = derivedFrom
-            ? { kind: 'registry' as const, urn: derivedFrom }
-            : { kind: 'draft' as const, draftId: performer.id }
-
-        return get().attachPerformerRefToAct(actId, performerRef)
+        return get().attachPerformerRefToAct(actId, performerNodeToActRef(performer))
     },
 
     autoLayoutActParticipants: (actId) => {
@@ -307,11 +261,11 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     },
 
     openActEditor: (actId, mode = 'act', options = {}) => {
-        set({
-            selectedActId: actId,
-            selectedPerformerId: null,
-            actEditorState: createActEditorState(actId, mode, options),
-        })
+        set((state) => buildActEditorSelectionState(
+            state,
+            actId,
+            createActEditorState(actId, mode, options),
+        ))
     },
 
     closeActEditor: () => {
@@ -319,19 +273,19 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     },
 
     openActParticipantEditor: (actId, participantKey) => {
-        set({
-            selectedActId: actId,
-            selectedPerformerId: null,
-            actEditorState: createActEditorState(actId, 'participant', { participantKey }),
-        })
+        set((state) => buildActEditorSelectionState(
+            state,
+            actId,
+            createActEditorState(actId, 'participant', { participantKey }),
+        ))
     },
 
     openActRelationEditor: (actId, relationId) => {
-        set({
-            selectedActId: actId,
-            selectedPerformerId: null,
-            actEditorState: createActEditorState(actId, 'relation', { relationId }),
-        })
+        set((state) => buildActEditorSelectionState(
+            state,
+            actId,
+            createActEditorState(actId, 'relation', { relationId }),
+        ))
     },
 
     updateActParticipantPosition: (actId, participantKey, x, y) => {
@@ -374,24 +328,12 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                     Object.entries(act.participants).filter(([key]) => referencedKeys.has(key)),
                 )
 
-            // Reset actEditorState if it points to a removed participant
-            let nextActEditorState = s.actEditorState
-            if (
-                nextActEditorState?.actId === actId
-                && nextActEditorState.mode === 'participant'
-                && nextActEditorState.participantKey
-                && !nextParticipants[nextActEditorState.participantKey]
-            ) {
-                nextActEditorState = createActEditorState(actId, 'act')
-            }
-            // Reset if it points to the removed relation
-            if (
-                nextActEditorState?.actId === actId
-                && nextActEditorState.mode === 'relation'
-                && nextActEditorState.relationId === relationId
-            ) {
-                nextActEditorState = createActEditorState(actId, 'act')
-            }
+            const nextActEditorState = resolveActEditorStateAfterRelationRemoval(
+                s.actEditorState,
+                actId,
+                relationId,
+                nextParticipants,
+            )
 
             return {
                 acts: s.acts.map((a) => {
@@ -463,37 +405,30 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     createThread: async (actId) => createActThreadImpl(get, set, actId),
 
     selectThread: (actId, threadId) => {
-        set({
-            activeThreadId: threadId,
-            activeThreadParticipantKey: null,
-            selectedActId: actId,
-            selectedPerformerId: null,
-            selectedPerformerSessionId: null,
-        })
+        set((state) => buildActThreadSelectionState(state, actId, threadId))
     },
 
     selectThreadParticipant: (participantKey) => {
-        set({ activeThreadParticipantKey: participantKey })
+        set((state) => {
+            if (!state.selectedActId || !state.activeThreadId) {
+                return {}
+            }
+
+            return buildActThreadSelectionState(
+                state,
+                state.selectedActId,
+                state.activeThreadId,
+                participantKey,
+            )
+        })
     },
 
     loadThreads: async (actId) => loadActThreadsImpl(get, set, actId),
 
     deleteThread: async (actId, threadId) => {
         await api.actRuntime.deleteThread(actId, threadId)
-        const threadKeyPrefix = `act:${actId}:thread:${threadId}:participant:`
-        const threadChatKeys = Object.keys(get().chatKeyToSession).filter((key) => key.startsWith(threadKeyPrefix))
-        set((state: StudioState) => {
-            const threads = (state.actThreads[actId] || []).filter((t) => t.id !== threadId)
-            const nextActiveThread = state.activeThreadId === threadId
-                ? resolvePreferredActThreadId(threads, null)
-                : state.activeThreadId
-
-            return {
-                actThreads: { ...state.actThreads, [actId]: threads },
-                activeThreadId: nextActiveThread,
-                activeThreadParticipantKey: nextActiveThread ? state.activeThreadParticipantKey : null,
-            }
-        })
+        const threadChatKeys = listActThreadChatKeys(get(), actId, threadId)
+        set((state: StudioState) => buildDeletedActThreadState(state, actId, threadId))
         for (const chatKey of threadChatKeys) {
             clearChatSessionView(get, chatKey)
         }

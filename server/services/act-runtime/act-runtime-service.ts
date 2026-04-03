@@ -94,6 +94,55 @@ class ActRuntimeService {
         return this.safetyGuards.get(threadId)!
     }
 
+    private async prewarmActParticipantProjections(actDefinition?: ActDefinition): Promise<void> {
+        if (!actDefinition) {
+            return
+        }
+
+        const { ensurePerformerProjection } = await import('../opencode-projection/stage-projection-service.js')
+        const { resolvePerformerForWake } = await import('./wake-performer-resolver.js')
+        const { projectActTools } = await import('./act-tool-projection.js')
+
+        for (const participantKey of Object.keys(actDefinition.participants || {})) {
+            try {
+                const performerConfig = await resolvePerformerForWake(
+                    this.workingDir,
+                    actDefinition,
+                    participantKey,
+                )
+                if (!performerConfig?.model) {
+                    continue
+                }
+
+                const actProjection = projectActTools(
+                    participantKey,
+                    actDefinition,
+                    'prewarm',
+                    this.workingDir,
+                )
+
+                await ensurePerformerProjection({
+                    performerId: participantKey,
+                    performerName: performerConfig.performerName,
+                    talRef: performerConfig.talRef,
+                    danceRefs: performerConfig.danceRefs,
+                    model: performerConfig.model,
+                    modelVariant: performerConfig.modelVariant,
+                    mcpServerNames: performerConfig.mcpServerNames,
+                    workingDir: this.workingDir,
+                    scope: 'act',
+                    actId: actDefinition.id,
+                    collaborationPromptSection: actProjection.contextPrompt,
+                    extraTools: actProjection.tools,
+                })
+            } catch (error) {
+                console.warn(
+                    `[act-runtime] Failed to prewarm projection for "${participantKey}" in act "${actDefinition.id}": ${errorMessage(error)}`,
+                )
+            }
+        }
+    }
+
     async sendMessage(threadId: string, body: SendMessageInput) {
         await this.ensureThreadsLoaded()
         const runtime = this.threadManager.getThreadRuntime(threadId)
@@ -280,10 +329,12 @@ class ActRuntimeService {
     async syncActDefinition(actId: string, actDefinition: ActDefinition) {
         await this.ensureThreadsLoaded()
         const threadIds = this.threadManager.listThreadIds(actId, ['active', 'idle'])
+        let anySynced = false
 
         for (const threadId of threadIds) {
             const synced = await this.threadManager.syncThreadActDefinition(threadId, actDefinition)
             if (!synced) continue
+            anySynced = true
 
             this.safetyGuards.delete(threadId)
 
@@ -301,6 +352,10 @@ class ActRuntimeService {
                 },
             }
             await this.threadManager.logEvent(threadId, event)
+        }
+
+        if (anySynced) {
+            await this.prewarmActParticipantProjections(actDefinition)
         }
 
         return { ok: true as const, threads: this.threadManager.listThreads(actId) }
@@ -325,6 +380,7 @@ class ActRuntimeService {
 
     async createThread(actId: string, actDefinition?: ActDefinition) {
         const thread = await this.threadManager.createThread(actId, actDefinition)
+        await this.prewarmActParticipantProjections(actDefinition)
         return { ok: true as const, thread }
     }
 
@@ -355,10 +411,10 @@ class ActRuntimeService {
         return { ok: true as const, thread }
     }
 
-    async getRecentEvents(threadId: string, count = 50) {
+    async getRecentEvents(threadId: string, count = 50, before = 0) {
         await this.ensureThreadsLoaded()
-        const events = await this.threadManager.getRecentEvents(threadId, count)
-        return { ok: true as const, events }
+        const page = await this.threadManager.getRecentEventsPage(threadId, count, before)
+        return { ok: true as const, ...page }
     }
 
     async registerParticipantSession(threadId: string, participantKey: string, sessionId: string) {
@@ -409,9 +465,12 @@ class ActRuntimeService {
     }
 
     /**
-     * Emit runtime.idle event when a wake cascade completes with no errors
-     * and no queued targets remaining. Participants subscribed to 'runtime.idle'
-     * will be woken by this event.
+     * Emit a system-level runtime.idle follow-up after a successful cascade.
+     * This remains a runtime trigger for subscribed participants, not a normal
+     * participant-facing coordination hint in the agent context.
+     *
+     * The follow-up idle cascade is intentionally fire-and-forget and does not
+     * feed back into maybeEmitRuntimeIdle, which keeps idle emission non-recursive.
      */
     private async maybeEmitRuntimeIdle(
         threadId: string,
@@ -436,7 +495,8 @@ class ActRuntimeService {
         }
         await this.threadManager.logEvent(threadId, idleEvent)
 
-        // Route the idle event — but don't recurse further to avoid infinite loops
+        // Route the idle event once as a system trigger. This follow-up cascade
+        // intentionally does not chain back into maybeEmitRuntimeIdle.
         const runtime = this.threadManager.getThreadRuntime(threadId)
         if (runtime) {
             processWakeCascade(idleEvent, actDefinition, mailbox, this.threadManager, threadId, this.workingDir)

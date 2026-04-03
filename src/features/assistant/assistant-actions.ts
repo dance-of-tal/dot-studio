@@ -10,6 +10,8 @@ import type { AssetCard } from '../../types'
 import type { StudioState } from '../../store/types'
 import { useStudioStore } from '../../store'
 import { api } from '../../api'
+import { buildDraftDeleteCascade } from '../../store/cascade-cleanup'
+import { removeMarkdownEditorsByDraftIds } from '../../store/workspace-helpers'
 
 // ── Ref state ────────────────────────────────────────────────────────────────
 
@@ -271,7 +273,7 @@ async function createDraft(
         },
         workspaceDirty: true,
     }))
-    store().recordStudioChange({ kind, draftIds: [draft.id] })
+    store().recordStudioChange({ kind: 'draft', draftIds: [draft.id] })
     if (blueprint.ref) {
         refs.drafts.set(blueprint.ref, { kind, id: draft.id })
     }
@@ -501,7 +503,13 @@ export async function applyAssistantAction(
                 useStudioStore.setState((state) => {
                     const drafts = { ...state.drafts }
                     delete drafts[draftId]
-                    return { drafts, workspaceDirty: true }
+                    const cascade = buildDraftDeleteCascade('tal', draftId, state.performers, state.acts)
+                    return {
+                        drafts,
+                        markdownEditors: removeMarkdownEditorsByDraftIds(state.markdownEditors, [draftId]),
+                        ...cascade,
+                        workspaceDirty: true,
+                    }
                 })
                 store().recordStudioChange({ kind: 'draft', draftIds: [draftId], workspaceWide: true })
                 return { success: true }
@@ -535,7 +543,13 @@ export async function applyAssistantAction(
                 useStudioStore.setState((state) => {
                     const drafts = { ...state.drafts }
                     delete drafts[draftId]
-                    return { drafts, workspaceDirty: true }
+                    const cascade = buildDraftDeleteCascade('dance', draftId, state.performers, state.acts)
+                    return {
+                        drafts,
+                        markdownEditors: removeMarkdownEditorsByDraftIds(state.markdownEditors, [draftId]),
+                        ...cascade,
+                        workspaceDirty: true,
+                    }
                 })
                 store().recordStudioChange({ kind: 'draft', draftIds: [draftId], workspaceWide: true })
                 return { success: true }

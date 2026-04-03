@@ -12,6 +12,7 @@ Use this skill when you need the exact current mutation surface.
 - For stage mutations, always end with exactly one raw `<assistant-actions>...</assistant-actions>` block.
 - Do not emit bare JSON or fenced JSON for stage mutations.
 - Validate the whole block before sending it. One invalid action can cause the entire block to be ignored.
+- For non-trivial blocks, run `node scripts/typecheck-assistant-actions.mjs <path-or->` to catch ref ordering, draft-ref kind mismatches, and disconnected workflow payloads before finalizing the reply.
 
 ## Action Ordering
 - Actions are applied sequentially in array order.
@@ -45,6 +46,10 @@ Use this skill when you need the exact current mutation surface.
 - `removeMcpServerNames`
 
 Rules:
+- A new Performer should reflect the user's requested role and working style, not a generic placeholder.
+- If the user request implies a concrete Tal, Dance, or model choice, include it in the Performer setup.
+- If the user explicitly asks to omit Tal, Dance, or model setup, honor that omission.
+- If more than one reasonable Tal/Dance/model setup is possible, ask a short clarifying question before creating the Performer.
 - If a new Performer needs a new Tal, prefer inline `talDraft` on `createPerformer`.
 - If a new Performer needs new Dance drafts, prefer inline `addDanceDrafts` on `createPerformer`.
 - If the drafts are created earlier in the same block, use `talDraftRef` and `addDanceDraftRefs`.
@@ -75,6 +80,8 @@ For inline relations and `connectPerformers`, prefer:
 
 Rules:
 - `actRules` must be a string array, not a single string.
+- The Act should reflect the user request in its participant set, role split, workflow shape, and actRules when requested.
+- If the Act needs missing participants, create those Performers first in cascade and make sure they also match the user intent.
 - When the Act participants are already known at creation time, prefer `participantPerformerRefs`, `participantPerformerIds`, or `participantPerformerNames` on `createAct`.
 - For team or workflow requests, a new Act with multiple participants but no relations is usually wrong.
 - For team or workflow requests such as `d2c company`, `investment team`, or `review flow`, include at least one relation in the same `createAct`.
@@ -108,6 +115,11 @@ Rules:
 - Use `installRegistryAsset` when the user already knows a registry URN.
 - Use `addDanceFromGitHub` for GitHub or skills.sh dance installs.
 - Use `importInstalledPerformer` or `importInstalledAct` after install when the goal is to place that asset on the canvas.
+
+## Asset Dialog
+- For Performer or Act creation requests, it is valid to use a short question-and-answer flow before mutating when important design choices are missing.
+- Ask only the smallest high-value questions needed to determine the correct asset shape.
+- Good questions include role focus, model preference, Dance need, participant split, and handoff shape.
 
 ## Dance Bundle Files
 `upsertDanceBundleFile` supports:

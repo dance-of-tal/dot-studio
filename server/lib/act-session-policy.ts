@@ -23,7 +23,8 @@ export const ACT_AGENT_POSTURE = 'build' as const
  * Both manual Act chat and wake cascade must use this function
  * so the rules are defined in exactly one place.
  */
-export function resolveActSessionPolicy(_actId: string) {
+export function resolveActSessionPolicy(actId?: string) {
+    void actId
     return {
         ownerKind: ACT_OWNER_KIND,
         scope: ACT_SCOPE,

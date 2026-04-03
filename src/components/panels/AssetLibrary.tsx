@@ -2,6 +2,7 @@ import { HardDrive, Globe, X } from 'lucide-react'
 import './AssetLibrary.css'
 import AssetLibraryLocalView from './AssetLibraryLocalView'
 import AssetLibraryRegistryView from './AssetLibraryRegistryView'
+import McpCatalogImpactDialog from './McpCatalogImpactDialog'
 import UninstallConfirmDialog from './UninstallConfirmDialog'
 import { useAssetLibraryController } from './useAssetLibraryController'
 
@@ -81,13 +82,14 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     mcpCatalogDirty={controller.mcpCatalogDirty}
                     mcpCatalogStatus={controller.mcpCatalogStatus}
                     mcpCatalogSaving={controller.mcpCatalogSaving}
+                    runtimeReloadPending={controller.runtimeReloadPending}
                     pendingMcpAuthName={controller.pendingMcpAuthName}
                     updateMcpEntry={controller.updateMcpEntry}
                     addMcpEntry={controller.addMcpEntry}
                     removeMcpEntry={controller.removeMcpEntry}
                     saveMcpCatalog={controller.saveMcpCatalog}
                     connectMcpServer={controller.connectMcpServer}
-                    authenticateMcpServer={controller.authenticateMcpServer}
+                    startMcpAuthFlow={controller.startMcpAuthFlow}
                     clearMcpAuth={controller.clearMcpAuth}
                     expandedMcpEntries={controller.expandedMcpEntries}
                     setExpandedMcpEntries={controller.setExpandedMcpEntries}
@@ -133,6 +135,15 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     actionName={controller.uninstallPlan.actionName}
                     onConfirm={controller.confirmUninstall}
                     onCancel={controller.cancelUninstall}
+                />
+            )}
+
+            {controller.mcpImpactDialog && (
+                <McpCatalogImpactDialog
+                    impact={controller.mcpImpactDialog}
+                    loading={controller.mcpImpactSaving}
+                    onConfirm={controller.confirmMcpImpactSave}
+                    onCancel={controller.cancelMcpImpactSave}
                 />
             )}
         </div>

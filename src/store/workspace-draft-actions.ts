@@ -1,9 +1,13 @@
 import { api } from '../api'
 import type { AssetRef, DanceDeliveryMode, DraftAsset, MarkdownEditorNode, WorkspaceActParticipantBinding, ActRelation } from '../types'
 import { ACT_DEFAULT_EXPANDED_HEIGHT, ACT_DEFAULT_WIDTH } from '../lib/act-layout'
-import { createPerformerNode } from '../lib/performers'
+import {
+    createPerformerNode,
+    PERFORMER_DEFAULT_HEIGHT,
+    PERFORMER_DEFAULT_WIDTH,
+} from '../lib/performers'
 import { createActParticipantKey } from './act-slice-helpers'
-import { defaultMarkdownContent } from './workspace-helpers'
+import { defaultMarkdownContent, resolveCanvasSpawnPosition } from './workspace-helpers'
 import { buildExitFocusModeState } from './workspace-focus-actions'
 import type { StudioState } from './types'
 
@@ -297,8 +301,15 @@ export function addPerformerFromDraftImpl(
 ) {
     performerIdCounter.value++
     const id = `performer-${performerIdCounter.value}`
-    const finalX = get().canvasCenter?.x ?? (60 + (get().performers.length * 28))
-    const finalY = get().canvasCenter?.y ?? (60 + (get().performers.length * 20))
+    const state = get()
+    const spawnPosition = resolveCanvasSpawnPosition({
+        canvasCenter: state.canvasCenter,
+        existingCount: state.performers.length,
+        width: PERFORMER_DEFAULT_WIDTH,
+        height: PERFORMER_DEFAULT_HEIGHT,
+    })
+    const finalX = spawnPosition.x
+    const finalY = spawnPosition.y
     const authoringDescription = description?.trim()
 
     const node = createPerformerNode({
@@ -348,6 +359,12 @@ export function importActFromDraftImpl(
     const actId = makeId('act')
     const centerX = get().canvasCenter?.x ?? 200
     const centerY = get().canvasCenter?.y ?? 200
+    const actPosition = resolveCanvasSpawnPosition({
+        canvasCenter: get().canvasCenter,
+        existingCount: get().acts.length,
+        width: ACT_DEFAULT_WIDTH,
+        height: ACT_DEFAULT_EXPANDED_HEIGHT,
+    })
 
     const participants: Record<string, WorkspaceActParticipantBinding> = {}
     const keyMapping: Record<string, string> = {}
@@ -384,7 +401,7 @@ export function importActFromDraftImpl(
         name,
         description: draftContent.description,
         actRules: draftContent.actRules,
-        position: (draftContent as Record<string, unknown>).position as { x: number; y: number } || { x: centerX, y: centerY },
+        position: (draftContent as Record<string, unknown>).position as { x: number; y: number } || actPosition,
         width: (draftContent as Record<string, unknown>).width as number || ACT_DEFAULT_WIDTH,
         height: (draftContent as Record<string, unknown>).height as number || ACT_DEFAULT_EXPANDED_HEIGHT,
         participants,
@@ -427,12 +444,19 @@ export function importActFromDraftImpl(
         const perfContent = (perfDraft?.content && typeof perfDraft.content === 'object')
             ? perfDraft.content as PerformerDraftContent
             : null
+        const spawnPosition = resolveCanvasSpawnPosition({
+            canvasCenter: get().canvasCenter,
+            existingCount: existingPerformers.length + materializedPerformers.length,
+            width: 320,
+            height: 400,
+            centerOffset: { x: 0, y: 260 },
+        })
 
         const node = createPerformerNode({
             id: makeId('performer'),
             name: perfDraft?.name || key,
-            x: centerX + materializedPerformers.length * 340,
-            y: centerY + 400,
+            x: spawnPosition.x,
+            y: spawnPosition.y,
             talRef: perfContent?.talRef || null,
             danceRefs: perfContent?.danceRefs || [],
             model: perfContent?.model || null,
@@ -489,10 +513,12 @@ export function createMarkdownEditorImpl(
     const description = source?.description || name
     const tags = source?.tags || []
     const content = source?.content || defaultMarkdownContent(kind)
-    const position = options?.position || {
-        x: 160 + (get().markdownEditors.length * 28),
-        y: 140 + (get().markdownEditors.length * 24),
-    }
+    const position = options?.position || resolveCanvasSpawnPosition({
+        canvasCenter: get().canvasCenter,
+        existingCount: get().markdownEditors.length,
+        width: 560,
+        height: 380,
+    })
 
     set((state: StudioState) => {
         const focusExit = buildExitFocusModeState(state)
@@ -545,7 +571,7 @@ export function createMarkdownEditorImpl(
             workspaceDirty: true,
         }
     })
-    get().recordStudioChange({ kind, draftIds: [draftId] })
+    get().recordStudioChange({ kind: 'draft', draftIds: [draftId] })
 
     return editorId
 }

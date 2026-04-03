@@ -111,6 +111,7 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
                 chatKeyToSession: {},
                 sessionToChatKey: {},
                 sessionLoading: {},
+                sessionMutationPending: {},
                 sessionReverts: {},
                 sessions: [],
                 lspServers: [],
@@ -319,6 +320,7 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
             chatKeyToSession: rehydratedChatBindings,
             sessionToChatKey: rehydratedSessionToChat,
             sessionLoading: {},
+            sessionMutationPending: {},
             sessionReverts: {},
             sessions: [],
             canvasTerminals: (data.canvasTerminals || []).map((t: PersistedCanvasTerminal) => ({

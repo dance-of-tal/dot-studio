@@ -5,13 +5,32 @@ import {
     authenticateMcp,
     completeMcpAuth,
     connectMcpServer,
+    getStudioMcpCatalog,
     listMcpServers,
     removeMcpAuth,
     startMcpAuth,
+    updateStudioMcpCatalog,
 } from '../services/opencode-service.js'
 import { requestWorkingDir } from './route-errors.js'
 
 const opencodeMcp = new Hono()
+
+opencodeMcp.get('/api/mcp/catalog', async (c) => {
+    try {
+        return c.json(await getStudioMcpCatalog())
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
+
+opencodeMcp.put('/api/mcp/catalog', async (c) => {
+    const body = await c.req.json().catch(() => ({}))
+    try {
+        return c.json(await updateStudioMcpCatalog(body))
+    } catch (err) {
+        return jsonOpencodeError(c, err)
+    }
+})
 
 opencodeMcp.get('/api/mcp/servers', async (c) => {
     try {

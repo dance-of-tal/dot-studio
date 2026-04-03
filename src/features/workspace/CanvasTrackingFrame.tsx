@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { NodeProps } from '@xyflow/react'
+import type { Node, NodeProps } from '@xyflow/react'
 import { Activity, FileCode, X } from 'lucide-react'
 import { api } from '../../api'
 import type { FileStatus } from '../../types'
@@ -17,7 +17,7 @@ type CanvasTrackingFrameData = {
     onDeactivateTransform?: () => void
 }
 
-export default function CanvasTrackingFrame({ data }: NodeProps<CanvasTrackingFrameData>) {
+export default function CanvasTrackingFrame({ data }: NodeProps<Node<CanvasTrackingFrameData, 'stageTracking'>>) {
     const { title, width, height, onClose } = data
     const transformActive = !!data.transformActive
     const onActivateTransform = data.onActivateTransform

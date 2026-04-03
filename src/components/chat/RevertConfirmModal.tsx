@@ -10,12 +10,14 @@ import './RevertConfirmModal.css'
 
 type RevertConfirmModalProps = {
     messagePreview: string
+    submitting?: boolean
     onConfirm: () => void
     onCancel: () => void
 }
 
 export default function RevertConfirmModal({
     messagePreview,
+    submitting = false,
     onConfirm,
     onCancel,
 }: RevertConfirmModalProps) {
@@ -24,14 +26,14 @@ export default function RevertConfirmModal({
         : messagePreview
 
     return createPortal(
-        <div className="publish-modal__backdrop" onClick={onCancel}>
+        <div className="publish-modal__backdrop" onClick={submitting ? undefined : onCancel}>
             <div className="publish-modal revert-confirm-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="publish-modal__header revert-confirm-modal__header">
                     <div className="revert-confirm-modal__title-wrap">
                         <CornerDownLeft size={16} />
                         <h3>Revert to this message?</h3>
                     </div>
-                    <button className="icon-btn" onClick={onCancel} type="button">
+                    <button className="icon-btn" onClick={onCancel} type="button" disabled={submitting}>
                         <X size={16} />
                     </button>
                 </div>
@@ -56,6 +58,7 @@ export default function RevertConfirmModal({
                     <button
                         type="button"
                         className="publish-modal__action"
+                        disabled={submitting}
                         onClick={onCancel}
                     >
                         Cancel
@@ -63,10 +66,11 @@ export default function RevertConfirmModal({
                     <button
                         type="button"
                         className="publish-modal__action publish-modal__action--destructive"
+                        disabled={submitting}
                         onClick={onConfirm}
                     >
                         <CornerDownLeft size={12} />
-                        <span>Revert</span>
+                        <span>{submitting ? 'Reverting…' : 'Revert'}</span>
                     </button>
                 </div>
             </div>

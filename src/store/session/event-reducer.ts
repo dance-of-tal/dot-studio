@@ -226,10 +226,12 @@ export function reduceSessionStatus(
     const state = get()
     if (!hasSession(state, sessionId)) return
 
-    set({ seStatuses: { ...state.seStatuses, [sessionId]: status } })
+    set({
+        seStatuses: { ...state.seStatuses, [sessionId]: status },
+        sessionLoading: withoutKey(state.sessionLoading, sessionId),
+    })
 
     if (status.type === 'busy') {
-        set({ sessionLoading: { ...get().sessionLoading, [sessionId]: true } })
         // Clean up retry messages
         const messages = get().seMessages[sessionId] || []
         const retryMsgId = `retry-${sessionId}`
@@ -244,7 +246,6 @@ export function reduceSessionStatus(
     }
 
     if (status.type === 'idle') {
-        set({ sessionLoading: withoutKey(get().sessionLoading, sessionId) })
         // Clean up retry messages
         const messages = get().seMessages[sessionId] || []
         const retryMsgId = `retry-${sessionId}`

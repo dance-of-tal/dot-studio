@@ -20,7 +20,17 @@ import { mergeOpenCodeConfig, readGlobalConfigFile, writeGlobalConfigFile } from
 import { readGlobalMcpCatalog, readProjectMcpServerNames, summarizeMcpCatalog } from '../lib/mcp-catalog.js'
 import type { McpLiveStatusMap } from '../lib/mcp-catalog.js'
 import { invalidateProviderListCache } from '../lib/model-catalog.js'
-import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
+import {
+    buildStoredProviderConnections,
+    clearStoredProviderAuth,
+    listStoredProviderAuthTypes,
+} from '../lib/opencode-auth.js'
+import {
+    extractMcpCatalog,
+    isMcpCatalog,
+    mergeMcpToolOverrides,
+    type McpCatalog,
+} from '../../shared/mcp-catalog.js'
 
 type ResponseEnvelope<T> = { data?: T | null | undefined }
 type ProviderAuthStatus = Record<string, unknown>
@@ -117,9 +127,17 @@ export async function getGlobalOpenCodeConfig() {
     return readGlobalConfigFile()
 }
 
-export async function getProviderAuthStatus(directory: string) {
+export async function getStudioMcpCatalog() {
+    return readGlobalMcpCatalog()
+}
+
+export async function getProviderAuthMethods(directory: string) {
     const oc = await getOpencode()
     return unwrapOpencodeResult<ProviderAuthStatus>(await oc.provider.auth({ directory })) || {}
+}
+
+export async function getProviderConnections() {
+    return buildStoredProviderConnections(await listStoredProviderAuthTypes())
 }
 
 export async function getLspStatus(directory: string) {
@@ -187,6 +205,30 @@ export async function updateGlobalOpenCodeConfig(patch: unknown) {
     await writeGlobalConfigFile(nextConfig)
     invalidate('mcp-servers')
     return nextConfig
+}
+
+export async function updateStudioMcpCatalog(catalog: unknown): Promise<McpCatalog> {
+    if (!isMcpCatalog(catalog)) {
+        throw new StudioValidationError('Invalid MCP catalog payload.')
+    }
+
+    const current = await readGlobalConfigFile()
+    const previousCatalog = extractMcpCatalog(current)
+    const nextTools = mergeMcpToolOverrides(
+        current.tools && typeof current.tools === 'object'
+            ? current.tools as Record<string, unknown>
+            : {},
+        previousCatalog,
+        catalog,
+    )
+    const nextConfig = mergeOpenCodeConfig(current, {
+        mcp: catalog,
+        tools: nextTools,
+    })
+
+    await writeGlobalConfigFile(nextConfig, { dispose: false })
+    invalidate('mcp-servers')
+    return catalog
 }
 
 export async function updateProjectOpenCodeConfig(directory: string, patch: unknown) {

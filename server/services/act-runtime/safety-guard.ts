@@ -26,12 +26,12 @@ export interface SafetyConfig {
 }
 
 export const DEFAULT_SAFETY_CONFIG: SafetyConfig = {
-    maxEventsPerAct: 500,
-    maxMessagesPerPair: 50,
-    maxBoardUpdatesPerKey: 100,
-    quietWindowMs: 60_000,        // 1 minute
-    loopDetectionThreshold: 5,
-    threadTimeoutMs: 30 * 60_000, // 30 minutes, per user turn
+    maxEventsPerAct: 300,
+    maxMessagesPerPair: 20,
+    maxBoardUpdatesPerKey: 50,
+    quietWindowMs: 45_000,        // 45 seconds
+    loopDetectionThreshold: 4,
+    threadTimeoutMs: 15 * 60_000, // 15 minutes, per user turn
 }
 
 // ── Safety Guard ────────────────────────────────────────

@@ -154,7 +154,7 @@ describe('workspace operations', () => {
             markdownEditors: [],
             acts: [],
         })
-        vi.spyOn(api.workspaces, 'setHidden').mockResolvedValue({ ok: true })
+        vi.spyOn(api.workspaces, 'setHidden').mockResolvedValue({ ok: true, id: 'workspace-1', hiddenFromList: false })
         vi.spyOn(api.studio, 'activate').mockResolvedValue({ ok: true, activeProjectDir: '/tmp/load-workspace' })
 
         await loadWorkspace('workspace-1', harness.get, harness.set)

@@ -3,7 +3,9 @@ import { formatStudioApiErrorMessage } from '../../lib/api-errors'
 import { logChatDebug, summarizeMessagesForChatDebug } from '../../lib/chat-debug'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers'
 import type { AssetRef, ChatMessage } from '../../types'
-import { buildActParticipantChatKey, describeChatTarget } from '../../../shared/chat-targets'
+import {
+    parseActParticipantChatKey,
+} from '../../../shared/chat-targets'
 import {
     addChatMessage,
     appendPerformerSystemMessage,
@@ -12,14 +14,26 @@ import {
     type ChatGet,
     type ChatSet,
 } from './chat-internals'
+import {
+    createOptimisticActMessage,
+    ensureActSendSession,
+    primeExistingActSession,
+    resolveActSendContext,
+} from './act-chat-send-utils'
 import { resolveChatRuntimeTarget } from './chat-runtime-target'
 import {
-    ensureSession,
     moveDraftMessageToSession,
     registerSessionBinding,
     resolveChatKeySession,
 } from '../session'
+import { resolveSessionActivity } from '../session/session-activity'
 import { collectRuntimeDraftIds, preparePendingRuntimeExecution } from '../runtime-execution'
+import {
+    ACT_THREAD_RECOVERY_MAX_POLLS,
+    createInitialActRecoveryState,
+    isActRecoverySettled,
+    syncActRecoveryParticipants,
+} from './act-chat-recovery'
 
 const STREAM_RECOVERY_GRACE_MS = 1200
 const STREAM_RECOVERY_POLL_MS = 1000
@@ -52,6 +66,11 @@ function hasSettledAssistantReply(messages: ChatMessage[]) {
     ))
 }
 
+function hasPendingInteractiveTurn(get: ChatGet, sessionId: string) {
+    const state = get()
+    return !!(state.sePermissions[sessionId] || state.seQuestions[sessionId])
+}
+
 export function createChatSendActions(
     set: ChatSet,
     get: ChatGet,
@@ -70,6 +89,7 @@ export function createChatSendActions(
     const scheduleStreamingRecoverySync = (chatKey: string, sessionId: string) => {
         const recoveryToken = Symbol(sessionId)
         activeRecoveryPolls.set(sessionId, recoveryToken)
+        const actTarget = parseActParticipantChatKey(chatKey)
 
         void (async () => {
             try {
@@ -80,9 +100,12 @@ export function createChatSendActions(
 
                 let lastSnapshotSignature: string | null = null
                 let stableSnapshotPolls = 0
+                let actRecoveryState = createInitialActRecoveryState(!!actTarget)
                 logChatDebug('fallback', 'start recovery polling', { chatKey, sessionId })
 
-                for (let attempt = 0; attempt < STREAM_RECOVERY_MAX_POLLS; attempt++) {
+                const recoveryMaxPolls = actTarget ? ACT_THREAD_RECOVERY_MAX_POLLS : STREAM_RECOVERY_MAX_POLLS
+
+                for (let attempt = 0; attempt < recoveryMaxPolls; attempt++) {
                     if (activeRecoveryPolls.get(sessionId) !== recoveryToken) {
                         return
                     }
@@ -92,24 +115,29 @@ export function createChatSendActions(
                         logChatDebug('fallback', 'stop recovery polling: binding changed', { chatKey, sessionId, attempt })
                         return
                     }
-                    const localStatus = state.seStatuses[sessionId]?.type || null
-                    if (localStatus === 'idle' || localStatus === 'error') {
-                        get().setSessionLoading(sessionId, false)
-                        logChatDebug('fallback', 'stop recovery polling: local status settled', {
-                            chatKey,
-                            sessionId,
-                            attempt,
-                            status: localStatus,
-                        })
-                        return
-                    }
-                    if (!state.sessionLoading[sessionId]) {
-                        logChatDebug('fallback', 'stop recovery polling: session not loading', { chatKey, sessionId, attempt })
-                        return
-                    }
 
                     try {
-                        const { status } = await api.chat.status(sessionId)
+                        let actThreadHasActiveSessions = false
+                        let status: Awaited<ReturnType<typeof api.chat.status>>['status'] | undefined
+                        if (actTarget) {
+                            const actRecovery = await syncActRecoveryParticipants({
+                                set,
+                                get,
+                                chatKey,
+                                sessionId,
+                                actTarget,
+                                attempt,
+                                state: actRecoveryState,
+                            })
+                            actRecoveryState = actRecovery.state
+                            actThreadHasActiveSessions = actRecovery.hasActiveSessions
+                            status = actRecovery.primaryStatus
+                        }
+
+                        if (typeof status === 'undefined') {
+                            const statusResult = await api.chat.status(sessionId)
+                            status = statusResult.status
+                        }
                         const snapshot = await syncPerformerMessages(set, get, chatKey, sessionId).catch(() => null)
                         if (get().chatKeyToSession[chatKey] !== sessionId) {
                             return
@@ -127,36 +155,67 @@ export function createChatSendActions(
                                 attempt,
                                 status: status?.type || null,
                                 stableSnapshotPolls,
+                                stableActThreadPolls: actRecoveryState.stableThreadPolls,
                                 messages: summarizeMessagesForChatDebug(snapshot.messages),
                             })
                         }
 
+                        const actThreadStableEnough = isActRecoverySettled(actTarget, actRecoveryState, actThreadHasActiveSessions)
+
                         if (status?.type === 'busy' || status?.type === 'retry' || status?.type === 'idle' || status?.type === 'error') {
                             get().setSessionStatus(sessionId, status)
-                            if (status.type === 'idle' || status.type === 'error') {
-                                get().setSessionLoading(sessionId, false)
+                            get().setSessionLoading(sessionId, false)
+                            if ((status.type === 'idle' || status.type === 'error') && actThreadStableEnough) {
                                 logChatDebug('fallback', 'stop recovery polling: status settled', {
                                     chatKey,
                                     sessionId,
                                     attempt,
                                     status: status.type,
+                                    stableActThreadPolls: actRecoveryState.stableThreadPolls,
+                                    lastActThreadActivityAt: actRecoveryState.lastThreadActivityAt,
                                 })
                                 return
                             }
                         }
 
+                        const currentActivity = resolveSessionActivity({
+                            loading: !!get().sessionLoading[sessionId],
+                            status: get().seStatuses[sessionId] || status,
+                            messages: get().seMessages[sessionId] || snapshot?.messages || [],
+                            permission: get().sePermissions[sessionId] || null,
+                            question: get().seQuestions[sessionId] || null,
+                        })
+
                         if (
                             snapshot
-                            && !status
                             && stableSnapshotPolls >= 1
                             && hasSettledAssistantReply(snapshot.messages)
+                            && !hasPendingInteractiveTurn(get, sessionId)
+                            && actThreadStableEnough
+                            && (!status || status.type === 'busy' || status.type === 'retry')
                         ) {
+                            get().setSessionStatus(sessionId, { type: 'idle' })
                             get().setSessionLoading(sessionId, false)
-                            logChatDebug('fallback', 'stop recovery polling: snapshot heuristic settled', {
+                            logChatDebug('fallback', 'stop recovery polling: snapshot heuristic settled stale status', {
                                 chatKey,
                                 sessionId,
                                 attempt,
+                                status: status?.type || null,
+                                stableActThreadPolls: actRecoveryState.stableThreadPolls,
+                                lastActThreadActivityAt: actRecoveryState.lastThreadActivityAt,
                                 messages: summarizeMessagesForChatDebug(snapshot.messages),
+                            })
+                            return
+                        }
+
+                        if (!currentActivity.isTransportActive && actThreadStableEnough) {
+                            logChatDebug('fallback', 'stop recovery polling: activity settled', {
+                                chatKey,
+                                sessionId,
+                                attempt,
+                                activityKind: currentActivity.kind,
+                                stableActThreadPolls: actRecoveryState.stableThreadPolls,
+                                lastActThreadActivityAt: actRecoveryState.lastThreadActivityAt,
                             })
                             return
                         }
@@ -345,14 +404,16 @@ export function createChatSendActions(
                 }
             }
 
-            const act = get().acts.find((entry) => entry.id === actId)
-            if (!act || !threadId) return
+            const actContext = resolveActSendContext(get, actId, threadId, participantKey)
+            if (!actContext) {
+                return
+            }
+            if (actContext.kind === 'notice') {
+                appendPerformerSystemMessage(set, get, actContext.chatKey, actContext.message)
+                return
+            }
 
-            const binding = act.participants[participantKey]
-            if (!binding) return
-            const participantLabel = binding.displayName || participantKey
-
-            const chatKey = buildActParticipantChatKey(actId, threadId, participantKey)
+            const { chatKey, performer, runtimeConfig } = actContext
             logChatDebug('send', 'sendActMessage start', {
                 chatKey,
                 actId,
@@ -360,38 +421,6 @@ export function createChatSendActions(
                 participantKey,
                 textLength: text.length,
             })
-
-            let performer: ReturnType<typeof getPerformerById> = null
-            if (binding.performerRef.kind === 'draft') {
-                const draftId = binding.performerRef.draftId
-                performer = get().performers.find((entry) =>
-                    entry.id === draftId
-                    || entry.meta?.derivedFrom === `draft:${draftId}`
-                ) || null
-            } else {
-                const urn = binding.performerRef.urn
-                performer = get().performers.find((entry) => entry.meta?.derivedFrom === urn) || null
-            }
-
-            if (!performer) {
-                const refLabel = binding.performerRef.kind === 'registry'
-                    ? binding.performerRef.urn
-                    : binding.performerRef.draftId
-                appendPerformerSystemMessage(set, get, chatKey,
-                    `Cannot resolve performer for participant "${participantLabel}" (ref: ${refLabel}). ` +
-                    `No matching local performer node found. Try re-importing the Act or creating a performer manually.`,
-                )
-                return
-            }
-
-            const runtimeConfig = resolvePerformerRuntimeConfig(performer)
-            if (!hasModelConfig(runtimeConfig.model)) {
-                appendPerformerSystemMessage(set, get, chatKey,
-                    `Model not configured for performer "${performer.name}". ` +
-                    `Open the performer editor and set up a model before sending messages.`,
-                )
-                return
-            }
 
             const prepared = await preparePendingRuntimeExecution(get, {
                 performerId: performer.id,
@@ -410,53 +439,31 @@ export function createChatSendActions(
                 return
             }
 
-            // Optimistic UI: show user message + loading state immediately
-            const optimisticActMsg = {
-                id: `temp-${Date.now()}`,
-                role: 'user' as const,
-                content: text,
-                timestamp: Date.now(),
-                metadata: {
-                    agentName: runtimeConfig.agentId || 'build',
-                    modelId: runtimeConfig.model?.modelId,
-                    provider: runtimeConfig.model?.provider,
-                    variant: runtimeConfig.modelVariant || undefined,
-                },
-            }
+            const optimisticActMsg = createOptimisticActMessage(text, runtimeConfig)
             addChatMessage(set, get, chatKey, optimisticActMsg)
 
-            const existingActSessionId = resolveChatKeySession(get, chatKey) || undefined
-            if (existingActSessionId) {
-                registerSessionBinding(set, get, chatKey, existingActSessionId)
-                get().clearSessionRevert(existingActSessionId)
-                get().setSessionLoading(existingActSessionId, true)
-            }
+            const hadExistingActSession = !!primeExistingActSession(set, get, chatKey)
 
             // Ensure SSE is connected before session creation so we receive
             // streaming deltas from the very first assistant response.
             get().initRealtimeEvents()
 
-            let sessionId: string | undefined = resolveChatKeySession(get, chatKey) || undefined
-            if (!sessionId) {
-                try {
-                    sessionId = await ensureSession(set, get, describeChatTarget(chatKey), {
-                        title: performer?.name || 'Performer',
-                        clearDrafts: false,
-                    })
+            let sessionId: string
+            try {
+                sessionId = await ensureActSendSession({
+                    set,
+                    get,
+                    chatKey,
+                    performerName: performer.name,
+                    optimisticMessageId: optimisticActMsg.id,
+                })
+                if (!hadExistingActSession) {
                     logChatDebug('send', 'created fresh act session', { chatKey, sessionId })
-                    get().clearSessionRevert(sessionId)
-                    moveDraftMessageToSession(set, get, chatKey, sessionId, optimisticActMsg.id)
-                    get().setSessionLoading(sessionId, true)
-                    await get().listSessions()
-                } catch (error) {
-                    console.error('Failed to create Act session', error)
-                    rollbackOptimisticMessage(chatKey, optimisticActMsg.id)
-                    appendPerformerSystemMessage(set, get, chatKey, formatStudioApiErrorMessage(error))
-                    return
                 }
-            }
-
-            if (!sessionId) {
+            } catch (error) {
+                console.error('Failed to create Act session', error)
+                rollbackOptimisticMessage(chatKey, optimisticActMsg.id)
+                appendPerformerSystemMessage(set, get, chatKey, formatStudioApiErrorMessage(error))
                 return
             }
 

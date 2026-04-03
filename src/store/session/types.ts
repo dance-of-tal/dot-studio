@@ -76,8 +76,11 @@ export interface SessionEntityState {
     chatKeyToSession: Record<string, string>
     sessionToChatKey: Record<string, string>
 
-    /** Per-session loading state (replaces shared loadingPerformerId) */
+    /** Per-session optimistic transport bridge until concrete status arrives. */
     sessionLoading: Record<string, boolean>
+
+    /** Per-session local mutation state for undo/revert/restore style operations. */
+    sessionMutationPending: Record<string, boolean>
 
     /** OpenCode revert state: hide rolled-back messages until restored or next prompt cleanup */
     sessionReverts: Record<string, { messageId: string; partId?: string }>
@@ -99,6 +102,7 @@ export interface SessionEntityActions {
     // Status
     setSessionStatus: (sessionId: string, status: SessionStatus) => void
     setSessionLoading: (sessionId: string, loading: boolean) => void
+    setSessionMutationPending: (sessionId: string, pending: boolean) => void
 
     // Dock state
     setSessionPermission: (sessionId: string, permission: PermissionRequest) => void

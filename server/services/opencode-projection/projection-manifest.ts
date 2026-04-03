@@ -9,6 +9,10 @@ export interface ProjectionManifest {
     owner: typeof NAMESPACE
     workspaceHash: string
     groups: Record<string, string[]>
+    runtime?: {
+        projectionPending?: boolean
+        updatedAt?: number
+    }
 }
 
 function manifestPath(executionDir: string) {
@@ -28,6 +32,15 @@ export async function writeManifest(executionDir: string, manifest: ProjectionMa
     const filePath = manifestPath(executionDir)
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, JSON.stringify(manifest, null, 2), 'utf-8')
+}
+
+async function readOrCreateManifest(executionDir: string, workspaceHash = ''): Promise<ProjectionManifest> {
+    return (await readManifest(executionDir)) || {
+        version: 1 as const,
+        owner: NAMESPACE,
+        workspaceHash,
+        groups: {},
+    }
 }
 
 export async function cleanGroupFiles(
@@ -54,16 +67,42 @@ export async function updateManifestGroup(
     groupKey: string,
     files: string[],
 ) {
-    const current = (await readManifest(executionDir)) || {
-        version: 1 as const,
-        owner: NAMESPACE,
-        workspaceHash,
-        groups: {},
-    }
+    const current = await readOrCreateManifest(executionDir, workspaceHash)
 
     current.workspaceHash = workspaceHash
     current.groups[groupKey] = files
     await writeManifest(executionDir, current)
+}
+
+export async function hasPendingProjectionRuntimeAdoption(executionDir: string): Promise<boolean> {
+    const manifest = await readManifest(executionDir)
+    return manifest?.runtime?.projectionPending === true
+}
+
+export async function markProjectionRuntimePending(
+    executionDir: string,
+    workspaceHash = '',
+): Promise<void> {
+    const manifest = await readOrCreateManifest(executionDir, workspaceHash)
+    manifest.runtime = {
+        ...(manifest.runtime || {}),
+        projectionPending: true,
+        updatedAt: Date.now(),
+    }
+    await writeManifest(executionDir, manifest)
+}
+
+export async function clearProjectionRuntimePending(executionDir: string): Promise<void> {
+    const manifest = await readManifest(executionDir)
+    if (!manifest?.runtime?.projectionPending) {
+        return
+    }
+    manifest.runtime = {
+        ...(manifest.runtime || {}),
+        projectionPending: false,
+        updatedAt: Date.now(),
+    }
+    await writeManifest(executionDir, manifest)
 }
 
 export async function updateGitExclude(executionDir: string) {

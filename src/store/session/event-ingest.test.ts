@@ -53,7 +53,7 @@ describe('Event Ingest', () => {
             rafCallbacks.push(cb)
             return rafIdCounter++
         })
-        vi.stubGlobal('cancelAnimationFrame', (_id: number) => {
+        vi.stubGlobal('cancelAnimationFrame', () => {
             // Remove by marking as no-op
         })
     })
@@ -175,6 +175,89 @@ describe('Event Ingest', () => {
 
             // Both deltas should be applied (but separately since contiguity was broken)
             expect(state.seMessages[SESSION_ID]![0].content).toBe('Hello world')
+
+            ingest.dispose()
+        })
+
+        it('flushes an accumulated delta before a non-delta event resets the group', () => {
+            const ingest = createEventIngest({ get, set })
+
+            state.seMessages[SESSION_ID] = [
+                { id: 'msg-1', role: 'assistant', content: '', timestamp: 1000 },
+            ]
+
+            ingest.enqueue({
+                type: 'message.part.delta',
+                properties: { sessionID: SESSION_ID, messageID: 'msg-1', partID: 'p1', field: 'text', delta: 'Hello' },
+            })
+            ingest.enqueue({
+                type: 'message.part.delta',
+                properties: { sessionID: SESSION_ID, messageID: 'msg-1', partID: 'p1', field: 'text', delta: ' world' },
+            })
+            ingest.enqueue({
+                type: 'session.status',
+                properties: { sessionID: SESSION_ID, status: { type: 'busy' } },
+            })
+
+            ingest.flushSync()
+
+            expect(state.seMessages[SESSION_ID]![0].content).toBe('Hello world')
+            expect(state.seStatuses[SESSION_ID]?.type).toBe('busy')
+
+            ingest.dispose()
+        })
+
+        it('accepts camelCase message event fields for streaming output', () => {
+            const ingest = createEventIngest({ get, set })
+
+            ingest.enqueue({
+                type: 'message.updated',
+                properties: {
+                    info: {
+                        sessionId: SESSION_ID,
+                        id: 'msg-1',
+                        role: 'assistant',
+                        time: { created: 1000 },
+                    },
+                },
+            })
+            ingest.enqueue({
+                type: 'message.part.delta',
+                properties: {
+                    sessionId: SESSION_ID,
+                    messageId: 'msg-1',
+                    partId: 'p1',
+                    field: 'text',
+                    delta: 'Hello',
+                },
+            })
+            ingest.enqueue({
+                type: 'message.part.updated',
+                properties: {
+                    part: {
+                        sessionId: SESSION_ID,
+                        messageId: 'msg-1',
+                        id: 'tool-1',
+                        type: 'tool',
+                        tool: 'wait_until',
+                        callId: 'call-1',
+                        state: { status: 'completed' },
+                    },
+                },
+            })
+            ingest.enqueue({
+                type: 'message.part.removed',
+                properties: {
+                    sessionId: SESSION_ID,
+                    messageId: 'msg-1',
+                    partId: 'tool-1',
+                },
+            })
+
+            ingest.flushSync()
+
+            expect(state.seMessages[SESSION_ID]?.[0]?.content).toBe('Hello')
+            expect(state.seMessages[SESSION_ID]?.[0]?.parts).toEqual([])
 
             ingest.dispose()
         })

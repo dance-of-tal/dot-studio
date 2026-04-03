@@ -20,12 +20,14 @@ Use this skill when the user wants to build a Dance skill bundle through Studio 
 - Put detailed examples or schemas in `references/`.
 - Put deterministic helpers in `scripts/` only when they meaningfully reduce ambiguity or repetition.
 - Create `agents/openai.yaml` only when the user wants the Dance to expose polished UI metadata.
+- For non-trivial `assistant-actions` blocks, validate the final block first with `node scripts/typecheck-assistant-actions.mjs <path-or->`.
 
 ## Assistant behavior
 - If the user wants a new Dance, prefer `createDanceDraft` first and give it a same-block `ref`.
 - When you need extra bundle files in the same reply, reuse that `draftRef`.
 - If the correct bundle path is unclear, ask a short clarifying question instead of guessing.
 - Prefer a few high-signal files over a large scaffold.
+- Treat failed action typechecks as blockers. Fix ref ordering, draft-ref kind mismatches, and disconnected multi-participant `createAct` payloads before applying them.
 
 ## Example
 

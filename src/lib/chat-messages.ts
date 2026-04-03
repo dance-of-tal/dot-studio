@@ -280,6 +280,136 @@ export function mergePendingOptimisticUserMessages(
     return merged.sort((left, right) => left.timestamp - right.timestamp)
 }
 
+function isLiveAssistantLikeMessage(message: ChatMessage) {
+    return (
+        (message.role === 'assistant' || message.role === 'system')
+        && !message.id.startsWith('temp-')
+    )
+}
+
+function chooseLongerString(left: string | undefined, right: string | undefined) {
+    return (right || '').length > (left || '').length ? right : left
+}
+
+function mergeAssistantLikeParts(
+    serverParts: ChatMessage['parts'],
+    currentParts: ChatMessage['parts'],
+): ChatMessage['parts'] {
+    if (!serverParts?.length) {
+        return currentParts?.length ? currentParts : undefined
+    }
+    if (!currentParts?.length) {
+        return serverParts
+    }
+
+    const currentById = new Map(currentParts.map((part) => [part.id, part]))
+    const merged = serverParts.map((serverPart) => {
+        const currentPart = currentById.get(serverPart.id)
+        if (!currentPart || currentPart.type !== serverPart.type) {
+            return serverPart
+        }
+
+        if ((serverPart.type === 'text' || serverPart.type === 'reasoning')) {
+            return {
+                ...serverPart,
+                content: chooseLongerString(serverPart.content, currentPart.content) || '',
+            }
+        }
+
+        if (serverPart.type === 'tool' && serverPart.tool && currentPart.tool) {
+            const statusRank = { pending: 0, running: 1, completed: 2, error: 2 } as const
+            const preferredTool = statusRank[currentPart.tool.status] > statusRank[serverPart.tool.status]
+                ? currentPart.tool
+                : serverPart.tool
+
+            return {
+                ...serverPart,
+                tool: {
+                    ...preferredTool,
+                    title: chooseLongerString(serverPart.tool.title, currentPart.tool.title),
+                    output: chooseLongerString(serverPart.tool.output, currentPart.tool.output),
+                    error: chooseLongerString(serverPart.tool.error, currentPart.tool.error),
+                    input: currentPart.tool.input || serverPart.tool.input,
+                    time: currentPart.tool.time || serverPart.tool.time,
+                },
+            }
+        }
+
+        return currentPart
+    })
+
+    for (const currentPart of currentParts) {
+        if (!merged.some((part) => part.id === currentPart.id)) {
+            merged.push(currentPart)
+        }
+    }
+
+    return merged
+}
+
+function mergeInFlightAssistantLikeMessage(serverMessage: ChatMessage, currentMessage: ChatMessage): ChatMessage {
+    return {
+        ...serverMessage,
+        content: chooseLongerString(serverMessage.content, currentMessage.content) || '',
+        parts: mergeAssistantLikeParts(serverMessage.parts, currentMessage.parts),
+        metadata: serverMessage.metadata || currentMessage.metadata,
+    }
+}
+
+function mergeInFlightAssistantMessages(
+    serverMessages: ChatMessage[],
+    currentMessages: ChatMessage[],
+    keepLiveAssistantMessages: boolean,
+): ChatMessage[] {
+    if (!keepLiveAssistantMessages || currentMessages.length === 0) {
+        return serverMessages
+    }
+
+    const currentById = new Map(currentMessages.map((message) => [message.id, message]))
+    const merged = serverMessages.map((serverMessage) => {
+        const currentMessage = currentById.get(serverMessage.id)
+        if (!currentMessage) {
+            return serverMessage
+        }
+        if (!isLiveAssistantLikeMessage(serverMessage) || !isLiveAssistantLikeMessage(currentMessage)) {
+            return serverMessage
+        }
+        return mergeInFlightAssistantLikeMessage(serverMessage, currentMessage)
+    })
+
+    for (const currentMessage of currentMessages) {
+        if (!isLiveAssistantLikeMessage(currentMessage)) {
+            continue
+        }
+        if (!merged.some((message) => message.id === currentMessage.id)) {
+            merged.push(currentMessage)
+        }
+    }
+
+    return merged.sort((left, right) => left.timestamp - right.timestamp)
+}
+
+export function mergeLiveSessionSnapshot(
+    serverMessages: ChatMessage[],
+    currentMessages: ChatMessage[],
+    options: {
+        preserveOptimisticUserMessages: boolean
+        preserveStreamingAssistantMessages: boolean
+    },
+): ChatMessage[] {
+    const withOptimisticUsers = mergePendingOptimisticUserMessages(
+        serverMessages,
+        currentMessages,
+        options.preserveOptimisticUserMessages,
+    )
+
+    return mergeInFlightAssistantMessages(
+        withOptimisticUsers,
+        currentMessages,
+        options.preserveStreamingAssistantMessages,
+    )
+}
+
 export function extractLatestNonRetryableAssistantError(
     sessionMessages: SessionMessageLike[],
 ): { id: string; message: string } | null {

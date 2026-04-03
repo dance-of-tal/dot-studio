@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
 import { FileEdit, ChevronDown, ChevronRight } from 'lucide-react'
 import type { ChatMessage } from '../../types'

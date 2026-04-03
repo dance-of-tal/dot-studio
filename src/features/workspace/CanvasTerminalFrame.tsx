@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -104,7 +104,7 @@ type CanvasTerminalFrameData = {
     onDeactivateTransform?: () => void;
 }
 
-export default function CanvasTerminalFrame({ data }: NodeProps<CanvasTerminalFrameData>) {
+export default function CanvasTerminalFrame({ data }: NodeProps<Node<CanvasTerminalFrameData, 'canvasTerminal'>>) {
     const { title, width, height, onClose, onSessionChange } = data;
     const transformActive = !!data.transformActive;
     const onActivateTransform = data.onActivateTransform;

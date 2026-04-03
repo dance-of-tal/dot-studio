@@ -77,5 +77,8 @@ describe('ensureAssistantAgent', () => {
         expect(prompt).toContain('Never use relation field aliases like fromPerformerRef or toPerformerRef')
         expect(prompt).toContain('d2c company team, investment team, review flow, or pipeline')
         expect(prompt).toContain('Every new relation must include a non-empty name and non-empty description')
+        expect(prompt).toContain('When creating a Performer, reflect the user request in the Performer itself')
+        expect(prompt).toContain('When creating or updating an Act, reflect the user request in the Act composition itself')
+        expect(prompt).toContain('For asset creation requests involving Tal, Dance, Performer, or Act, it is good to use a short question-and-answer flow')
     })
 })

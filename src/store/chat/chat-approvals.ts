@@ -5,9 +5,9 @@ import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import { api } from '../../api'
 import { showToast } from '../../lib/toast'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
-import type { ChatGet, ChatSet } from './chat-internals'
+import type { ChatGet } from './chat-internals'
 
-export function createChatApprovals(set: ChatSet, get: ChatGet) {
+export function createChatApprovals(get: ChatGet) {
     return {
         respondToPermission: async (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') => {
             // Capture for rollback on failure

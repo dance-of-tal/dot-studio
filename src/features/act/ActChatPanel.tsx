@@ -28,7 +28,12 @@ import { usePermissionInteraction } from '../../hooks/usePermissionInteraction'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
 import { resolveDisplayedActThread } from '../../lib/act-threads'
-import { buildActParticipantChatKey } from '../../../shared/chat-targets'
+import {
+    buildActiveActParticipantChatKey,
+    buildActParticipantLoadingStates,
+    resolveActiveActParticipantKey,
+    resolveActParticipantPerformer,
+} from './act-chat-panel-helpers'
 import './ActChatPanel.css'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
@@ -69,19 +74,20 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         void loadThreads(actId)
     }, [actId, loadThreads])
 
-    // Active participant in thread
     const participantKeys = act ? Object.keys(act.participants) : []
-    const isCallboardView = !!currentThread && activeThreadParticipantKey === null
-    const activeParticipantKey = isCallboardView ? null : activeThreadParticipantKey || participantKeys[0] || null
-
-    // Namespaced chat key for this thread+performer
-    const chatKey = activeParticipantKey && currentThread
-        ? buildActParticipantChatKey(actId, currentThread.id, activeParticipantKey)
-        : null
+    const { isCallboardView, activeParticipantKey } = useMemo(
+        () => resolveActiveActParticipantKey(participantKeys, currentThread?.id || null, activeThreadParticipantKey),
+        [participantKeys, currentThread, activeThreadParticipantKey],
+    )
+    const chatKey = useMemo(
+        () => buildActiveActParticipantChatKey(actId, currentThread?.id || null, activeParticipantKey),
+        [actId, currentThread, activeParticipantKey],
+    )
 
     const chatSession = useChatSession(chatKey)
     const messages: ChatMessage[] = chatSession.messages || EMPTY_MESSAGES
     const isLoading = chatSession.isLoading
+    const canAbort = chatSession.canAbort
     const sessionId = chatSession.sessionId
     const actTodos = chatSession.todos
     const permissionRequest = chatSession.permission
@@ -89,6 +95,10 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const setSessionTodos = useStudioStore((state) => state.setSessionTodos)
     const chatKeyToSession = useStudioStore((state) => state.chatKeyToSession)
     const sessionLoading = useStudioStore((state) => state.sessionLoading)
+    const seMessages = useStudioStore((state) => state.seMessages)
+    const seStatuses = useStudioStore((state) => state.seStatuses)
+    const sePermissions = useStudioStore((state) => state.sePermissions)
+    const seQuestions = useStudioStore((state) => state.seQuestions)
     const hasPendingPermission = !!permissionRequest
     const isTodoLive = isLoading || hasPendingPermission
 
@@ -120,36 +130,26 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         [act, activeParticipantKey, performers],
     )
     const participantLoadingStates = useMemo(() => {
-        if (!currentThread) {
-            return new Map<string, boolean>()
-        }
-
-        return new Map(
-            participantKeys.map((key) => {
-                const participantChatKey = buildActParticipantChatKey(actId, currentThread.id, key)
-                const participantSessionId = chatKeyToSession[participantChatKey]
-                return [key, participantSessionId ? !!sessionLoading[participantSessionId] : false]
-            }),
-        )
-    }, [actId, chatKeyToSession, currentThread, participantKeys, sessionLoading])
+        return buildActParticipantLoadingStates({
+            actId,
+            threadId: currentThread?.id || null,
+            participantKeys,
+            chatKeyToSession,
+            sessionLoading,
+            seMessages,
+            seStatuses,
+            sePermissions,
+            seQuestions,
+        })
+    }, [actId, chatKeyToSession, currentThread, participantKeys, sessionLoading, seMessages, seStatuses, sePermissions, seQuestions])
 
     // Auto-scroll is now handled by ThreadBody's useAutoScroll hook
 
     // Resolve performer model from ref binding
-    const resolvedPerformer = useMemo(() => {
-        if (!act || !activeParticipantKey) return null
-        const binding = act.participants[activeParticipantKey]
-        if (!binding) return null
-        const ref = binding.performerRef
-        if (ref.kind === 'draft') {
-            return performers.find((p) =>
-                p.id === ref.draftId
-                || p.meta?.derivedFrom === `draft:${ref.draftId}`,
-            ) || null
-        } else {
-            return performers.find((p) => p.meta?.derivedFrom === ref.urn) || null
-        }
-    }, [act, activeParticipantKey, performers])
+    const resolvedPerformer = useMemo(
+        () => resolveActParticipantPerformer(act, activeParticipantKey, performers),
+        [act, activeParticipantKey, performers],
+    )
     const modelConfigured = hasModelConfig(resolvedPerformer?.model || null)
 
     const handleCreateThread = useCallback(async () => {
@@ -303,7 +303,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                             <>
                                 <User size={20} className="act-chat__empty-icon" />
                                 <strong>Model not configured</strong>
-                                <span>Set up a model for &ldquo;{activeParticipantLabel || activeParticipantKey}&rdquo; in the performer editor.</span>
+                                <span>Set up a model for "{activeParticipantLabel || activeParticipantKey}" in the performer editor.</span>
                             </>
                         ) : (
                             <>
@@ -352,7 +352,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                                 disabled={noParticipants || !readiness.runnable || !currentThread || !modelConfigured || isLoading}
                                 className="text-input"
                             />
-                            {isLoading ? (
+                            {canAbort ? (
                                 <button className="send-btn abort" onClick={() => chatKey && abortChat(chatKey)} title="Abort generation">
                                     <Square size={12} fill="currentColor" />
                                 </button>

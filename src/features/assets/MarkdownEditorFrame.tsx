@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { ExternalLink, FileText, Save, Upload, X } from 'lucide-react'
-import type { NodeProps } from '@xyflow/react'
+import type { Node, NodeProps } from '@xyflow/react'
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
 import { useStudioStore } from '../../store'
@@ -245,9 +245,7 @@ function MarkdownAssetEditor({
     )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default function MarkdownEditorFrame(props: NodeProps<any>) {
-    const { id, data, selected } = props as { id: string; data: MarkdownEditorFrameData; selected?: boolean }
+export default function MarkdownEditorFrame({ id, data, selected }: NodeProps<Node<MarkdownEditorFrameData, 'markdownEditor'>>) {
 
     const draft = useStudioStore((state) => state.drafts[data.draftId])
     const workingDir = useStudioStore((state) => state.workingDir)

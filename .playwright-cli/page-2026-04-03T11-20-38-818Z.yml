@@ -1,0 +1,486 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - generic [ref=e11]: Workspaces
+            - button "Open workspace directory" [ref=e12] [cursor=pointer]:
+              - img [ref=e13]
+          - generic [ref=e14]:
+            - generic [ref=e15]: Current
+            - strong [ref=e16]: Agent-Investment
+            - generic "/Users/junhoyoon/Agent-Investment" [ref=e17]
+          - generic [ref=e18]:
+            - button "Agent-Investment …/junhoyoon/Agent-Investment" [ref=e19] [cursor=pointer]:
+              - img [ref=e21]
+              - generic [ref=e23]:
+                - generic [ref=e24]: Agent-Investment
+                - generic [ref=e25]: …/junhoyoon/Agent-Investment
+              - button "Workspace actions" [ref=e29]:
+                - img [ref=e30]
+            - button "analyst-team …/dot00/analyst-team" [ref=e34] [cursor=pointer]:
+              - img [ref=e36]
+              - generic [ref=e38]:
+                - generic [ref=e39]: analyst-team
+                - generic [ref=e40]: …/dot00/analyst-team
+              - button "Workspace actions" [ref=e44]:
+                - img [ref=e45]
+        - generic [ref=e50]:
+          - generic [ref=e51]:
+            - generic [ref=e52]:
+              - generic [ref=e53]: Performers
+              - button "Add performer" [ref=e55] [cursor=pointer]:
+                - img [ref=e56]
+            - generic [ref=e59]:
+              - button "HeadManager" [ref=e61] [cursor=pointer]:
+                - img [ref=e63]
+                - img [ref=e66]
+                - generic [ref=e69]: HeadManager
+                - generic [ref=e70]:
+                  - button "Hide performer" [ref=e71]:
+                    - img [ref=e72]
+                  - button "New session" [ref=e75]:
+                    - img [ref=e76]
+                  - button "Edit performer" [ref=e77]:
+                    - img [ref=e78]
+                  - button "Save performer as draft" [ref=e81]:
+                    - img [ref=e82]
+                  - button "Delete performer" [ref=e85]:
+                    - img [ref=e86]
+              - button "Moderator" [ref=e90] [cursor=pointer]:
+                - img [ref=e92]
+                - img [ref=e95]
+                - generic [ref=e98]: Moderator
+                - generic [ref=e99]:
+                  - button "Hide performer" [ref=e100]:
+                    - img [ref=e101]
+                  - button "New session" [ref=e104]:
+                    - img [ref=e105]
+                  - button "Edit performer" [ref=e106]:
+                    - img [ref=e107]
+                  - button "Save performer as draft" [ref=e110]:
+                    - img [ref=e111]
+                  - button "Delete performer" [ref=e114]:
+                    - img [ref=e115]
+              - button "BullAnalyst" [ref=e119] [cursor=pointer]:
+                - img [ref=e121]
+                - img [ref=e124]
+                - generic [ref=e127]: BullAnalyst
+                - generic [ref=e128]:
+                  - button "Hide performer" [ref=e129]:
+                    - img [ref=e130]
+                  - button "New session" [ref=e133]:
+                    - img [ref=e134]
+                  - button "Edit performer" [ref=e135]:
+                    - img [ref=e136]
+                  - button "Save performer as draft" [ref=e139]:
+                    - img [ref=e140]
+                  - button "Delete performer" [ref=e143]:
+                    - img [ref=e144]
+              - button "BearAnalyst" [ref=e148] [cursor=pointer]:
+                - img [ref=e150]
+                - img [ref=e153]
+                - generic [ref=e156]: BearAnalyst
+                - generic [ref=e157]:
+                  - button "Hide performer" [ref=e158]:
+                    - img [ref=e159]
+                  - button "New session" [ref=e162]:
+                    - img [ref=e163]
+                  - button "Edit performer" [ref=e164]:
+                    - img [ref=e165]
+                  - button "Save performer as draft" [ref=e168]:
+                    - img [ref=e169]
+                  - button "Delete performer" [ref=e172]:
+                    - img [ref=e173]
+          - generic [ref=e177]:
+            - generic [ref=e178]:
+              - generic [ref=e179]: Acts
+              - button "Add Act" [ref=e181] [cursor=pointer]:
+                - img [ref=e182]
+            - generic [ref=e188]:
+              - button "Investment Advisory Team 4p · 6r · 1t" [ref=e189] [cursor=pointer]:
+                - img [ref=e191]
+                - img [ref=e194]
+                - generic [ref=e198]:
+                  - generic [ref=e199]: Investment Advisory Team
+                  - generic [ref=e200]: 4p · 6r · 1t
+                - generic [ref=e201]:
+                  - button "Hide from canvas" [ref=e202]:
+                    - img [ref=e203]
+                  - button "New Thread" [ref=e206]:
+                    - img [ref=e207]
+                  - button "Edit act" [ref=e208]:
+                    - img [ref=e209]
+                  - button "Save act as draft" [ref=e212]:
+                    - img [ref=e213]
+                  - button "Delete act" [ref=e216]:
+                    - img [ref=e217]
+              - button "● Thread fAGRTS Saved thread" [ref=e221] [cursor=pointer]:
+                - img [ref=e223]
+                - generic [ref=e227]:
+                  - generic [ref=e229]:
+                    - generic [ref=e230]: ●
+                    - text: Thread fAGRTS
+                  - generic [ref=e231]: Saved thread
+                - generic [ref=e232]:
+                  - button "Rename thread" [ref=e233]:
+                    - img [ref=e234]
+                  - button "Delete thread" [ref=e236]:
+                    - img [ref=e237]
+      - button "Asset Library" [ref=e241] [cursor=pointer]:
+        - img [ref=e242]
+        - generic [ref=e247]: Asset Library
+        - img [ref=e248]
+    - generic [ref=e251]:
+      - generic [ref=e252]:
+        - generic [ref=e253]:
+          - button "Zoom In" [ref=e254] [cursor=pointer]:
+            - img [ref=e255]
+          - button "Zoom Out" [ref=e256] [cursor=pointer]:
+            - img [ref=e257]
+          - button "Fit to Screen" [ref=e258] [cursor=pointer]:
+            - img [ref=e259]
+        - generic [ref=e264]:
+          - button "DOT" [ref=e265]:
+            - img [ref=e266]
+            - generic [ref=e268]: DOT
+          - button "Sign in" [ref=e269] [cursor=pointer]:
+            - img [ref=e270]
+            - generic [ref=e273]: Sign in
+          - generic "Local server connected" [ref=e274]:
+            - img [ref=e275]
+          - button "Terminal" [ref=e281] [cursor=pointer]:
+            - img [ref=e282]
+            - img [ref=e284]
+          - button "Workspace Tracking" [ref=e286] [cursor=pointer]:
+            - img [ref=e287]
+          - button "Save or publish selected asset" [ref=e290] [cursor=pointer]:
+            - img [ref=e291]
+          - button "Toggle Theme" [ref=e294] [cursor=pointer]:
+            - img [ref=e295]
+          - button "Settings" [ref=e297] [cursor=pointer]:
+            - img [ref=e298]
+          - button "Assistant" [ref=e301] [cursor=pointer]
+      - application [ref=e302]:
+        - generic [ref=e304]:
+          - generic:
+            - generic:
+              - group [ref=e305]:
+                - generic [ref=e307]:
+                  - generic [ref=e308]:
+                    - button "Toggle resize handles" [ref=e309]:
+                      - img
+                    - generic [ref=e311]: HeadManager
+                    - generic [ref=e313]:
+                      - generic [ref=e314]:
+                        - 'generic "Tal: HeadManager Tal" [ref=e315]': HeadManager Tal
+                        - 'generic "Dance: pdf" [ref=e316]': pdf
+                        - generic "openai/gpt-5.4" [ref=e317]: gpt-5.4
+                      - button "Focus mode" [ref=e318] [cursor=pointer]:
+                        - img [ref=e319]
+                      - button "Edit performer" [ref=e324] [cursor=pointer]:
+                        - img [ref=e325]
+                      - button "Hide from Canvas" [ref=e328] [cursor=pointer]:
+                        - img [ref=e329]
+                  - generic [ref=e334]:
+                    - generic [ref=e335]:
+                      - generic [ref=e337]:
+                        - img [ref=e338]
+                        - paragraph [ref=e341]: Start a conversation
+                        - paragraph [ref=e342]: Send a message to begin
+                      - button "Scroll to bottom":
+                        - img
+                    - generic [ref=e343]:
+                      - generic [ref=e344]:
+                        - textbox "Message... (# files, / to use dance for this turn)" [ref=e345]
+                        - button [disabled] [ref=e346]:
+                          - img [ref=e347]
+                      - generic [ref=e350]:
+                        - generic [ref=e351]:
+                          - button "Build" [ref=e352] [cursor=pointer]:
+                            - img [ref=e353]
+                            - generic [ref=e357]: Build
+                          - button "Plan" [ref=e358] [cursor=pointer]:
+                            - img [ref=e359]
+                            - generic [ref=e361]: Plan
+                        - combobox [ref=e363] [cursor=pointer]:
+                          - option "Default" [selected]
+                          - option "none"
+                          - option "low"
+                          - option "medium"
+                          - option "high"
+                          - option "xhigh"
+              - group [ref=e364]:
+                - generic [ref=e366]:
+                  - generic [ref=e367]:
+                    - button "Toggle resize handles" [ref=e368]:
+                      - img
+                    - generic [ref=e370]: Moderator
+                    - generic [ref=e372]:
+                      - generic [ref=e373]:
+                        - 'generic "Tal: Moderator Tal" [ref=e374]': Moderator Tal
+                        - generic "openai/gpt-5.4" [ref=e375]: gpt-5.4
+                      - button "Focus mode" [ref=e376] [cursor=pointer]:
+                        - img [ref=e377]
+                      - button "Edit performer" [ref=e382] [cursor=pointer]:
+                        - img [ref=e383]
+                      - button "Hide from Canvas" [ref=e386] [cursor=pointer]:
+                        - img [ref=e387]
+                  - generic [ref=e392]:
+                    - generic [ref=e393]:
+                      - generic [ref=e395]:
+                        - img [ref=e396]
+                        - paragraph [ref=e399]: Start a conversation
+                        - paragraph [ref=e400]: Send a message to begin
+                      - button "Scroll to bottom":
+                        - img
+                    - generic [ref=e401]:
+                      - generic [ref=e402]:
+                        - textbox "Message... (# files, / to use dance for this turn)" [ref=e403]
+                        - button [disabled] [ref=e404]:
+                          - img [ref=e405]
+                      - generic [ref=e408]:
+                        - generic [ref=e409]:
+                          - button "Build" [ref=e410] [cursor=pointer]:
+                            - img [ref=e411]
+                            - generic [ref=e415]: Build
+                          - button "Plan" [ref=e416] [cursor=pointer]:
+                            - img [ref=e417]
+                            - generic [ref=e419]: Plan
+                        - combobox [ref=e421] [cursor=pointer]:
+                          - option "Default" [selected]
+                          - option "none"
+                          - option "low"
+                          - option "medium"
+                          - option "high"
+                          - option "xhigh"
+              - group [ref=e422]:
+                - generic [ref=e424]:
+                  - generic [ref=e425]:
+                    - button "Toggle resize handles" [ref=e426]:
+                      - img
+                    - generic [ref=e428]: BullAnalyst
+                    - generic [ref=e430]:
+                      - generic [ref=e431]:
+                        - 'generic "Tal: BullAnalyst Tal" [ref=e432]': BullAnalyst Tal
+                        - generic "openai/gpt-5.4" [ref=e433]: gpt-5.4
+                      - button "Focus mode" [ref=e434] [cursor=pointer]:
+                        - img [ref=e435]
+                      - button "Edit performer" [ref=e440] [cursor=pointer]:
+                        - img [ref=e441]
+                      - button "Hide from Canvas" [ref=e444] [cursor=pointer]:
+                        - img [ref=e445]
+                  - generic [ref=e450]:
+                    - generic [ref=e451]:
+                      - generic [ref=e453]:
+                        - img [ref=e454]
+                        - paragraph [ref=e457]: Start a conversation
+                        - paragraph [ref=e458]: Send a message to begin
+                      - button "Scroll to bottom":
+                        - img
+                    - generic [ref=e459]:
+                      - generic [ref=e460]:
+                        - textbox "Message... (# files, / to use dance for this turn)" [ref=e461]
+                        - button [disabled] [ref=e462]:
+                          - img [ref=e463]
+                      - generic [ref=e466]:
+                        - generic [ref=e467]:
+                          - button "Build" [ref=e468] [cursor=pointer]:
+                            - img [ref=e469]
+                            - generic [ref=e473]: Build
+                          - button "Plan" [ref=e474] [cursor=pointer]:
+                            - img [ref=e475]
+                            - generic [ref=e477]: Plan
+                        - combobox [ref=e479] [cursor=pointer]:
+                          - option "Default" [selected]
+                          - option "none"
+                          - option "low"
+                          - option "medium"
+                          - option "high"
+                          - option "xhigh"
+              - group [ref=e480]:
+                - generic [ref=e482]:
+                  - generic [ref=e483]:
+                    - button "Toggle resize handles" [ref=e484]:
+                      - img
+                    - generic [ref=e486]: BearAnalyst
+                    - generic [ref=e488]:
+                      - generic [ref=e489]:
+                        - 'generic "Tal: BearAnalyst Tal" [ref=e490]': BearAnalyst Tal
+                        - generic "openai/gpt-5.4" [ref=e491]: gpt-5.4
+                      - button "Focus mode" [ref=e492] [cursor=pointer]:
+                        - img [ref=e493]
+                      - button "Edit performer" [ref=e498] [cursor=pointer]:
+                        - img [ref=e499]
+                      - button "Hide from Canvas" [ref=e502] [cursor=pointer]:
+                        - img [ref=e503]
+                  - generic [ref=e508]:
+                    - generic [ref=e509]:
+                      - generic [ref=e511]:
+                        - img [ref=e512]
+                        - paragraph [ref=e515]: Start a conversation
+                        - paragraph [ref=e516]: Send a message to begin
+                      - button "Scroll to bottom":
+                        - img
+                    - generic [ref=e517]:
+                      - generic [ref=e518]:
+                        - textbox "Message... (# files, / to use dance for this turn)" [ref=e519]
+                        - button [disabled] [ref=e520]:
+                          - img [ref=e521]
+                      - generic [ref=e524]:
+                        - generic [ref=e525]:
+                          - button "Build" [ref=e526] [cursor=pointer]:
+                            - img [ref=e527]
+                            - generic [ref=e531]: Build
+                          - button "Plan" [ref=e532] [cursor=pointer]:
+                            - img [ref=e533]
+                            - generic [ref=e535]: Plan
+                        - combobox [ref=e537] [cursor=pointer]:
+                          - option "Default" [selected]
+                          - option "none"
+                          - option "low"
+                          - option "medium"
+                          - option "high"
+                          - option "xhigh"
+              - group [ref=e538]:
+                - generic [ref=e540]:
+                  - generic [ref=e541]:
+                    - button "Toggle resize handles" [ref=e542]:
+                      - img
+                    - generic [ref=e544] [cursor=pointer]:
+                      - img [ref=e545]
+                      - generic [ref=e549]: Investment Advisory Team
+                      - generic [ref=e550]: "#1"
+                    - generic [ref=e552]:
+                      - generic "Ready to run" [ref=e553]
+                      - button "Focus mode" [ref=e554] [cursor=pointer]:
+                        - img [ref=e555]
+                      - button "Edit Act" [ref=e560] [cursor=pointer]:
+                        - img [ref=e561]
+                      - button "Hide Act" [ref=e564] [cursor=pointer]:
+                        - img [ref=e565]
+                  - generic [ref=e571]:
+                    - generic [ref=e572]:
+                      - button "Board" [ref=e573] [cursor=pointer]:
+                        - img [ref=e574]
+                        - generic [ref=e577]: Board
+                      - button "HeadManager" [ref=e578] [cursor=pointer]:
+                        - img [ref=e579]
+                        - generic [ref=e582]: HeadManager
+                      - button "Moderator" [ref=e583] [cursor=pointer]:
+                        - img [ref=e584]
+                        - generic [ref=e587]: Moderator
+                      - button "BullAnalyst" [ref=e588] [cursor=pointer]:
+                        - img [ref=e589]
+                        - generic [ref=e592]: BullAnalyst
+                      - button "BearAnalyst" [ref=e593] [cursor=pointer]:
+                        - img [ref=e594]
+                        - generic [ref=e597]: BearAnalyst
+                    - generic [ref=e598]:
+                      - generic [ref=e599]:
+                        - tablist "Board filters" [ref=e600]:
+                          - tab "Artifacts" [selected] [ref=e601] [cursor=pointer]:
+                            - generic [ref=e602]: Artifacts
+                          - tab "Findings" [ref=e603] [cursor=pointer]:
+                            - generic [ref=e604]: Findings
+                          - tab "Tasks 2" [ref=e605] [cursor=pointer]:
+                            - generic [ref=e606]: Tasks
+                            - generic [ref=e607]: "2"
+                        - generic [ref=e608]:
+                          - generic [ref=e609]: just now
+                          - button "Refresh" [ref=e610] [cursor=pointer]:
+                            - img [ref=e611]
+                      - generic [ref=e616]:
+                        - generic [ref=e618]:
+                          - img [ref=e619]
+                          - generic [ref=e622]: No artifacts found
+                        - complementary [ref=e623]:
+                          - generic [ref=e624]:
+                            - generic [ref=e625]:
+                              - img [ref=e626]
+                              - generic [ref=e628]: Recent Activity
+                            - generic [ref=e629]:
+                              - generic [ref=e630]:
+                                - img [ref=e632]
+                                - generic [ref=e635]: Runtime idle
+                                - generic [ref=e636]: 1h ago
+                              - generic [ref=e637]:
+                                - img [ref=e639]
+                                - generic [ref=e641]: HeadManager -> Moderator [raw-debug]
+                                - generic [ref=e642]: 1h ago
+                              - generic [ref=e643]:
+                                - img [ref=e645]
+                                - generic [ref=e648]: Runtime idle
+                                - generic [ref=e649]: 1h ago
+                              - generic [ref=e650]:
+                                - img [ref=e652]
+                                - generic [ref=e654]: BearAnalyst -> Moderator [debate_step_3_bear]
+                                - generic [ref=e655]: 1h ago
+                              - generic [ref=e656]:
+                                - img [ref=e658]
+                                - generic [ref=e661]: Moderator updated "samsung_case_status"
+                                - generic [ref=e662]: 1h ago
+                              - generic [ref=e663]:
+                                - img [ref=e665]
+                                - generic [ref=e668]: Runtime idle
+                                - generic [ref=e669]: 1h ago
+                              - generic [ref=e670]:
+                                - img [ref=e672]
+                                - generic [ref=e674]: BullAnalyst -> Moderator [debate_step_3_bull]
+                                - generic [ref=e675]: 1h ago
+                              - generic [ref=e676]:
+                                - img [ref=e678]
+                                - generic [ref=e681]: Runtime idle
+                                - generic [ref=e682]: 1h ago
+                              - generic [ref=e683]:
+                                - img [ref=e685]
+                                - generic [ref=e688]: Runtime idle
+                                - generic [ref=e689]: 1h ago
+                              - generic [ref=e690]:
+                                - img [ref=e692]
+                                - generic [ref=e694]: Moderator -> BearAnalyst [debate_step_3_bear]
+                                - generic [ref=e695]: 1h ago
+                              - generic [ref=e696]:
+                                - img [ref=e698]
+                                - generic [ref=e700]: Moderator -> BullAnalyst [debate_step_3_bull]
+                                - generic [ref=e701]: 1h ago
+                              - generic [ref=e702]:
+                                - img [ref=e704]
+                                - generic [ref=e707]: Runtime idle
+                                - generic [ref=e708]: 1h ago
+                              - generic [ref=e709]:
+                                - img [ref=e711]
+                                - generic [ref=e713]: BullAnalyst -> Moderator [debate_step_2_bull]
+                                - generic [ref=e714]: 1h ago
+                              - generic [ref=e715]:
+                                - img [ref=e717]
+                                - generic [ref=e720]: Moderator updated "samsung_case_status"
+                                - generic [ref=e721]: 1h ago
+                              - generic [ref=e722]:
+                                - img [ref=e724]
+                                - generic [ref=e727]: Runtime idle
+                                - generic [ref=e728]: 1h ago
+                              - generic [ref=e729]:
+                                - img [ref=e731]
+                                - generic [ref=e733]: BearAnalyst -> Moderator [debate_step_2_bear]
+                                - generic [ref=e734]: 1h ago
+                              - generic [ref=e735]:
+                                - img [ref=e737]
+                                - generic [ref=e740]: Runtime idle
+                                - generic [ref=e741]: 1h ago
+                              - generic [ref=e742]:
+                                - img [ref=e744]
+                                - generic [ref=e746]: Moderator -> HeadManager [debug_ack_3]
+                                - generic [ref=e747]: 1h ago
+                              - generic [ref=e748]:
+                                - img [ref=e750]
+                                - generic [ref=e753]: Moderator updated "samsung_case_status"
+                                - generic [ref=e754]: 1h ago
+                              - generic [ref=e755]:
+                                - img [ref=e757]
+                                - generic [ref=e760]: Runtime idle
+                                - generic [ref=e761]: 1h ago
+                              - generic [ref=e762]: Scroll for more
+        - img
+  - status [ref=e764]

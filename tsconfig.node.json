@@ -5,14 +5,12 @@
     "lib": [
       "ES2023"
     ],
-    "module": "ESNext",
+    "module": "NodeNext",
     "types": [
       "node"
     ],
     "skipLibCheck": true,
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
+    "moduleResolution": "NodeNext",
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,

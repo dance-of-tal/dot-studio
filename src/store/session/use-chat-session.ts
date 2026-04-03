@@ -4,6 +4,7 @@ import { mergeSystemPrefixMessages } from '../../lib/chat-messages'
 import type { ChatMessage } from '../../types'
 import type { SessionStatus } from './types'
 import type { Todo } from '@opencode-ai/sdk/v2'
+import { resolveSessionActivity } from './session-activity'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_TODOS: Todo[] = []
@@ -14,6 +15,9 @@ const EMPTY_CHAT_SESSION = {
     messages: EMPTY_MESSAGES,
     prefixCount: 0,
     isLoading: false,
+    canAbort: false,
+    isMutating: false,
+    activityKind: 'idle',
     status: IDLE_STATUS,
     permission: null,
     question: null,
@@ -34,8 +38,11 @@ export function useChatSession(chatKey: string | null) {
     const sessionMessages = useStudioStore((state) => (
         sessionId ? state.seMessages[sessionId] || EMPTY_MESSAGES : EMPTY_MESSAGES
     ))
-    const isLoading = useStudioStore((state) => (
+    const rawLoading = useStudioStore((state) => (
         sessionId ? !!state.sessionLoading[sessionId] : false
+    ))
+    const rawStatus = useStudioStore((state) => (
+        sessionId ? state.seStatuses[sessionId] : null
     ))
     const status = useStudioStore((state) => (
         sessionId ? state.seStatuses[sessionId] || IDLE_STATUS : IDLE_STATUS
@@ -52,6 +59,9 @@ export function useChatSession(chatKey: string | null) {
     const revert = useStudioStore((state) => (
         sessionId ? state.sessionReverts[sessionId] || null : null
     ))
+    const isMutating = useStudioStore((state) => (
+        sessionId ? !!state.sessionMutationPending[sessionId] : false
+    ))
 
     return useMemo(() => {
         if (!chatKey) {
@@ -67,6 +77,14 @@ export function useChatSession(chatKey: string | null) {
                 prefix.role === 'system'
                 && !sessionMessages.some((message) => message.id === prefix.id)
             )).length
+        const activity = resolveSessionActivity({
+            loading: rawLoading,
+            status: rawStatus,
+            messages,
+            permission,
+            question,
+        })
+        const isLoading = activity.isActive
 
         return {
             chatKey,
@@ -74,6 +92,9 @@ export function useChatSession(chatKey: string | null) {
             messages,
             prefixCount,
             isLoading,
+            canAbort: activity.canAbort,
+            isMutating,
+            activityKind: activity.kind,
             status,
             permission,
             question,
@@ -86,11 +107,13 @@ export function useChatSession(chatKey: string | null) {
         draftMessages,
         prefixMessages,
         sessionMessages,
-        isLoading,
+        rawLoading,
+        rawStatus,
         status,
         permission,
         question,
         todos,
         revert,
+        isMutating,
     ])
 }

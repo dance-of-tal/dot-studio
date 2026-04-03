@@ -3,7 +3,7 @@
  */
 import { useEffect, useMemo, useRef, useCallback } from 'react'
 import { useReactFlow } from '@xyflow/react'
-import type { NodeProps } from '@xyflow/react'
+import type { Node, NodeProps } from '@xyflow/react'
 import { Workflow } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
@@ -28,7 +28,7 @@ type ActFrameData = {
     onDeactivateTransform?: () => void
 }
 
-export default function ActFrame({ data, id }: NodeProps<ActFrameData>) {
+export default function ActFrame({ data, id }: NodeProps<Node<ActFrameData, 'act'>>) {
     const {
         acts,
         performers,

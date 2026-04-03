@@ -40,6 +40,7 @@ export const createSessionSlice: StateCreator<
     chatKeyToSession: {},
     sessionToChatKey: {},
     sessionLoading: {},
+    sessionMutationPending: {},
     sessionReverts: {},
 
     // ── Session CRUD ──
@@ -62,6 +63,7 @@ export const createSessionSlice: StateCreator<
             seQuestions: withoutKey(state.seQuestions, sessionId),
             seTodos: withoutKey(state.seTodos, sessionId),
             sessionLoading: withoutKey(state.sessionLoading, sessionId),
+            sessionMutationPending: withoutKey(state.sessionMutationPending, sessionId),
             sessionReverts: withoutKey(state.sessionReverts, sessionId),
             chatKeyToSession: nextChatKeyToSession,
             sessionToChatKey: nextSessionToChatKey,
@@ -116,6 +118,13 @@ export const createSessionSlice: StateCreator<
             return { sessionLoading: { ...state.sessionLoading, [sessionId]: true } }
         }
         return { sessionLoading: withoutKey(state.sessionLoading, sessionId) }
+    }),
+
+    setSessionMutationPending: (sessionId: string, pending: boolean) => set((state) => {
+        if (pending) {
+            return { sessionMutationPending: { ...state.sessionMutationPending, [sessionId]: true } }
+        }
+        return { sessionMutationPending: withoutKey(state.sessionMutationPending, sessionId) }
     }),
 
     // ── Dock state ──
@@ -237,6 +246,7 @@ export const createSessionSlice: StateCreator<
             seQuestions: withoutKey(state.seQuestions, sessionId),
             seTodos: withoutKey(state.seTodos, sessionId),
             sessionLoading: withoutKey(state.sessionLoading, sessionId),
+            sessionMutationPending: withoutKey(state.sessionMutationPending, sessionId),
             sessionReverts: withoutKey(state.sessionReverts, sessionId),
             ...(chatKey ? {
                 chatDrafts: withoutKey(state.chatDrafts, chatKey),

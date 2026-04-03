@@ -19,6 +19,7 @@ import {
 } from './asset-library-utils'
 import type { AssetCard, DraftAsset } from '../../types'
 import type { LibraryAsset } from './asset-panel-types'
+import type { InstalledKind } from './asset-library-utils'
 
 describe('normalizeAuthor', () => {
     it('prefixes @ when missing', () => {
@@ -201,7 +202,7 @@ describe('filterInstalledAssets', () => {
 
 describe('buildRegistryGroups', () => {
     it('groups by kind and maintains order', () => {
-        const results = [
+        const results: Array<{ kind: InstalledKind; name: string }> = [
             { kind: 'tal', name: 'T1' },
             { kind: 'dance', name: 'D1' },
             { kind: 'tal', name: 'T2' },
@@ -305,11 +306,17 @@ describe('buildInstalledAssetDragPayload', () => {
 
     it('includes participants and relations for installed act assets', () => {
         const participants = [
-            { id: 'p1', performer: 'performer/@user/coder' },
-            { id: 'p2', performer: 'performer/@user/reviewer' },
+            { key: 'p1', performer: 'performer/@user/coder' },
+            { key: 'p2', performer: 'performer/@user/reviewer' },
         ]
-        const relations = [
-            { id: 'r1', between: ['p1', 'p2'], direction: 'one-way', name: 'request_review' },
+        const relations: Array<{
+            id: string
+            between: [string, string]
+            direction: 'one-way'
+            name: string
+            description: string
+        }> = [
+            { id: 'r1', between: ['p1', 'p2'], direction: 'one-way', name: 'request_review', description: 'Route review requests.' },
         ]
         const payload = buildInstalledAssetDragPayload({
             kind: 'act',

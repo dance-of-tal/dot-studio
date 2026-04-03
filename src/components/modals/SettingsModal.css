@@ -144,18 +144,4 @@
     .stg-sidebar {
         width: 140px;
     }
-
-    .settings-form-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .settings-section-head {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .settings-caption {
-        max-width: none;
-        text-align: left;
-    }
 }

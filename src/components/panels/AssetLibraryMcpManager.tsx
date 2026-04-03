@@ -14,13 +14,14 @@ type Props = {
     mcpCatalogDirty: boolean
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
+    runtimeReloadPending: boolean
     pendingMcpAuthName: string | null
     updateMcpEntry: McpCatalogState['updateMcpEntry']
     addMcpEntry: () => string
     removeMcpEntry: (key: string) => void
     saveMcpCatalog: () => Promise<boolean>
     connectMcpServer: (name: string) => Promise<void>
-    authenticateMcpServer: (name: string) => Promise<void>
+    startMcpAuthFlow: (name: string) => Promise<void>
     clearMcpAuth: (name: string) => Promise<void>
     expandedMcpEntries: Record<string, boolean>
     setExpandedMcpEntries: Dispatch<SetStateAction<Record<string, boolean>>>
@@ -319,11 +320,11 @@ type McpEditableCardProps = {
     updateMcpEntry: Props['updateMcpEntry']
     removeMcpEntry: Props['removeMcpEntry']
     connectMcpServer: Props['connectMcpServer']
-    authenticateMcpServer: Props['authenticateMcpServer']
+    startMcpAuthFlow: Props['startMcpAuthFlow']
     clearMcpAuth: Props['clearMcpAuth']
     expandedMcpEntries: Props['expandedMcpEntries']
     setExpandedMcpEntries: Props['setExpandedMcpEntries']
-    runWithSavedCatalog: (action: () => Promise<void>) => Promise<void>
+    runWithPreparedMcpRuntime: (action: () => Promise<void>) => Promise<void>
 }
 
 function describeMcpStatus(status: string) {
@@ -351,11 +352,11 @@ function McpEditableCard({
     updateMcpEntry,
     removeMcpEntry,
     connectMcpServer,
-    authenticateMcpServer,
+    startMcpAuthFlow,
     clearMcpAuth,
     expandedMcpEntries,
     setExpandedMcpEntries,
-    runWithSavedCatalog,
+    runWithPreparedMcpRuntime,
 }: McpEditableCardProps) {
     const liveStatus = live?.status || 'disconnected'
     const remote = isRemoteDraft(entry)
@@ -388,14 +389,7 @@ function McpEditableCard({
         status: liveStatus,
         tools: live?.tools || [],
         resources: live?.resources || [],
-        enabled: true,
-        defined: !!entry.name.trim(),
-        configType: transportLabel,
-        authStatus: live?.authStatus || (liveStatus === 'connected' ? 'ready' : liveStatus === 'needs_auth' ? 'needs_auth' : 'n/a'),
-        error: live?.error,
-        oauthConfigured: live?.oauthConfigured,
-        clientRegistrationRequired: live?.clientRegistrationRequired,
-    }), [entry.name, live?.authStatus, live?.clientRegistrationRequired, live?.error, live?.oauthConfigured, live?.resources, live?.tools, liveStatus, transportLabel])
+    }), [entry.name, live?.resources, live?.tools, liveStatus])
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: `mcp-editor-${entry.key}`,
         data: dragPayload,
@@ -417,9 +411,8 @@ function McpEditableCard({
         >
             <div className="asset-card__header">
                 <button
+                    type="button"
                     className={`asset-mcp-editor__drag-handle${canDrag ? '' : ' is-disabled'}`}
-                    onClick={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
                     title={dragTitle}
                     {...attributes}
                     {...listeners}
@@ -476,7 +469,7 @@ function McpEditableCard({
                     <div className="asset-mcp-editor__actions">
                         <button
                             className="btn btn--primary"
-                            onClick={() => entry.name.trim() && void runWithSavedCatalog(() => connectMcpServer(entry.name.trim()))}
+                            onClick={() => entry.name.trim() && void runWithPreparedMcpRuntime(() => connectMcpServer(entry.name.trim()))}
                             disabled={!entry.name.trim()}
                         >
                             Test Server
@@ -484,7 +477,7 @@ function McpEditableCard({
                         {canAuthenticate ? (
                             <button
                                 className="btn"
-                                onClick={() => entry.name.trim() && void runWithSavedCatalog(() => authenticateMcpServer(entry.name.trim()))}
+                                onClick={() => entry.name.trim() && void runWithPreparedMcpRuntime(() => startMcpAuthFlow(entry.name.trim()))}
                                 disabled={!entry.name.trim()}
                             >
                                 {pendingMcpAuthName === entry.name.trim()
@@ -499,7 +492,7 @@ function McpEditableCard({
                         {canClearAuth ? (
                             <button
                                 className="btn"
-                                onClick={() => entry.name.trim() && void runWithSavedCatalog(() => clearMcpAuth(entry.name.trim()))}
+                                onClick={() => entry.name.trim() && void runWithPreparedMcpRuntime(() => clearMcpAuth(entry.name.trim()))}
                                 disabled={!entry.name.trim()}
                             >
                                 Clear Auth
@@ -520,13 +513,14 @@ export default function AssetLibraryMcpManager({
     mcpCatalogDirty,
     mcpCatalogStatus,
     mcpCatalogSaving,
+    runtimeReloadPending,
     pendingMcpAuthName,
     updateMcpEntry,
     addMcpEntry,
     removeMcpEntry,
     saveMcpCatalog,
     connectMcpServer,
-    authenticateMcpServer,
+    startMcpAuthFlow,
     clearMcpAuth,
     expandedMcpEntries,
     setExpandedMcpEntries,
@@ -535,7 +529,11 @@ export default function AssetLibraryMcpManager({
         ? 'Saving MCP changes...'
         : mcpCatalogStatus
 
-    const runWithSavedCatalog = async (action: () => Promise<void>) => {
+    const runtimePendingMessage = runtimeReloadPending
+        ? 'Runtime reload pending. New MCP config will apply on the next run after current sessions go idle.'
+        : null
+
+    const runWithPreparedMcpRuntime = async (action: () => Promise<void>) => {
         if (mcpCatalogDirty) {
             const saved = await saveMcpCatalog()
             if (!saved) {
@@ -560,6 +558,14 @@ export default function AssetLibraryMcpManager({
                 <div className="asset-authoring-row__note">
                     Define Studio MCP servers here, then drag a saved server card onto a performer to enable it there.
                 </div>
+                <button
+                    className="btn"
+                    onClick={() => void saveMcpCatalog()}
+                    disabled={!mcpCatalogDirty || mcpCatalogSaving}
+                    style={{ marginLeft: 'auto' }}
+                >
+                    {mcpCatalogSaving ? 'Saving…' : 'Save'}
+                </button>
             </div>
 
             {mcpDraftEntries.length > 0 ? (
@@ -576,11 +582,11 @@ export default function AssetLibraryMcpManager({
                                 updateMcpEntry={updateMcpEntry}
                                 removeMcpEntry={removeMcpEntry}
                                 connectMcpServer={connectMcpServer}
-                                authenticateMcpServer={authenticateMcpServer}
+                                startMcpAuthFlow={startMcpAuthFlow}
                                 clearMcpAuth={clearMcpAuth}
                                 expandedMcpEntries={expandedMcpEntries}
                                 setExpandedMcpEntries={setExpandedMcpEntries}
-                                runWithSavedCatalog={runWithSavedCatalog}
+                                runWithPreparedMcpRuntime={runWithPreparedMcpRuntime}
                             />
                         )
                     })}
@@ -590,6 +596,7 @@ export default function AssetLibraryMcpManager({
             )}
 
             {statusMessage ? <div className="asset-authoring-hint">{statusMessage}</div> : null}
+            {runtimePendingMessage ? <div className="asset-authoring-hint">{runtimePendingMessage}</div> : null}
         </div>
     )
 }

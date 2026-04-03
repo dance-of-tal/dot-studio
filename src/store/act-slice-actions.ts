@@ -1,6 +1,10 @@
 import type { ActRelation } from '../types'
 import type { StudioState } from './types'
-import { fallbackParticipantLabel, resolveBindingDisplayName, scheduleActRuntimeSync } from './act-slice-helpers'
+import {
+    resolveActParticipantName,
+    resolveBindingDisplayName,
+    scheduleActRuntimeSync,
+} from './act-slice-helpers'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
@@ -16,20 +20,10 @@ export function addActRelationImpl(
     const performers = get().performers
     const leftBinding = act?.participants[between[0]]
     const rightBinding = act?.participants[between[1]]
-    const leftRef = leftBinding?.performerRef
-    const rightRef = rightBinding?.performerRef
     const leftFallbackLabel = leftBinding ? resolveBindingDisplayName(leftBinding, between[0]) : between[0]
     const rightFallbackLabel = rightBinding ? resolveBindingDisplayName(rightBinding, between[1]) : between[1]
-    const leftLabel = leftRef
-        ? (leftRef.kind === 'draft'
-            ? performers.find((performer) => performer.id === leftRef.draftId)?.name || fallbackParticipantLabel(leftRef)
-            : performers.find((performer) => performer.meta?.derivedFrom === leftRef.urn)?.name || fallbackParticipantLabel(leftRef))
-        : leftFallbackLabel
-    const rightLabel = rightRef
-        ? (rightRef.kind === 'draft'
-            ? performers.find((performer) => performer.id === rightRef.draftId)?.name || fallbackParticipantLabel(rightRef)
-            : performers.find((performer) => performer.meta?.derivedFrom === rightRef.urn)?.name || fallbackParticipantLabel(rightRef))
-        : rightFallbackLabel
+    const leftLabel = resolveActParticipantName(performers, leftBinding, leftFallbackLabel)
+    const rightLabel = resolveActParticipantName(performers, rightBinding, rightFallbackLabel)
 
     const relation: ActRelation = {
         id: `rel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,

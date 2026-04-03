@@ -43,7 +43,7 @@ export function AssistantChat() {
     const workingDir = useStudioStore((state) => state.workingDir)
     const assistantChatKey = useMemo(() => buildAssistantChatKey(workingDir), [workingDir])
     const chatSession = useChatSession(assistantChatKey)
-    const { messages, isLoading, sessionId, status: sessionStatus } = chatSession
+    const { messages, isLoading, canAbort, activityKind, sessionId, status: sessionStatus } = chatSession
 
     const { data: models } = useModels()
     const connectedModels = useMemo(
@@ -196,14 +196,12 @@ export function AssistantChat() {
 
     const statusLabel = (() => {
         if (isLoading) return 'Thinking'
+        if (activityKind === 'interactive') return 'Needs input'
+        if (activityKind === 'parked') return 'Waiting'
         if (!sessionId) return 'Ready'
         switch (sessionStatus?.type) {
             case 'error':
                 return 'Needs attention'
-            case 'busy':
-                return 'Running'
-            case 'retry':
-                return 'Retrying'
             default:
                 return 'Ready'
         }
@@ -347,7 +345,7 @@ export function AssistantChat() {
                                     rows={1}
                                     disabled={isLoading || !assistantModel}
                                 />
-                                {isLoading ? (
+                                {canAbort ? (
                                     <button
                                         className="assistant-submit"
                                         onClick={() => void abortChat(assistantChatKey)}

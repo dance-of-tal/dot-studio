@@ -77,24 +77,10 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 8px;
+    padding: 6px;
     overflow: auto;
     min-height: 200px;
-    background:
-        repeating-linear-gradient(
-            0deg,
-            transparent,
-            transparent 19px,
-            var(--border-subtle, rgba(128, 128, 128, 0.06)) 19px,
-            var(--border-subtle, rgba(128, 128, 128, 0.06)) 20px
-        ),
-        repeating-linear-gradient(
-            90deg,
-            transparent,
-            transparent 19px,
-            var(--border-subtle, rgba(128, 128, 128, 0.06)) 19px,
-            var(--border-subtle, rgba(128, 128, 128, 0.06)) 20px
-        );
+    background: var(--bg-panel);
     border-radius: 0 0 6px 6px;
 }
 

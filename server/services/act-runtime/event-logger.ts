@@ -56,6 +56,40 @@ export class EventLogger {
         }
     }
 
+    async readRecentEventsPage(count: number, before = 0): Promise<{
+        events: MailboxEvent[]
+        total: number
+        hasMore: boolean
+        nextBefore: number
+    }> {
+        try {
+            const content = await fs.readFile(this.logPath, 'utf-8')
+            const lines = content.trim().split('\n').filter(Boolean)
+            const total = lines.length
+            const normalizedBefore = Math.max(0, Math.min(total, Math.floor(before)))
+            const end = Math.max(0, total - normalizedBefore)
+            const start = Math.max(0, end - Math.max(1, Math.floor(count)))
+            const events = lines.slice(start, end).map((line) => JSON.parse(line) as MailboxEvent)
+            const nextBefore = normalizedBefore + events.length
+            return {
+                events,
+                total,
+                hasMore: nextBefore < total,
+                nextBefore,
+            }
+        } catch (error: unknown) {
+            if (isErrnoException(error) && error.code === 'ENOENT') {
+                return {
+                    events: [],
+                    total: 0,
+                    hasMore: false,
+                    nextBefore: 0,
+                }
+            }
+            throw error
+        }
+    }
+
     /**
      * Read all events from the log.
      */

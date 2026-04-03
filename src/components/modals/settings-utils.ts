@@ -19,7 +19,11 @@ export type ProviderCard = ProviderSummary & {
     authMethods: ProviderAuthMethod[]
 }
 
-export type SettingsTab = 'runtime' | 'project' | 'providers'
+export type ProviderConnections = Record<string, {
+    connected: boolean
+    authType?: string
+}>
+
 export type ProviderListFilter = 'popular' | 'connected' | 'all'
 export type McpStatusTone = 'connected' | 'disconnected' | 'needs_auth' | 'failed'
 
@@ -54,40 +58,10 @@ export type ModelPickerState = {
     query: string
 }
 
-export type OpenCodeInfo = {
-    connected: boolean
-    url: string
-    error?: string
-    managed?: boolean
-    mode?: 'managed' | 'external'
-    restartAvailable?: boolean
-    project?: {
-        worktree?: string
-    }
-}
-
-export type ProjectConfig = {
-    share?: 'manual' | 'auto' | 'disabled'
-    username?: string
-    disabled_providers?: string[]
-    enabled_providers?: string[]
-}
-
 /** Auto-detect: server text starting with http(s):// is a remote MCP server */
 export function isRemoteServer(serverText: string): boolean {
     const trimmed = serverText.trim().toLowerCase()
     return trimmed.startsWith('http://') || trimmed.startsWith('https://')
-}
-
-export type ProjectSettingsDraft = {
-    share: 'manual' | 'auto' | 'disabled'
-    username: string
-    visibleProviders: Record<string, boolean>
-}
-
-export type ProjectConfigMeta = {
-    exists: boolean
-    path: string
 }
 
 // ── Constants ───────────────────────────────────────────
@@ -137,30 +111,47 @@ export function labelForAuthMethod(method: ProviderAuthMethod) {
     return `Connect with ${method.label}`
 }
 
+function readProviderAuthMethods(value: ProviderAuthMethod[] | undefined): ProviderAuthMethod[] {
+    return Array.isArray(value) ? value : []
+}
+
+function readProviderConnected(value: ProviderConnections[string] | undefined): boolean {
+    return value?.connected === true
+}
+
 export function mergeProviders(
     providers: ProviderSummary[],
     authMethods: Record<string, ProviderAuthMethod[]>,
+    connections: ProviderConnections,
 ): ProviderCard[] {
     const providerMap = new Map<string, ProviderCard>()
 
     for (const provider of providers) {
+        const providerAuthMethods = readProviderAuthMethods(authMethods[provider.id])
+        const providerConnections = connections[provider.id]
         providerMap.set(provider.id, {
             ...provider,
-            authMethods: authMethods[provider.id] || [],
+            connected: provider.connected || readProviderConnected(providerConnections),
+            authMethods: providerAuthMethods,
         })
     }
 
-    for (const [id, methods] of Object.entries(authMethods)) {
+    for (const id of new Set([
+        ...Object.keys(authMethods),
+        ...Object.keys(connections),
+    ])) {
         const existing = providerMap.get(id)
+        const providerAuthMethods = readProviderAuthMethods(authMethods[id])
+        const providerConnections = connections[id]
         providerMap.set(id, {
             id,
             name: existing?.name || id,
             source: existing?.source || 'builtin',
             env: existing?.env || [],
-            connected: existing?.connected || false,
+            connected: existing?.connected || readProviderConnected(providerConnections),
             modelCount: existing?.modelCount || 0,
             defaultModel: existing?.defaultModel || null,
-            authMethods: methods,
+            authMethods: providerAuthMethods,
         })
     }
 
@@ -176,31 +167,6 @@ export function mergeProviders(
             }
             return a.name.localeCompare(b.name)
         })
-}
-
-export function buildProjectDraft(
-    providers: ProviderCard[],
-    config: ProjectConfig,
-): ProjectSettingsDraft {
-    const enabledProviders = Array.isArray(config.enabled_providers) ? config.enabled_providers : []
-    const disabledProviders = new Set(Array.isArray(config.disabled_providers) ? config.disabled_providers : [])
-    const hasWhitelist = enabledProviders.length > 0
-    const visibleProviders = providers.reduce<Record<string, boolean>>((acc, provider) => {
-        acc[provider.id] = hasWhitelist
-            ? enabledProviders.includes(provider.id)
-            : !disabledProviders.has(provider.id)
-        return acc
-    }, {})
-
-    return {
-        share: config.share || 'manual',
-        username: config.username || '',
-        visibleProviders,
-    }
-}
-
-export function isProjectDraftEqual(left: ProjectSettingsDraft | null, right: ProjectSettingsDraft | null) {
-    return JSON.stringify(left) === JSON.stringify(right)
 }
 
 export function parseKeyValueText(text: string): Record<string, string> | undefined {

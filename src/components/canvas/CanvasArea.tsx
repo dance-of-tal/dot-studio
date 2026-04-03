@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 import { ReactFlow, Background, ConnectionMode } from '@xyflow/react';
-import type { Node, ReactFlowInstance } from '@xyflow/react';
+import type { Node, NodeTypes, ReactFlowInstance } from '@xyflow/react';
 import { useDroppable } from '@dnd-kit/core';
 import '@xyflow/react/dist/style.css';
 import { useStudioStore } from '../../store';
@@ -16,8 +16,6 @@ import { useCanvasFocusFit } from './useCanvasFocusFit';
 import { useCanvasPresentation } from './useCanvasPresentation';
 import { resolveFocusNodeId } from '../../lib/focus-utils';
 import OffsetBezierEdge from './OffsetBezierEdge';
-
-const ActInspectorPanel = lazy(() => import('../../features/act/ActInspectorPanel'));
 
 const WorkspaceToolbar = lazy(() => import('../toolbar/WorkspaceToolbar'));
 const AgentFrame = lazy(() =>
@@ -40,7 +38,7 @@ const nodeTypes = {
     canvasTerminal: withCanvasNodeSuspense(CanvasTerminalFrame),
     stageTracking: withCanvasNodeSuspense(CanvasTrackingFrame),
     act: withCanvasNodeSuspense(ActFrame),
-};
+} satisfies NodeTypes;
 
 const edgeTypes = {
     offsetBezier: OffsetBezierEdge,
@@ -246,6 +244,7 @@ export default function CanvasArea() {
         onConnect,
         handleNodesChange,
         onMoveEnd,
+        syncCanvasCenter,
     } = useCanvasFlowHandlers({
         nodes,
         editingActId: actEditorState?.actId || null,
@@ -277,6 +276,35 @@ export default function CanvasArea() {
         updateTrackingWindowSize,
         updatePerformerSize,
     })
+
+    useEffect(() => {
+        if (!reactFlowInstance || !canvasAreaRef.current) {
+            return
+        }
+
+        let frameId = window.requestAnimationFrame(() => {
+            frameId = 0
+            syncCanvasCenter()
+        })
+
+        const observer = new ResizeObserver(() => {
+            if (frameId) {
+                window.cancelAnimationFrame(frameId)
+            }
+            frameId = window.requestAnimationFrame(() => {
+                frameId = 0
+                syncCanvasCenter()
+            })
+        })
+        observer.observe(canvasAreaRef.current)
+
+        return () => {
+            if (frameId) {
+                window.cancelAnimationFrame(frameId)
+            }
+            observer.disconnect()
+        }
+    }, [reactFlowInstance, nodes.length, syncCanvasCenter])
 
     const canvasDropLabel = getCanvasDropLabel(active?.data?.current?.kind)
 
@@ -322,11 +350,6 @@ export default function CanvasArea() {
             >
                 <Background color={isFocusActive ? 'transparent' : 'var(--border-strong)'} gap={16} size={1} />
             </ReactFlow>
-            {actEditorState ? (
-                <Suspense fallback={null}>
-                    <ActInspectorPanel />
-                </Suspense>
-            ) : null}
         </div>
     );
 }

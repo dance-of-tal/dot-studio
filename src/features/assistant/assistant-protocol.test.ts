@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
     extractAssistantActionEnvelope,
+    lintAssistantActionEnvelope,
     stripAssistantActionBlock,
 } from './assistant-protocol'
 
@@ -168,5 +169,55 @@ describe('assistant-protocol', () => {
 
         expect(result.envelope).toBeNull()
         expect(result.content).toBe('hello')
+    })
+
+    it('flags same-block refs that are used before they are created', () => {
+        const content = '<assistant-actions>{"version":1,"actions":[{"type":"createAct","name":"Review Flow","participantPerformerRefs":["reviewer","writer"]},{"type":"createPerformer","ref":"reviewer","name":"Reviewer"},{"type":"createPerformer","ref":"writer","name":"Writer"}]}</assistant-actions>'
+
+        const envelope = extractAssistantActionEnvelope(content).envelope
+
+        expect(envelope).not.toBeNull()
+        expect(lintAssistantActionEnvelope(envelope!)).toEqual([
+            {
+                level: 'warning',
+                actionIndex: 0,
+                message: 'createAct has multiple participants but no relations. This often produces a disconnected workflow.',
+            },
+            {
+                level: 'error',
+                actionIndex: 0,
+                message: 'performer ref "reviewer" is used before it is created in the same action block.',
+            },
+            {
+                level: 'error',
+                actionIndex: 0,
+                message: 'performer ref "writer" is used before it is created in the same action block.',
+            },
+        ])
+    })
+
+    it('flags duplicate and wrong-kind draft refs', () => {
+        const content = '<assistant-actions>{"version":1,"actions":[{"type":"createTalDraft","ref":"shared-draft","name":"Reviewer Tal","content":"# Role"},{"type":"createDanceDraft","ref":"shared-draft","name":"Review Skill","content":"# Skill"},{"type":"updatePerformer","performerRef":"reviewer","talDraftRef":"shared-draft","addDanceDraftRefs":["shared-draft"]}]}</assistant-actions>'
+
+        const envelope = extractAssistantActionEnvelope(content).envelope
+
+        expect(envelope).not.toBeNull()
+        expect(lintAssistantActionEnvelope(envelope!)).toEqual([
+            {
+                level: 'error',
+                actionIndex: 1,
+                message: 'draft ref "shared-draft" is already declared for a tal draft earlier in the same action block.',
+            },
+            {
+                level: 'error',
+                actionIndex: 2,
+                message: 'performer ref "reviewer" is used before it is created in the same action block.',
+            },
+            {
+                level: 'error',
+                actionIndex: 2,
+                message: 'dance draft ref "shared-draft" resolves to a tal draft in the same action block.',
+            },
+        ])
     })
 })

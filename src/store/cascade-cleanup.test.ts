@@ -101,8 +101,8 @@ describe('buildDraftDeleteCascade', () => {
                     k3: { performerRef: { kind: 'registry', urn: 'performer/@acme/x' }, position: { x: 200, y: 0 } },
                 },
                 relations: [
-                    { id: 'r1', between: ['k1', 'k2'], direction: 'both' as const },
-                    { id: 'r2', between: ['k2', 'k3'], direction: 'both' as const },
+                    { id: 'r1', between: ['k1', 'k2'], direction: 'both' as const, name: 'handoff', description: '' },
+                    { id: 'r2', between: ['k2', 'k3'], direction: 'both' as const, name: 'review', description: '' },
                 ],
             }),
         ]
@@ -158,7 +158,7 @@ describe('buildInstalledDeleteCascade', () => {
                     k2: { performerRef: { kind: 'draft', draftId: 'p2' }, position: { x: 100, y: 0 } },
                 },
                 relations: [
-                    { id: 'r1', between: ['k1', 'k2'], direction: 'both' as const },
+                    { id: 'r1', between: ['k1', 'k2'], direction: 'both' as const, name: 'handoff', description: '' },
                 ],
             }),
         ]
@@ -207,11 +207,11 @@ describe('buildPerformerDeleteCascade', () => {
                     k2: { performerRef: { kind: 'draft', draftId: 'performer-2' }, position: { x: 100, y: 0 } },
                 },
                 relations: [
-                    { id: 'r1', between: ['k1', 'k2'], direction: 'both' as const },
+                    { id: 'r1', between: ['k1', 'k2'], direction: 'both' as const, name: 'handoff', description: '' },
                 ],
             }),
         ]
-        const result = buildPerformerDeleteCascade('performer-1', acts)
+        const result = buildPerformerDeleteCascade({ id: 'performer-1' }, acts)
         expect(Object.keys(result.acts![0].participants)).toEqual(['k2'])
         expect(result.acts![0].relations).toHaveLength(0)
     })
@@ -226,7 +226,7 @@ describe('buildPerformerDeleteCascade', () => {
                 relations: [],
             }),
         ]
-        expect(buildPerformerDeleteCascade('no-match', acts)).toEqual({})
+        expect(buildPerformerDeleteCascade({ id: 'no-match' }, acts)).toEqual({})
     })
 
     it('preserves acts that have no matching participants (same reference)', () => {
@@ -246,8 +246,25 @@ describe('buildPerformerDeleteCascade', () => {
                 relations: [],
             }),
         ]
-        const result = buildPerformerDeleteCascade('performer-1', acts)
+        const result = buildPerformerDeleteCascade({ id: 'performer-1' }, acts)
         expect(result.acts![0]).toBe(acts[0])
         expect(Object.keys(result.acts![1].participants)).toEqual([])
+    })
+
+    it('removes act participants referencing a linked draft id for the deleted performer', () => {
+        const acts = [
+            makeAct({
+                id: 'act-1',
+                participants: {
+                    k1: { performerRef: { kind: 'draft', draftId: 'performer-draft-1' }, position: { x: 0, y: 0 } },
+                },
+                relations: [],
+            }),
+        ]
+        const result = buildPerformerDeleteCascade({
+            id: 'performer-1',
+            meta: { derivedFrom: 'draft:performer-draft-1' },
+        }, acts)
+        expect(Object.keys(result.acts![0].participants)).toEqual([])
     })
 })

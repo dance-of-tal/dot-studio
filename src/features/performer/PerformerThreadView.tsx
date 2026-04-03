@@ -40,29 +40,30 @@ export default function PerformerThreadView({
     composer,
 }: Props) {
     const chatSession = useChatSession(performerId)
-    const { sessionId, todos, revert: revertState, permission } = chatSession
+    const { sessionId, todos, revert: revertState, permission, isMutating } = chatSession
     const restoreRevertedMessage = useStudioStore((state) => state.restoreRevertedMessage)
     const setSessionTodos = useStudioStore((state) => state.setSessionTodos)
     const [showReview, setShowReview] = useState(false)
+    const revertMessageId = revertState?.messageId ?? null
 
     const visibleMessages = useMemo(() => {
-        if (!revertState?.messageId) {
+        if (!revertMessageId) {
             return messages
         }
-        return messages.filter((message) => message.id < revertState.messageId)
-    }, [messages, revertState?.messageId])
+        return messages.filter((message) => message.id < revertMessageId)
+    }, [messages, revertMessageId])
 
     const rolledMessages = useMemo(() => {
-        if (!revertState?.messageId) {
+        if (!revertMessageId) {
             return []
         }
         return messages
-            .filter((message) => message.role === 'user' && message.id >= revertState.messageId)
+            .filter((message) => message.role === 'user' && message.id >= revertMessageId)
             .map((message) => ({
                 id: message.id,
                 text: summarizeUserMessage(message),
             }))
-    }, [messages, revertState?.messageId])
+    }, [messages, revertMessageId])
 
     const hasDiffs = useMemo(() => collectSessionDiffs(visibleMessages).length > 0, [visibleMessages])
 
@@ -78,7 +79,7 @@ export default function PerformerThreadView({
         <>
             <SessionRevertDock
                 items={rolledMessages}
-                disabled={isLoading}
+                disabled={isLoading || isMutating}
                 onRestore={(messageId) => {
                     void restoreRevertedMessage(performerId, messageId)
                 }}
@@ -135,7 +136,7 @@ export default function PerformerThreadView({
                                 <MessageActionBar
                                     message={msg}
                                     performerId={performerId}
-                                    canRevert={hasActiveSession}
+                                    canRevert={hasActiveSession && !isMutating}
                                     onRevert={(pid, mid) => onOpenRevert(pid, mid, msg.content)}
                                 />
                             ) : null}

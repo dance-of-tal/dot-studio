@@ -137,7 +137,7 @@ export default function ChatMessageContent({
     const rawContent = useMemo(() => stripAssistantActionBlock(message.content || ''), [message.content])
     const deferredContent = useDeferredValue(rawContent)
     const displayContent = streaming ? rawContent : deferredContent
-    const showThinking = showReasoningSummaries && streaming
+    const showThinking = showReasoningSummaries
 
     return (
         <div className={className}>
@@ -146,7 +146,7 @@ export default function ChatMessageContent({
             ) : null}
             {displayContent ? (
                 <>
-                    <MarkdownRenderer content={displayContent} showThinking={showThinking} />
+                    <MarkdownRenderer content={displayContent} showThinking={showThinking} streaming={streaming} />
                     <CopyResponseButton content={rawContent} />
                 </>
             ) : null}

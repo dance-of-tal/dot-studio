@@ -1,31 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Settings, X, Sliders, Server, Cpu, FolderCog, LayoutGrid } from 'lucide-react'
+import { RefreshCw, Settings, X, Sliders, Server, LayoutGrid } from 'lucide-react'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import { queryKeys } from '../../hooks/queries'
 import './SettingsModal.css'
 import './SettingsControls.css'
 import { useProviderAuth } from './useProviderAuth'
-import type {
-    ProviderCard,
-    OpenCodeInfo,
-    ProjectSettingsDraft,
-    ProjectConfigMeta,
-} from './settings-utils'
-import {
-    mergeProviders,
-    buildProjectDraft,
-    isProjectDraftEqual,
-} from './settings-utils'
+import type { ProviderCard } from './settings-utils'
+import { mergeProviders } from './settings-utils'
 
 import SettingsGeneral from './SettingsGeneral'
 import SettingsProviders from './SettingsProviders'
 import SettingsModels from './SettingsModels'
-import SettingsOpenCode from './SettingsOpenCode'
-import SettingsProject from './SettingsProject'
 
-type SettingsTab = 'general' | 'providers' | 'models' | 'opencode' | 'project'
+type SettingsTab = 'general' | 'providers' | 'models'
 
 interface SidebarSection {
     label: string
@@ -46,13 +35,6 @@ const SECTIONS: SidebarSection[] = [
             { key: 'models', label: 'Models', icon: <LayoutGrid size={14} /> },
         ],
     },
-    {
-        label: 'Runtime',
-        items: [
-            { key: 'opencode', label: 'OpenCode', icon: <Cpu size={14} /> },
-            { key: 'project', label: 'Project', icon: <FolderCog size={14} /> },
-        ],
-    },
 ]
 
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -63,20 +45,11 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const setPerformerModel = useStudioStore((state) => state.setPerformerModel)
 
     const [providers, setProviders] = useState<ProviderCard[]>([])
-    const [opencodeInfo, setOpencodeInfo] = useState<OpenCodeInfo | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<SettingsTab>('general')
-    const [projectDraft, setProjectDraft] = useState<ProjectSettingsDraft | null>(null)
-    const [projectSnapshot, setProjectSnapshot] = useState<ProjectSettingsDraft | null>(null)
-    const [projectMeta, setProjectMeta] = useState<ProjectConfigMeta | null>(null)
-    const [savingProject, setSavingProject] = useState(false)
-    const [projectMessage, setProjectMessage] = useState<string | null>(null)
-    const projectDirtyRef = useRef(false)
-    const projectDraftRef = useRef<ProjectSettingsDraft | null>(null)
-    const projectSnapshotRef = useRef<ProjectSettingsDraft | null>(null)
+    const [statusMessage, setStatusMessage] = useState<string | null>(null)
     const providersRef = useRef<ProviderCard[]>([])
-    const opencodeInfoRef = useRef<OpenCodeInfo | null>(null)
     const loadRequestIdRef = useRef(0)
 
     const selectedPerformer = useMemo(
@@ -84,30 +57,9 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         [performers, selectedPerformerId],
     )
 
-    const projectDirty = useMemo(
-        () => !isProjectDraftEqual(projectDraft, projectSnapshot),
-        [projectDraft, projectSnapshot],
-    )
-
-    useEffect(() => {
-        projectDirtyRef.current = projectDirty
-    }, [projectDirty])
-
-    useEffect(() => {
-        projectDraftRef.current = projectDraft
-    }, [projectDraft])
-
-    useEffect(() => {
-        projectSnapshotRef.current = projectSnapshot
-    }, [projectSnapshot])
-
     useEffect(() => {
         providersRef.current = providers
     }, [providers])
-
-    useEffect(() => {
-        opencodeInfoRef.current = opencodeInfo
-    }, [opencodeInfo])
 
     const loadSettingsState = useCallback(async (showLoading = false) => {
         const requestId = ++loadRequestIdRef.current
@@ -117,35 +69,22 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         setError(null)
 
         try {
-            const [providerRes, authRes, healthRes, projectRes] = await Promise.all([
+            const [providerRes, authMethodsRes, providerConnectionsRes] = await Promise.all([
                 api.providers.list(),
-                api.provider.auth().catch(() => ({})),
-                api.opencodeHealth().catch((err) => ({
-                    connected: false, url: '', error: err instanceof Error ? err.message : String(err), restartAvailable: false,
-                })),
-                api.config.getProject().catch(() => ({
-                    exists: false, path: `${workingDir}/config.json`, config: {},
-                })),
+                api.provider.authMethods().catch(() => ({})),
+                api.provider.connections().catch(() => ({})),
             ])
 
-            const mergedProviders = mergeProviders(providerRes, authRes || {})
+            const mergedProviders = mergeProviders(
+                providerRes,
+                authMethodsRes || {},
+                providerConnectionsRes || {},
+            )
             if (requestId !== loadRequestIdRef.current) {
                 return mergedProviders
             }
 
             setProviders(mergedProviders)
-            setOpencodeInfo(healthRes)
-            setProjectMeta({ exists: projectRes.exists, path: projectRes.path })
-
-            if (
-                !projectDirtyRef.current
-                || !projectDraftRef.current
-                || !projectSnapshotRef.current
-            ) {
-                const nextDraft = buildProjectDraft(mergedProviders, projectRes.config || {})
-                setProjectDraft(nextDraft)
-                setProjectSnapshot(nextDraft)
-            }
 
             return mergedProviders
         } catch (err) {
@@ -173,8 +112,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         setPerformerModel,
         refreshProviderState,
         setError,
-        setProjectMessage,
-        setActiveTab: (tab) => setActiveTab(tab as SettingsTab),
+        setStatusMessage,
     })
     const syncFlowsWithProvidersRef = useRef(auth.syncFlowsWithProviders)
 
@@ -185,7 +123,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const refreshSettings = useCallback(async () => {
         try {
             const mergedProviders = await loadSettingsState(
-                providersRef.current.length === 0 && !opencodeInfoRef.current,
+                providersRef.current.length === 0,
             )
             syncFlowsWithProvidersRef.current(mergedProviders)
         } catch {
@@ -200,51 +138,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     }, [open, refreshSettings, workingDir])
 
     if (!open) return null
-
-    function toggleProviderVisibility(providerId: string) {
-        setProjectDraft((cur) => {
-            if (!cur) return cur
-            return {
-                ...cur,
-                visibleProviders: { ...cur.visibleProviders, [providerId]: !cur.visibleProviders[providerId] },
-            }
-        })
-    }
-
-    function resetProjectDraft() {
-        if (!projectSnapshot) return
-        setProjectDraft(projectSnapshot)
-        setProjectMessage(null)
-    }
-
-    async function saveProjectSettings() {
-        if (!projectDraft) return
-        setSavingProject(true)
-        setError(null)
-        setProjectMessage(null)
-
-        try {
-            const disabledProviders = providers
-                .filter((p) => !projectDraft.visibleProviders[p.id])
-                .map((p) => p.id)
-
-            await api.config.updateProject({
-                share: projectDraft.share,
-                username: projectDraft.username,
-                disabled_providers: disabledProviders,
-                enabled_providers: [],
-            })
-            useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
-
-            setProjectSnapshot(projectDraft)
-            setProjectMessage('Saved to OpenCode project config.')
-            await refreshProviderState()
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err))
-        } finally {
-            setSavingProject(false)
-        }
-    }
 
     function renderContent() {
         if (loading && activeTab !== 'general') {
@@ -272,40 +165,12 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                         disconnectProvider={auth.disconnectProvider}
                         applyPickedModel={auth.applyPickedModel}
                         retryBrowserOauth={auth.retryBrowserOauth}
-                        projectMessage={projectMessage}
+                        statusMessage={statusMessage}
                     />
                 )
 
             case 'models':
                 return <SettingsModels />
-
-            case 'opencode':
-                return (
-                    <SettingsOpenCode
-                        opencodeInfo={opencodeInfo}
-                        setError={setError}
-                        onRestart={async () => {
-                            await api.opencodeRestart()
-                            await refreshSettings()
-                        }}
-                    />
-                )
-
-            case 'project':
-                return (
-                    <SettingsProject
-                        projectMeta={projectMeta}
-                        projectDraft={projectDraft}
-                        providers={providers}
-                        projectDirty={projectDirty}
-                        savingProject={savingProject}
-                        projectMessage={projectMessage}
-                        toggleProviderVisibility={toggleProviderVisibility}
-                        setProjectDraft={setProjectDraft}
-                        resetProjectDraft={resetProjectDraft}
-                        saveProjectSettings={saveProjectSettings}
-                    />
-                )
         }
     }
 

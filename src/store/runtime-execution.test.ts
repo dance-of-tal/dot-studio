@@ -11,6 +11,9 @@ function createState(overrides: Partial<StudioState> = {}) {
         workingDir: '/tmp/workspace',
         sessionLoading: {},
         seStatuses: {},
+        seMessages: {},
+        sePermissions: {},
+        seQuestions: {},
         saveWorkspace: vi.fn(async () => {}),
         applyPendingRuntimeReload: vi.fn(async () => true),
         ...overrides,
@@ -73,7 +76,7 @@ describe('preparePendingRuntimeExecution', () => {
         expect(result.reason).toBe('projection_update_pending')
     })
 
-    it('does not block unrelated performers just because another session is running', async () => {
+    it('blocks projection changes when any session is running because dispose is workspace-scoped', async () => {
         const state = createState({
             projectionDirty: {
                 performerIds: ['performer-2'],
@@ -104,8 +107,9 @@ describe('preparePendingRuntimeExecution', () => {
             runtimeConfig: { talRef: null, danceRefs: [] },
         })
 
-        expect(result.blocked).toBe(false)
+        expect(result.blocked).toBe(true)
         expect(result.requiresDispose).toBe(true)
+        expect(result.reason).toBe('projection_update_pending')
     })
 
     it('ignores stale loading once the session status is idle', async () => {
@@ -178,5 +182,57 @@ describe('preparePendingRuntimeExecution', () => {
 
         expect(result.blocked).toBe(true)
         expect(result.reason).toBe('projection_update_pending')
+    })
+
+    it('ignores wait_until parked sessions even when stale loading remains', async () => {
+        const state = createState({
+            projectionDirty: {
+                performerIds: ['performer-2'],
+                actIds: [],
+                draftIds: [],
+                workspaceWide: false,
+            },
+            sessionLoading: { 'session-1': true },
+            seStatuses: { 'session-1': { type: 'busy' } },
+            seMessages: {
+                'session-1': [{
+                    id: 'msg-1',
+                    role: 'assistant',
+                    content: '',
+                    timestamp: 1,
+                    parts: [{
+                        id: 'tool-1',
+                        type: 'tool',
+                        tool: {
+                            name: 'wait_until',
+                            callId: 'call-1',
+                            status: 'completed',
+                        },
+                    }],
+                }],
+            },
+            performers: [
+                {
+                    id: 'performer-2',
+                    name: 'Performer 2',
+                    talRef: null,
+                    danceRefs: [],
+                    model: null,
+                    mcpServerNames: [],
+                    scope: 'shared',
+                    position: { x: 0, y: 0 },
+                    danceDeliveryMode: 'auto',
+                },
+            ],
+            acts: [],
+        })
+
+        const result = await preparePendingRuntimeExecution(() => state, {
+            performerId: 'performer-2',
+            runtimeConfig: { talRef: null, danceRefs: [] },
+        })
+
+        expect(result.blocked).toBe(false)
+        expect(result.requiresDispose).toBe(true)
     })
 })

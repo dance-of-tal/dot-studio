@@ -1,14 +1,9 @@
 /**
  * SettingsGeneral — General UI preferences panel.
- * Mirrors OpenCode's settings-general.tsx (reasoning, shell/edit parts, follow-up).
+ * Mirrors OpenCode's settings-general.tsx (reasoning and tool expansion prefs).
  */
 
-import { useUISettings, type FollowupBehavior } from '../../store/settingsSlice'
-
-const followupOptions: { value: FollowupBehavior; label: string; description: string }[] = [
-    { value: 'steer', label: 'Steer', description: 'Immediately redirect the active conversation' },
-    { value: 'queue', label: 'Queue', description: 'Add as the next message after the current turn finishes' },
-]
+import { useUISettings } from '../../store/settingsSlice'
 
 interface ToggleRowProps {
     title: string
@@ -32,36 +27,6 @@ function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
                 />
                 <span className="stg-toggle__track" />
             </label>
-        </div>
-    )
-}
-
-interface SelectRowProps {
-    title: string
-    description: string
-    value: string
-    options: { value: string; label: string; description?: string }[]
-    onChange: (value: string) => void
-}
-
-function SelectRow({ title, description, value, options, onChange }: SelectRowProps) {
-    return (
-        <div className="stg-row">
-            <div className="stg-row__text">
-                <span className="stg-row__title">{title}</span>
-                <span className="stg-row__desc">{description}</span>
-            </div>
-            <select
-                className="stg-select"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-            >
-                {options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                    </option>
-                ))}
-            </select>
         </div>
     )
 }
@@ -96,14 +61,6 @@ export default function SettingsGeneral() {
                         description="Auto-expand file edit diffs in the conversation feed"
                         checked={settings.editToolPartsExpanded}
                         onChange={settings.setEditToolPartsExpanded}
-                    />
-
-                    <SelectRow
-                        title="Follow-up behavior"
-                        description="How to handle messages you send while the AI is still responding"
-                        value={settings.followup}
-                        options={followupOptions}
-                        onChange={(v) => settings.setFollowup(v as FollowupBehavior)}
                     />
                 </div>
             </div>

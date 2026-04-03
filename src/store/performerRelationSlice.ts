@@ -10,6 +10,6 @@ export const createPerformerRelationSlice: StateCreator<
     [],
     [],
     PerformerRelationSlice
-> = (_set, _get) => ({
+> = () => ({
     // No-op: edges are managed by actSlice via Act.relations
 })

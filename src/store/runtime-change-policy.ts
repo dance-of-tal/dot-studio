@@ -71,9 +71,10 @@ export function mergeProjectionDirtyState(
     current: ProjectionDirtyState,
     change: Extract<StudioChangeDescriptor, { kind: 'performer' | 'act' | 'draft' }>,
 ): ProjectionDirtyState {
+    const actIds = 'actIds' in change ? change.actIds : undefined
     return {
         performerIds: unique([...current.performerIds, ...(change.performerIds || [])]),
-        actIds: unique([...current.actIds, ...(change.actIds || [])]),
+        actIds: unique([...current.actIds, ...(actIds || [])]),
         draftIds: unique([...current.draftIds, ...(change.draftIds || [])]),
         workspaceWide: current.workspaceWide || change.workspaceWide === true,
     }

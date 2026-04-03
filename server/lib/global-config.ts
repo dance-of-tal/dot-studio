@@ -43,11 +43,18 @@ export function mergeOpenCodeConfig(
     }
 }
 
-export async function writeGlobalConfigFile(config: Record<string, unknown>) {
+export async function writeGlobalConfigFile(
+    config: Record<string, unknown>,
+    options?: {
+        dispose?: boolean
+    },
+) {
     const filePath = resolveGlobalConfigPath()
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, `${JSON.stringify(config, null, 2)}\n`, 'utf-8')
-    const oc = await getOpencode()
-    await oc.global.dispose()
+    if (options?.dispose !== false) {
+        const oc = await getOpencode()
+        await oc.global.dispose()
+    }
     return config
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     getProviderAuthSuccessAction,
     isBuiltinOpenCodeProvider,
+    mergeProviders,
     shouldDisplayConnectedProvider,
 } from './settings-utils'
 
@@ -40,5 +41,47 @@ describe('getProviderAuthSuccessAction', () => {
 
     it('opens the model picker when a performer is selected', () => {
         expect(getProviderAuthSuccessAction({ id: 'p1', name: 'Lead' })).toBe('pick-model')
+    })
+})
+
+describe('mergeProviders', () => {
+    it('marks a provider connected when provider connections say connected', () => {
+        const merged = mergeProviders([
+            {
+                id: 'openai',
+                name: 'OpenAI',
+                source: 'builtin',
+                env: [],
+                connected: false,
+                modelCount: 10,
+                defaultModel: 'gpt-5',
+            },
+        ], {
+            openai: [
+                { type: 'oauth', label: 'Browser OAuth' },
+            ],
+        }, {
+            openai: { connected: true, authType: 'oauth' },
+        })
+
+        expect(merged).toHaveLength(1)
+        expect(merged[0].connected).toBe(true)
+        expect(merged[0].authMethods).toEqual([
+            { type: 'oauth', label: 'Browser OAuth' },
+        ])
+    })
+
+    it('creates a provider card from global auth state even when project providers are unavailable', () => {
+        const merged = mergeProviders([], {
+            openai: [
+                { type: 'oauth', label: 'Browser OAuth' },
+            ],
+        }, {
+            openai: { connected: true, authType: 'oauth' },
+        })
+
+        expect(merged).toHaveLength(1)
+        expect(merged[0].id).toBe('openai')
+        expect(merged[0].connected).toBe(true)
     })
 })

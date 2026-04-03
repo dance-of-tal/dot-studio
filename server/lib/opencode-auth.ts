@@ -53,6 +53,49 @@ export async function readStoredProviderAuthType(providerId: string): Promise<st
     }
 }
 
+export async function listStoredProviderAuthTypes(): Promise<Record<string, string>> {
+    const authPath = await resolveAuthStorePath()
+    if (!authPath) {
+        return {}
+    }
+
+    try {
+        const raw = await fs.readFile(authPath, 'utf-8')
+        const parsed = JSON.parse(raw) as Record<string, unknown>
+        const result: Record<string, string> = {}
+
+        for (const [providerId, value] of Object.entries(parsed)) {
+            if (!value || typeof value !== 'object') {
+                continue
+            }
+            const normalized = providerId.replace(/\/+$/, '')
+            if (!normalized) {
+                continue
+            }
+            const type = (value as Record<string, unknown>).type
+            if (typeof type === 'string' && type.trim()) {
+                result[normalized] = type.trim()
+            }
+        }
+
+        return result
+    } catch {
+        return {}
+    }
+}
+
+export function buildStoredProviderConnections(storedAuthTypes: Record<string, string>) {
+    return Object.fromEntries(
+        Object.entries(storedAuthTypes).map(([providerId, authType]) => [
+            providerId,
+            {
+                connected: true,
+                authType,
+            },
+        ]),
+    )
+}
+
 export async function clearStoredProviderAuth(providerId: string) {
     const authPath = await resolveAuthStorePath()
     if (!authPath) {

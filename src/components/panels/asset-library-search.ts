@@ -1,10 +1,16 @@
 // Search, filter, and haystack utilities for the Asset Library
 
-import type { AssetCard } from '../../types'
 import type { InstalledKind, LocalSection, RuntimeKind, SourceFilter } from './asset-library-utils'
 import type { RegistryGroup } from './asset-panel-types'
 
-type SearchableAsset = Partial<Pick<AssetCard, 'name' | 'author' | 'urn' | 'description' | 'tags'>>
+type SearchableAsset = {
+    name?: string
+    author?: string
+    urn?: string
+    description?: string
+    tags?: string[]
+    source?: string
+}
 type SearchableModel = {
     name?: string
     id?: string
@@ -57,8 +63,8 @@ export function buildMcpHaystack(mcp: SearchableMcp): string {
         .toLowerCase()
 }
 
-export function filterInstalledAssets(
-    assets: AssetCard[],
+export function filterInstalledAssets<T extends SearchableAsset>(
+    assets: T[],
     sourceFilter: SourceFilter,
     queryText: string,
 ) {

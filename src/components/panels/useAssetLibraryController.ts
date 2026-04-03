@@ -5,7 +5,7 @@ import { useStudioStore } from '../../store'
 import { showToast } from '../../lib/toast'
 import { slugifyAssetName } from '../../lib/performers'
 import { buildDraftDeleteCascade, buildInstalledDeleteCascade } from '../../store/cascade-cleanup'
-import type { AssetCard } from '../../types'
+import { removeMarkdownEditorsByDraftIds } from '../../store/workspace-helpers'
 import {
     useAssetKind,
     useAssets,
@@ -75,8 +75,10 @@ export function useAssetLibraryController() {
     const showModels = scope === 'local' && localSection === 'runtime' && runtimeKind === 'models'
     const showMcps = scope === 'local' && localSection === 'runtime' && runtimeKind === 'mcps'
 
-    const { data: installedAssets = [], isLoading: assetsLoading } = useAssetKind(installedKind, showInstalledAssets)
-    const { data: assetInventory = [] } = useAssets(scope === 'registry')
+    const { data: installedAssetResults = [], isLoading: assetsLoading } = useAssetKind(installedKind, showInstalledAssets)
+    const installedAssets = installedAssetResults as LibraryAsset[]
+    const { data: assetInventoryResults = [] } = useAssets(scope === 'registry')
+    const assetInventory = assetInventoryResults as LibraryAsset[]
     const { data: models = [] } = useModels(showModels)
     const { data: registryResults = [], isLoading: registryLoading, error: registryError } = useRegistrySearch(
         registryQuery,
@@ -91,17 +93,22 @@ export function useAssetLibraryController() {
         mcpCatalogDirty,
         mcpCatalogStatus,
         mcpCatalogSaving,
+        runtimeReloadPending,
         pendingMcpAuthName,
+        mcpImpactDialog,
+        mcpImpactSaving,
         updateMcpEntry,
         addMcpEntry,
         removeMcpEntry,
         saveMcpCatalog,
         connectMcpServer,
-        authenticateMcpServer,
+        startMcpAuthFlow,
         clearMcpAuth,
+        confirmMcpImpactSave,
+        cancelMcpImpactSave,
     } = mcp
 
-    const draftAssetCards = useMemo<AssetCard[]>(
+    const draftAssetCards = useMemo<LibraryAsset[]>(
         () => buildDraftAssetCards(drafts, installedKind),
         [drafts, installedKind],
     )
@@ -112,6 +119,9 @@ export function useAssetLibraryController() {
     )
 
     const installMutation = useInstallAsset()
+
+    const isLibraryAsset = (asset: AssetPanelAsset | null | undefined): asset is LibraryAsset =>
+        !!asset && isInstalledAssetKind(asset.kind)
 
     useEffect(() => {
         setSelectedAsset(null)
@@ -185,7 +195,7 @@ export function useAssetLibraryController() {
     }
 
     const handlePinnedAssetAction = async (asset: AssetPanelAsset, action: 'save-local' | 'publish') => {
-        if (!asset || !isInstalledAssetKind(asset.kind)) return
+        if (!isLibraryAsset(asset)) return
 
         try {
             setDetailActionLoading(action)
@@ -206,12 +216,17 @@ export function useAssetLibraryController() {
                 await invalidateInstalledAssetQueries(asset.kind)
 
                 if (asset.source === 'draft' && asset.draftId) {
-                    api.drafts.delete(asset.kind, asset.draftId).catch(() => {})
+                    const draftId = asset.draftId
+                    api.drafts.delete(asset.kind, draftId).catch(() => {})
                     useStudioStore.setState((state) => {
                         const next = { ...state.drafts }
-                        delete next[asset.draftId]
-                        const cascade = buildDraftDeleteCascade(asset.kind, asset.draftId, state.performers, state.acts)
-                        return { drafts: next, ...cascade }
+                        delete next[draftId]
+                        const cascade = buildDraftDeleteCascade(asset.kind, draftId, state.performers, state.acts)
+                        return {
+                            drafts: next,
+                            markdownEditors: removeMarkdownEditorsByDraftIds(state.markdownEditors, [draftId]),
+                            ...cascade,
+                        }
                     })
                 }
 
@@ -242,7 +257,7 @@ export function useAssetLibraryController() {
     const [uninstallLoading, setUninstallLoading] = useState(false)
 
     const handleUninstallAsset = async (asset: AssetPanelAsset) => {
-        if (!asset?.kind || !asset?.urn) return
+        if (!isLibraryAsset(asset) || !asset.urn) return
         try {
             const plan = await api.dot.previewUninstall(asset.kind, asset.urn)
             // Always show confirmation dialog, even if no dependents
@@ -256,6 +271,7 @@ export function useAssetLibraryController() {
     }
 
     const executeUninstall = async (asset: AssetPanelAsset, cascade: boolean) => {
+        if (!isLibraryAsset(asset) || !asset.urn) return
         try {
             setUninstallLoading(true)
             const result = await api.dot.uninstallAsset(asset.kind, asset.urn, cascade)
@@ -264,6 +280,9 @@ export function useAssetLibraryController() {
                 const newState: Partial<ReturnType<typeof useStudioStore.getState>> = {}
                 for (const deletedUrn of result.deletedUrns) {
                     const kind = deletedUrn.split('/')[0]
+                    if (!isInstalledAssetKind(kind)) {
+                        continue
+                    }
                     const patch = buildInstalledDeleteCascade(kind, deletedUrn, state.performers, state.acts)
                     if (patch.performers) newState.performers = patch.performers
                     if (patch.acts) newState.acts = patch.acts
@@ -305,7 +324,7 @@ export function useAssetLibraryController() {
     }
 
     const handleDeleteDraft = async (asset: AssetPanelAsset) => {
-        if (!asset?.draftId || !asset?.kind) return
+        if (!isLibraryAsset(asset) || !asset.draftId) return
         try {
             const plan = await api.drafts.previewDelete(asset.kind, asset.draftId)
             setUninstallPlan({ asset, actionName: 'Delete', ...plan })
@@ -318,11 +337,12 @@ export function useAssetLibraryController() {
     }
 
     const handleEditDraft = (asset: AssetPanelAsset) => {
-        if (!asset?.draftId) return
+        if (!isLibraryAsset(asset) || !asset.draftId) return
         openDraftEditor(asset.draftId)
     }
 
     const executeDeleteDraft = async (asset: AssetPanelAsset, cascade: boolean) => {
+        if (!isLibraryAsset(asset) || !asset.draftId) return
         try {
             setUninstallLoading(true)
             const result = await api.drafts.delete(asset.kind, asset.draftId, cascade)
@@ -345,6 +365,11 @@ export function useAssetLibraryController() {
                         if (patch.workspaceDirty) newState.workspaceDirty = true
                     }
                 }
+
+                newState.markdownEditors = removeMarkdownEditorsByDraftIds(
+                    state.markdownEditors,
+                    result.deletedIds,
+                )
 
                 return newState
             })
@@ -385,7 +410,7 @@ export function useAssetLibraryController() {
         [mcpServers, queryText],
     )
     const registryGroups = useMemo(
-        () => buildRegistryGroups(registryResults as LibraryAsset[]),
+        () => buildRegistryGroups(registryResults),
         [registryResults],
     )
 
@@ -452,14 +477,19 @@ export function useAssetLibraryController() {
         mcpCatalogDirty,
         mcpCatalogStatus,
         mcpCatalogSaving,
+        runtimeReloadPending,
         pendingMcpAuthName,
+        mcpImpactDialog,
+        mcpImpactSaving,
         updateMcpEntry,
         addMcpEntry,
         removeMcpEntry,
         saveMcpCatalog,
         connectMcpServer,
-        authenticateMcpServer,
+        startMcpAuthFlow,
         clearMcpAuth,
+        confirmMcpImpactSave,
+        cancelMcpImpactSave,
         expandedMcpEntries,
         setExpandedMcpEntries,
         expandedModelProviders,

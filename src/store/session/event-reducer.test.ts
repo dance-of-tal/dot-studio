@@ -2,6 +2,7 @@
  * Event Reducer — Unit Tests (Phase 7.2)
  */
 import { describe, it, expect, beforeEach } from 'vitest'
+import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
 import type { StudioState } from '../types'
 import {
     reduceMessageUpdated,
@@ -266,11 +267,13 @@ describe('Event Reducer', () => {
     })
 
     describe('reduceSessionStatus', () => {
-        it('sets busy status and marks session loading', () => {
+        it('sets busy status and clears optimistic loading bridge', () => {
+            state.sessionLoading[SESSION_ID] = true
+
             reduceSessionStatus(SESSION_ID, { type: 'busy' }, get, set)
 
             expect(state.seStatuses[SESSION_ID]!.type).toBe('busy')
-            expect(state.sessionLoading[SESSION_ID]).toBe(true)
+            expect(state.sessionLoading[SESSION_ID]).toBeUndefined()
         })
 
         it('clears loading on idle', () => {
@@ -353,7 +356,7 @@ describe('Event Reducer', () => {
 
             reducePermissionAsked(SESSION_ID, {
                 id: 'perm-1', sessionID: SESSION_ID, method: 'test',
-            } as any, get, set)
+            } as unknown as PermissionRequest, get, set)
 
             expect(state.sePermissions[SESSION_ID]).toBeDefined()
             expect(state.sessionLoading[SESSION_ID]).toBeUndefined()
@@ -362,7 +365,7 @@ describe('Event Reducer', () => {
 
     describe('reducePermissionReplied', () => {
         it('clears pending permission', () => {
-            state.sePermissions[SESSION_ID] = { id: 'perm-1', sessionID: SESSION_ID } as any
+            state.sePermissions[SESSION_ID] = { id: 'perm-1', sessionID: SESSION_ID, metadata: {} } as PermissionRequest
 
             reducePermissionReplied(SESSION_ID, get, set)
 
@@ -376,22 +379,22 @@ describe('Event Reducer', () => {
 
             reduceQuestionAsked(SESSION_ID, {
                 id: 'q-1', sessionID: SESSION_ID,
-            } as any, get, set)
+            } as QuestionRequest, get, set)
 
             expect(state.seQuestions[SESSION_ID]).toBeDefined()
             expect(state.sessionLoading[SESSION_ID]).toBeUndefined()
         })
     })
 
-    describe('reduceTodoUpdated', () => {
-        it('sets todos for sessionId', () => {
-            reduceTodoUpdated(SESSION_ID, [{ id: 'todo-1', content: 'Fix bug' }] as any, get, set)
+        describe('reduceTodoUpdated', () => {
+            it('sets todos for sessionId', () => {
+            reduceTodoUpdated(SESSION_ID, [{ id: 'todo-1', content: 'Fix bug' }] as unknown as Todo[], get, set)
 
             expect(state.seTodos[SESSION_ID]).toHaveLength(1)
         })
 
         it('stores todos only by sessionId', () => {
-            reduceTodoUpdated(SESSION_ID, [{ id: 'todo-1', content: 'Fix bug' }] as any, get, set)
+            reduceTodoUpdated(SESSION_ID, [{ id: 'todo-1', content: 'Fix bug' }] as unknown as Todo[], get, set)
 
             expect(state.seTodos[CHAT_KEY]).toBeUndefined()
         })
@@ -414,8 +417,9 @@ describe('Event Reducer', () => {
         })
 
         it('handles status transitions busy→retry→busy→idle correctly', () => {
+            state.sessionLoading[SESSION_ID] = true
             reduceSessionStatus(SESSION_ID, { type: 'busy' }, get, set)
-            expect(state.sessionLoading[SESSION_ID]).toBe(true)
+            expect(state.sessionLoading[SESSION_ID]).toBeUndefined()
 
             reduceSessionStatus(SESSION_ID, { type: 'retry', attempt: 1, message: 'Error' }, get, set)
             expect(state.seMessages[SESSION_ID]!.some((m) => m.id === `retry-${SESSION_ID}`)).toBe(true)

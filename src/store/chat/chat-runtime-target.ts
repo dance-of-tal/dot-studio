@@ -6,7 +6,8 @@ import type {
     AssistantStageContext,
 } from '../../../shared/assistant-actions'
 import { resolvePerformerRuntimeConfig } from '../../lib/performers'
-import type { ActRelation, PerformerNode, WorkspaceAct, WorkspaceActParticipantBinding } from '../../types'
+import { resolvePerformerFromActBinding } from '../../lib/act-participants'
+import type { ActRelation, WorkspaceAct, WorkspaceActParticipantBinding } from '../../types'
 import { isAssistantChatKey } from '../assistantSlice'
 import type { ChatGet } from './chat-internals'
 
@@ -21,28 +22,13 @@ const EMPTY_RUNTIME_CONFIG = {
     planMode: false,
 }
 
-function performerByRegistryUrn(performers: PerformerNode[], urn: string): PerformerNode | null {
-    return performers.find((performer) => performer.meta?.derivedFrom === urn) || null
-}
-
-function performerByDraftId(performers: PerformerNode[], draftId: string): PerformerNode | null {
-    return performers.find((performer) =>
-        performer.id === draftId
-        || performer.meta?.derivedFrom === `draft:${draftId}`,
-    ) || null
-}
-
 function resolveParticipantSummary(
     get: ChatGet,
     participantKey: string,
     binding: WorkspaceActParticipantBinding,
 ): AssistantStageActParticipantSummary {
     const performers = get().performers
-    const performer = binding?.performerRef?.kind === 'draft'
-        ? performerByDraftId(performers, binding.performerRef.draftId)
-        : binding?.performerRef?.kind === 'registry'
-            ? performerByRegistryUrn(performers, binding.performerRef.urn)
-            : null
+    const performer = resolvePerformerFromActBinding(performers, binding)
 
     const subscriptions: AssistantParticipantSubscriptions | undefined = binding.subscriptions
         ? {

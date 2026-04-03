@@ -1,5 +1,6 @@
 import { getOpencode } from '../lib/opencode.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
+import { clearProjectionRuntimePending } from './opencode-projection/projection-manifest.js'
 
 type OpenCodeSessionSummary = {
     id?: string
@@ -59,6 +60,7 @@ export async function applyStudioRuntimeReload(workingDir: string) {
 
     for (const directory of directories) {
         await oc.instance.dispose({ directory }).catch(() => {})
+        await clearProjectionRuntimePending(directory).catch(() => {})
     }
 
     return {

@@ -197,7 +197,7 @@ describe('publish cascade builders', () => {
         ])
     })
 
-    it('promotes a draft performer and nested draft Tal when publishing an act', () => {
+    it('promotes a canvas performer and nested draft Tal when publishing an act', () => {
         const result = buildActPublishPayload({
             id: 'act-1',
             name: 'Review Flow',
@@ -221,24 +221,6 @@ describe('publish cascade builders', () => {
             username: 'acme',
             workingDir: '/tmp/workflows',
             drafts: {
-                'performer-draft-1': {
-                    id: 'performer-draft-1',
-                    kind: 'performer',
-                    name: 'Reviewer Performer',
-                    slug: 'reviewer-performer',
-                    description: 'Reviewer Performer',
-                    tags: ['performer'],
-                    content: {
-                        talRef: { kind: 'draft', draftId: 'tal-draft-1' },
-                        danceRefs: [],
-                        model: { provider: 'openai', modelId: 'gpt-5' },
-                        modelVariant: null,
-                        mcpServerNames: [],
-                        mcpBindingMap: {},
-                    },
-                    updatedAt: 1,
-                    saveState: 'saved',
-                },
                 'tal-draft-1': {
                     id: 'tal-draft-1',
                     kind: 'tal',
@@ -251,6 +233,110 @@ describe('publish cascade builders', () => {
                     saveState: 'saved',
                 },
             },
+            performers: [
+                {
+                    id: 'performer-1',
+                    name: 'Reviewer Performer',
+                    scope: 'shared',
+                    position: { x: 0, y: 0 },
+                    model: { provider: 'openai', modelId: 'gpt-5' },
+                    modelVariant: null,
+                    agentId: null,
+                    talRef: { kind: 'draft', draftId: 'tal-draft-1' },
+                    danceRefs: [],
+                    mcpServerNames: [],
+                    mcpBindingMap: {},
+                    declaredMcpConfig: null,
+                    danceDeliveryMode: 'auto',
+                    meta: {
+                        derivedFrom: 'draft:performer-draft-1',
+                        authoring: {
+                            slug: 'reviewer-performer',
+                            description: 'Reviewer Performer',
+                            tags: ['performer'],
+                        },
+                    },
+                },
+            ],
+        })
+
+        expect(result.payload).toMatchObject({
+            urn: 'act/@acme/workflows/review-flow',
+            payload: {
+                participants: [
+                    expect.objectContaining({
+                        key: 'Reviewer',
+                        performer: 'performer/@acme/workflows/reviewer-performer',
+                    }),
+                ],
+            },
+        })
+        expect(result.providedAssets.map((asset) => asset.urn)).toEqual([
+            'tal/@acme/workflows/reviewer-tal',
+            'performer/@acme/workflows/reviewer-performer',
+        ])
+    })
+
+    it('publishes unsaved canvas performers referenced by act participants', () => {
+        const result = buildActPublishPayload({
+            id: 'act-1',
+            name: 'Review Flow',
+            position: { x: 0, y: 0 },
+            width: 400,
+            height: 300,
+            participants: {
+                'participant-reviewer': {
+                    performerRef: { kind: 'draft', draftId: 'performer-1' },
+                    displayName: 'Reviewer',
+                    position: { x: 0, y: 0 },
+                },
+            },
+            relations: [],
+            createdAt: Date.now(),
+        }, {
+            slug: 'review-flow',
+            description: 'Review Flow',
+            tags: ['workflow'],
+        }, {
+            username: 'acme',
+            workingDir: '/tmp/workflows',
+            drafts: {
+                'tal-draft-1': {
+                    id: 'tal-draft-1',
+                    kind: 'tal',
+                    name: 'Reviewer Tal',
+                    slug: 'reviewer-tal',
+                    description: 'Reviewer Tal',
+                    tags: ['tal'],
+                    content: '# Review carefully',
+                    updatedAt: 1,
+                    saveState: 'saved',
+                },
+            },
+            performers: [
+                {
+                    id: 'performer-1',
+                    name: 'Reviewer Performer',
+                    scope: 'shared',
+                    position: { x: 0, y: 0 },
+                    model: { provider: 'openai', modelId: 'gpt-5' },
+                    modelVariant: null,
+                    agentId: null,
+                    talRef: { kind: 'draft', draftId: 'tal-draft-1' },
+                    danceRefs: [],
+                    mcpServerNames: [],
+                    mcpBindingMap: {},
+                    declaredMcpConfig: null,
+                    danceDeliveryMode: 'auto',
+                    meta: {
+                        authoring: {
+                            slug: 'reviewer-performer',
+                            description: 'Reviewer Performer',
+                            tags: ['performer'],
+                        },
+                    },
+                },
+            ],
         })
 
         expect(result.payload).toMatchObject({
@@ -286,24 +372,83 @@ describe('publish cascade builders', () => {
             },
             relations: [],
             createdAt: Date.now(),
-        }, {
-            'performer-draft-1': {
-                id: 'performer-draft-1',
-                kind: 'performer',
+        }, [
+            {
+                id: 'performer-1',
                 name: 'Reviewer Performer',
-                content: {
-                    talRef: null,
-                    danceRefs: [{ kind: 'draft', draftId: 'dance-draft-1' }],
-                    model: null,
-                    modelVariant: null,
-                    mcpServerNames: [],
-                    mcpBindingMap: {},
+                scope: 'shared',
+                position: { x: 0, y: 0 },
+                model: null,
+                modelVariant: null,
+                agentId: null,
+                talRef: null,
+                danceRefs: [{ kind: 'draft', draftId: 'dance-draft-1' }],
+                mcpServerNames: [],
+                mcpBindingMap: {},
+                declaredMcpConfig: null,
+                danceDeliveryMode: 'auto',
+                meta: {
+                    derivedFrom: 'draft:performer-draft-1',
                 },
-                updatedAt: 1,
-                saveState: 'saved',
             },
-        })).toEqual([
+        ], {})).toEqual([
             'Draft Dance refs are still attached inside this act. Export them, upload them to GitHub, import them from Asset Library, and re-apply them before publishing this act.',
+        ])
+    })
+
+    it('treats matching canvas performers as valid act publish dependencies', () => {
+        expect(getActPublishDependencyIssues({
+            id: 'act-1',
+            name: 'Review Flow',
+            position: { x: 0, y: 0 },
+            width: 400,
+            height: 300,
+            participants: {
+                'participant-reviewer': {
+                    performerRef: { kind: 'draft', draftId: 'performer-1' },
+                    displayName: 'Reviewer',
+                    position: { x: 0, y: 0 },
+                },
+            },
+            relations: [],
+            createdAt: Date.now(),
+        }, [
+            {
+                id: 'performer-1',
+                name: 'Reviewer Performer',
+                scope: 'shared',
+                position: { x: 0, y: 0 },
+                model: { provider: 'openai', modelId: 'gpt-5' },
+                modelVariant: null,
+                agentId: null,
+                talRef: { kind: 'registry', urn: 'tal/@user/project/reasoning' },
+                danceRefs: [],
+                mcpServerNames: [],
+                mcpBindingMap: {},
+                declaredMcpConfig: null,
+                danceDeliveryMode: 'auto',
+            },
+        ], {})).toEqual([])
+    })
+
+    it('reports missing canvas performers as act publish blockers', () => {
+        expect(getActPublishDependencyIssues({
+            id: 'act-1',
+            name: 'Review Flow',
+            position: { x: 0, y: 0 },
+            width: 400,
+            height: 300,
+            participants: {
+                'participant-reviewer': {
+                    performerRef: { kind: 'draft', draftId: 'performer-1' },
+                    displayName: 'Reviewer',
+                    position: { x: 0, y: 0 },
+                },
+            },
+            relations: [],
+            createdAt: Date.now(),
+        }, [], {})).toEqual([
+            'Participant "Reviewer" is missing its performer on the canvas. Re-attach the performer before publishing this act.',
         ])
     })
 })

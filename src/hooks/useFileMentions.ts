@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type RefObject } from 'react'
+import { useState, useEffect, useRef, type RefObject } from 'react'
 import { api } from '../api'
 
 export interface FileMention {
@@ -16,9 +16,9 @@ export function useFileMentions(externalInputRef?: RefObject<HTMLTextAreaElement
     const fallbackRef = useRef<HTMLTextAreaElement>(null)
     const inputRef = externalInputRef || fallbackRef
 
-    const mentionRegex = /#([a-zA-Z0-9_\-\.\/]*)$/
+    const mentionRegex = /#([a-zA-Z0-9_./-]*)$/
 
-    const checkMention = useCallback((value?: string, cursorPosition?: number | null) => {
+    function checkMention(value?: string, cursorPosition?: number | null) {
         const input = inputRef.current
         const sourceValue = typeof value === 'string' ? value : input?.value
         const cursor = typeof cursorPosition === 'number' ? cursorPosition : input?.selectionStart
@@ -34,7 +34,7 @@ export function useFileMentions(externalInputRef?: RefObject<HTMLTextAreaElement
             setMentionQuery(null)
             setMentionResults([])
         }
-    }, [])
+    }
 
     useEffect(() => {
         if (mentionQuery === null) return
@@ -59,7 +59,7 @@ export function useFileMentions(externalInputRef?: RefObject<HTMLTextAreaElement
         }
     }, [mentionQuery])
 
-    const extractMentionText = useCallback(() => {
+    function extractMentionText() {
         if (!inputRef.current) return null
         const cursor = inputRef.current.selectionStart
         const text = inputRef.current.value
@@ -76,7 +76,7 @@ export function useFileMentions(externalInputRef?: RefObject<HTMLTextAreaElement
         setMentionResults([])
 
         return newText
-    }, [])
+    }
 
     return {
         inputRef,
@@ -86,6 +86,6 @@ export function useFileMentions(externalInputRef?: RefObject<HTMLTextAreaElement
         setMentionIndex,
         checkMention,
         extractMentionText,
-        setIsMentioning
+        setIsMentioning,
     }
 }

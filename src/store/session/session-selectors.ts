@@ -13,6 +13,8 @@ import type { ChatMessage } from '../../types'
 import type { SessionStatus } from './types'
 import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'
 import { mergeSystemPrefixMessages } from '../../lib/chat-messages'
+import { parseActParticipantChatKey } from '../../../shared/chat-targets'
+import { canAbortSessionExecution, resolveSessionActivity } from './session-activity'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_TODOS: Todo[] = []
@@ -39,7 +41,13 @@ export function selectChatKeyForSession(state: StudioState, sessionId: string): 
 
 export type SessionStreamTarget =
     | { kind: 'performer'; performerId: string }
-    | { kind: 'act-participant'; chatKey: string }
+    | {
+        kind: 'act-participant'
+        chatKey: string
+        actId: string
+        threadId: string
+        participantKey: string
+    }
 
 /**
  * Resolve a sessionId to a SessionStreamTarget for event routing.
@@ -49,8 +57,9 @@ export function selectStreamTarget(state: StudioState, sessionId: string): Sessi
     const chatKey = selectChatKeyForSession(state, sessionId)
     if (!chatKey) return null
 
-    if (chatKey.startsWith('act:')) {
-        return { kind: 'act-participant', chatKey }
+    const actTarget = parseActParticipantChatKey(chatKey)
+    if (actTarget) {
+        return { kind: 'act-participant', chatKey, ...actTarget }
     }
     return { kind: 'performer', performerId: chatKey }
 }
@@ -100,7 +109,37 @@ export function selectSessionStatus(state: StudioState, sessionId: string): Sess
  * Check if a session is currently loading (busy).
  */
 export function selectSessionIsLoading(state: StudioState, sessionId: string): boolean {
-    return !!state.sessionLoading[sessionId]
+    return resolveSessionActivity({
+        loading: !!state.sessionLoading[sessionId],
+        status: state.seStatuses[sessionId],
+        messages: state.seMessages[sessionId] || EMPTY_MESSAGES,
+        permission: state.sePermissions[sessionId] || null,
+        question: state.seQuestions[sessionId] || null,
+    }).isActive
+}
+
+export function selectSessionCanAbort(state: StudioState, sessionId: string): boolean {
+    return canAbortSessionExecution({
+        loading: !!state.sessionLoading[sessionId],
+        status: state.seStatuses[sessionId],
+        messages: state.seMessages[sessionId] || EMPTY_MESSAGES,
+        permission: state.sePermissions[sessionId] || null,
+        question: state.seQuestions[sessionId] || null,
+    })
+}
+
+export function selectSessionIsMutating(state: StudioState, sessionId: string): boolean {
+    return !!state.sessionMutationPending[sessionId]
+}
+
+export function selectSessionActivityKind(state: StudioState, sessionId: string) {
+    return resolveSessionActivity({
+        loading: !!state.sessionLoading[sessionId],
+        status: state.seStatuses[sessionId],
+        messages: state.seMessages[sessionId] || EMPTY_MESSAGES,
+        permission: state.sePermissions[sessionId] || null,
+        question: state.seQuestions[sessionId] || null,
+    }).kind
 }
 
 /**
@@ -109,7 +148,7 @@ export function selectSessionIsLoading(state: StudioState, sessionId: string): b
  */
 export function selectChatKeyIsLoading(state: StudioState, chatKey: string): boolean {
     const sessionId = selectSessionIdForChatKey(state, chatKey)
-    return !!(sessionId && state.sessionLoading[sessionId])
+    return !!(sessionId && selectSessionIsLoading(state, sessionId))
 }
 
 // ── Dock state ──
@@ -147,6 +186,9 @@ export function selectChatSessionState(state: StudioState, chatKey: string) {
         messages: selectMessagesForChatKey(state, chatKey),
         prefixCount: selectPrefixCountForChatKey(state, chatKey),
         isLoading: selectChatKeyIsLoading(state, chatKey),
+        canAbort: sessionId ? selectSessionCanAbort(state, sessionId) : false,
+        isMutating: sessionId ? selectSessionIsMutating(state, sessionId) : false,
+        activityKind: sessionId ? selectSessionActivityKind(state, sessionId) : 'idle',
         status: sessionId ? selectSessionStatus(state, sessionId) : IDLE_STATUS,
         permission: sessionId ? selectPendingPermission(state, sessionId) : null,
         question: sessionId ? selectPendingQuestion(state, sessionId) : null,

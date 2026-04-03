@@ -117,15 +117,21 @@ export function buildInstalledDeleteCascade(
 
 /**
  * Build a state patch that cleans up Act references after a canvas performer is deleted.
- * Canvas performers use draftId = performer.id in Act participant refs.
+ * Act participant refs can point to either the live performer id or a linked draft id.
  */
 export function buildPerformerDeleteCascade(
-    performerId: string,
+    performer: Pick<PerformerNode, 'id' | 'meta'>,
     acts: WorkspaceAct[],
 ): { acts?: WorkspaceAct[]; workspaceDirty?: boolean } {
+    const draftIds = new Set<string>([performer.id])
+    const derivedFrom = performer.meta?.derivedFrom?.trim()
+    if (derivedFrom?.startsWith('draft:')) {
+        draftIds.add(derivedFrom.slice('draft:'.length))
+    }
+
     const updated = acts.map((act) =>
         removeActParticipants(act, (_key, binding) =>
-            binding.performerRef.kind === 'draft' && binding.performerRef.draftId === performerId,
+            binding.performerRef.kind === 'draft' && draftIds.has(binding.performerRef.draftId),
         ),
     )
     if (updated.some((a, i) => a !== acts[i])) {

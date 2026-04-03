@@ -149,12 +149,14 @@ actRuntimeThreads.get('/api/act/:actId/thread/:threadId', async (c) => {
 
 actRuntimeThreads.get('/api/act/:actId/thread/:threadId/events', async (c) => {
     const threadId = c.req.param('threadId')
-    const count = parseInt(c.req.query('count') || '50', 10)
+    const parsedCount = parseInt(c.req.query('count') || '50', 10)
+    const count = Number.isFinite(parsedCount) ? parsedCount : 50
+    const before = Math.max(0, parseInt(c.req.query('before') || '0', 10) || 0)
     try {
-        return c.json(await getActRuntimeService(requestWorkingDir(c)).getRecentEvents(threadId, count))
+        return c.json(await getActRuntimeService(requestWorkingDir(c)).getRecentEvents(threadId, count, before))
     } catch {
         // Thread may not exist after server restart — return empty events
-        return c.json({ ok: true, events: [] })
+        return c.json({ ok: true, events: [], total: 0, hasMore: false, nextBefore: 0 })
     }
 })
 

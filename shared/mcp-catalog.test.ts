@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergeMcpToolOverrides } from './mcp-catalog'
+import { mergeMcpToolOverrides } from './mcp-catalog.js'
 
 describe('mergeMcpToolOverrides', () => {
     it('replaces Studio-managed MCP tool globs and preserves unrelated tool config', () => {

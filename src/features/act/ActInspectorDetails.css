@@ -3,10 +3,15 @@
 
 /* Item Header (Performer / Edge detail) */
 .act-panel__item-header {
+    position: sticky;
+    top: var(--act-panel-sticky-offset, 0px);
+    z-index: 2;
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 10px 14px;
+    padding: 10px 12px;
+    background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+    backdrop-filter: blur(10px);
     border-bottom: 1px solid color-mix(in srgb, var(--border-main) 50%, transparent);
 }
 
@@ -33,6 +38,8 @@
 .act-panel__item-name--edge {
     cursor: default;
     font-size: 12px;
+    line-height: 1.4;
+    white-space: normal;
 }
 
 .act-panel__item-name--edge:hover {
@@ -124,10 +131,13 @@
     display: flex;
     align-items: center;
     gap: 4px;
+    width: 100%;
     padding: 5px 6px;
+    border: 0;
     background: var(--bg-hover);
     border-radius: 5px;
     font-size: 11px;
+    text-align: left;
     cursor: pointer;
     transition: background 0.15s;
 }
@@ -147,6 +157,11 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.act-panel__edge-inline-arrow {
+    color: var(--text-muted);
+    margin: 0 6px;
 }
 
 .act-panel__edge-badge {
@@ -172,10 +187,10 @@
 /* Toggle group (invocation, session) */
 .act-panel__toggle-group {
     display: flex;
-    gap: 2px;
+    gap: 4px;
     background: var(--bg-hover);
-    border-radius: 6px;
-    padding: 2px;
+    border-radius: 10px;
+    padding: 3px;
 }
 
 .act-panel__toggle {
@@ -209,6 +224,7 @@
 /* Stat grid */
 .act-panel__stat-grid {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
@@ -218,9 +234,26 @@
     gap: 4px;
     font-size: 11px;
     color: var(--text-muted);
-    padding: 4px 8px;
+    min-height: 34px;
+    padding: 6px 9px;
     background: var(--bg-hover);
-    border-radius: 5px;
+    border-radius: 9px;
+    border: 1px solid color-mix(in srgb, var(--border-light) 75%, transparent);
+}
+
+.act-panel__stat--wide {
+    width: 100%;
+}
+
+.act-panel__content--detail {
+    padding: 0;
+}
+
+.act-panel__detail-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 12px 14px;
 }
 
 /* Tags */
@@ -232,10 +265,10 @@
 
 .act-panel__tag {
     font-size: 10px;
-    padding: 2px 6px;
+    padding: 3px 7px;
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     color: var(--accent);
-    border-radius: 3px;
+    border-radius: 999px;
     cursor: pointer;
     transition: opacity 0.12s ease;
 }
@@ -328,21 +361,172 @@
 
 /* Subscription sub-fields */
 .act-panel__sub-field {
-    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
 }
 
 .act-panel__sub-label {
     display: block;
     font-size: 10px;
     color: var(--text-muted);
-    margin-bottom: 3px;
 }
 
 .act-panel__sub-input-row {
-    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.act-panel__sub-input-row > *:first-child {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.act-panel__sub-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.act-panel__sub-meta {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--text-muted);
+    line-height: 1.35;
 }
 
 .act-panel__input--small {
     font-size: 11px;
     padding: 4px 6px;
+}
+
+.act-panel__action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    min-width: 54px;
+    padding: 6px 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border-main));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.act-panel__action-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border-main));
+}
+
+.act-panel__action-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.act-panel__empty--inline {
+    line-height: 1.35;
+}
+
+.act-panel__checkbox-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--border-light) 85%, transparent);
+    background: color-mix(in srgb, var(--bg-hover) 66%, transparent);
+    cursor: pointer;
+}
+
+.act-panel__checkbox-card input {
+    margin: 2px 0 0;
+    accent-color: var(--accent);
+}
+
+.act-panel__checkbox-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.act-panel__checkbox-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.act-panel__checkbox-description {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.act-panel__relation-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.act-panel__endpoint-chip {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    max-width: calc(50% - 20px);
+    padding: 6px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-panel) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border-light) 85%, transparent);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.act-panel__edge-dir--large {
+    font-size: 14px;
+}
+
+@container (max-width: 340px) {
+    .act-panel__detail-stack {
+        padding: 10px;
+    }
+
+    .act-panel__item-header {
+        padding: 10px;
+    }
+
+    .act-panel__sub-heading {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+    }
+
+    .act-panel__sub-input-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .act-panel__action-btn {
+        width: 100%;
+    }
+
+    .act-panel__endpoint-chip {
+        max-width: calc(50% - 16px);
+        padding: 5px 7px;
+    }
+
+    .act-panel__relation-summary {
+        gap: 6px;
+    }
 }

@@ -22,6 +22,18 @@ import {
 import { preparePendingRuntimeExecution } from '../runtime-execution'
 
 export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
+    const runSessionMutation = async <T>(
+        sessionId: string,
+        action: () => Promise<T>,
+    ) => {
+        get().setSessionMutationPending(sessionId, true)
+        try {
+            return await action()
+        } finally {
+            get().setSessionMutationPending(sessionId, false)
+        }
+    }
+
     const createFreshSession = async (
         performerId: string,
         options?: {
@@ -118,6 +130,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                 try {
                     await api.chat.abort(sessionId)
                     await syncPerformerMessages(set, get, performerId, sessionId)
+                    get().setSessionStatus(sessionId, { type: 'idle' })
                     appendSystemNotice(get, performerId, 'Stopped the current turn.')
                 } catch (error) {
                     console.error('Failed to abort chat', error)
@@ -140,18 +153,17 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                 return
             }
 
-            get().setSessionLoading(sessionId, true)
             try {
-                const result = await api.chat.revert(sessionId, lastUser.id)
-                const revert = readSessionRevert(result)
-                if (revert) {
-                    get().setSessionRevert(sessionId, revert)
-                }
-                await syncPerformerMessages(set, get, performerId, sessionId)
+                await runSessionMutation(sessionId, async () => {
+                    const result = await api.chat.revert(sessionId, lastUser.id)
+                    const revert = readSessionRevert(result)
+                    if (revert) {
+                        get().setSessionRevert(sessionId, revert)
+                    }
+                    await syncPerformerMessages(set, get, performerId, sessionId)
+                })
             } catch (error) {
                 appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
-            } finally {
-                get().setSessionLoading(sessionId, false)
             }
         },
 
@@ -183,19 +195,18 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             const sessionId = state.chatKeyToSession[performerId]
             if (!sessionId) return
 
-            get().setSessionLoading(sessionId, true)
             try {
-                const result = await api.chat.revert(sessionId, messageId)
-                const revert = readSessionRevert(result)
-                if (revert) {
-                    get().setSessionRevert(sessionId, revert)
-                }
-                await syncPerformerMessages(set, get, performerId, sessionId)
+                await runSessionMutation(sessionId, async () => {
+                    const result = await api.chat.revert(sessionId, messageId)
+                    const revert = readSessionRevert(result)
+                    if (revert) {
+                        get().setSessionRevert(sessionId, revert)
+                    }
+                    await syncPerformerMessages(set, get, performerId, sessionId)
+                })
             } catch (error) {
                 console.error('Failed to revert session', error)
                 appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
-            } finally {
-                get().setSessionLoading(sessionId, false)
             }
         },
 
@@ -210,30 +221,29 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             const messages = state.seMessages[sessionId] || selectMessagesForChatKey(state, performerId)
             const nextUserMessage = messages.find((message) => message.role === 'user' && message.id > messageId)
 
-            get().setSessionLoading(sessionId, true)
             try {
-                if (state.seStatuses[sessionId]?.type && state.seStatuses[sessionId].type !== 'idle') {
-                    await api.chat.abort(sessionId).catch(() => {})
-                }
-
-                if (!nextUserMessage) {
-                    await api.chat.unrevert(sessionId)
-                    get().clearSessionRevert(sessionId)
-                } else {
-                    const result = await api.chat.revert(sessionId, nextUserMessage.id)
-                    const nextRevert = readSessionRevert(result)
-                    if (nextRevert) {
-                        get().setSessionRevert(sessionId, nextRevert)
-                    } else {
-                        get().clearSessionRevert(sessionId)
+                await runSessionMutation(sessionId, async () => {
+                    if (state.seStatuses[sessionId]?.type && state.seStatuses[sessionId].type !== 'idle') {
+                        await api.chat.abort(sessionId).catch(() => {})
                     }
-                }
-                await syncPerformerMessages(set, get, performerId, sessionId)
+
+                    if (!nextUserMessage) {
+                        await api.chat.unrevert(sessionId)
+                        get().clearSessionRevert(sessionId)
+                    } else {
+                        const result = await api.chat.revert(sessionId, nextUserMessage.id)
+                        const nextRevert = readSessionRevert(result)
+                        if (nextRevert) {
+                            get().setSessionRevert(sessionId, nextRevert)
+                        } else {
+                            get().clearSessionRevert(sessionId)
+                        }
+                    }
+                    await syncPerformerMessages(set, get, performerId, sessionId)
+                })
             } catch (error) {
                 console.error('Failed to restore reverted message', error)
                 appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
-            } finally {
-                get().setSessionLoading(sessionId, false)
             }
         },
 

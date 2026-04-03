@@ -12,6 +12,9 @@ import {
     sanitizeMcpBindingMap,
 } from './performers-publish'
 
+export const PERFORMER_DEFAULT_WIDTH = 320
+export const PERFORMER_DEFAULT_HEIGHT = 400
+
 export function createPerformerNode(input: {
     id: string
     name: string
@@ -44,8 +47,8 @@ export function createPerformerNode(input: {
         id: input.id,
         name: input.name,
         position: { x: input.x, y: input.y },
-        width: 320,
-        height: 400,
+        width: PERFORMER_DEFAULT_WIDTH,
+        height: PERFORMER_DEFAULT_HEIGHT,
         scope: input.scope || 'shared',
         model: input.model || null,
         ...(input.modelPlaceholder ? { modelPlaceholder: input.modelPlaceholder } : {}),

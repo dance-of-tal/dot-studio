@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergePendingOptimisticUserMessages } from './chat-messages'
+import { mergeLiveSessionSnapshot, mergePendingOptimisticUserMessages } from './chat-messages'
 import type { ChatMessage } from '../types'
 
 describe('mergePendingOptimisticUserMessages', () => {
@@ -40,5 +40,67 @@ describe('mergePendingOptimisticUserMessages', () => {
         }
 
         expect(mergePendingOptimisticUserMessages([], [optimistic], false)).toEqual([])
+    })
+})
+
+describe('mergeLiveSessionSnapshot', () => {
+    it('keeps the longer local assistant content while the session is still loading', () => {
+        const serverMessage: ChatMessage = {
+            id: 'msg-1',
+            role: 'assistant',
+            content: 'Hello\nWorld',
+            timestamp: 2_000,
+        }
+        const currentMessage: ChatMessage = {
+            id: 'msg-1',
+            role: 'assistant',
+            content: 'Hello\nWorld\nMore detail',
+            timestamp: 2_000,
+        }
+
+        expect(mergeLiveSessionSnapshot([serverMessage], [currentMessage], {
+            preserveOptimisticUserMessages: true,
+            preserveStreamingAssistantMessages: true,
+        })).toEqual([
+            currentMessage,
+        ])
+    })
+
+    it('preserves a local assistant message that is missing from a lagging snapshot while loading', () => {
+        const currentMessage: ChatMessage = {
+            id: 'msg-1',
+            role: 'assistant',
+            content: 'Partial assistant reply',
+            timestamp: 2_000,
+        }
+
+        expect(mergeLiveSessionSnapshot([], [currentMessage], {
+            preserveOptimisticUserMessages: true,
+            preserveStreamingAssistantMessages: true,
+        })).toEqual([
+            currentMessage,
+        ])
+    })
+
+    it('uses the server snapshot once the session is no longer loading', () => {
+        const serverMessage: ChatMessage = {
+            id: 'msg-1',
+            role: 'assistant',
+            content: 'Hello',
+            timestamp: 2_000,
+        }
+        const currentMessage: ChatMessage = {
+            id: 'msg-1',
+            role: 'assistant',
+            content: 'Hello\nWorld\nMore detail',
+            timestamp: 2_000,
+        }
+
+        expect(mergeLiveSessionSnapshot([serverMessage], [currentMessage], {
+            preserveOptimisticUserMessages: false,
+            preserveStreamingAssistantMessages: false,
+        })).toEqual([
+            serverMessage,
+        ])
     })
 })

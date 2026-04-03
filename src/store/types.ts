@@ -276,7 +276,7 @@ export interface ActSlice {
     toggleActVisibility: (id: string) => void
 
     // ── Participant Binding (ref-based) ─────────
-    bindPerformerToAct: (actId: string, performerRef: WorkspaceActParticipantBinding['performerRef']) => string
+    bindPerformerToAct: (actId: string, performerRef: WorkspaceActParticipantBinding['performerRef']) => string | null
     attachPerformerRefToAct: (actId: string, performerRef: WorkspaceActParticipantBinding['performerRef']) => string | null
     attachPerformerToAct: (actId: string, performerId: string) => string | null
     autoLayoutActParticipants: (actId: string) => void

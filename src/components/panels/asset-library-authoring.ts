@@ -1,12 +1,13 @@
 // Asset authoring and draft payload builders for the Asset Library
 
-import type { AssetCard, DraftAsset } from '../../types'
+import type { DraftAsset } from '../../types'
+import type { LibraryAsset } from './asset-panel-types'
 import type { InstalledKind } from './asset-library-utils'
 
 export function buildDraftAssetCards(
     drafts: Record<string, DraftAsset>,
     installedKind: InstalledKind,
-): AssetCard[] {
+): LibraryAsset[] {
 
     return Object.values(drafts)
         .filter((draft): draft is DraftAsset => !!draft && draft.kind === installedKind && draft.saveState === 'saved')

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -9,6 +10,7 @@ import './MarkdownRenderer.css';
 interface MarkdownRendererProps {
     content: string
     showThinking?: boolean
+    streaming?: boolean
 }
 
 type CodeElementProps = {
@@ -24,11 +26,21 @@ function toCodeText(value: unknown): string {
 }
 
 /** Separate thinking/reasoning text from the actual response */
-function splitThinking(content: string): { thinking: string | null; response: string } {
+export function splitThinking(
+    content: string,
+    options: { streaming?: boolean } = {},
+): { thinking: string | null; response: string } {
     // Detect a leading <think> block even if there is leading whitespace or tag attributes.
     const thinkMatch = content.match(/^\s*<think(?:\s[^>]*)?>([\s\S]*?)<\/think>\s*([\s\S]*)$/i)
     if (thinkMatch) {
         return { thinking: thinkMatch[1].trim(), response: thinkMatch[2].trim() }
+    }
+
+    if (options.streaming) {
+        const partialThinkMatch = content.match(/^\s*<think(?:\s[^>]*)?>([\s\S]*)$/i)
+        if (partialThinkMatch) {
+            return { thinking: partialThinkMatch[1].trimStart(), response: '' }
+        }
     }
 
     return { thinking: null, response: content }
@@ -76,8 +88,8 @@ function ThinkingBlock({ content }: { content: string }) {
     )
 }
 
-export default function MarkdownRenderer({ content, showThinking = true }: MarkdownRendererProps) {
-    const { thinking, response } = splitThinking(content)
+export default function MarkdownRenderer({ content, showThinking = true, streaming = false }: MarkdownRendererProps) {
+    const { thinking, response } = splitThinking(content, { streaming })
     const visibleThinking = showThinking ? thinking : null
 
     return (

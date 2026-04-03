@@ -119,12 +119,12 @@ export interface ActParticipantBinding {
 // ── Act Safety Config (runtime-only, not in asset) ──────
 
 export interface ActSafetyConfig {
-    maxEvents?: number                   // Act Thread total event cap. Default 500
-    maxMessagesPerPair?: number          // per performer-pair message cap. Default 50
-    maxBoardUpdatesPerKey?: number       // per board key update cap. Default 100
-    quietWindowMs?: number               // idle quiet window. Default 60s
-    threadTimeoutMs?: number             // Thread timeout. Default 30 min
-    loopDetectionThreshold?: number      // ping-pong detection threshold. Default 5
+    maxEvents?: number                   // Act Thread total event cap. Default 300
+    maxMessagesPerPair?: number          // per performer-pair message cap. Default 20
+    maxBoardUpdatesPerKey?: number       // per board key update cap. Default 50
+    quietWindowMs?: number               // idle quiet window. Default 45s
+    threadTimeoutMs?: number             // Thread timeout. Default 15 min
+    loopDetectionThreshold?: number      // ping-pong detection threshold. Default 4
 }
 
 // ── Act Definition ──────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronDown, RotateCcw } from 'lucide-react'
 import './SessionRevertDock.css'
 
@@ -20,11 +20,9 @@ export function SessionRevertDock({
     disabled = false,
     onRestore,
 }: SessionRevertDockProps) {
-    const [collapsed, setCollapsed] = useState(true)
-
-    useEffect(() => {
-        setCollapsed(true)
-    }, [items.length, items[0]?.id])
+    const itemSignature = `${items.length}:${items[0]?.id || ''}`
+    const [expandedSignature, setExpandedSignature] = useState<string | null>(null)
+    const collapsed = expandedSignature !== itemSignature
 
     const summary = useMemo(() => (
         items.length === 1
@@ -43,7 +41,7 @@ export function SessionRevertDock({
             <button
                 className="session-revert-dock__header"
                 type="button"
-                onClick={() => setCollapsed((value) => !value)}
+                onClick={() => setExpandedSignature((current) => current === itemSignature ? null : itemSignature)}
             >
                 <span className="session-revert-dock__summary">{summary}</span>
                 {collapsed && preview ? (

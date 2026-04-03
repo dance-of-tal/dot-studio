@@ -36,6 +36,8 @@ export default function ActParticipantBindingView() {
         : `Draft: ${binding.performerRef.draftId}`
 
     const subscriptions = binding.subscriptions || {}
+    const messageTags = subscriptions.messageTags || []
+    const callboardKeys = getCallboardKeys(subscriptions)
     const availableMessageSources = Object.keys(act.participants)
         .filter((key) => key !== participantKey)
         .map((key) => ({ key, label: resolveActParticipantLabel(act, key, performers) }))
@@ -65,9 +67,10 @@ export default function ActParticipantBindingView() {
     }
 
     return (
-        <div className="act-panel__content">
+        <div className="act-panel__content act-panel__content--detail">
             <div className="act-panel__item-header">
                 <button
+                    type="button"
                     className="icon-btn"
                     title="Back to Act Config"
                     onClick={() => openActEditor(activeActId, 'act')}
@@ -79,6 +82,7 @@ export default function ActParticipantBindingView() {
                     {resolveActParticipantLabel(act, participantKey, performers)}
                 </span>
                 <button
+                    type="button"
                     className="icon-btn act-panel__danger-btn"
                     title="Remove participant"
                     onClick={() => {
@@ -90,129 +94,178 @@ export default function ActParticipantBindingView() {
                 </button>
             </div>
 
-            <div className="act-panel__section">
-                <div className="act-panel__stat-grid">
-                    <div className="act-panel__stat">
-                        <Hexagon size={11} />
-                        <span>{refLabel}</span>
+            <div className="act-panel__detail-stack">
+                <div className="act-panel__section act-panel__section--card">
+                    <label className="act-panel__label"><Hexagon size={11} /> Binding</label>
+                    <div className="act-panel__stat-grid">
+                        <div className="act-panel__stat act-panel__stat--wide">
+                            <Hexagon size={11} />
+                            <span>{refLabel}</span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div className="act-panel__section">
-                <label className="act-panel__label"><ArrowRightLeft size={11} /> Relations ({relatedRelations.length})</label>
-                {relatedRelations.length > 0 ? (
-                    <div className="act-panel__list">
-                        {relatedRelations.map((relation) => {
-                            const otherKey = relation.between[0] === participantKey ? relation.between[1] : relation.between[0]
-                            return (
-                                <div
-                                    key={relation.id}
-                                    className="act-panel__edge-link"
-                                    onClick={() => openActRelationEditor(activeActId, relation.id)}
-                                    title="Click to edit relation"
-                                >
-                                    <span className="act-panel__edge-dir">
-                                        {relation.direction === 'both' ? '↔' : '→'}
+                <div className="act-panel__section act-panel__section--card">
+                    <label className="act-panel__label"><ArrowRightLeft size={11} /> Relations ({relatedRelations.length})</label>
+                    {relatedRelations.length > 0 ? (
+                        <div className="act-panel__list">
+                            {relatedRelations.map((relation) => {
+                                const otherKey = relation.between[0] === participantKey ? relation.between[1] : relation.between[0]
+                                return (
+                                    <button
+                                        key={relation.id}
+                                        type="button"
+                                        className="act-panel__edge-link"
+                                        onClick={() => openActRelationEditor(activeActId, relation.id)}
+                                        title="Click to edit relation"
+                                    >
+                                        <span className="act-panel__edge-dir">
+                                            {relation.direction === 'both' ? '↔' : '→'}
+                                        </span>
+                                        <span className="act-panel__edge-target">{resolveActParticipantLabel(act, otherKey, performers)}</span>
+                                        <span className="act-panel__edge-badge">
+                                            {relation.direction}
+                                        </span>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    ) : (
+                        <span className="act-panel__empty">No relations defined</span>
+                    )}
+                </div>
+
+                <div className="act-panel__section act-panel__section--card">
+                    <label className="act-panel__label">Subscriptions</label>
+                    <span className="act-panel__hint">Click any chip to remove it.</span>
+
+                    <div className="act-panel__sub-field">
+                        <div className="act-panel__sub-heading">
+                            <span className="act-panel__sub-label">Messages From</span>
+                            <span className="act-panel__sub-meta">Only wake for specific teammates.</span>
+                        </div>
+                        {(subscriptions.messagesFrom || []).length > 0 ? (
+                            <div className="act-panel__tags">
+                                {(subscriptions.messagesFrom || []).map((value) => (
+                                    <span key={value} className="act-panel__tag" onClick={() => removeSubItem('messagesFrom', value)}>
+                                        {resolveActParticipantLabel(act, value, performers)} ×
                                     </span>
-                                    <span className="act-panel__edge-target">{resolveActParticipantLabel(act, otherKey, performers)}</span>
-                                    <span className="act-panel__edge-badge">
-                                        {relation.direction}
+                                ))}
+                            </div>
+                        ) : (
+                            <span className="act-panel__empty act-panel__empty--inline">No teammate filters yet.</span>
+                        )}
+                        <div className="act-panel__sub-input-row">
+                            <select
+                                className="act-panel__input act-panel__input--small"
+                                value={subInput.messagesFrom}
+                                onChange={(e) => setSubInput((prev) => ({ ...prev, messagesFrom: e.target.value }))}
+                            >
+                                <option value="">Select teammate…</option>
+                                {availableMessageSources.map((option) => (
+                                    <option key={option.key} value={option.key}>{option.label}</option>
+                                ))}
+                            </select>
+                            <button
+                                className="act-panel__action-btn"
+                                type="button"
+                                disabled={!subInput.messagesFrom}
+                                onClick={() => addSubItem('messagesFrom')}
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="act-panel__sub-field">
+                        <div className="act-panel__sub-heading">
+                            <span className="act-panel__sub-label">Message Tags</span>
+                            <span className="act-panel__sub-meta">Match tagged messages only.</span>
+                        </div>
+                        {messageTags.length > 0 ? (
+                            <div className="act-panel__tags">
+                                {messageTags.map((value) => (
+                                    <span key={value} className="act-panel__tag" onClick={() => removeSubItem('messageTags', value)}>
+                                        {value} ×
                                     </span>
-                                </div>
-                            )
-                        })}
+                                ))}
+                            </div>
+                        ) : (
+                            <span className="act-panel__empty act-panel__empty--inline">No message tags yet.</span>
+                        )}
+                        <div className="act-panel__sub-input-row">
+                            <input
+                                className="act-panel__input act-panel__input--small"
+                                value={subInput.messageTags}
+                                onChange={(e) => setSubInput((prev) => ({ ...prev, messageTags: e.target.value }))}
+                                onKeyDown={(e) => e.key === 'Enter' && addSubItem('messageTags')}
+                                placeholder="tag name"
+                            />
+                            <button
+                                className="act-panel__action-btn"
+                                type="button"
+                                disabled={!subInput.messageTags.trim()}
+                                onClick={() => addSubItem('messageTags')}
+                            >
+                                Add
+                            </button>
+                        </div>
                     </div>
-                ) : (
-                    <span className="act-panel__empty">No relations defined</span>
-                )}
-            </div>
 
-            <div className="act-panel__section">
-                <label className="act-panel__label">Subscriptions</label>
+                    <div className="act-panel__sub-field">
+                        <div className="act-panel__sub-heading">
+                            <span className="act-panel__sub-label">Shared Note Keys</span>
+                            <span className="act-panel__sub-meta">Listen to shared board updates.</span>
+                        </div>
+                        {callboardKeys.length > 0 ? (
+                            <div className="act-panel__tags">
+                                {callboardKeys.map((value: string) => (
+                                    <span key={value} className="act-panel__tag" onClick={() => removeSubItem('callboardKeys', value)}>
+                                        {value} ×
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <span className="act-panel__empty act-panel__empty--inline">No shared note keys yet.</span>
+                        )}
+                        <div className="act-panel__sub-input-row">
+                            <input
+                                className="act-panel__input act-panel__input--small"
+                                value={subInput.callboardKeys}
+                                onChange={(e) => setSubInput((prev) => ({ ...prev, callboardKeys: e.target.value }))}
+                                onKeyDown={(e) => e.key === 'Enter' && addSubItem('callboardKeys')}
+                                placeholder="key pattern (e.g. launch-brief, signal-*)"
+                            />
+                            <button
+                                className="act-panel__action-btn"
+                                type="button"
+                                disabled={!subInput.callboardKeys.trim()}
+                                onClick={() => addSubItem('callboardKeys')}
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
 
-                <div className="act-panel__sub-field">
-                    <span className="act-panel__sub-label">Messages From</span>
-                    <div className="act-panel__tags">
-                        {(subscriptions.messagesFrom || []).map((value) => (
-                            <span key={value} className="act-panel__tag" onClick={() => removeSubItem('messagesFrom', value)}>
-                                {resolveActParticipantLabel(act, value, performers)} ×
+                    <div className="act-panel__sub-field">
+                        <span className="act-panel__sub-label">Event Types</span>
+                        <label className="act-panel__checkbox-card">
+                            <input
+                                type="checkbox"
+                                checked={(subscriptions.eventTypes || []).includes('runtime.idle')}
+                                onChange={(e) => {
+                                    const nextEt: ('runtime.idle')[] = e.target.checked ? ['runtime.idle'] : []
+                                    updatePerformerBinding(activeActId, participantKey, {
+                                        subscriptions: nextSubscriptions(subscriptions, { eventTypes: nextEt }),
+                                    })
+                                }}
+                            />
+                            <span className="act-panel__checkbox-copy">
+                                <span className="act-panel__checkbox-title">runtime.idle</span>
+                                <span className="act-panel__checkbox-description">Wake when other participants go idle.</span>
                             </span>
-                        ))}
+                        </label>
                     </div>
-                    <div className="act-panel__sub-input-row">
-                        <select
-                            className="act-panel__input act-panel__input--small"
-                            value={subInput.messagesFrom}
-                            onChange={(e) => setSubInput((prev) => ({ ...prev, messagesFrom: e.target.value }))}
-                        >
-                            <option value="">Select teammate…</option>
-                            {availableMessageSources.map((option) => (
-                                <option key={option.key} value={option.key}>{option.label}</option>
-                            ))}
-                        </select>
-                        <button className="act-panel__toggle" type="button" onClick={() => addSubItem('messagesFrom')}>
-                            Add
-                        </button>
-                    </div>
-                </div>
-
-                <div className="act-panel__sub-field">
-                    <span className="act-panel__sub-label">Message Tags</span>
-                    <div className="act-panel__tags">
-                        {(subscriptions.messageTags || []).map((value) => (
-                            <span key={value} className="act-panel__tag" onClick={() => removeSubItem('messageTags', value)}>
-                                {value} ×
-                            </span>
-                        ))}
-                    </div>
-                    <div className="act-panel__sub-input-row">
-                        <input
-                            className="act-panel__input act-panel__input--small"
-                            value={subInput.messageTags}
-                            onChange={(e) => setSubInput((prev) => ({ ...prev, messageTags: e.target.value }))}
-                            onKeyDown={(e) => e.key === 'Enter' && addSubItem('messageTags')}
-                            placeholder="tag name"
-                        />
-                    </div>
-                </div>
-
-                <div className="act-panel__sub-field">
-                    <span className="act-panel__sub-label">Shared Note Keys</span>
-                    <div className="act-panel__tags">
-                        {getCallboardKeys(subscriptions).map((value: string) => (
-                            <span key={value} className="act-panel__tag" onClick={() => removeSubItem('callboardKeys', value)}>
-                                {value} ×
-                            </span>
-                        ))}
-                    </div>
-                    <div className="act-panel__sub-input-row">
-                        <input
-                            className="act-panel__input act-panel__input--small"
-                            value={subInput.callboardKeys}
-                            onChange={(e) => setSubInput((prev) => ({ ...prev, callboardKeys: e.target.value }))}
-                            onKeyDown={(e) => e.key === 'Enter' && addSubItem('callboardKeys')}
-                            placeholder="key pattern (e.g. launch-brief, signal-*)"
-                        />
-                    </div>
-                </div>
-
-                <div className="act-panel__sub-field">
-                    <span className="act-panel__sub-label">Event Types</span>
-                    <label className="act-panel__checkbox-row" style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px' }}>
-                        <input
-                            type="checkbox"
-                            checked={(subscriptions.eventTypes || []).includes('runtime.idle')}
-                            onChange={(e) => {
-                                const nextEt: ('runtime.idle')[] = e.target.checked ? ['runtime.idle'] : []
-                                updatePerformerBinding(activeActId, participantKey, {
-                                    subscriptions: nextSubscriptions(subscriptions, { eventTypes: nextEt }),
-                                })
-                            }}
-                        />
-                        <span>runtime.idle</span>
-                        <span className="act-panel__hint" style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>Wake when other participants go idle</span>
-                    </label>
                 </div>
             </div>
         </div>

@@ -17,6 +17,7 @@ type Props = {
     input: string
     setInput: (value: string) => void
     isLoading: boolean
+    canAbort: boolean
     modelConfigured: boolean
     sessionId: string | null
     selectedAgentId: string
@@ -66,6 +67,7 @@ export default function PerformerChatComposer(props: Props) {
         input,
         setInput,
         isLoading,
+        canAbort,
         modelConfigured,
         sessionId,
         selectedAgentId,
@@ -201,7 +203,7 @@ export default function PerformerChatComposer(props: Props) {
                     rows={1}
                     className="text-input"
                 />
-                {isLoading ? (
+                {canAbort ? (
                     <button className="send-btn abort" onClick={() => abortChat(performerId)} title="Abort generation">
                         <Square size={12} fill="currentColor" />
                     </button>

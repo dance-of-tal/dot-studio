@@ -90,6 +90,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
     const chatSession = useChatSession(id)
     const messages = chatSession.messages
     const isLoading = chatSession.isLoading
+    const canAbort = chatSession.canAbort
     const prefixCount = chatSession.prefixCount
     const modelConfigured = hasModelConfig(data.model)
     const isEditMode = editingTarget?.type === 'performer' && editingTarget.id === id
@@ -312,6 +313,7 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                         messages={messages}
                         prefixCount={prefixCount}
                         isLoading={isLoading}
+                        canAbort={canAbort}
                         sessionId={sessionId}
                         hasActiveSession={hasActiveSession}
                         modelConfigured={modelConfigured}

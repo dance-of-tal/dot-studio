@@ -354,6 +354,19 @@ export class ThreadManager {
         return runtime.eventLogger.tailEvents(count)
     }
 
+    async getRecentEventsPage(threadId: string, count: number = 50, before = 0) {
+        const runtime = this.threads.get(threadId)
+        if (!runtime) {
+            return {
+                events: [],
+                total: 0,
+                hasMore: false,
+                nextBefore: 0,
+            }
+        }
+        return runtime.eventLogger.readRecentEventsPage(count, before)
+    }
+
     // ── Board persistence ───────────────────────────
 
     async persistBoard(threadId: string): Promise<void> {

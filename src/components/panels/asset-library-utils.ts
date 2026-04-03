@@ -22,7 +22,7 @@ export function normalizeAuthor(author?: string) {
     return author.startsWith('@') ? author : `@${author}`
 }
 
-export function isInstalledAssetKind(kind: string) {
+export function isInstalledAssetKind(kind: string | null | undefined): kind is InstalledKind {
     return kind === 'tal' || kind === 'dance' || kind === 'performer' || kind === 'act'
 }
 

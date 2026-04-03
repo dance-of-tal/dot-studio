@@ -25,7 +25,7 @@ interface SettingsProvidersProps {
     disconnectProvider: (providerId: string, providerName: string) => void
     applyPickedModel: (model: ConnectedModel) => void
     retryBrowserOauth: (providerId: string) => void
-    projectMessage: string | null
+    statusMessage: string | null
 }
 
 const POPULAR_ORDER = [
@@ -39,7 +39,7 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
         visibleModelPickerModels, openApiKeyFlow, handleAuthMethod,
         handleOauthCallback, handleApiAuthSave, dismissOauthFlow,
         disconnectProvider, applyPickedModel,
-        retryBrowserOauth, projectMessage,
+        retryBrowserOauth, statusMessage,
     } = props
 
     const [connectTargetId, setConnectTargetId] = useState<string | null>(null)
@@ -81,7 +81,7 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                 <h2 className="stg-panel__title">Providers</h2>
             </div>
 
-            {projectMessage && <div className="stg-banner stg-banner--success">{projectMessage}</div>}
+            {statusMessage && <div className="stg-banner stg-banner--success">{statusMessage}</div>}
 
             {/* Connected providers */}
             <div className="stg-section">
