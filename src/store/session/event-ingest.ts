@@ -85,6 +85,8 @@ interface EventIngestOptions {
 }
 
 const HEARTBEAT_TIMEOUT_MS = 30_000
+const MAX_EVENTS_PER_FRAME = 100
+const FRAME_BUDGET_MS = 8
 
 function readSessionId(record: Record<string, unknown> | null | undefined): string | undefined {
     const sessionId = record?.sessionID ?? record?.sessionId
@@ -122,8 +124,13 @@ export function createEventIngest(options: EventIngestOptions) {
 
     // ── Buffer & RAF state ──
     let buffer: SSEEvent[] = []
+    let pendingFlushEvents: SSEEvent[] = []
     let rafId: number | null = null
     let heartbeatTimer: ReturnType<typeof setTimeout> | null = null
+
+    function now() {
+        return typeof performance !== 'undefined' ? performance.now() : Date.now()
+    }
 
     // ── Heartbeat tracking ──
 
@@ -212,13 +219,29 @@ export function createEventIngest(options: EventIngestOptions) {
 
     function flush() {
         rafId = null
-        if (buffer.length === 0) return
+        if (buffer.length > 0) {
+            pendingFlushEvents.push(...coalesceBuffer(buffer))
+            buffer = []
+        }
+        if (pendingFlushEvents.length === 0) return
 
-        const events = coalesceBuffer(buffer)
-        buffer = []
-
-        for (const event of events) {
+        const startedAt = now()
+        let processedCount = 0
+        while (
+            pendingFlushEvents.length > 0
+            && processedCount < MAX_EVENTS_PER_FRAME
+            && (now() - startedAt) < FRAME_BUDGET_MS
+        ) {
+            const event = pendingFlushEvents.shift()
+            if (!event) {
+                break
+            }
             processEvent(event)
+            processedCount += 1
+        }
+
+        if (pendingFlushEvents.length > 0 || buffer.length > 0) {
+            rafId = requestAnimationFrame(flush)
         }
     }
 
@@ -407,7 +430,17 @@ export function createEventIngest(options: EventIngestOptions) {
                 cancelAnimationFrame(rafId)
                 rafId = null
             }
-            flush()
+            if (buffer.length > 0) {
+                pendingFlushEvents.push(...coalesceBuffer(buffer))
+                buffer = []
+            }
+            while (pendingFlushEvents.length > 0) {
+                const event = pendingFlushEvents.shift()
+                if (!event) {
+                    break
+                }
+                processEvent(event)
+            }
         },
 
         /**
@@ -420,11 +453,12 @@ export function createEventIngest(options: EventIngestOptions) {
             }
             stopHeartbeat()
             buffer = []
+            pendingFlushEvents = []
         },
 
         /** Current buffer size (for testing). */
         get pendingCount() {
-            return buffer.length
+            return buffer.length + pendingFlushEvents.length
         },
     }
 }

@@ -14,6 +14,7 @@ const {
     listPendingPermissionsMock,
     resolveSessionMock,
     chatMessagesMock,
+    statusMock,
     lspStatusMock,
     compileMock,
     currentSources,
@@ -23,6 +24,7 @@ const {
     listPendingPermissionsMock: vi.fn(),
     resolveSessionMock: vi.fn(),
     chatMessagesMock: vi.fn(),
+    statusMock: vi.fn(),
     lspStatusMock: vi.fn(),
     compileMock: vi.fn(),
     currentSources: {
@@ -38,6 +40,7 @@ vi.mock('../api', () => ({
             listPendingPermissions: listPendingPermissionsMock,
             resolveSession: resolveSessionMock,
             messages: chatMessagesMock,
+            status: statusMock,
         },
         adapter: {
             events: adapterEventsMock,
@@ -101,8 +104,6 @@ function createBaseState(loadThreads: ReturnType<typeof vi.fn>): StudioState {
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
         focusSnapshot: null,
         canvasRevealTarget: null,
         inspectorFocus: null,
@@ -138,6 +139,7 @@ function createBaseState(loadThreads: ReturnType<typeof vi.fn>): StudioState {
         clearChatDraftMessages: vi.fn(),
         setSessionMessages: vi.fn(),
         setSessionLoading: vi.fn(),
+        setSessionStatus: vi.fn(),
     } as unknown as StudioState
 }
 
@@ -168,6 +170,9 @@ function createHarness(loadThreads: ReturnType<typeof vi.fn>) {
             return
         }
         delete state.sessionLoading[sessionId]
+    })
+    state.setSessionStatus = vi.fn((sessionId: string, status) => {
+        state.seStatuses[sessionId] = status
     })
 
     state = {
@@ -235,6 +240,7 @@ describe('integrationSlice act participant sync', () => {
             ],
             nextCursor: null,
         })
+        statusMock.mockReset().mockResolvedValue({ status: { type: 'idle' } })
         lspStatusMock.mockReset().mockResolvedValue([])
         compileMock.mockReset()
     })
@@ -398,9 +404,91 @@ describe('integrationSlice act participant sync', () => {
 
         expect(harness.get().chatKeyToSession[chatKey]).toBe('session-2')
         expect(harness.get().actThreads['act-1']?.[0]?.participantSessions?.['participant-2']).toBe('session-2')
-        expect(harness.get().sessionLoading['session-2']).toBe(true)
+        expect(harness.get().sessionLoading['session-2']).toBeUndefined()
+        expect(harness.get().seStatuses['session-2']).toEqual({ type: 'busy' })
         expect(harness.get().seMessages['session-2']?.[0]?.id).toBe('msg-1')
         expect(loadThreads).not.toHaveBeenCalled()
+
+        harness.get().cleanupRealtimeEvents()
+    })
+
+    it('recovers an act participant session to idle when realtime busy events arrive without a later session.idle event', async () => {
+        const loadThreads = vi.fn(async () => {})
+        const harness = createHarness(loadThreads)
+        const chatKey = 'act:act-1:thread:thread-1:participant:participant-2'
+
+        let statusCalls = 0
+        statusMock.mockImplementation(async () => {
+            statusCalls += 1
+            return {
+                status: { type: statusCalls === 1 ? 'busy' as const : 'idle' as const },
+            }
+        })
+        chatMessagesMock.mockResolvedValue({
+            messages: [
+                {
+                    id: 'msg-1',
+                    info: {
+                        id: 'msg-1',
+                        role: 'assistant',
+                        time: { created: 1000 },
+                    },
+                    parts: [
+                        { id: 'text-1', type: 'text', text: 'Recovered reply' },
+                    ],
+                },
+            ],
+            nextCursor: null,
+        })
+
+        harness.get().initRealtimeEvents()
+
+        emitEvent(currentSources.chat, {
+            type: 'session.status',
+            properties: {
+                sessionID: 'session-2',
+                ownerId: chatKey,
+                ownerKind: 'act',
+                status: { type: 'busy' },
+            },
+        })
+        emitEvent(currentSources.chat, {
+            type: 'message.updated',
+            properties: {
+                ownerId: chatKey,
+                ownerKind: 'act',
+                info: {
+                    sessionID: 'session-2',
+                    id: 'msg-1',
+                    role: 'assistant',
+                    time: { created: 1000 },
+                },
+            },
+        })
+        emitEvent(currentSources.chat, {
+            type: 'message.part.updated',
+            properties: {
+                ownerId: chatKey,
+                ownerKind: 'act',
+                part: {
+                    sessionID: 'session-2',
+                    messageID: 'msg-1',
+                    id: 'text-1',
+                    type: 'text',
+                    text: 'Recovered reply',
+                },
+            },
+        })
+
+        flushRAF()
+        await Promise.resolve()
+        await Promise.resolve()
+        await vi.advanceTimersByTimeAsync(2200)
+
+        expect(harness.get().chatKeyToSession[chatKey]).toBe('session-2')
+        expect(harness.get().sessionLoading['session-2']).toBeUndefined()
+        expect(harness.get().seStatuses['session-2']).toEqual({ type: 'idle' })
+        expect(harness.get().seMessages['session-2']?.[0]?.content).toBe('Recovered reply')
 
         harness.get().cleanupRealtimeEvents()
     })

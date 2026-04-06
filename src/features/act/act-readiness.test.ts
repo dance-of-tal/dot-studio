@@ -12,7 +12,6 @@ function makePerformer(overrides: Partial<PerformerNode> = {}): PerformerNode {
         talRef: null,
         danceRefs: [],
         mcpServerNames: [],
-        danceDeliveryMode: 'auto',
         ...overrides,
     }
 }
@@ -105,12 +104,18 @@ describe('evaluateActReadiness', () => {
         const performer = makePerformer({ id: 'p1', model: null })
         const act = makeAct({
             participants: {
-                'agent-a': { performerRef: { kind: 'draft', draftId: 'p1' }, position: { x: 0, y: 0 } },
+                'agent-a': {
+                    performerRef: { kind: 'draft', draftId: 'p1' },
+                    displayName: 'CEO',
+                    position: { x: 0, y: 0 },
+                },
             },
         })
         const result = evaluateActReadiness(act, [performer])
         expect(result.runnable).toBe(false)
-        expect(result.issues.some((i) => i.code === 'no-model-config')).toBe(true)
+        const issue = result.issues.find((i) => i.code === 'no-model-config')
+        expect(issue).toBeDefined()
+        expect(issue?.message).toBe('Participant "CEO" has no model configured')
     })
 
     it('returns warning for disconnected participant', () => {

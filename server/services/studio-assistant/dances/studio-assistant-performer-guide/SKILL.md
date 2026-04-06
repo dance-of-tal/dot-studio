@@ -20,6 +20,11 @@ Use this skill when you need the exact current mutation surface.
 - Prefer one dependency-ordered block over multiple loosely related blocks.
 
 ## Supported Action Families
+- CRUD coverage is fixed to all four authoring asset families:
+- `Tal` = local draft CRUD
+- `Dance` = local draft CRUD
+- `Performer` = current Stage CRUD
+- `Act` = current Stage CRUD
 - Install/import: `installRegistryAsset`, `addDanceFromGitHub`, `importInstalledPerformer`, `importInstalledAct`
 - Tal draft: `createTalDraft`, `updateTalDraft`, `deleteTalDraft`
 - Dance draft: `createDanceDraft`, `updateDanceDraft`, `deleteDanceDraft`
@@ -46,6 +51,7 @@ Use this skill when you need the exact current mutation surface.
 - `removeMcpServerNames`
 
 Rules:
+- For explicit Performer create, update, or delete requests, use the matching Performer action directly.
 - A new Performer should reflect the user's requested role and working style, not a generic placeholder.
 - If the user request implies a concrete Tal, Dance, or model choice, include it in the Performer setup.
 - If the user explicitly asks to omit Tal, Dance, or model setup, honor that omission.
@@ -79,6 +85,7 @@ For inline relations and `connectPerformers`, prefer:
 - `description`
 
 Rules:
+- For explicit Act create, update, or delete requests, use the matching Act action directly.
 - `actRules` must be a string array, not a single string.
 - The Act should reflect the user request in its participant set, role split, workflow shape, and actRules when requested.
 - If the Act needs missing participants, create those Performers first in cascade and make sure they also match the user intent.
@@ -112,9 +119,11 @@ Rules:
 - `callboardKeys` is the canonical field name.
 
 ## Install And Import
+- Install/import helpers are support paths, not CRUD for Tal, Dance, Performer, or Act.
 - Use `installRegistryAsset` when the user already knows a registry URN.
 - Use `addDanceFromGitHub` for GitHub or skills.sh dance installs.
 - Use `importInstalledPerformer` or `importInstalledAct` after install when the goal is to place that asset on the canvas.
+- Do not present `Save Local` or `Publish` as supported assistant CRUD operations.
 
 ## Asset Dialog
 - For Performer or Act creation requests, it is valid to use a short question-and-answer flow before mutating when important design choices are missing.

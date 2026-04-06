@@ -13,7 +13,6 @@ import {
     renameStudioChatSession,
     respondSessionPermission,
     revertStudioChatSession,
-    shareStudioChatSession,
     summarizeStudioChatSession,
     unrevertStudioChatSession,
     listPendingPermissions,
@@ -84,14 +83,6 @@ chatSessions.post('/api/chat/sessions/:id/permission/:pid/respond', async (c) =>
     const { response } = await c.req.json<{ response: 'once' | 'always' | 'reject' }>()
     try {
         return c.json(await respondSessionPermission(requestWorkingDir(c), c.req.param('id'), c.req.param('pid'), response))
-    } catch (err) {
-        return jsonOpencodeError(c, err)
-    }
-})
-
-chatSessions.post('/api/chat/sessions/:id/share', async (c) => {
-    try {
-        return c.json(await shareStudioChatSession(requestWorkingDir(c), c.req.param('id')))
     } catch (err) {
         return jsonOpencodeError(c, err)
     }

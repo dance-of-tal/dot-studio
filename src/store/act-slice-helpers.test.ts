@@ -113,7 +113,6 @@ describe('participant binding helpers', () => {
             talRef: null,
             danceRefs: [],
             mcpServerNames: [],
-            danceDeliveryMode: 'auto',
         },
         {
             id: 'performer-2',
@@ -124,7 +123,6 @@ describe('participant binding helpers', () => {
             talRef: null,
             danceRefs: [],
             mcpServerNames: [],
-            danceDeliveryMode: 'auto',
             meta: {
                 derivedFrom: 'performer://beta',
             },
@@ -249,9 +247,7 @@ describe('participant binding helpers', () => {
             selectedPerformerSessionId: 'session-1',
             activeThreadId: 'thread-1',
             activeThreadParticipantKey: 'alpha',
-            focusedPerformerId: 'performer-1',
-            focusedNodeType: 'performer',
-            focusSnapshot: { nodeId: 'act-1' },
+            focusSnapshot: { nodeId: 'act-1', type: 'act' },
             actEditorState: { actId: 'act-1', mode: 'participant', participantKey: 'alpha', relationId: null },
             actThreads: {
                 'act-1': [
@@ -269,8 +265,6 @@ describe('participant binding helpers', () => {
             actEditorState: { actId: 'act-1', mode: 'participant', participantKey: 'alpha', relationId: null },
             activeThreadId: 'thread-1',
             activeThreadParticipantKey: 'alpha',
-            focusedPerformerId: 'performer-1',
-            focusedNodeType: 'performer',
         })
     })
 

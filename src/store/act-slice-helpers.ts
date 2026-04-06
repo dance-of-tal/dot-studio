@@ -2,12 +2,19 @@ import { nanoid } from 'nanoid'
 import type { ActDefinition, AssetCard, AssetRef, PerformerNode, WorkspaceAct, WorkspaceActParticipantBinding, ActRelation } from '../types'
 import { api } from '../api'
 import { parseActAsset } from 'dance-of-tal/contracts'
-import { assetUrnDisplayName } from '../lib/asset-urn'
+import { assetUrnDisplayName, parseStudioAssetUrn } from '../lib/asset-urn'
 import { resolvePerformerFromActBinding } from '../lib/act-participants'
 import { resolvePreferredActThreadId } from '../lib/act-threads'
-import { PERFORMER_DEFAULT_HEIGHT, PERFORMER_DEFAULT_WIDTH } from '../lib/performers'
+import {
+    createPerformerNodeFromAsset,
+    normalizeAssetMcpForStudio,
+    normalizeAssetModelForStudio,
+    PERFORMER_DEFAULT_HEIGHT,
+    PERFORMER_DEFAULT_WIDTH,
+} from '../lib/performers'
 import { showToast } from '../lib/toast'
 import { buildActParticipantChatKey, parseActParticipantChatKey } from '../../shared/chat-targets'
+import { mcpServerNamesFromConfig } from '../../shared/mcp-catalog'
 import type { ActEditorState, StudioState } from './types'
 import { clearChatSessionView, registerSessionBinding, syncSessionSnapshot } from './session'
 
@@ -185,8 +192,6 @@ export function buildSelectActState(state: StudioState, actId: string | null) {
             selectedPerformerId: null,
             selectedPerformerSessionId: null,
             actEditorState: null,
-            focusedPerformerId: state.focusSnapshot ? state.focusedPerformerId : null,
-            focusedNodeType: state.focusSnapshot ? state.focusedNodeType : null,
         }
     }
 
@@ -203,8 +208,6 @@ export function buildSelectActState(state: StudioState, actId: string | null) {
         activeThreadParticipantKey: shouldPreserveParticipantSelection
             ? resolveValidActParticipantSelection(state, actId, state.activeThreadParticipantKey)
             : null,
-        focusedPerformerId: state.focusSnapshot ? state.focusedPerformerId : null,
-        focusedNodeType: state.focusSnapshot ? state.focusedNodeType : null,
     }
 }
 
@@ -320,7 +323,117 @@ export function autoLayoutBindings(bindings: Record<string, WorkspaceActParticip
     }))
 }
 
-export function importActFromAssetImpl(
+async function loadPerformerAssetDetailByUrn(urn: string): Promise<AssetCard | null> {
+    const parsed = parseStudioAssetUrn(urn)
+    if (!parsed || parsed.kind !== 'performer') {
+        return null
+    }
+
+    const author = parsed.author.replace(/^@/, '')
+    try {
+        return await api.assets.get('performer', author, parsed.path) as AssetCard
+    } catch {
+        try {
+            return await api.assets.getRegistry('performer', author, parsed.path) as AssetCard
+        } catch {
+            return null
+        }
+    }
+}
+
+async function buildMaterializedRegistryPerformers(
+    get: GetState,
+    participants: Record<string, WorkspaceActParticipantBinding>,
+    center: { x: number; y: number } | null,
+) {
+    const existingPerformers = get().performers
+    const seeds: Array<{
+        key: string
+        urn: string
+        binding: WorkspaceActParticipantBinding
+    }> = []
+
+    for (const [key, binding] of Object.entries(participants)) {
+        if (binding.performerRef.kind !== 'registry') continue
+
+        const urn = binding.performerRef.urn
+        const alreadyExists = existingPerformers.some((p) => p.meta?.derivedFrom === urn)
+        if (alreadyExists) continue
+
+        if (seeds.some((seed) => seed.urn === urn)) continue
+        seeds.push({ key, urn, binding })
+    }
+
+    if (seeds.length === 0) {
+        return []
+    }
+
+    const [runtimeModels, globalConfig, performerAssets] = await Promise.all([
+        api.models.list().catch(() => []),
+        api.config.getGlobal().catch(() => ({})),
+        Promise.all(seeds.map(async (seed) => loadPerformerAssetDetailByUrn(seed.urn))),
+    ])
+    const availableMcpServerNames = mcpServerNamesFromConfig(globalConfig)
+
+    return seeds.map((seed, index) => {
+        const detail = performerAssets[index]
+        const x = (center?.x ?? 400) + index * 340
+        const y = (center?.y ?? 300) + 350
+
+        if (detail) {
+            const normalized = normalizeAssetMcpForStudio(
+                normalizeAssetModelForStudio(detail, runtimeModels),
+                availableMcpServerNames,
+            )
+            const node = createPerformerNodeFromAsset({
+                id: nanoid(12),
+                asset: {
+                    ...normalized,
+                    name: resolveBindingDisplayName(seed.binding, seed.key),
+                },
+                x,
+                y,
+                hidden: true,
+            })
+            const authoring = {
+                ...(detail.slug ? { slug: detail.slug } : {}),
+                ...(detail.description ? { description: detail.description } : {}),
+                ...(Array.isArray(detail.tags) ? { tags: detail.tags } : {}),
+            }
+            return {
+                ...node,
+                meta: {
+                    ...node.meta,
+                    ...(Object.keys(authoring).length > 0 ? { authoring } : {}),
+                },
+            }
+        }
+
+        return {
+            id: nanoid(12),
+            name: resolveBindingDisplayName(seed.binding, seed.key),
+            position: { x, y },
+            width: PERFORMER_DEFAULT_WIDTH,
+            height: PERFORMER_DEFAULT_HEIGHT,
+            scope: 'shared' as const,
+            model: null,
+            talRef: null,
+            danceRefs: [],
+            mcpServerNames: [],
+            mcpBindingMap: {},
+            declaredMcpConfig: null,
+            hidden: true,
+            meta: {
+                derivedFrom: seed.urn,
+                authoring: {
+                    description: `Auto-created for Act participant "${seed.key}" (${seed.urn}). Configure a model to make this participant runnable.`,
+                },
+            },
+        }
+    })
+}
+
+export async function importActFromAssetImpl(
     get: GetState,
     set: SetState,
     asset: AssetCard,
@@ -404,52 +517,7 @@ export function importActFromAssetImpl(
         },
     }
 
-    // WS3: Auto-materialize hidden performer nodes for registry-bound participants.
-    // sendActMessage resolves performer by meta.derivedFrom === urn.
-    // Without a local performer node, registry-bound participants can't run.
-    const existingPerformers = get().performers
-    const materializedPerformers: import('../types').PerformerNode[] = []
-
-    for (const [key, binding] of Object.entries(participants)) {
-        if (binding.performerRef.kind !== 'registry') continue
-
-        const urn = binding.performerRef.urn
-        // Skip if a local performer already exists for this URN
-        const alreadyExists = existingPerformers.some(
-            (p) => p.meta?.derivedFrom === urn,
-        )
-        if (alreadyExists) continue
-
-        // Also skip if we already materialized one for this same URN in this import
-        if (materializedPerformers.some((p) => p.meta?.derivedFrom === urn)) continue
-
-        const performerNode: import('../types').PerformerNode = {
-            id: nanoid(12),
-            name: resolveBindingDisplayName(binding, key),
-            position: {
-                x: (center?.x ?? 400) + materializedPerformers.length * 340,
-                y: (center?.y ?? 300) + 350,
-            },
-            width: PERFORMER_DEFAULT_WIDTH,
-            height: PERFORMER_DEFAULT_HEIGHT,
-            scope: 'shared',
-            model: null,
-            talRef: null,
-            danceRefs: [],
-            mcpServerNames: [],
-            mcpBindingMap: {},
-            declaredMcpConfig: null,
-            danceDeliveryMode: 'auto',
-            hidden: true,
-            meta: {
-                derivedFrom: urn,
-                authoring: {
-                    description: `Auto-created for Act participant "${key}" (${urn}). Configure a model to make this participant runnable.`,
-                },
-            },
-        }
-        materializedPerformers.push(performerNode)
-    }
+    const materializedPerformers = await buildMaterializedRegistryPerformers(get, participants, center)
 
     set((state: StudioState) => ({
         acts: [...state.acts, nextAct],

@@ -11,6 +11,7 @@ import {
     tripParticipantCircuit,
 } from './wake-cascade.js'
 import { workspaceIdForDir } from '../../lib/config.js'
+import { serverDebug } from '../../lib/server-logger.js'
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unknown error'
@@ -81,9 +82,9 @@ class ActRuntimeService {
     private async ensureThreadsLoaded(): Promise<void> {
         if (this._threadsLoaded) return
         this._threadsLoaded = true
-        console.log(`[act-runtime] Loading persisted threads for workspace ${this.workingDir}`)
+        serverDebug('act-runtime', `Loading persisted threads for workspace ${this.workingDir}`)
         await this.threadManager.loadPersistedThreads()
-        console.log(`[act-runtime] Loaded ${this.threadManager.getActiveThreadCount()} threads`)
+        serverDebug('act-runtime', `Loaded ${this.threadManager.getActiveThreadCount()} threads`)
     }
 
     private getSafetyGuard(threadId: string): SafetyGuard {

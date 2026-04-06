@@ -15,6 +15,7 @@ import { SessionQueue } from './session-queue.js'
 import type { Mailbox } from './mailbox.js'
 import type { ThreadManager } from './thread-manager.js'
 import { ACT_AGENT_POSTURE } from '../../lib/act-session-policy.js'
+import { serverDebug } from '../../lib/server-logger.js'
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unknown error'
@@ -248,8 +249,9 @@ async function drainNextQueuedWake(
             continue
         }
 
-        console.log(
-            `[wake-cascade] Draining queued wake-up for "${next.participantKey}"${settledParticipantKey ? ` after "${settledParticipantKey}" settled` : ''}`,
+        serverDebug(
+            'wake-cascade',
+            `Draining queued wake-up for "${next.participantKey}"${settledParticipantKey ? ` after "${settledParticipantKey}" settled` : ''}`,
         )
         return injectWakeTarget(
             next.target,
@@ -318,7 +320,7 @@ async function injectWakeTarget(
                 sessionId = created.sessionId
                 // Persist the session mapping in the thread
                 await threadManager.getOrCreateSession(threadId, participantKey, () => sessionId!)
-                console.log(`[wake-cascade] Auto-created session ${sessionId} for participant "${participantKey}"`)
+                serverDebug('wake-cascade', `Auto-created session ${sessionId} for participant "${participantKey}"`)
             } catch (createErr) {
                 result.errors.push(`Failed to auto-create session for ${participantKey}: ${errorMessage(createErr)}`)
                 const drainResult = await drainParticipantQueueAfterSettlement(
@@ -403,7 +405,7 @@ async function injectWakeTarget(
                     providerID: performerConfig.model.provider,
                     modelID: performerConfig.model.modelId,
                 }
-                console.log(`[wake-cascade] Performer projection done for "${participantKey}" model=${performerConfig.model.modelId}`)
+                serverDebug('wake-cascade', `Performer projection done for "${participantKey}" model=${performerConfig.model.modelId}`)
             } catch (projErr) {
                 console.warn(`[wake-cascade] Performer projection failed for "${participantKey}", falling back to generic tools:`, projErr)
                 // Fallback: write generic Act tools only
@@ -415,7 +417,7 @@ async function injectWakeTarget(
             }
         } else {
             // No performer model — write generic Act tools only
-            console.warn(`[wake-cascade] No model config for "${participantKey}", using generic Act tools only`)
+            serverDebug('wake-cascade', `No model config for "${participantKey}", using generic Act tools only`)
             promptText = [collaborationPromptSection, prompt].filter(Boolean).join('\n\n---\n\n')
             await writeGenericActTools(
                 executionDir,
@@ -544,15 +546,18 @@ export async function processWakeCascade(
     const targets = routeEvent(event, actDefinition, mailbox, recentEvents)
     result.targets = targets
 
-    console.log(`[wake-cascade] Event type=${event.type} source=${event.source} → ${targets.length} targets: [${targets.map(t => t.participantKey).join(', ')}]`)
+    serverDebug(
+        'wake-cascade',
+        `Event type=${event.type} source=${event.source} -> ${targets.length} targets: [${targets.map(t => t.participantKey).join(', ')}]`,
+    )
     if (targets.length === 0) {
-        // Log why no targets matched
+        // Keep no-match diagnostics available only in verbose mode.
         for (const [key, binding] of Object.entries(actDefinition.participants)) {
             if (key === event.source) continue
             const hasSubs = !!binding.subscriptions
             const subKeys = binding.subscriptions ? JSON.stringify(binding.subscriptions) : 'none'
             const hasRelation = actDefinition.relations.some(r => r.between.includes(key) && r.between.includes(event.source || ''))
-            console.log(`[wake-cascade]   participant "${key}": subs=${hasSubs}(${subKeys}), relation=${hasRelation}`)
+            serverDebug('wake-cascade', `participant "${key}": subs=${hasSubs}(${subKeys}), relation=${hasRelation}`)
         }
     }
 

@@ -37,6 +37,7 @@ pnpm-debug.log*
 
 # Internal-only docs
 AGENT.md
+AGENTS.md
 REFACTOR.md
 prd/
 # doc/

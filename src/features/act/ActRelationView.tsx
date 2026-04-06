@@ -1,4 +1,5 @@
 import { ArrowRightLeft, ChevronLeft, Trash2, Hash } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import type { ActRelation } from '../../types'
 import { useStudioStore } from '../../store'
 import { resolveActParticipantLabel } from './participant-labels'
@@ -10,7 +11,14 @@ export default function ActRelationView() {
     const {
         acts, performers, actEditorState,
         updateRelation, removeRelation, openActEditor,
-    } = useStudioStore()
+    } = useStudioStore(useShallow((state) => ({
+        acts: state.acts,
+        performers: state.performers,
+        actEditorState: state.actEditorState,
+        updateRelation: state.updateRelation,
+        removeRelation: state.removeRelation,
+        openActEditor: state.openActEditor,
+    })))
 
     const activeActId = actEditorState?.actId || null
     const relationId = actEditorState?.mode === 'relation' ? actEditorState.relationId : null

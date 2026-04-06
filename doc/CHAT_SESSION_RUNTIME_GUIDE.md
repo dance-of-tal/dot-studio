@@ -219,6 +219,13 @@ Current server callers that should stay on the ownership service boundary:
 - `server/routes/act-runtime-tools.ts`
 - `server/services/workspace-service.ts`
 
+## Server Logging Defaults
+
+- default Hono/server terminal logging should stay quiet for successful fast requests
+- log request lines for `4xx`, `5xx`, and slow requests so operator-facing problems still surface in the terminal
+- Act runtime success-path diagnostics should stay behind `STUDIO_VERBOSE_SERVER_LOGS=1` instead of printing on every wake, projection, or tool call
+- warnings and errors that indicate degraded runtime behavior should continue to print by default
+
 ## Quick Checklist For Future Changes
 
 - Is the change using canonical `chatKey` identity?

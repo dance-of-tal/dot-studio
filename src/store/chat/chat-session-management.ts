@@ -1,16 +1,16 @@
+import { describeChatTarget } from '../../../shared/chat-targets'
 import { api } from '../../api'
-import { showToast } from '../../lib/toast'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
 import { hasModelConfig } from '../../lib/performers'
-import { describeChatTarget, isActParticipantChatKey } from '../../../shared/chat-targets'
+import { showToast } from '../../lib/toast'
 import {
-    getPerformerById,
-    getPerformerSessionId,
-    syncPerformerMessages,
+    getChatSessionId,
+    syncChatMessages,
     type ChatGet,
     type ChatSet,
 } from './chat-internals'
-import { resolveChatRuntimeTarget } from './chat-runtime-target'
+import type { ChatRuntimeConfig } from './chat-runtime-target'
+import { EMPTY_RUNTIME_CONFIG, resolveChatRuntimeTarget } from './chat-runtime-target'
 import {
     appendSystemNotice,
     clearChatSessionView,
@@ -35,29 +35,19 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
     }
 
     const createFreshSession = async (
-        performerId: string,
+        chatKey: string,
         options?: {
             resetMessages?: Array<{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }>
             actId?: string
             performerName?: string
             preserveDraftMessages?: boolean
         },
-    ) => {
-        const performer = getPerformerById(get, performerId)
-        const target = resolveChatRuntimeTarget(get, performerId)
-        const name = options?.performerName || target?.name || performer?.name || 'Untitled Performer'
-        const runtimeConfig = target?.runtimeConfig || {
-            talRef: null,
-            danceRefs: [],
-            model: null,
-            modelVariant: null,
-            agentId: 'build',
-            mcpServerNames: [],
-            danceDeliveryMode: 'auto' as const,
-            planMode: false,
-        }
+    ): Promise<{ sessionId: string | null; runtimeConfig: ChatRuntimeConfig }> => {
+        const target = resolveChatRuntimeTarget(get, chatKey)
+        const runtimeConfig = target?.runtimeConfig || EMPTY_RUNTIME_CONFIG
+        const name = options?.performerName || target?.name || 'Untitled Performer'
 
-        if (!hasModelConfig(runtimeConfig.model)) {
+        if (!target || target.notice || !hasModelConfig(runtimeConfig.model)) {
             return {
                 sessionId: null,
                 runtimeConfig,
@@ -65,7 +55,8 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         }
 
         const prepared = await preparePendingRuntimeExecution(get, {
-            performerId,
+            performerId: target.executionScope.performerId,
+            actId: target.executionScope.actId,
             runtimeConfig,
         })
         if (prepared.blocked) {
@@ -74,12 +65,13 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                 runtimeConfig,
             }
         }
-        const sessionId = await createFreshSessionBinding(set, get, describeChatTarget(performerId), {
+
+        const sessionId = await createFreshSessionBinding(set, get, describeChatTarget(chatKey), {
             title: name,
             clearDrafts: !options?.preserveDraftMessages,
         })
         get().setChatPrefixMessages(
-            performerId,
+            chatKey,
             options?.resetMessages?.filter((message) => message.role === 'system') || [],
         )
         if (options?.resetMessages) {
@@ -93,48 +85,48 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         }
     }
 
-    const detachPerformerSessionInternal = (performerId: string, notice?: string) => {
-        detachChatSession(set, get, performerId, { notice })
+    const detachChatSessionInternal = (chatKey: string, notice?: string) => {
+        detachChatSession(set, get, chatKey, { notice })
         set((state) => ({
-            selectedPerformerSessionId: state.selectedPerformerId === performerId ? null : state.selectedPerformerSessionId,
+            selectedPerformerSessionId: state.selectedPerformerId === chatKey ? null : state.selectedPerformerSessionId,
         }))
     }
 
     return {
         createFreshSession,
-        clearSession: (performerId: string) => {
-            clearChatSessionView(get, performerId)
+        clearSession: (chatKey: string) => {
+            clearChatSessionView(get, chatKey)
             set((state) => ({
-                selectedPerformerSessionId: state.selectedPerformerId === performerId ? null : state.selectedPerformerSessionId,
+                selectedPerformerSessionId: state.selectedPerformerId === chatKey ? null : state.selectedPerformerSessionId,
             }))
         },
 
-        startNewSession: async (performerId: string) => {
-            const target = resolveChatRuntimeTarget(get, performerId)
-            if (!target || !hasModelConfig(target.runtimeConfig.model)) {
-                get().clearSession(performerId)
+        startNewSession: async (chatKey: string) => {
+            const target = resolveChatRuntimeTarget(get, chatKey)
+            if (!target || target.notice || !hasModelConfig(target.runtimeConfig.model)) {
+                get().clearSession(chatKey)
                 return
             }
             try {
-                await createFreshSession(performerId, { resetMessages: [] })
+                await createFreshSession(chatKey, { resetMessages: [] })
                 set({ selectedPerformerSessionId: null })
             } catch (error) {
                 console.error('Failed to start new session', error)
-                appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
+                appendSystemNotice(get, chatKey, formatStudioApiErrorMessage(error))
             }
         },
 
-        abortChat: async (performerId: string) => {
-            const sessionId = getPerformerSessionId(get, performerId)
+        abortChat: async (chatKey: string) => {
+            const sessionId = getChatSessionId(get, chatKey)
             if (sessionId) {
                 try {
                     await api.chat.abort(sessionId)
-                    await syncPerformerMessages(set, get, performerId, sessionId)
+                    await syncChatMessages(set, get, chatKey, sessionId)
                     get().setSessionStatus(sessionId, { type: 'idle' })
-                    appendSystemNotice(get, performerId, 'Stopped the current turn.')
+                    appendSystemNotice(get, chatKey, 'Stopped the current turn.')
                 } catch (error) {
                     console.error('Failed to abort chat', error)
-                    appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
+                    appendSystemNotice(get, chatKey, formatStudioApiErrorMessage(error))
                 }
             }
             if (sessionId) {
@@ -142,14 +134,14 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             }
         },
 
-        undoLastTurn: async (performerId: string) => {
-            const sessionId = getPerformerSessionId(get, performerId)
+        undoLastTurn: async (chatKey: string) => {
+            const sessionId = getChatSessionId(get, chatKey)
             if (!sessionId) return
-            const lastUser = [...selectMessagesForChatKey(get(), performerId)]
+            const lastUser = [...selectMessagesForChatKey(get(), chatKey)]
                 .reverse()
                 .find((message) => message.role === 'user')
             if (!lastUser) {
-                appendSystemNotice(get, performerId, 'No prior turn is available to undo.')
+                appendSystemNotice(get, chatKey, 'No prior turn is available to undo.')
                 return
             }
 
@@ -160,17 +152,15 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                     if (revert) {
                         get().setSessionRevert(sessionId, revert)
                     }
-                    await syncPerformerMessages(set, get, performerId, sessionId)
+                    await syncChatMessages(set, get, chatKey, sessionId)
                 })
             } catch (error) {
-                appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
+                appendSystemNotice(get, chatKey, formatStudioApiErrorMessage(error))
             }
         },
 
         rehydrateSessions: async () => {
-            const state = get()
-            const sessionEntries = Object.entries(state.chatKeyToSession)
-                .filter(([chatKey]) => !isActParticipantChatKey(chatKey))
+            const sessionEntries = Object.entries(get().chatKeyToSession)
             if (sessionEntries.length === 0) return
 
             const staleChatKeys: string[] = []
@@ -178,21 +168,19 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                 try {
                     await syncSessionSnapshot(set, get, chatKey, sessionId)
                 } catch (error) {
-                    console.error(`Failed to rehydrate session for performer ${chatKey}:`, error)
+                    console.error(`Failed to rehydrate session for ${chatKey}:`, error)
                     staleChatKeys.push(chatKey)
                 }
             }
 
-            if (staleChatKeys.length > 0) {
-                for (const chatKey of staleChatKeys) {
-                    detachChatSession(set, get, chatKey)
-                }
+            for (const chatKey of staleChatKeys) {
+                detachChatSession(set, get, chatKey)
             }
         },
 
-        revertSession: async (performerId: string, messageId: string) => {
+        revertSession: async (chatKey: string, messageId: string) => {
             const state = get()
-            const sessionId = state.chatKeyToSession[performerId]
+            const sessionId = state.chatKeyToSession[chatKey]
             if (!sessionId) return
 
             try {
@@ -202,23 +190,23 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                     if (revert) {
                         get().setSessionRevert(sessionId, revert)
                     }
-                    await syncPerformerMessages(set, get, performerId, sessionId)
+                    await syncChatMessages(set, get, chatKey, sessionId)
                 })
             } catch (error) {
                 console.error('Failed to revert session', error)
-                appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
+                appendSystemNotice(get, chatKey, formatStudioApiErrorMessage(error))
             }
         },
 
-        restoreRevertedMessage: async (performerId: string, messageId: string) => {
+        restoreRevertedMessage: async (chatKey: string, messageId: string) => {
             const state = get()
-            const sessionId = state.chatKeyToSession[performerId]
+            const sessionId = state.chatKeyToSession[chatKey]
             if (!sessionId) return
 
             const revert = state.sessionReverts[sessionId]
             if (!revert?.messageId) return
 
-            const messages = state.seMessages[sessionId] || selectMessagesForChatKey(state, performerId)
+            const messages = state.seMessages[sessionId] || selectMessagesForChatKey(state, chatKey)
             const nextUserMessage = messages.find((message) => message.role === 'user' && message.id > messageId)
 
             try {
@@ -239,23 +227,23 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                             get().clearSessionRevert(sessionId)
                         }
                     }
-                    await syncPerformerMessages(set, get, performerId, sessionId)
+                    await syncChatMessages(set, get, chatKey, sessionId)
                 })
             } catch (error) {
                 console.error('Failed to restore reverted message', error)
-                appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
+                appendSystemNotice(get, chatKey, formatStudioApiErrorMessage(error))
             }
         },
 
-        getDiff: async (performerId: string) => {
+        getDiff: async (chatKey: string) => {
             const state = get()
-            const sessionId = state.chatKeyToSession[performerId]
+            const sessionId = state.chatKeyToSession[chatKey]
             if (!sessionId) return []
             try {
                 return await api.chat.diff(sessionId)
             } catch (error) {
                 console.error('Failed to get diff', error)
-                appendSystemNotice(get, performerId, formatStudioApiErrorMessage(error))
+                appendSystemNotice(get, chatKey, formatStudioApiErrorMessage(error))
                 return []
             }
         },
@@ -295,7 +283,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             }
         },
 
-        detachPerformerSession: detachPerformerSessionInternal,
+        detachPerformerSession: detachChatSessionInternal,
     }
 }
 

@@ -27,8 +27,6 @@ function createTestState(): StudioState {
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
         focusSnapshot: null,
         canvasRevealTarget: null,
         inspectorFocus: null,
@@ -70,6 +68,7 @@ function createTestState(): StudioState {
         assistantAvailableModels: [],
         appliedAssistantActionMessageIds: {},
         assistantActionResults: {},
+        recordStudioChange: (() => 'lazy_projection') as StudioState['recordStudioChange'],
     } as unknown as StudioState
 }
 
@@ -106,11 +105,10 @@ describe('workspace focus actions', () => {
         expect(state.performers.find((entry) => entry.id === 'performer-2')?.hidden).toBe(true)
     })
 
-    it('restores performer size from snapshot even if focusedPerformerId was cleared', () => {
+    it('restores performer size from the snapshot when exiting focus mode', () => {
         const harness = createStateHarness()
 
         enterFocusModeImpl(harness.get, harness.set, 'performer-1', 'performer', { width: 900, height: 700 })
-        harness.set({ focusedPerformerId: null })
 
         exitFocusModeImpl(harness.get, harness.set)
 
@@ -126,19 +124,18 @@ describe('workspace focus actions', () => {
         expect(state.isTerminalOpen).toBe(true)
     })
 
-    it('switches focus targets using the snapshot node id when the focused id is stale', () => {
+    it('switches focus targets by restoring the baseline layout before refocusing', () => {
         const harness = createStateHarness()
 
         enterFocusModeImpl(harness.get, harness.set, 'performer-1', 'performer', { width: 900, height: 700 })
-        harness.set({ focusedPerformerId: null })
 
         switchFocusTargetImpl(harness.get, harness.set, 'performer-2', 'performer')
 
         const state = harness.read()
         expect(state.focusSnapshot?.nodeId).toBe('performer-2')
-        expect(state.focusedPerformerId).toBe('performer-2')
         expect(state.performers.find((entry) => entry.id === 'performer-1')).toMatchObject({
             hidden: true,
+            position: { x: 0, y: 0 },
             width: 320,
             height: 400,
         })
@@ -146,6 +143,46 @@ describe('workspace focus actions', () => {
             hidden: false,
             width: 900,
             height: 700,
+        })
+    })
+
+    it('switches from an act focus target back to a performer using the restored baseline state', () => {
+        const harness = createStateHarness({
+            ...createTestState(),
+            acts: [{
+                id: 'act-1',
+                name: 'Control',
+                position: { x: 220, y: 160 },
+                width: ACT_DEFAULT_WIDTH,
+                height: ACT_DEFAULT_EXPANDED_HEIGHT,
+                participants: {},
+                relations: [],
+                createdAt: Date.now(),
+                hidden: false,
+            }],
+        } as StudioState)
+
+        enterFocusModeImpl(harness.get, harness.set, 'act-1', 'act', { width: 1000, height: 760 })
+        switchFocusTargetImpl(harness.get, harness.set, 'performer-2', 'performer')
+
+        const state = harness.read()
+        expect(state.focusSnapshot).toMatchObject({
+            nodeId: 'performer-2',
+            type: 'performer',
+            assetLibraryOpen: true,
+            assistantOpen: true,
+            terminalOpen: true,
+        })
+        expect(state.performers.find((entry) => entry.id === 'performer-2')).toMatchObject({
+            hidden: false,
+            width: 1000,
+            height: 760,
+        })
+        expect(state.acts.find((entry) => entry.id === 'act-1')).toMatchObject({
+            hidden: true,
+            width: ACT_DEFAULT_WIDTH,
+            height: ACT_DEFAULT_EXPANDED_HEIGHT,
+            position: { x: 220, y: 160 },
         })
     })
 
@@ -166,13 +203,10 @@ describe('workspace focus actions', () => {
         } as StudioState)
 
         enterFocusModeImpl(harness.get, harness.set, 'act-1', 'act', { width: 1000, height: 760 })
-        harness.set({ focusedPerformerId: null })
 
         const patch = buildExitFocusModeState(harness.read())
 
         expect(patch).toMatchObject({
-            focusedPerformerId: null,
-            focusedNodeType: null,
             focusSnapshot: null,
             isAssetLibraryOpen: true,
             isAssistantOpen: true,
@@ -203,7 +237,6 @@ describe('workspace focus actions', () => {
 
         const state = harness.read()
         expect(state.focusSnapshot).toBeNull()
-        expect(state.focusedPerformerId).toBeNull()
         expect(state.selectedMarkdownEditorId).toBe('markdown-editor-1')
         expect(state.isAssetLibraryOpen).toBe(true)
         expect(state.isAssistantOpen).toBe(true)

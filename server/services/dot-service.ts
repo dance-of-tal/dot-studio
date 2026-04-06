@@ -209,6 +209,7 @@ export async function publishDotAsset(cwd: string, input: {
         slug: input.slug,
         payload: input.payload,
         tags: input.tags,
+        providedAssets: input.providedAssets,
         auth,
     })
     invalidate('assets')

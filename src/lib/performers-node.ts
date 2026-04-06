@@ -2,7 +2,6 @@
 
 import type {
     AssetRef,
-    DanceDeliveryMode,
     ModelConfig,
     PerformerNode,
     PerformerScope,
@@ -30,7 +29,6 @@ export function createPerformerNode(input: {
     mcpServerNames?: string[]
     mcpBindingMap?: Record<string, string>
     declaredMcpConfig?: Record<string, unknown> | null
-    danceDeliveryMode?: DanceDeliveryMode
     planMode?: boolean
     hidden?: boolean
     meta?: {
@@ -59,7 +57,6 @@ export function createPerformerNode(input: {
         mcpServerNames: Array.from(new Set(input.mcpServerNames || [])),
         mcpBindingMap: sanitizeMcpBindingMap(input.mcpBindingMap),
         declaredMcpConfig: input.declaredMcpConfig || null,
-        danceDeliveryMode: input.danceDeliveryMode || 'auto',
         ...(input.planMode ? { planMode: input.planMode } : {}),
         ...(input.hidden !== undefined ? { hidden: input.hidden } : {}),
         ...(input.meta ? { meta: input.meta } : {}),
@@ -135,7 +132,6 @@ export function clonePerformerNode(input: {
         mcpServerNames: input.source.mcpServerNames,
         mcpBindingMap: input.source.mcpBindingMap,
         declaredMcpConfig: input.source.declaredMcpConfig,
-        danceDeliveryMode: input.source.danceDeliveryMode,
         planMode: input.source.planMode,
         hidden: input.hidden ?? input.source.hidden,
         meta: {

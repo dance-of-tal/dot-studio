@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import { ReactFlow, Background, ConnectionMode } from '@xyflow/react';
 import type { Node, NodeTypes, ReactFlowInstance } from '@xyflow/react';
 import { useDroppable } from '@dnd-kit/core';
+import { useShallow } from 'zustand/react/shallow';
 import '@xyflow/react/dist/style.css';
 import { useStudioStore } from '../../store';
 import { resolvePerformerRuntimeConfig } from '../../lib/performers';
@@ -14,7 +15,7 @@ import { useCanvasFlowHandlers } from './useCanvasFlowHandlers';
 import { useCanvasTransformTarget } from './useCanvasTransformTarget';
 import { useCanvasFocusFit } from './useCanvasFocusFit';
 import { useCanvasPresentation } from './useCanvasPresentation';
-import { resolveFocusNodeId } from '../../lib/focus-utils';
+import { resolveFocusNodeId, syncFocusViewport } from '../../lib/focus-utils';
 import OffsetBezierEdge from './OffsetBezierEdge';
 
 const WorkspaceToolbar = lazy(() => import('../toolbar/WorkspaceToolbar'));
@@ -47,13 +48,11 @@ const edgeTypes = {
 export default function CanvasArea() {
     const {
         performers,
-
         markdownEditors,
         canvasTerminals,
         trackingWindow,
         drafts,
         workingDir,
-        focusedPerformerId,
         focusSnapshot,
         canvasRevealTarget,
         selectedMarkdownEditorId,
@@ -73,7 +72,6 @@ export default function CanvasArea() {
         selectMarkdownEditor,
         selectPerformer,
         setActiveChatPerformer,
-
         closeEditor,
         closeActEditor,
         openActEditor,
@@ -87,7 +85,47 @@ export default function CanvasArea() {
         updateActSize,
         attachPerformerToAct,
         addRelation,
-    } = useStudioStore();
+    } = useStudioStore(useShallow((state) => ({
+        performers: state.performers,
+        markdownEditors: state.markdownEditors,
+        canvasTerminals: state.canvasTerminals,
+        trackingWindow: state.trackingWindow,
+        drafts: state.drafts,
+        workingDir: state.workingDir,
+        focusSnapshot: state.focusSnapshot,
+        canvasRevealTarget: state.canvasRevealTarget,
+        selectedMarkdownEditorId: state.selectedMarkdownEditorId,
+        editingTarget: state.editingTarget,
+        updatePerformerPosition: state.updatePerformerPosition,
+        updatePerformerSize: state.updatePerformerSize,
+        updateMarkdownEditorPosition: state.updateMarkdownEditorPosition,
+        updateMarkdownEditorSize: state.updateMarkdownEditorSize,
+        updateCanvasTerminalPosition: state.updateCanvasTerminalPosition,
+        updateCanvasTerminalSize: state.updateCanvasTerminalSize,
+        updateCanvasTerminalSession: state.updateCanvasTerminalSession,
+        removeCanvasTerminal: state.removeCanvasTerminal,
+        closeTrackingWindow: state.closeTrackingWindow,
+        updateTrackingWindowPosition: state.updateTrackingWindowPosition,
+        updateTrackingWindowSize: state.updateTrackingWindowSize,
+        selectedPerformerId: state.selectedPerformerId,
+        selectMarkdownEditor: state.selectMarkdownEditor,
+        selectPerformer: state.selectPerformer,
+        setActiveChatPerformer: state.setActiveChatPerformer,
+        closeEditor: state.closeEditor,
+        closeActEditor: state.closeActEditor,
+        openActEditor: state.openActEditor,
+        setCanvasCenter: state.setCanvasCenter,
+        acts: state.acts,
+        actEditorState: state.actEditorState,
+        selectedActId: state.selectedActId,
+        selectAct: state.selectAct,
+        openActRelationEditor: state.openActRelationEditor,
+        updateActPosition: state.updateActPosition,
+        updateActSize: state.updateActSize,
+        attachPerformerToAct: state.attachPerformerToAct,
+        addRelation: state.addRelation,
+    })));
+    const focusedPerformerId = focusSnapshot?.type === 'performer' ? focusSnapshot.nodeId : null;
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<Node> | null>(null);
     const { active, isOver: isCanvasDropOver, setNodeRef: setCanvasDropRef } = useDroppable({
         id: 'canvas-root-dropzone',
@@ -152,7 +190,6 @@ export default function CanvasArea() {
     })
 
     useCanvasFocusFit({
-        focusedPerformerId,
         focusSnapshot,
         canvasRevealTarget,
         reactFlowInstance,
@@ -164,7 +201,7 @@ export default function CanvasArea() {
             return
         }
 
-        const focusNodeId = resolveFocusNodeId(focusSnapshot, focusedPerformerId)
+        const focusNodeId = resolveFocusNodeId(focusSnapshot)
         if (!focusNodeId) {
             return
         }
@@ -214,7 +251,9 @@ export default function CanvasArea() {
                 }
             })
 
-            reactFlowInstance?.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 200 })
+            if (reactFlowInstance) {
+                syncFocusViewport(reactFlowInstance)
+            }
         }
 
         const scheduleSync = () => {
@@ -234,7 +273,7 @@ export default function CanvasArea() {
             }
             observer.disconnect()
         }
-    }, [focusSnapshot, focusedPerformerId, reactFlowInstance])
+    }, [focusSnapshot, reactFlowInstance])
 
     const {
         onEdgeClick,

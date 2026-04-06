@@ -28,8 +28,11 @@ import {
 import {
     addActRelationImpl,
 } from './act-slice-actions'
+import {
+    collectVisibleCanvasNodeRects,
+    resolveCanvasNodeSpawnPosition,
+} from '../lib/canvas-node-layout'
 import { buildExitFocusModeState } from './workspace-focus-actions'
-import { resolveCanvasSpawnPosition } from './workspace-helpers'
 import { clearChatSessionView } from './session'
 
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
@@ -46,9 +49,10 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
 
     addAct: (name) => {
         const id = nanoid(12)
-        const spawnPosition = resolveCanvasSpawnPosition({
-            canvasCenter: get().canvasCenter,
-            existingCount: get().acts.length,
+        const state = get()
+        const spawnPosition = resolveCanvasNodeSpawnPosition({
+            canvasCenter: state.canvasCenter,
+            occupiedRects: collectVisibleCanvasNodeRects(state.performers, state.acts),
             width: ACT_DEFAULT_WIDTH,
             height: ACT_DEFAULT_EXPANDED_HEIGHT,
         })
@@ -66,6 +70,11 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
             acts: [...s.acts, act],
             selectedActId: id,
             selectedPerformerId: null,
+            canvasRevealTarget: {
+                id,
+                type: 'act',
+                nonce: (s.canvasRevealTarget?.nonce || 0) + 1,
+            },
             actEditorState: null,
             activeThreadId: null,
             activeThreadParticipantKey: null,
@@ -393,8 +402,8 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         get().recordStudioChange({ kind: 'act', actIds: [id] })
     },
 
-    importActFromAsset: (asset) => {
-        importActFromAssetImpl(get, set, asset, {
+    importActFromAsset: async (asset) => {
+        await importActFromAssetImpl(get, set, asset, {
             width: ACT_DEFAULT_WIDTH,
             height: ACT_DEFAULT_EXPANDED_HEIGHT,
         })

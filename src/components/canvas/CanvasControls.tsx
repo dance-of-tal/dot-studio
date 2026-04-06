@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import type { Viewport } from '@xyflow/react'
 import { Maximize, Maximize2, Minimize } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
 import { getCanvasViewportSize, scheduleFitView } from '../../lib/focus-utils'
 
@@ -17,7 +18,14 @@ export default function CanvasControls() {
         enterFocusMode,
         exitFocusMode,
         exitActLayoutMode,
-    } = useStudioStore()
+    } = useStudioStore(useShallow((state) => ({
+        selectedPerformerId: state.selectedPerformerId,
+        selectedActId: state.selectedActId,
+        focusSnapshot: state.focusSnapshot,
+        enterFocusMode: state.enterFocusMode,
+        exitFocusMode: state.exitFocusMode,
+        exitActLayoutMode: state.exitActLayoutMode,
+    })))
     const isFocusActive = !!focusSnapshot
 
     const toggleFitView = useCallback(() => {

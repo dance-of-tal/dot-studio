@@ -40,6 +40,7 @@ export function evaluateActReadiness(
 ): ActReadinessResult {
     const issues: ActReadinessIssue[] = []
     const participantKeys = Object.keys(act.participants)
+    const participantLabel = (key: string) => act.participants[key]?.displayName?.trim() || key
 
     // ── 1. No participants ──────────────────────────────
     if (participantKeys.length === 0) {
@@ -94,7 +95,7 @@ export function evaluateActReadiness(
             issues.push({
                 code: 'unresolved-performer',
                 severity: 'error',
-                message: `Participant "${key}" has no matching performer on the canvas`,
+                message: `Participant "${participantLabel(key)}" has no matching performer on the canvas`,
                 focus: { mode: 'participant', participantKey: key },
             })
             continue // skip model check if performer not found
@@ -105,7 +106,7 @@ export function evaluateActReadiness(
             issues.push({
                 code: 'no-model-config',
                 severity: 'error',
-                message: `Participant "${key}" has no model configured`,
+                message: `Participant "${participantLabel(key)}" has no model configured`,
                 focus: { mode: 'participant', participantKey: key },
             })
         }
@@ -123,7 +124,7 @@ export function evaluateActReadiness(
                 issues.push({
                     code: 'disconnected-participant',
                     severity: 'warning',
-                    message: `Participant "${key}" is not connected by any relation`,
+                    message: `Participant "${participantLabel(key)}" is not connected by any relation`,
                     focus: { mode: 'participant', participantKey: key },
                 })
             }
@@ -150,7 +151,7 @@ export function evaluateActReadiness(
                         issues.push({
                             code: 'invalid-subscription-source',
                             severity: 'warning',
-                            message: `Participant "${key}" subscribes to messages from unknown participant "${fromKey}"`,
+                            message: `Participant "${participantLabel(key)}" subscribes to messages from unknown participant "${participantLabel(fromKey)}"`,
                             focus: { mode: 'participant', participantKey: key },
                         })
                     }

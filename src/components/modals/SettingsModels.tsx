@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { api } from '../../api'
+import { buildRuntimeModelProviderGroups } from '../../lib/runtime-models'
 import type { ConnectedModel } from './settings-utils'
 
 type ModelEntry = Pick<ConnectedModel, 'id' | 'name' | 'provider' | 'providerName' | 'toolCall' | 'reasoning' | 'connected'>
@@ -48,33 +49,16 @@ export default function SettingsModels() {
         return () => { cancelled = true }
     }, [])
 
-    const filtered = useMemo(() => {
-        const q = query.trim().toLowerCase()
-        if (!q) return models.filter((m) => m.connected)
-        return models
-            .filter((m) => m.connected)
-            .filter((m) =>
-                `${m.name} ${m.id} ${m.providerName}`.toLowerCase().includes(q),
-            )
-    }, [models, query])
-
     const groups = useMemo(() => {
-        const map = new Map<string, ProviderGroup>()
-        for (const m of filtered) {
-            let g = map.get(m.provider)
-            if (!g) {
-                g = { providerId: m.provider, providerName: m.providerName, models: [] }
-                map.set(m.provider, g)
-            }
-            g.models.push(m)
-        }
-        const result = Array.from(map.values())
-        result.sort((a, b) => a.providerName.localeCompare(b.providerName))
-        for (const g of result) {
-            g.models.sort((a, b) => a.name.localeCompare(b.name))
-        }
-        return result
-    }, [filtered])
+        return buildRuntimeModelProviderGroups(models, {
+            query,
+            connectedOnly: true,
+        }).map((group): ProviderGroup => ({
+            providerId: group.providerId,
+            providerName: group.providerName,
+            models: group.models,
+        }))
+    }, [models, query])
 
     return (
         <div className="stg-panel">

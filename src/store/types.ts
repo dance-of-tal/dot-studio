@@ -54,8 +54,6 @@ export interface WorkspaceSlice {
     selectedPerformerId: string | null
     selectedPerformerSessionId: string | null
     selectedMarkdownEditorId: string | null
-    focusedPerformerId: string | null
-    focusedNodeType: 'performer' | 'act' | null
     focusSnapshot: FocusSnapshot | null
     canvasRevealTarget: CanvasRevealTarget | null
     inspectorFocus: string | null
@@ -108,7 +106,6 @@ export interface WorkspaceSlice {
     selectPerformer: (id: string | null) => void
     selectPerformerSession: (sessionId: string | null) => void
     selectMarkdownEditor: (id: string | null) => void
-    setFocusedPerformer: (id: string | null) => void
     enterFocusMode: (nodeId: string, nodeType: 'performer' | 'act', viewportSize: { width: number; height: number }) => void
     exitFocusMode: () => void
     switchFocusTarget: (nodeId: string, nodeType: 'performer' | 'act') => void
@@ -140,7 +137,6 @@ export interface WorkspaceSlice {
     setPerformerModel: (performerId: string, model: ModelConfig | null) => void
     setPerformerModelVariant: (performerId: string, variant: string | null) => void
     setPerformerAgentId: (performerId: string, agentId: string | null) => void
-    setPerformerDanceDeliveryMode: (performerId: string, mode: 'auto' | 'tool' | 'inline') => void
     addPerformerMcp: (performerId: string, mcp: McpServer) => void
     removePerformerMcp: (performerId: string, mcpName: string) => void
     setPerformerMcpBinding: (performerId: string, placeholderName: string, serverName: string | null) => void
@@ -185,12 +181,12 @@ export interface WorkspaceSlice {
 
 export interface ChatSlice {
     activeChatPerformerId: string | null
-    sessions: Array<{ id: string; title?: string; createdAt?: number }>
+    sessions: Array<{ id: string; title?: string; createdAt?: number; updatedAt?: number }>
 
     setActiveChatPerformer: (performerId: string | null) => void
-    addChatMessage: (performerId: string, msg: ChatMessage) => void
+    addChatMessage: (chatKey: string, msg: ChatMessage) => void
     sendMessage: (
-        performerId: string,
+        chatKey: string,
         message: string,
         attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
         extraDanceRefs?: AssetRef[],
@@ -201,18 +197,17 @@ export interface ChatSlice {
         participantKey: string,
         message: string,
     ) => Promise<void>
-    executeSlashCommand: (performerId: string, cmd: string) => Promise<void>
-    clearSession: (performerId: string) => void
-    startNewSession: (performerId: string) => Promise<void>
-    abortChat: (performerId: string) => Promise<void>
-    undoLastTurn: (performerId: string) => Promise<void>
+    clearSession: (chatKey: string) => void
+    startNewSession: (chatKey: string) => Promise<void>
+    abortChat: (chatKey: string) => Promise<void>
+    undoLastTurn: (chatKey: string) => Promise<void>
     rehydrateSessions: () => Promise<void>
-    revertSession: (performerId: string, messageId: string) => Promise<void>
-    restoreRevertedMessage: (performerId: string, messageId: string) => Promise<void>
-    getDiff: (performerId: string) => Promise<Array<Record<string, unknown>>>
+    revertSession: (chatKey: string, messageId: string) => Promise<void>
+    restoreRevertedMessage: (chatKey: string, messageId: string) => Promise<void>
+    getDiff: (chatKey: string) => Promise<Array<Record<string, unknown>>>
     listSessions: () => Promise<void>
     deleteSession: (sessionId: string) => Promise<void>
-    detachPerformerSession: (performerId: string, notice?: string) => void
+    detachPerformerSession: (chatKey: string, notice?: string) => void
 
     respondToPermission: (sessionId: string, permissionId: string, response: 'once' | 'always' | 'reject') => Promise<void>
     respondToQuestion: (sessionId: string, questionId: string, answers: QuestionAnswer[]) => Promise<void>
@@ -303,7 +298,7 @@ export interface ActSlice {
 
     // ── Authoring / import ──────────────────────
     updateActAuthoringMeta: (id: string, meta: WorkspaceAct['meta']) => void
-    importActFromAsset: (asset: AssetCard) => void
+    importActFromAsset: (asset: AssetCard) => Promise<void>
 
     // ── Thread management ───────────────────────
     createThread: (actId: string) => Promise<string>

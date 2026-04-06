@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { ProviderAuthMethod, ProviderCard, OauthFlow } from './settings-utils'
 import type { ConnectedModel, ModelPickerState } from './settings-utils'
-import { isPopularProvider, shouldDisplayConnectedProvider } from './settings-utils'
+import { getConnectedProviderCards, getPopularProviderCards } from './settings-utils'
 import ProviderConnectModal from './ProviderConnectModal'
 
 interface SettingsProvidersProps {
@@ -28,11 +28,6 @@ interface SettingsProvidersProps {
     statusMessage: string | null
 }
 
-const POPULAR_ORDER = [
-    'opencode', 'anthropic', 'openai', 'google',
-    'github-copilot', 'openrouter', 'amazon-bedrock', 'azure',
-]
-
 export default function SettingsProviders(props: SettingsProvidersProps) {
     const {
         providers, oauthFlows, setOauthFlows, modelPicker, setModelPicker,
@@ -44,21 +39,8 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
 
     const [connectTargetId, setConnectTargetId] = useState<string | null>(null)
 
-    const connected = useMemo(
-        () => providers.filter(shouldDisplayConnectedProvider),
-        [providers],
-    )
-
-    const popular = useMemo(() => {
-        const connectedIds = new Set(connected.map((p) => p.id))
-        return providers
-            .filter((p) => !connectedIds.has(p.id) && isPopularProvider(p.id))
-            .sort((a, b) => {
-                const ai = POPULAR_ORDER.indexOf(a.id)
-                const bi = POPULAR_ORDER.indexOf(b.id)
-                return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi)
-            })
-    }, [providers, connected])
+    const connected = useMemo(() => getConnectedProviderCards(providers), [providers])
+    const popular = useMemo(() => getPopularProviderCards(providers), [providers])
 
     const connectTarget = useMemo(
         () => connectTargetId ? providers.find((provider) => provider.id === connectTargetId) || null : null,

@@ -9,7 +9,6 @@ import {
     getOpenCodeHealth,
     getOpenCodeUnavailableHealth,
     getProviderAuthMethods,
-    getProviderConnections,
     getVcsStatus,
     listOpenCodeAgents,
     listOpenCodeToolIds,
@@ -145,14 +144,6 @@ opencodeCore.put('/api/config/project', async (c) => {
 opencodeCore.get('/api/provider/auth', async (c) => {
     try {
         return c.json(await getProviderAuthMethods(requestWorkingDir(c)))
-    } catch (err) {
-        return jsonOpencodeError(c, err, { defaultStatus: 503 })
-    }
-})
-
-opencodeCore.get('/api/provider/connections', async (c) => {
-    try {
-        return c.json(await getProviderConnections())
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 503 })
     }

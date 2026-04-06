@@ -6,7 +6,7 @@ import type { ChatMessage } from '../../types'
 let showReasoningSummaries = true
 
 vi.mock('../../store/settingsSlice', () => ({
-    useUISettings: () => ({
+    useUISettings: (selector: (state: { showReasoningSummaries: boolean }) => unknown = (state) => state) => selector({
         showReasoningSummaries,
     }),
 }))

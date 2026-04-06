@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useDeferredValue } from 'react'
+import { memo, useState, useMemo, useCallback, useDeferredValue } from 'react'
 import { ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import type { ChatMessage, ChatMessagePart, ChatMessageToolInfo } from '../../types'
@@ -124,16 +124,12 @@ function CopyResponseButton({ content }: { content: string }) {
     )
 }
 
-export default function ChatMessageContent({
+function ChatMessageContent({
     message,
     className = 'assistant-body',
     streaming = false,
-}: {
-    message: Pick<ChatMessage, 'content' | 'parts'>
-    className?: string
-    streaming?: boolean
-}) {
-    const { showReasoningSummaries } = useUISettings()
+}: ChatMessageContentProps) {
+    const showReasoningSummaries = useUISettings((state) => state.showReasoningSummaries)
     const rawContent = useMemo(() => stripAssistantActionBlock(message.content || ''), [message.content])
     const deferredContent = useDeferredValue(rawContent)
     const displayContent = streaming ? rawContent : deferredContent
@@ -147,9 +143,21 @@ export default function ChatMessageContent({
             {displayContent ? (
                 <>
                     <MarkdownRenderer content={displayContent} showThinking={showThinking} streaming={streaming} />
-                    <CopyResponseButton content={rawContent} />
+                    {!streaming ? <CopyResponseButton content={rawContent} /> : null}
                 </>
             ) : null}
         </div>
     )
 }
+
+type ChatMessageContentProps = {
+    message: Pick<ChatMessage, 'content' | 'parts'>
+    className?: string
+    streaming?: boolean
+}
+
+export default memo(ChatMessageContent, (prev, next) => (
+    prev.message === next.message
+    && prev.className === next.className
+    && prev.streaming === next.streaming
+))

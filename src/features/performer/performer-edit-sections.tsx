@@ -1,5 +1,5 @@
 import { Hexagon, Zap, Pencil, X, Server } from 'lucide-react'
-import type { AssetRef, DanceDeliveryMode, ModelConfig, PerformerNode } from '../../types'
+import type { AssetRef, ModelConfig, PerformerNode } from '../../types'
 import { assetUrnDisplayName } from '../../lib/asset-urn'
 import ModelVariantSelect from './ModelVariantSelect'
 
@@ -64,13 +64,11 @@ export function PerformerDancesDetail({
     performerId,
     onOpenAssetEditor,
     onRemoveDance,
-    onDanceDeliveryModeChange,
 }: {
     performer: PerformerNode | null
     performerId: string
     onOpenAssetEditor: (kind: 'tal' | 'dance', targetRef: AssetRef | null, attachMode: 'tal' | 'dance-new' | 'dance-replace') => void
     onRemoveDance: (id: string, key: string) => void
-    onDanceDeliveryModeChange: (value: DanceDeliveryMode) => void
 }) {
     return (
         <div className="edit-advanced nodrag nowheel">
@@ -99,24 +97,6 @@ export function PerformerDancesDetail({
                     ) : (
                         <span className="adv-section__summary">No dances connected. Drag & drop from the Asset Library.</span>
                     )}
-                </div>
-            </div>
-            <div className="adv-section">
-                <div className="adv-section__head">
-                    <span className="section-title">Delivery Mode</span>
-                </div>
-                <div className="adv-section__body">
-                    <label className="adv-field">
-                        <select
-                            className="select nodrag nowheel"
-                            value={performer?.danceDeliveryMode || 'auto'}
-                            onChange={(event) => onDanceDeliveryModeChange(event.target.value as DanceDeliveryMode)}
-                        >
-                            <option value="auto">Auto</option>
-                            <option value="inject">Inject</option>
-                            <option value="tool">Tool</option>
-                        </select>
-                    </label>
                 </div>
             </div>
         </div>

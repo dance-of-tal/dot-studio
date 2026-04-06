@@ -6,7 +6,8 @@
  * - host composer state hook
  * - manage revert confirmation modal
  */
-import { useState, type RefObject } from 'react'
+import { useCallback, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
 import type { ChatMessage, AssetCard, DraftAsset, PerformerNode } from '../../types'
 import RevertConfirmModal from '../../components/chat/RevertConfirmModal'
@@ -35,7 +36,6 @@ type PerformerChatPanelProps = {
     } | null
     danceAssets: AssetCard[]
     drafts: Record<string, DraftAsset>
-    chatEndRef: RefObject<HTMLDivElement | null>
     onSetAgentId: (id: string, agentId: string | null) => void
     onSetModelVariant: (id: string, variant: string | null) => void
 }
@@ -56,18 +56,22 @@ export default function PerformerChatPanel({
     runtimeTools,
     danceAssets,
     drafts,
-    chatEndRef,
     onSetAgentId,
     onSetModelVariant,
 }: PerformerChatPanelProps) {
     const {
         abortChat,
-        executeSlashCommand,
         revertSession,
         respondToPermission,
         respondToQuestion,
         rejectQuestion,
-    } = useStudioStore()
+    } = useStudioStore(useShallow((state) => ({
+        abortChat: state.abortChat,
+        revertSession: state.revertSession,
+        respondToPermission: state.respondToPermission,
+        respondToQuestion: state.respondToQuestion,
+        rejectQuestion: state.rejectQuestion,
+    })))
 
     const [revertTarget, setRevertTarget] = useState<{ performerId: string; messageId: string; messageContent: string } | null>(null)
     const [isRevertConfirming, setIsRevertConfirming] = useState(false)
@@ -86,6 +90,9 @@ export default function PerformerChatPanel({
     const questionRequest = useStudioStore((state) => (
         sessionId ? selectPendingQuestion(state, sessionId) : null
     ))
+    const handleOpenRevert = useCallback((pid: string, mid: string, content: string) => {
+        setRevertTarget({ performerId: pid, messageId: mid, messageContent: content })
+    }, [])
 
     return (
         <>
@@ -95,8 +102,7 @@ export default function PerformerChatPanel({
                 prefixCount={prefixCount}
                 isLoading={isLoading}
                 hasActiveSession={hasActiveSession}
-                chatEndRef={chatEndRef}
-                onOpenRevert={(pid, mid, content) => setRevertTarget({ performerId: pid, messageId: mid, messageContent: content })}
+                onOpenRevert={handleOpenRevert}
                 composer={(
                     <PerformerChatComposer
                         performerId={performerId}
@@ -121,7 +127,6 @@ export default function PerformerChatPanel({
                         handleKeyDownWrapper={composerState.handleKeyDownWrapper}
                         handleSend={composerState.handleSend}
                         abortChat={abortChat}
-                        executeSlashCommand={executeSlashCommand}
                         danceSlashMatch={composerState.danceSlashMatch}
                         danceSearchSections={composerState.danceSearchSections}
                         danceSearchResults={composerState.danceSearchResults}

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import { buildActParticipantChatKey } from '../../../shared/chat-targets'
 import { createPerformerNode } from '../../lib/performers-node'
-import { buildAssistantStageContext } from './chat-runtime-target'
+import { buildAssistantStageContext, resolveChatRuntimeTarget } from './chat-runtime-target'
 
 describe('chat-runtime-target', () => {
     it('includes act rules and participant subscriptions in assistant stage context', () => {
@@ -122,5 +123,65 @@ describe('chat-runtime-target', () => {
                 tags: undefined,
             },
         ])
+    })
+
+    it('resolves act participant chatKeys through the shared runtime target path', () => {
+        const performer = createPerformerNode({
+            id: 'performer-researcher',
+            name: 'Researcher',
+            x: 0,
+            y: 0,
+        })
+        performer.model = {
+            provider: 'openai',
+            modelId: 'gpt-5.4',
+        }
+
+        const chatKey = buildActParticipantChatKey('act-1', 'thread-1', 'participant-researcher')
+        const target = resolveChatRuntimeTarget((() => ({
+            workingDir: '/tmp/workspace',
+            performers: [performer],
+            acts: [
+                {
+                    id: 'act-1',
+                    name: 'Research Flow',
+                    description: 'Research then draft.',
+                    actRules: [],
+                    position: { x: 0, y: 0 },
+                    width: 400,
+                    height: 300,
+                    createdAt: Date.now(),
+                    participants: {
+                        'participant-researcher': {
+                            performerRef: { kind: 'draft', draftId: 'performer-researcher' },
+                            displayName: 'Lead Researcher',
+                            position: { x: 0, y: 0 },
+                        },
+                    },
+                    relations: [],
+                },
+            ],
+            drafts: {},
+            assistantAvailableModels: [],
+            assistantModel: null,
+        })) as never, chatKey)
+
+        expect(target).toMatchObject({
+            chatKey,
+            kind: 'act-participant',
+            name: 'Researcher',
+            executionScope: {
+                performerId: 'performer-researcher',
+                actId: 'act-1',
+                clearPerformerIds: ['performer-researcher'],
+                clearActIds: ['act-1'],
+            },
+            requestTarget: {
+                performerId: chatKey,
+                performerName: 'Researcher',
+                actId: 'act-1',
+                actThreadId: 'thread-1',
+            },
+        })
     })
 })

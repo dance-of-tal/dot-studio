@@ -122,12 +122,13 @@ export async function ensureOpencodeSidecar(): Promise<void> {
 
         const opencode = spawn(
             resolveCommand(),
-            ['--port', String(resolvePort()), path.resolve(DEFAULT_PROJECT_DIR)],
+            ['serve', '--port', String(resolvePort())],
             {
                 cwd: path.resolve(DEFAULT_PROJECT_DIR),
                 env: {
                     ...process.env,
                     OPENCODE_CONFIG_DIR: path.join(STUDIO_DIR, 'opencode'),
+                    OPENCODE_ENABLE_EXA: process.env.OPENCODE_ENABLE_EXA || '1',
                 },
                 stdio: 'ignore',
             },

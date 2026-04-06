@@ -34,7 +34,6 @@ type Props = {
     handleKeyDownWrapper: (e: React.KeyboardEvent) => void
     handleSend: () => void
     abortChat: (performerId: string) => void
-    executeSlashCommand: (performerId: string, command: string) => void
     danceSlashMatch: string | null
     danceSearchSections: Array<{ key: string; title: string; items: DanceSearchItem[] }>
     danceSearchResults: DanceSearchItem[]
@@ -43,7 +42,7 @@ type Props = {
     showSlashMenu: boolean
     setShowSlashMenu: (value: boolean) => void
     slashIndex: number
-    filteredCommands: Array<{ cmd: string; desc: string; mode: 'compose' | 'execute' }>
+    filteredCommands: Array<{ cmd: string; desc: string; mode: 'compose' }>
     isFileMentioning: boolean
     fileMentionResults: FileMention[]
     fileMentionIndex: number
@@ -84,7 +83,6 @@ export default function PerformerChatComposer(props: Props) {
         handleKeyDownWrapper,
         handleSend,
         abortChat,
-        executeSlashCommand,
         danceSlashMatch,
         danceSearchSections,
         danceSearchResults,
@@ -158,8 +156,6 @@ export default function PerformerChatComposer(props: Props) {
                 setShowSlashMenu={setShowSlashMenu}
                 slashIndex={slashIndex}
                 filteredCommands={filteredCommands}
-                performerId={performerId}
-                executeSlashCommand={executeSlashCommand}
             />
 
             {activePermissionRequest ? (

@@ -45,6 +45,11 @@ Server-side execution preparation:
 
 - `server/services/runtime-preparation-service.ts`
 
+Provider and model catalog rule:
+
+- provider and model availability in Studio should follow OpenCode's `provider.list()` for the active working directory
+- do not maintain separate Studio-only fallback provider catalogs or auth-derived connected state overlays
+
 ## Entity Matrix
 
 `hot`

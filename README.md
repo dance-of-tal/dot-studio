@@ -1,183 +1,223 @@
 # DOT Studio
 
-> Visual workspace for composing, testing, and running Dance of Tal agents on top of OpenCode.
+> Figma-style workspace for choreographing Dance of Tal performers and Acts on top of OpenCode.
 
-[![npm version](https://img.shields.io/npm/v/dot-studio)](https://www.npmjs.com/package/dot-studio)
-[![License: MIT](https://img.shields.io/badge/License-MIT-white.svg)](./LICENSE)
+[![npm version](https://img.shields.io/npm/v/dot-studio?style=flat-square)](https://www.npmjs.com/package/dot-studio)
+![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20.19.0-3c873a?style=flat-square)
+[![License](https://img.shields.io/badge/License-MIT-0f172a?style=flat-square)](./LICENSE)
 
-DOT Studio is the local visual interface for [Dance of Tal](https://github.com/dance-of-tal/dance-of-tal).
-It gives you a canvas for building AI systems out of:
+[Overview](#overview) • [Get Started](#get-started) • [Core Concepts](#core-concepts) • [Typical Workflow](#typical-workflow) • [CLI](#cli)
 
 ![DOT Studio screenshot](.github/screenshot.png)
 
-- `Tal`: core identity and instruction layer
+DOT Studio is the local visual editor for [Dance of Tal](https://github.com/dance-of-tal/dance-of-tal). Think of it as a Figma-style workspace for AI choreography: you arrange performers on a canvas, define how they relate, and turn those relationships into runnable Acts while [OpenCode](https://github.com/opencode-ai/opencode) handles execution behind the scenes.
+
+You can work in two complementary ways:
+
+- direct manipulation: drag, drop, connect, and edit performers and Acts yourself on the canvas
+- assisted editing: ask the built-in Studio Assistant to create or update things when the manual path feels tedious or hard
+
+You can author and connect:
+
+- `Tal`: identity and instruction layers
 - `Dance`: reusable skill packages
-- `Performer`: an agent composed from Tal, Dances, model, and MCP servers
-- `Act`: a choreography that connects multiple performers into a workflow
+- `Performer`: runnable agents composed from Tal, Dances, models, and MCP config
+- `Act`: multi-performer workflows with runtime collaboration rules
 
-The Studio runs entirely on your machine. It serves a local web app, talks to OpenCode, and persists local workspace state for repeatable agent development.
+## Overview
 
-## Why DOT Studio
+DOT Studio is built for local, iterative work.
 
-- Build multi-agent systems visually instead of wiring JSON by hand
-- Attach Tal, Dance, model, and MCP runtime config directly to performers
-- Inspect chats, tool usage, sessions, drafts, and Act runtime state in one place
-- Move between local drafts and registry-installed assets without leaving the canvas
-- Use DOT's package primitives while still keeping OpenCode as the execution engine
+- Choreograph multiple performers visually on a shared canvas
+- Work in a Figma-style editing flow instead of wiring runtime artifacts by hand
+- Drag and drop performers and Acts, then refine them with detailed editing controls
+- Edit Tal and Dance drafts without leaving the workspace
+- Configure models, MCP servers, and runtime settings in one place
+- Chat with performers and Act participants from the same UI
+- Use the Studio Assistant when you want help building or changing the canvas faster
+- Keep everything local while Studio saves workspace state and prepares runtime output for OpenCode
 
-## Install
+> [!IMPORTANT]
+> `.opencode/` is generated output for OpenCode. You usually should not edit it directly.
 
-### Run once with `npx`
+## Get Started
+
+### Requirements
+
+- Node.js `>=20.19.0`
+- An environment supported by Node.js and OpenCode
+
+### Run with `npx`
 
 ```bash
-npx dot-studio .
+npx dot-studio
 ```
+
+This opens Studio for the current directory and starts the local services it needs.
+If the directory has not been initialized as a DOT workspace yet, Studio prepares it automatically.
 
 ### Install globally
 
 ```bash
 npm install -g dot-studio
-dot-studio .
+dot-studio
 ```
 
-### Starting from a fresh DOT workspace
+### Fresh DOT setup
 
-If you also want the DOT CLI available locally:
+If you are starting from a brand new DOT workspace:
 
 ```bash
 npm install -g dance-of-tal dot-studio
 dot init
 dot login
-dot-studio .
+dot-studio
 ```
 
-## Requirements
+### Connect to an existing OpenCode instance
 
-- Node.js `>=20.19.0`
-- macOS, Linux, or another environment supported by Node + OpenCode
-
-DOT Studio can start OpenCode in managed mode automatically.
-If you already run OpenCode elsewhere, point Studio at it:
+DOT Studio can start OpenCode for you, or you can point it to an existing instance:
 
 ```bash
-OPENCODE_URL=http://localhost:4096 dot-studio .
+OPENCODE_URL=http://localhost:4096 dot-studio
 ```
 
-## Usage
+## Core Concepts
+
+Studio works with four main building blocks:
+
+- `Tal`: the base identity, behavior, and instruction layer
+- `Dance`: a reusable skill or capability package
+- `Performer`: an agent made from Tal, Dances, model settings, and MCP configuration
+- `Act`: the choreography layer that connects performers and defines how they collaborate
+
+If you are new to DOT Studio, the easiest mental model is:
+
+`Tal + Dance + model + tools = Performer`
+
+`Multiple Performers + choreography = Act`
+
+In other words, Studio is less like a form builder and more like a choreography board for agent systems.
+
+## Typical Workflow
+
+### 1. Open a workspace
+
+Start Studio in a project folder:
 
 ```bash
-dot-studio [projectDir] [--no-open] [--port 3001]
+dot-studio
+```
+
+Studio opens in your browser and restores the workspace for that directory when available.
+You can also point it at another folder with `dot-studio /path/to/project`.
+
+### 2. Create or import assets
+
+Common ways to get started:
+
+- create a new Tal draft
+- create a new Dance draft
+- import an installed Performer or Act
+- drag performers and Acts onto the canvas and start sketching the choreography
+
+### 3. Configure a performer
+
+For each performer, you can typically set:
+
+- a Tal
+- one or more Dances
+- a model and variant
+- MCP servers and related runtime configuration
+
+You can do this directly in the editor with drag-and-drop placement and detailed configuration panels, or let the Studio Assistant help set things up for you.
+
+### 4. Build an Act
+
+Acts are where the choreography comes together.
+
+Typical Act work includes:
+
+- attaching performers as participants
+- defining participant relationships
+- setting collaboration rules
+- chatting with participants in runtime threads
+
+### 5. Chat and iterate
+
+Once a performer or Act is set up, you can use Studio to:
+
+- send prompts
+- inspect responses and session state
+- review available runtime tools
+- keep editing the workspace and run again
+
+> [!NOTE]
+> Runtime-affecting edits are picked up on the next execution path. Studio handles projection and runtime refresh for you.
+
+### 6. Use the Studio Assistant
+
+The Studio Assistant is a built-in chat surface for editing the canvas.
+
+Use direct editing when you want precise control. Use the Assistant when you already know the outcome you want but do not want to wire everything manually.
+
+The Assistant is especially useful when:
+
+- you want to scaffold a performer or Act quickly
+- you want to make several related changes in one go
+- the choreography is getting large and repetitive to edit by hand
+- you are exploring and want Studio to help shape the first draft
+
+You can use it to help with tasks like:
+
+- creating Tal or Dance drafts
+- creating or updating performers
+- creating or updating Acts
+- wiring performers together more quickly
+- handling edits that would otherwise take several manual drag-and-drop steps
+
+## What You Can Do
+
+- create and edit Tal and Dance drafts
+- import installed Performers and Acts onto the canvas
+- configure performer models, MCP servers, and runtime settings
+- build choreography-driven Acts by connecting participants and defining relationships
+- edit directly with drag-and-drop and detailed panels, or delegate tedious setup to the Studio Assistant
+- chat with performers, Act participants, and the Studio Assistant
+- save and reopen local workspaces as you iterate
+
+## CLI
+
+```bash
+dot-studio [path] [options]
+dot-studio open [path] [options]
+dot-studio doctor [path] [options]
+dot-studio --help
+dot-studio --version
 ```
 
 Examples:
 
 ```bash
-# open the current directory
-dot-studio .
-
-# do not launch a browser automatically
-dot-studio . --no-open
-
-# bind Studio to a specific port
-dot-studio . --port 3010
+dot-studio
+dot-studio ~/projects/dance-of-tal
+dot-studio open . --no-open
+dot-studio open . --port 3010
+dot-studio doctor
+dot-studio doctor ~/projects/dance-of-tal --opencode-url http://localhost:4096
 ```
 
-When launched in production mode, Studio serves the UI and API from a single local server.
+Behavior:
 
-## What You Can Do In Studio
+- `dot-studio` opens the current directory as a workspace
+- `dot-studio <path>` opens that directory as a workspace
+- if the target directory is not initialized yet, Studio initializes the workspace automatically
+- `dot-studio doctor` checks Node.js, workspace path, Studio port, and OpenCode readiness
+- `dot-studio --help` shows the built-in CLI help
 
-- Create and edit Tal and Dance drafts
-- Import installed Performers and Acts onto the canvas
-- Attach registry assets, GitHub-backed Dances, models, and MCP servers
-- Build Acts by attaching performers and defining participant relations
-- Chat with performers and inspect their sessions
-- Review runtime tool availability before sending prompts
-- Save, reload, and manage local Studio workspaces
+## Package Scope
 
-## Open Source Scope
+This package is the Studio application itself.
 
-This package is the Studio application only.
-
-- `dot-studio`: visual editor and local runtime UI
-- `dance-of-tal`: package manager / contracts / CLI for DOT assets
-
-Studio depends on the published `dance-of-tal` package for DOT contracts, parsing, installation, publishing, and registry-facing logic.
-
-## Architecture
-
-- Frontend: React 19, Vite, Zustand, TanStack Query, XYFlow, DnD Kit
-- Backend: Hono on Node.js
-- Runtime integration: OpenCode via `@opencode-ai/sdk`
-- Contracts and asset operations: `dance-of-tal`
-
-High-level layout:
-
-```text
-src/       React UI, state, assistant actions, canvas interactions
-server/    API routes, OpenCode integration, projection/runtime services
-shared/    shared contracts and runtime-safe types
-```
-
-## Development
-
-```bash
-npm install
-npm run dev:all
-```
-
-This starts:
-
-- the Vite client
-- the Studio server
-- a local OpenCode sidecar on port `4096`
-
-Useful scripts:
-
-- `npm run dev:all` - full local development environment
-- `npm run build` - production client + server build
-- `npm run type-check` - TypeScript checks
-- `npm run test` - Vitest
-- `npm run lint` - ESLint
-- `npm run pack:check` - build and inspect the npm tarball
-
-## Packaging
-
-To verify the published package locally:
-
-```bash
-npm run pack:check
-npm pack
-```
-
-The npm package includes:
-
-- `dist/` server and CLI output
-- `client/` production frontend assets
-- `README.md`
-- `LICENSE`
-
-## Contributing
-
-Issues and pull requests are welcome.
-
-If you are making code changes:
-
-```bash
-npm run build
-npm run test
-```
-
-If your change affects packaging or installation:
-
-```bash
-npm run pack:check
-```
-
-## Related Packages
-
-- [`dance-of-tal`](https://www.npmjs.com/package/dance-of-tal)
-- [`dot-studio`](https://www.npmjs.com/package/dot-studio)
-
-## License
-
-MIT © monarchjuno
+- `dot-studio` provides the local visual editor, server, and CLI
+- `dance-of-tal` provides DOT contracts, parsing, installation, publishing, and registry-facing behavior

@@ -54,6 +54,54 @@ describe('assistant-protocol', () => {
         expect(result.content).toBe('Created a reviewer setup.')
     })
 
+    it('accepts Tal draft CRUD envelopes', () => {
+        const content = [
+            'Updated the Tal draft.',
+            '<assistant-actions>{"version":1,"actions":[{"type":"createTalDraft","ref":"tal","name":"Writer Tal","content":"# Role"},{"type":"updateTalDraft","draftRef":"tal","content":"# Updated Role"},{"type":"deleteTalDraft","draftRef":"tal"}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope?.actions).toHaveLength(3)
+        expect(result.content).toBe('Updated the Tal draft.')
+    })
+
+    it('accepts Dance draft CRUD envelopes', () => {
+        const content = [
+            'Updated the Dance draft.',
+            '<assistant-actions>{"version":1,"actions":[{"type":"createDanceDraft","ref":"dance","name":"Review Skill","content":"# Skill"},{"type":"updateDanceDraft","draftRef":"dance","content":"# Updated Skill"},{"type":"deleteDanceDraft","draftRef":"dance"}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope?.actions).toHaveLength(3)
+        expect(result.content).toBe('Updated the Dance draft.')
+    })
+
+    it('accepts Performer Stage CRUD envelopes', () => {
+        const content = [
+            'Updated the performer.',
+            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"writer","name":"Writer"},{"type":"updatePerformer","performerRef":"writer","name":"Senior Writer"},{"type":"deletePerformer","performerRef":"writer"}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope?.actions).toHaveLength(3)
+        expect(result.content).toBe('Updated the performer.')
+    })
+
+    it('accepts Act Stage CRUD envelopes', () => {
+        const content = [
+            'Updated the act.',
+            '<assistant-actions>{"version":1,"actions":[{"type":"createAct","ref":"review","name":"Code Review"},{"type":"updateAct","actRef":"review","actRules":["Escalate blockers quickly."]},{"type":"deleteAct","actRef":"review"}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope?.actions).toHaveLength(3)
+        expect(result.content).toBe('Updated the act.')
+    })
+
     it('accepts raw JSON envelopes without the assistant-actions wrapper', () => {
         const content = '{"version":1,"actions":[{"type":"createAct","name":"Investment Team"}]}'
 
@@ -85,6 +133,18 @@ describe('assistant-protocol', () => {
 
         expect(result.envelope?.actions).toHaveLength(3)
         expect(result.content).toBe('Imported the setup.')
+    })
+
+    it('rejects unsupported lifecycle actions outside the current surface', () => {
+        const content = [
+            'hello',
+            '<assistant-actions>{"version":1,"actions":[{"type":"publishPerformer","performerName":"Reviewer"}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope).toBeNull()
+        expect(result.content).toBe('hello')
     })
 
     it('accepts act rules and participant subscription actions', () => {

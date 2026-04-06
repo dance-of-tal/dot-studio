@@ -10,7 +10,7 @@
 import type { StateCreator } from 'zustand'
 import type { StudioState, ChatSlice } from './types'
 import {
-    addChatMessage as addChatMessageHelper,
+    appendChatMessage as appendChatMessageHelper,
 } from './chat/chat-internals'
 import { createChatApprovals } from './chat/chat-approvals'
 import { createChatSessionActions } from './chat/chat-session-actions'
@@ -30,7 +30,7 @@ export const createChatSlice: StateCreator<
 
         setActiveChatPerformer: (performerId) => set({ activeChatPerformerId: performerId }),
 
-        addChatMessage: (performerId, msg) => addChatMessageHelper(set, get, performerId, msg),
+        addChatMessage: (chatKey, msg) => appendChatMessageHelper(set, get, chatKey, msg),
 
         // ── Approvals (delegated) ───────────────────
         ...approvals,

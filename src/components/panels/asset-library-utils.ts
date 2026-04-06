@@ -2,6 +2,11 @@
 // This file serves as a barrel re-export for the split modules.
 
 import { assetUrnDisplayName } from '../../lib/asset-urn'
+export {
+    ALL_MODEL_PROVIDER_FILTER,
+    type ModelProviderFilter,
+    modelProviderFilterForProvider,
+} from '../../lib/runtime-models'
 
 export type InstalledKind = 'performer' | 'tal' | 'dance' | 'act'
 export type RuntimeKind = 'models' | 'mcps'
@@ -9,7 +14,6 @@ export type AssetScope = 'local' | 'registry'
 export type SourceFilter = 'all' | 'global' | 'stage' | 'draft'
 export type LocalSection = 'installed' | 'runtime'
 export type RegistryKind = 'all' | InstalledKind
-export type ModelProviderFilter = 'all' | 'anthropic' | 'openai' | 'google' | 'xai' | 'other'
 
 export const INSTALLED_KIND_ORDER: InstalledKind[] = ['performer', 'tal', 'dance', 'act']
 

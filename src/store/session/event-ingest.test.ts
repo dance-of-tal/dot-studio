@@ -257,7 +257,9 @@ describe('Event Ingest', () => {
             ingest.flushSync()
 
             expect(state.seMessages[SESSION_ID]?.[0]?.content).toBe('Hello')
-            expect(state.seMessages[SESSION_ID]?.[0]?.parts).toEqual([])
+            expect(state.seMessages[SESSION_ID]?.[0]?.parts).toEqual([
+                { id: 'p1', type: 'text', content: 'Hello' },
+            ])
 
             ingest.dispose()
         })

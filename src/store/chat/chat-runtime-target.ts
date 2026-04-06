@@ -5,20 +5,51 @@ import type {
     AssistantStageActSummary,
     AssistantStageContext,
 } from '../../../shared/assistant-actions'
+import { describeChatTarget } from '../../../shared/chat-targets'
+import { describeActParticipantRef, resolvePerformerFromActBinding } from '../../lib/act-participants'
 import { resolvePerformerRuntimeConfig } from '../../lib/performers'
-import { resolvePerformerFromActBinding } from '../../lib/act-participants'
-import type { ActRelation, WorkspaceAct, WorkspaceActParticipantBinding } from '../../types'
+import type { ActRelation, AssetRef, WorkspaceAct, WorkspaceActParticipantBinding } from '../../types'
 import { isAssistantChatKey } from '../assistantSlice'
 import type { ChatGet } from './chat-internals'
 
-const EMPTY_RUNTIME_CONFIG = {
+export type ChatRuntimeConfig = {
+    talRef: AssetRef | null
+    danceRefs: AssetRef[]
+    model: { provider: string; modelId: string } | null
+    modelVariant: string | null
+    agentId: string
+    mcpServerNames: string[]
+    planMode: boolean
+}
+
+export type ResolvedChatRuntimeTarget = {
+    chatKey: string
+    kind: 'assistant' | 'performer' | 'act-participant'
+    name: string
+    runtimeConfig: ChatRuntimeConfig
+    assistantContext: AssistantStageContext | null
+    executionScope: {
+        performerId: string | null
+        actId: string | null
+        clearPerformerIds: string[]
+        clearActIds: string[]
+    }
+    requestTarget: {
+        performerId: string
+        performerName: string
+        actId?: string
+        actThreadId?: string
+    }
+    notice?: string
+}
+
+export const EMPTY_RUNTIME_CONFIG: ChatRuntimeConfig = {
     talRef: null,
     danceRefs: [],
     model: null,
     modelVariant: null,
     agentId: 'build',
     mcpServerNames: [],
-    danceDeliveryMode: 'auto' as const,
     planMode: false,
 }
 
@@ -72,8 +103,8 @@ function resolveActSummary(get: ChatGet, act: WorkspaceAct): AssistantStageActSu
     }
 }
 
-export function isAssistantPerformerId(performerId: string): boolean {
-    return isAssistantChatKey(performerId)
+export function isAssistantPerformerId(chatKey: string): boolean {
+    return isAssistantChatKey(chatKey)
 }
 
 export function buildAssistantStageContext(get: ChatGet): AssistantStageContext | null {
@@ -119,12 +150,14 @@ export function buildAssistantStageContext(get: ChatGet): AssistantStageContext 
     }
 }
 
-export function resolveChatRuntimeTarget(get: ChatGet, performerId: string) {
+export function resolveChatRuntimeTarget(get: ChatGet, chatKey: string): ResolvedChatRuntimeTarget | null {
     const state = get()
+    const descriptor = describeChatTarget(chatKey)
 
-    if (isAssistantPerformerId(performerId)) {
+    if (descriptor.kind === 'assistant') {
         return {
-            isAssistant: true,
+            chatKey,
+            kind: 'assistant',
             name: 'Studio Assistant',
             runtimeConfig: {
                 ...EMPTY_RUNTIME_CONFIG,
@@ -136,18 +169,115 @@ export function resolveChatRuntimeTarget(get: ChatGet, performerId: string) {
                     : null,
             },
             assistantContext: buildAssistantStageContext(get),
+            executionScope: {
+                performerId: null,
+                actId: null,
+                clearPerformerIds: [],
+                clearActIds: [],
+            },
+            requestTarget: {
+                performerId: chatKey,
+                performerName: 'Studio Assistant',
+            },
         }
     }
 
-    const performer = state.performers.find((item) => item.id === performerId) || null
+    if (descriptor.kind === 'act-participant') {
+        const act = state.acts.find((entry) => entry.id === descriptor.actId) || null
+        const binding = act?.participants[descriptor.participantKey]
+        const participantName = binding?.displayName || descriptor.participantKey
+        const performer = resolvePerformerFromActBinding(state.performers, binding)
+
+        if (!binding) {
+            return {
+                chatKey,
+                kind: 'act-participant',
+                name: participantName,
+                runtimeConfig: EMPTY_RUNTIME_CONFIG,
+                assistantContext: null,
+                executionScope: {
+                    performerId: null,
+                    actId: descriptor.actId,
+                    clearPerformerIds: [],
+                    clearActIds: [],
+                },
+                requestTarget: {
+                    performerId: chatKey,
+                    performerName: participantName,
+                    actId: descriptor.actId,
+                    actThreadId: descriptor.threadId,
+                },
+                notice: `Act participant "${participantName}" is no longer available in this Act.`,
+            }
+        }
+
+        if (!performer) {
+            return {
+                chatKey,
+                kind: 'act-participant',
+                name: participantName,
+                runtimeConfig: EMPTY_RUNTIME_CONFIG,
+                assistantContext: null,
+                executionScope: {
+                    performerId: null,
+                    actId: descriptor.actId,
+                    clearPerformerIds: [],
+                    clearActIds: [],
+                },
+                requestTarget: {
+                    performerId: chatKey,
+                    performerName: participantName,
+                    actId: descriptor.actId,
+                    actThreadId: descriptor.threadId,
+                },
+                notice:
+                    `Cannot resolve performer for participant "${participantName}" ` +
+                    `(ref: ${describeActParticipantRef(binding, descriptor.participantKey)}). ` +
+                    'No matching local performer node found. Try re-importing the Act or creating a performer manually.',
+            }
+        }
+
+        return {
+            chatKey,
+            kind: 'act-participant',
+            name: performer.name || participantName,
+            runtimeConfig: resolvePerformerRuntimeConfig(performer),
+            assistantContext: null,
+            executionScope: {
+                performerId: performer.id,
+                actId: descriptor.actId,
+                clearPerformerIds: [performer.id],
+                clearActIds: [descriptor.actId],
+            },
+            requestTarget: {
+                performerId: chatKey,
+                performerName: performer.name || participantName,
+                actId: descriptor.actId,
+                actThreadId: descriptor.threadId,
+            },
+        }
+    }
+
+    const performer = state.performers.find((item) => item.id === descriptor.performerId) || null
     if (!performer) {
         return null
     }
 
     return {
-        isAssistant: false,
+        chatKey,
+        kind: 'performer',
         name: performer.name || 'Untitled Performer',
         runtimeConfig: resolvePerformerRuntimeConfig(performer),
         assistantContext: null,
+        executionScope: {
+            performerId: performer.id,
+            actId: null,
+            clearPerformerIds: [performer.id],
+            clearActIds: [],
+        },
+        requestTarget: {
+            performerId: performer.id,
+            performerName: performer.name || 'Untitled Performer',
+        },
     }
 }

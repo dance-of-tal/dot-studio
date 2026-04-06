@@ -215,6 +215,35 @@ function requireDraftParticipantPerformer(
     return performer
 }
 
+function maybePromoteRegistryParticipantPerformer(
+    participantUrn: string,
+    context: ActPublishContext,
+    collector: Map<string, ProvidedPublishAsset>,
+) {
+    const stage = stageFromWorkingDir(context.workingDir)
+    const expectedPrefix = `performer/@${context.username}/${stage}/`
+    if (!participantUrn.startsWith(expectedPrefix)) {
+        return null
+    }
+
+    const performer = context.performers.find((candidate) => (
+        candidate.meta?.publishBindingUrn?.trim() === participantUrn
+        || candidate.meta?.derivedFrom?.trim() === participantUrn
+    ))
+    if (!performer) {
+        return null
+    }
+
+    const slug = participantUrn.split('/').pop() || slugifyAssetName(performer.name || 'performer')
+    return promotePerformerNode(performer, {
+        slug,
+        description: performer.meta?.authoring?.description || performer.name,
+        tags: performer.meta?.authoring?.tags,
+        scope: 'act',
+        includeProvidedAsset: true,
+    }, context, collector)
+}
+
 export function getPerformerPublishBlockReasons(
     performer: Pick<PerformerNode, 'talRef' | 'danceRefs'>,
     drafts: Record<string, DraftAsset>,
@@ -323,9 +352,10 @@ export function buildActPublishPayload(
 
     const participants = Object.entries(act.participants).map(([key, binding]) => {
         if (binding.performerRef.kind === 'registry') {
+            const promoted = maybePromoteRegistryParticipantPerformer(binding.performerRef.urn, context, collector)
             return {
                 key: displayNameByKey[key] || key,
-                performer: binding.performerRef.urn,
+                performer: promoted?.urn || binding.performerRef.urn,
                 ...(binding.subscriptions
                     ? {
                         subscriptions: {

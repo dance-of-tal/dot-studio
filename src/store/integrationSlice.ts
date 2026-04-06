@@ -25,6 +25,11 @@ import {
     syncSessionSnapshot,
 } from './session'
 import { hasRunningStudioSessions } from './runtime-reload-utils'
+import {
+    createSessionRecoveryCoordinator,
+    shouldStartActSessionRecovery,
+    shouldStopSessionRecovery,
+} from './chat/session-recovery'
 
 type ChatEvent = {
     type?: string
@@ -136,7 +141,7 @@ export const createIntegrationSlice: StateCreator<
     function flushPendingSessionEvents(sessionId: string) {
         const queue = pendingSessionEvents.get(sessionId)
         if (!queue?.length) {
-            return
+            return []
         }
         pendingSessionEvents.delete(sessionId)
         logChatDebug('integration', 'flush buffered session events', {
@@ -146,6 +151,7 @@ export const createIntegrationSlice: StateCreator<
         for (const bufferedEvent of queue) {
             eventIngest.enqueue(bufferedEvent)
         }
+        return queue
     }
 
     function repairKnownSessionBinding(sessionId: string): SessionStreamTarget | null {
@@ -228,6 +234,44 @@ export const createIntegrationSlice: StateCreator<
         }
     }
 
+    const sessionRecovery = createSessionRecoveryCoordinator({
+        get,
+        set,
+        syncSessionMessages: (chatKey, sessionId) => syncSessionSnapshot(set, get, chatKey, sessionId),
+        setSessionStatus: (sessionId, status) => get().setSessionStatus(sessionId, status),
+        setSessionLoading: (sessionId, loading) => get().setSessionLoading(sessionId, loading),
+    })
+
+    function reconcileActSessionRecovery(
+        target: SessionStreamTarget | null,
+        sessionId: string,
+        events: ChatEvent[],
+    ) {
+        if (!target || target.kind !== 'act-participant') {
+            return
+        }
+
+        let nextAction: 'start' | 'stop' | null = null
+        for (const event of events) {
+            if (shouldStopSessionRecovery(event)) {
+                nextAction = 'stop'
+                continue
+            }
+            if (shouldStartActSessionRecovery(event)) {
+                nextAction = 'start'
+            }
+        }
+
+        if (nextAction === 'stop') {
+            sessionRecovery.stop(sessionId)
+            return
+        }
+
+        if (nextAction === 'start') {
+            sessionRecovery.schedule(target.chatKey, sessionId)
+        }
+    }
+
     function tryLazyResolveSession(sessionId: string) {
         const failedAt = failedResolves.get(sessionId)
         if (failedAt && (Date.now() - failedAt) < FAILED_RESOLVE_RETRY_MS) {
@@ -259,9 +303,10 @@ export const createIntegrationSlice: StateCreator<
                     ownerKind: result.ownerKind,
                 })
                 registerResolvedSessionBinding(sessionId, result.ownerId)
-                flushPendingSessionEvents(sessionId)
+                const queuedEvents = flushPendingSessionEvents(sessionId)
                 const target = repairKnownSessionBinding(sessionId) || resolveSessionTarget(get(), sessionId)
                 if (target) {
+                    reconcileActSessionRecovery(target, sessionId, queuedEvents)
                     void syncSessionMessages(target, sessionId, { reason: 'lazy-resolve' })
                 }
             })
@@ -343,6 +388,7 @@ export const createIntegrationSlice: StateCreator<
                         return
                     }
                     flushPendingSessionEvents(sessionID)
+                    reconcileActSessionRecovery(knownTarget, sessionID, [event])
                 }
 
                 if (event.type && CHAT_EVENT_TYPES.has(event.type)) {
@@ -366,6 +412,7 @@ export const createIntegrationSlice: StateCreator<
             reconnectEventSource()
         },
         onSessionIdle: (sessionId: string) => {
+            sessionRecovery.stop(sessionId)
             logChatDebug('integration', 'session idle callback', { sessionId })
             void ensureSessionTarget(sessionId).then((target) => {
                 if (target) {
@@ -469,6 +516,7 @@ export const createIntegrationSlice: StateCreator<
             chatSlot.setWorkingDir(null)
             adapterSlot.setWorkingDir(null)
             eventIngest.dispose()
+            sessionRecovery.dispose()
             syncingSessions.clear()
             pendingResolves.clear()
             failedResolves.clear()
@@ -496,12 +544,10 @@ export const createIntegrationSlice: StateCreator<
                     runtimeConfig.agentId,
                     runtimeConfig.mcpServerNames,
                     runtimeConfig.planMode,
-                    runtimeConfig.danceDeliveryMode,
                     requestTargets,
                 )
                 const lines = [
                     `// OpenCode Agent: ${res.agent}`,
-                    `// Delivery Mode: ${res.deliveryMode}`,
                 ]
 
                 if (runtimeConfig.modelVariant) {

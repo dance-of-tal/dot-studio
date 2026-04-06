@@ -1,8 +1,10 @@
 import { useRef, useCallback, useEffect, useState } from 'react'
 
 export interface UseAutoScrollOptions {
-    /** Whether the agent is currently generating content */
-    working: boolean
+    /** Stable chat/thread key for preserving scroll state across switches */
+    stateKey?: string | null
+    /** Changes when visible content changes and may require follow-scroll */
+    contentVersion?: unknown
     /** Called when user manually scrolls up */
     onUserInteracted?: () => void
     /** Threshold in px from bottom to consider "at bottom" */
@@ -16,118 +18,166 @@ export interface UseAutoScrollReturn {
     contentRef: React.RefCallback<HTMLElement>
     /** Scroll event handler — attach to the scrollable container's onScroll */
     handleScroll: () => void
-    /** Whether the user has scrolled up */
-    userScrolled: boolean
-    /** Resume auto-scroll (resets userScrolled) */
-    resume: () => void
-    /** Force scroll to bottom */
-    forceScrollToBottom: () => void
 }
 
-/**
- * React hook implementing OpenCode-style auto-scroll behavior.
- *
- * Key behaviors:
- * - Automatically scrolls to bottom when content grows (via ResizeObserver)
- * - Detects user scrolling up via wheel events and stops auto-scroll
- * - Ignores scroll events inside nested `[data-scrollable]` regions
- * - Settles for 300ms after working stops to catch final content
- * - Dynamically toggles overflow-anchor to prevent layout jumps
- */
+type SavedScrollState = {
+    scrollTop: number
+    userScrolled: boolean
+}
+
+const savedScrollStates = new Map<string, SavedScrollState>()
+
 export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollReturn {
-    const { working, onUserInteracted, bottomThreshold = 10 } = options
+    const {
+        stateKey = null,
+        contentVersion,
+        onUserInteracted,
+        bottomThreshold = 10,
+    } = options
 
     const scrollElRef = useRef<HTMLElement | null>(null)
-    const contentElRef = useRef<HTMLElement | null>(null)
     const [userScrolled, setUserScrolled] = useState(false)
-
-    // Track programmatic scrolls to distinguish from user scrolls
-    const autoScrollRef = useRef<{ top: number; time: number } | null>(null)
-    const autoTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-    const settleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-    const settlingRef = useRef(false)
-    const wheelCleanupRef = useRef<(() => void) | null>(null)
+    const userScrolledRef = useRef(false)
+    const lastScrollTopRef = useRef(0)
+    const programmaticScrollRef = useRef(false)
+    const programmaticTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
     const resizeObserverRef = useRef<ResizeObserver | null>(null)
+    const wheelCleanupRef = useRef<(() => void) | null>(null)
+    const activeStateKeyRef = useRef<string | null>(stateKey)
+    const pendingRestoreRef = useRef<SavedScrollState | 'bottom' | null>(null)
 
-    const isActive = useCallback(() => working || settlingRef.current, [working])
+    const distanceFromBottom = useCallback((el: HTMLElement) => (
+        el.scrollHeight - el.clientHeight - el.scrollTop
+    ), [])
 
-    const distanceFromBottom = useCallback((el: HTMLElement) => {
-        return el.scrollHeight - el.clientHeight - el.scrollTop
+    const isNearBottom = useCallback((el: HTMLElement) => (
+        distanceFromBottom(el) <= bottomThreshold
+    ), [bottomThreshold, distanceFromBottom])
+
+    const canScroll = useCallback((el: HTMLElement) => (
+        el.scrollHeight - el.clientHeight > 1
+    ), [])
+
+    const persistState = useCallback((override?: Partial<SavedScrollState>) => {
+        const key = activeStateKeyRef.current
+        const el = scrollElRef.current
+        if (!key || !el) return
+
+        savedScrollStates.set(key, {
+            scrollTop: override?.scrollTop ?? el.scrollTop,
+            userScrolled: override?.userScrolled ?? userScrolledRef.current,
+        })
     }, [])
 
-    const canScroll = useCallback((el: HTMLElement) => {
-        return el.scrollHeight - el.clientHeight > 1
+    const setDetached = useCallback((detached: boolean) => {
+        userScrolledRef.current = detached
+        setUserScrolled((current) => (current === detached ? current : detached))
     }, [])
 
-    const markAuto = useCallback((el: HTMLElement) => {
-        autoScrollRef.current = {
-            top: Math.max(0, el.scrollHeight - el.clientHeight),
-            time: Date.now(),
+    const beginProgrammaticScroll = useCallback(() => {
+        programmaticScrollRef.current = true
+        if (programmaticTimerRef.current) {
+            clearTimeout(programmaticTimerRef.current)
         }
-        if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
-        autoTimerRef.current = setTimeout(() => {
-            autoScrollRef.current = null
-            autoTimerRef.current = undefined
-        }, 1500)
+        programmaticTimerRef.current = setTimeout(() => {
+            programmaticScrollRef.current = false
+            programmaticTimerRef.current = undefined
+        }, 80)
     }, [])
 
-    const isAutoScroll = useCallback((el: HTMLElement) => {
-        const a = autoScrollRef.current
-        if (!a) return false
-        if (Date.now() - a.time > 1500) {
-            autoScrollRef.current = null
-            return false
-        }
-        return Math.abs(el.scrollTop - a.top) < 2
-    }, [])
-
-    const scrollToBottomNow = useCallback((behavior: ScrollBehavior) => {
+    const scrollToBottomNow = useCallback(() => {
         const el = scrollElRef.current
         if (!el) return
-        markAuto(el)
-        if (behavior === 'smooth') {
-            el.scrollTo({ top: el.scrollHeight, behavior })
-            return
-        }
-        // Direct assignment bypasses CSS scroll-behavior: smooth
+        beginProgrammaticScroll()
         el.scrollTop = el.scrollHeight
-    }, [markAuto])
+        lastScrollTopRef.current = el.scrollTop
+        setDetached(false)
+        persistState({
+            scrollTop: Math.max(0, el.scrollHeight - el.clientHeight),
+            userScrolled: false,
+        })
+    }, [beginProgrammaticScroll, persistState, setDetached])
 
-    const scrollToBottom = useCallback((force: boolean) => {
-        if (!force && !isActive()) return
-
-        if (force && userScrolled) setUserScrolled(false)
-
+    const applyPendingRestore = useCallback(() => {
         const el = scrollElRef.current
-        if (!el) return
+        const pending = pendingRestoreRef.current
+        if (!el || !pending) return
 
-        if (!force && userScrolled) return
-
-        const distance = distanceFromBottom(el)
-        if (distance < 2) {
-            markAuto(el)
+        if (pending === 'bottom') {
+            pendingRestoreRef.current = null
+            scrollToBottomNow()
             return
         }
 
-        scrollToBottomNow('auto')
-    }, [isActive, userScrolled, distanceFromBottom, markAuto, scrollToBottomNow])
+        const maxTop = Math.max(0, el.scrollHeight - el.clientHeight)
+        beginProgrammaticScroll()
+        el.scrollTop = Math.min(pending.scrollTop, maxTop)
+        lastScrollTopRef.current = el.scrollTop
+        setDetached(pending.userScrolled)
+        persistState({
+            scrollTop: el.scrollTop,
+            userScrolled: pending.userScrolled,
+        })
+        pendingRestoreRef.current = null
+    }, [beginProgrammaticScroll, persistState, scrollToBottomNow, setDetached])
 
-    const stop = useCallback(() => {
+    const followIfPinnedToBottom = useCallback(() => {
         const el = scrollElRef.current
-        if (!el) return
-        if (!canScroll(el)) {
-            if (userScrolled) setUserScrolled(false)
+        if (!el || pendingRestoreRef.current) return
+        if (userScrolledRef.current) {
+            persistState()
             return
         }
-        if (userScrolled) return
-        setUserScrolled(true)
+        scrollToBottomNow()
+    }, [persistState, scrollToBottomNow])
+
+    const detach = useCallback(() => {
+        const el = scrollElRef.current
+        if (!el || !canScroll(el) || userScrolledRef.current) return
+        setDetached(true)
+        persistState({ scrollTop: el.scrollTop, userScrolled: true })
         onUserInteracted?.()
-    }, [canScroll, userScrolled, onUserInteracted])
+    }, [canScroll, onUserInteracted, persistState, setDetached])
 
-    // Update overflow-anchor dynamically
-    const updateOverflowAnchor = useCallback((el: HTMLElement) => {
-        el.style.overflowAnchor = userScrolled ? 'auto' : 'none'
-    }, [userScrolled])
+    const handleScroll = useCallback(() => {
+        const el = scrollElRef.current
+        if (!el) return
+
+        const previousTop = lastScrollTopRef.current
+        const currentTop = el.scrollTop
+        const movingUp = currentTop < previousTop - 1
+        lastScrollTopRef.current = currentTop
+
+        if (!canScroll(el)) {
+            setDetached(false)
+            persistState({ scrollTop: currentTop, userScrolled: false })
+            return
+        }
+
+        if (programmaticScrollRef.current) {
+            persistState({ scrollTop: currentTop })
+            return
+        }
+
+        if (movingUp) {
+            detach()
+            persistState({ scrollTop: currentTop, userScrolled: true })
+            return
+        }
+
+        if (isNearBottom(el)) {
+            setDetached(false)
+            persistState({ scrollTop: currentTop, userScrolled: false })
+            return
+        }
+
+        if (userScrolledRef.current) {
+            persistState({ scrollTop: currentTop, userScrolled: true })
+            return
+        }
+
+        persistState({ scrollTop: currentTop, userScrolled: false })
+    }, [canScroll, detach, isNearBottom, persistState, setDetached])
 
     const isScrollableBoundary = useCallback((el: Element | null) => {
         if (!(el instanceof HTMLElement)) {
@@ -136,134 +186,121 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         return (el.scrollHeight - el.clientHeight > 1) || (el.scrollWidth - el.clientWidth > 1)
     }, [])
 
-    // Scroll event handler
-    const handleScroll = useCallback(() => {
-        const el = scrollElRef.current
-        if (!el) return
+    const updateOverflowAnchor = useCallback((el: HTMLElement) => {
+        el.style.overflowAnchor = 'none'
+    }, [])
 
-        if (!canScroll(el)) {
-            if (userScrolled) setUserScrolled(false)
-            return
-        }
-
-        if (distanceFromBottom(el) < bottomThreshold) {
-            if (userScrolled) setUserScrolled(false)
-            return
-        }
-
-        // Ignore scroll events triggered by our own scrollToBottom calls
-        if (!userScrolled && isAutoScroll(el)) {
-            scrollToBottom(false)
-            return
-        }
-
-        stop()
-    }, [canScroll, distanceFromBottom, bottomThreshold, userScrolled, isAutoScroll, scrollToBottom, stop])
-
-    // scrollRef callback
     const scrollRef = useCallback((el: HTMLElement | null) => {
-        // Clean up previous
         if (wheelCleanupRef.current) {
             wheelCleanupRef.current()
             wheelCleanupRef.current = null
         }
 
+        if (!el) {
+            persistState()
+            scrollElRef.current = null
+            return
+        }
+
         scrollElRef.current = el
-        if (!el) return
-
         updateOverflowAnchor(el)
+        lastScrollTopRef.current = el.scrollTop
 
-        const handleWheel = (e: WheelEvent) => {
-            if (e.deltaY >= 0) return
-            // Don't treat nested scrollable regions as leaving follow mode
-            const target = e.target instanceof Element ? e.target : undefined
+        const handleWheel = (event: WheelEvent) => {
+            if (event.deltaY >= 0) return
+
+            const target = event.target instanceof Element ? event.target : null
             const nested = target?.closest('[data-scrollable]')
-            if (nested && nested !== el && isScrollableBoundary(nested)) return
-            stop()
+            if (nested && nested !== el && isScrollableBoundary(nested)) {
+                return
+            }
+
+            detach()
         }
 
         el.addEventListener('wheel', handleWheel, { passive: true })
         wheelCleanupRef.current = () => el.removeEventListener('wheel', handleWheel)
-    }, [updateOverflowAnchor, stop, isScrollableBoundary])
 
-    // contentRef callback — setup ResizeObserver
+        queueMicrotask(() => {
+            applyPendingRestore()
+        })
+    }, [applyPendingRestore, detach, isScrollableBoundary, persistState, updateOverflowAnchor])
+
     const contentRef = useCallback((el: HTMLElement | null) => {
         if (resizeObserverRef.current) {
             resizeObserverRef.current.disconnect()
             resizeObserverRef.current = null
         }
 
-        contentElRef.current = el
         if (!el) return
 
         const observer = new ResizeObserver(() => {
-            const scrollEl = scrollElRef.current
-            if (scrollEl && !canScroll(scrollEl)) {
-                setUserScrolled(false)
+            if (pendingRestoreRef.current) {
+                applyPendingRestore()
                 return
             }
-            if (!isActive()) return
-            // Don't scroll if user has scrolled up
-            if (userScrolled) return
-            scrollToBottom(false)
+            followIfPinnedToBottom()
         })
+
         observer.observe(el)
         resizeObserverRef.current = observer
-    }, [canScroll, isActive, userScrolled, scrollToBottom])
+    }, [applyPendingRestore, followIfPinnedToBottom])
 
-    // Working state changes
     useEffect(() => {
-        settlingRef.current = false
-        if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
-        settleTimerRef.current = undefined
+        if (activeStateKeyRef.current && activeStateKeyRef.current !== stateKey) {
+            persistState()
+        }
 
-        if (working) {
-            if (!userScrolled) {
-                queueMicrotask(() => {
-                    scrollToBottom(true)
-                })
-            }
+        activeStateKeyRef.current = stateKey
+        const savedState = stateKey ? savedScrollStates.get(stateKey) ?? null : null
+
+        userScrolledRef.current = savedState?.userScrolled ?? false
+        setUserScrolled(savedState?.userScrolled ?? false)
+        pendingRestoreRef.current = savedState ?? 'bottom'
+
+        queueMicrotask(() => {
+            applyPendingRestore()
+        })
+    }, [applyPendingRestore, persistState, stateKey])
+
+    useEffect(() => {
+        const el = scrollElRef.current
+        if (!el) return
+
+        if (pendingRestoreRef.current) {
+            queueMicrotask(() => {
+                applyPendingRestore()
+            })
             return
         }
 
-        // Settling period after working stops
-        settlingRef.current = true
-        settleTimerRef.current = setTimeout(() => {
-            settlingRef.current = false
-        }, 300)
-    }, [working]) // eslint-disable-line react-hooks/exhaustive-deps
+        followIfPinnedToBottom()
+    }, [applyPendingRestore, contentVersion, followIfPinnedToBottom])
 
-    // Update overflow-anchor when userScrolled changes
     useEffect(() => {
         const el = scrollElRef.current
-        if (el) updateOverflowAnchor(el)
-    }, [userScrolled, updateOverflowAnchor])
+        if (!el) return
+        updateOverflowAnchor(el)
+    }, [updateOverflowAnchor, userScrolled])
 
-    // Cleanup
     useEffect(() => {
         return () => {
-            if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
-            if (autoTimerRef.current) clearTimeout(autoTimerRef.current)
-            if (wheelCleanupRef.current) wheelCleanupRef.current()
-            if (resizeObserverRef.current) resizeObserverRef.current.disconnect()
+            persistState()
+            if (programmaticTimerRef.current) {
+                clearTimeout(programmaticTimerRef.current)
+            }
+            if (wheelCleanupRef.current) {
+                wheelCleanupRef.current()
+            }
+            if (resizeObserverRef.current) {
+                resizeObserverRef.current.disconnect()
+            }
         }
-    }, [])
-
-    const resume = useCallback(() => {
-        setUserScrolled(false)
-        scrollToBottom(true)
-    }, [scrollToBottom])
-
-    const forceScrollToBottom = useCallback(() => {
-        scrollToBottom(true)
-    }, [scrollToBottom])
+    }, [persistState])
 
     return {
         scrollRef,
         contentRef,
         handleScroll,
-        userScrolled,
-        resume,
-        forceScrollToBottom,
     }
 }

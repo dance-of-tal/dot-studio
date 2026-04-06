@@ -16,6 +16,7 @@ import { queryKeys, useAssetKind } from '../../hooks/queries'
 import { useDotLogin } from '../../hooks/useDotLogin'
 import {
     buildMarkdownAssetPayload,
+    buildAuthoringPayloadForPublishApi,
     buildPerformerPreflight,
     buildPickerItems,
     getActPublishBlockReasons,
@@ -272,7 +273,14 @@ export function usePublishModalController(open: boolean) {
                     username: authUser?.username || '',
                     workingDir,
                 })
-                const result = await api.dot.publishAsset('performer', slug, publishInput.payload, tags, publishInput.providedAssets, true)
+                const result = await api.dot.publishAsset(
+                    'performer',
+                    slug,
+                    buildAuthoringPayloadForPublishApi(publishInput.payload),
+                    tags,
+                    publishInput.providedAssets,
+                    true,
+                )
                 await invalidateKind('performer')
                 setStatus({
                     tone: 'success',
@@ -288,7 +296,14 @@ export function usePublishModalController(open: boolean) {
                     username: authUser?.username || '',
                     workingDir,
                 })
-                const result = await api.dot.publishAsset('act', slug, publishInput.payload, tags, publishInput.providedAssets, true)
+                const result = await api.dot.publishAsset(
+                    'act',
+                    slug,
+                    buildAuthoringPayloadForPublishApi(publishInput.payload),
+                    tags,
+                    publishInput.providedAssets,
+                    true,
+                )
                 await invalidateKind('act')
                 setStatus({
                     tone: 'success',

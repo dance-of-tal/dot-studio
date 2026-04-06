@@ -6,6 +6,7 @@ import {
     parseActSessionOwnershipOwnerId,
     resolveSessionOwnership,
 } from '../services/session-ownership-service.js'
+import { serverDebug } from '../lib/server-logger.js'
 import { requestWorkingDir } from './route-errors.js'
 
 const actRuntimeTools = new Hono()
@@ -72,19 +73,18 @@ async function resolveParticipantKeyByName(
     return resolveParticipantRecipient(actDefinition, senderKey, recipient)
 }
 
-// ── Debug logging middleware for Act tool routes ────
 actRuntimeTools.use('/api/act/*', async (c, next) => {
     const url = c.req.url
     const method = c.req.method
     const workingDir = c.req.query('workingDir') || c.req.header('x-dot-working-dir') || 'NONE'
-    console.log(`[act-tool-req] ${method} ${url.replace(/\?.*/, '')} workingDir=${decodeURIComponent(workingDir).slice(-40)}`)
+    serverDebug('act-tool-req', `${method} ${url.replace(/\?.*/, '')} workingDir=${decodeURIComponent(workingDir).slice(-40)}`)
     await next()
 })
 
 actRuntimeTools.post('/api/act/:actId/thread/:threadId/send-message', async (c) => {
     const threadId = c.req.param('threadId')
     const workingDir = requestWorkingDir(c)
-    console.log(`[act-tool] send-message: threadId=${threadId}, workingDir=${workingDir}`)
+    serverDebug('act-tool', `send-message threadId=${threadId} workingDir=${workingDir}`)
     const body = await c.req.json<{
         from: string
         to: string
@@ -94,7 +94,7 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/send-message', async (c) 
 
     const service = getActRuntimeService(workingDir)
     const result = await service.sendMessage(threadId, body)
-    console.log(`[act-tool] send-message result: ok=${result.ok}${!result.ok ? `, error=${result.error}` : ''}`)
+    serverDebug('act-tool', `send-message result ok=${result.ok}${!result.ok ? ` error=${result.error}` : ''}`)
     if (!result.ok) {
         return c.json(result, result.status as 404 | 429)
     }
@@ -155,7 +155,7 @@ actRuntimeTools.post('/api/act/session/:sessionId/message-teammate', async (c) =
 actRuntimeTools.post('/api/act/:actId/thread/:threadId/post-to-board', async (c) => {
     const threadId = c.req.param('threadId')
     const workingDir = requestWorkingDir(c)
-    console.log(`[act-tool] post-to-board: threadId=${threadId}, workingDir=${workingDir}`)
+    serverDebug('act-tool', `post-to-board threadId=${threadId} workingDir=${workingDir}`)
     const body = await c.req.json<{
         author: string
         key: string
@@ -166,7 +166,7 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/post-to-board', async (c)
     }>()
 
     const result = await getActRuntimeService(workingDir).postToBoard(threadId, body)
-    console.log(`[act-tool] post-to-board result: ok=${result.ok}${!result.ok ? `, error=${result.error}` : ''}`)
+    serverDebug('act-tool', `post-to-board result ok=${result.ok}${!result.ok ? ` error=${result.error}` : ''}`)
     if (!result.ok) {
         return c.json(result, result.status as 400 | 403 | 404 | 429)
     }
@@ -202,13 +202,13 @@ actRuntimeTools.post('/api/act/session/:sessionId/update-shared-board', async (c
 actRuntimeTools.get('/api/act/:actId/thread/:threadId/read-board', async (c) => {
     const threadId = c.req.param('threadId')
     const workingDir = requestWorkingDir(c)
-    console.log(`[act-tool] read-board: threadId=${threadId}, workingDir=${workingDir}`)
+    serverDebug('act-tool', `read-board threadId=${threadId} workingDir=${workingDir}`)
     const key = c.req.query('key')
     const summaryOnly = c.req.query('summaryOnly') !== 'false'
     const limitRaw = c.req.query('limit')
     const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined
     const result = await getActRuntimeService(workingDir).readBoard(threadId, { key, summaryOnly, limit })
-    console.log(`[act-tool] read-board result: ok=${result.ok}${!result.ok ? `, error=${result.error}` : ''}`)
+    serverDebug('act-tool', `read-board result ok=${result.ok}${!result.ok ? ` error=${result.error}` : ''}`)
     if (!result.ok) {
         return c.json(result, result.status as 404)
     }

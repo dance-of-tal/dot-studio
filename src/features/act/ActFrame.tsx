@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useCallback } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import type { Node, NodeProps } from '@xyflow/react'
 import { Workflow } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
 import CanvasWindowFrame from '../../components/canvas/CanvasWindowFrame'
 import {
@@ -15,7 +16,7 @@ import {
 import { resolveActThreadOrdinal, resolveDisplayedActThread } from '../../lib/act-threads'
 import ActHeaderActions from './ActHeaderActions'
 import ActSurfacePanel from './ActSurfacePanel'
-import { getCanvasViewportSize, resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
+import { getCanvasViewportSize, isFocusTarget, scheduleFitView } from '../../lib/focus-utils'
 import { evaluateActReadiness } from './act-readiness'
 import './ActFrame.css'
 
@@ -40,11 +41,24 @@ export default function ActFrame({ data, id }: NodeProps<Node<ActFrameData, 'act
         toggleActVisibility,
         activeThreadId,
         actThreads,
-        focusedPerformerId,
         focusSnapshot,
         enterFocusMode,
         exitFocusMode,
-    } = useStudioStore()
+    } = useStudioStore(useShallow((state) => ({
+        acts: state.acts,
+        performers: state.performers,
+        selectedActId: state.selectedActId,
+        actEditorState: state.actEditorState,
+        selectAct: state.selectAct,
+        openActEditor: state.openActEditor,
+        closeActEditor: state.closeActEditor,
+        toggleActVisibility: state.toggleActVisibility,
+        activeThreadId: state.activeThreadId,
+        actThreads: state.actThreads,
+        focusSnapshot: state.focusSnapshot,
+        enterFocusMode: state.enterFocusMode,
+        exitFocusMode: state.exitFocusMode,
+    })))
     const bodyRef = useRef<HTMLDivElement>(null)
 
     const act = useMemo(() => acts.find((a) => a.id === id), [acts, id])
@@ -55,8 +69,7 @@ export default function ActFrame({ data, id }: NodeProps<Node<ActFrameData, 'act
 
     const isSelected = selectedActId === id
     const isEditing = actEditorState?.actId === id
-    const focusNodeId = resolveFocusNodeId(focusSnapshot, focusedPerformerId)
-    const isFocused = focusSnapshot?.type === 'act' && focusNodeId === id
+    const isFocused = isFocusTarget(focusSnapshot, id, 'act')
     const width = data.width || act?.width || ACT_DEFAULT_WIDTH
     const height = resolveActExpandedHeight(act?.height)
     const threads = useMemo(() => actThreads[id] || EMPTY_THREADS, [actThreads, id])

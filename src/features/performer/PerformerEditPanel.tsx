@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { ArrowLeft, ChevronLeft, Cpu, Hexagon, Server, Zap } from 'lucide-react'
 
 import { unresolvedDeclaredMcpServerNames } from '../../lib/performers'
-import type { PerformerNode, ModelConfig, AssetRef, DanceDeliveryMode, McpServer } from '../../types'
+import type { PerformerNode, ModelConfig, AssetRef, McpServer } from '../../types'
 
 import PerformerComposeCards from './PerformerComposeCards'
 import {
@@ -53,7 +53,6 @@ type PerformerEditPanelProps = {
     onNameChange: (value: string) => void
     onDescriptionChange: (value: string) => void
     onTalRefChange: (ref: AssetRef | null) => void
-    onDanceDeliveryModeChange: (value: DanceDeliveryMode) => void
     onModelChange: (model: ModelConfig | null) => void
     onModelVariantChange: (variant: string | null) => void
     onRemoveDance: (id: string, key: string) => void
@@ -77,7 +76,6 @@ export default function PerformerEditPanel({
     onNameChange,
     onDescriptionChange,
     onTalRefChange,
-    onDanceDeliveryModeChange,
     onModelChange,
     onModelVariantChange,
     onRemoveDance,
@@ -231,7 +229,6 @@ export default function PerformerEditPanel({
                     performerId={performerId}
                     onOpenAssetEditor={onOpenAssetEditor}
                     onRemoveDance={onRemoveDance}
-                    onDanceDeliveryModeChange={onDanceDeliveryModeChange}
                 />
             )}
             {detailView === 'model' && (

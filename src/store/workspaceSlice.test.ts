@@ -9,6 +9,18 @@ const { applyRuntimeReloadMock, deleteSessionMock, showToastMock } = vi.hoisted(
     showToastMock: vi.fn(),
 }))
 
+function overlaps(
+    left: { x: number; y: number; width: number; height: number },
+    right: { x: number; y: number; width: number; height: number },
+) {
+    return !(
+        left.x + left.width <= right.x
+        || right.x + right.width <= left.x
+        || left.y + left.height <= right.y
+        || right.y + right.height <= left.y
+    )
+}
+
 vi.mock('../api', () => ({
     api: {
         opencodeApplyRuntimeReload: applyRuntimeReloadMock,
@@ -34,8 +46,6 @@ function createBaseState(): StudioState {
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
         focusSnapshot: null,
         canvasRevealTarget: null,
         inspectorFocus: null,
@@ -161,6 +171,46 @@ describe('workspace runtime reload', () => {
         })
     })
 
+    it('spawns a new performer without overlapping an existing act window', () => {
+        const harness = createHarness({
+            ...createBaseState(),
+            canvasCenter: { x: 1000, y: 700 },
+            acts: [{
+                id: 'act-1',
+                name: 'Existing Act',
+                position: { x: 840, y: 300 },
+                width: 640,
+                height: 800,
+                participants: {},
+                relations: [],
+                createdAt: Date.now(),
+            }],
+        } as StudioState)
+
+        const performerId = harness.get().addPerformer('New Performer')
+        const performer = harness.get().performers.find((entry) => entry.id === performerId)
+
+        expect(performer).toBeTruthy()
+        expect(overlaps(
+            {
+                x: performer!.position.x,
+                y: performer!.position.y,
+                width: performer!.width || 320,
+                height: performer!.height || 400,
+            },
+            {
+                x: 840,
+                y: 300,
+                width: 640,
+                height: 800,
+            },
+        )).toBe(false)
+        expect(harness.get().canvasRevealTarget).toMatchObject({
+            id: performerId,
+            type: 'performer',
+        })
+    })
+
     it('deletes a bound performer session when removing the performer', async () => {
         deleteSessionMock.mockResolvedValue(undefined)
         const removeSession = vi.fn()
@@ -181,7 +231,6 @@ describe('workspace runtime reload', () => {
                 talRef: null,
                 danceRefs: [],
                 mcpServerNames: [],
-                danceDeliveryMode: 'auto',
             }],
             sessions: [{ id: 'session-1', title: 'Performer 1' }],
             chatKeyToSession: { 'performer-1': 'session-1' },

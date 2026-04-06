@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
 import { Send, Sparkles, ChevronUp, AlertCircle, Settings, RefreshCcw, Square, X } from 'lucide-react'
 import { useModels } from '../../hooks/queries'
@@ -38,7 +39,21 @@ export function AssistantChat() {
         markAssistantActionsApplied,
         recordAssistantActionResult,
         initRealtimeEvents,
-    } = useStudioStore()
+    } = useStudioStore(useShallow((state) => ({
+        isAssistantOpen: state.isAssistantOpen,
+        assistantModel: state.assistantModel,
+        appliedAssistantActionMessageIds: state.appliedAssistantActionMessageIds,
+        assistantActionResults: state.assistantActionResults,
+        sendMessage: state.sendMessage,
+        abortChat: state.abortChat,
+        startNewSession: state.startNewSession,
+        toggleAssistant: state.toggleAssistant,
+        setAssistantModel: state.setAssistantModel,
+        setAssistantAvailableModels: state.setAssistantAvailableModels,
+        markAssistantActionsApplied: state.markAssistantActionsApplied,
+        recordAssistantActionResult: state.recordAssistantActionResult,
+        initRealtimeEvents: state.initRealtimeEvents,
+    })))
 
     const workingDir = useStudioStore((state) => state.workingDir)
     const assistantChatKey = useMemo(() => buildAssistantChatKey(workingDir), [workingDir])
@@ -54,7 +69,6 @@ export function AssistantChat() {
 
     const [input, setInput] = useState('')
     const [panelWidth, setPanelWidth] = useState(320)
-    const chatEndRef = useRef<HTMLDivElement>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const dragging = useRef(false)
 
@@ -145,25 +159,21 @@ export function AssistantChat() {
     }, [panelWidth])
 
     useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages])
-
-    useEffect(() => {
         const textarea = textareaRef.current
         if (!textarea) return
         textarea.style.height = '0px'
         textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`
     }, [input])
 
-    const handleSend = () => {
+    const handleSend = useCallback(() => {
         const trimmed = input.trim()
         if (!trimmed || !assistantModel || isLoading) return
         initRealtimeEvents()
         sendMessage(assistantChatKey, trimmed)
         setInput('')
-    }
+    }, [assistantChatKey, assistantModel, initRealtimeEvents, input, isLoading, sendMessage])
 
-    const handleRefreshSession = async () => {
+    const handleRefreshSession = useCallback(async () => {
         if (!hasModels || isLoading) return
         await startNewSession(assistantChatKey)
         setInput('')
@@ -176,25 +186,30 @@ export function AssistantChat() {
                 dedupeKey: 'assistant:refresh-session',
             },
         )
-    }
+    }, [assistantChatKey, hasModels, isLoading, startNewSession])
 
-    const openSettings = () => {
+    const openSettings = useCallback(() => {
         document.querySelector<HTMLButtonElement>('[title="Settings"]')?.click()
-    }
+    }, [])
 
-    if (!isAssistantOpen) return null
+    const currentModelLabel = useMemo(() => (
+        assistantModel
+            ? (connectedModels.find((model) => (
+                model.provider === assistantModel.provider
+                && model.id === assistantModel.modelId
+            ))?.name || assistantModel.modelId)
+            : null
+    ), [assistantModel, connectedModels])
 
-    const currentModelLabel = assistantModel
-        ? (connectedModels.find(m => m.provider === assistantModel.provider && m.id === assistantModel.modelId)?.name || assistantModel.modelId)
-        : null
+    const groupedModels = useMemo(() => (
+        connectedModels.reduce<Record<string, RuntimeModelCatalogEntry[]>>((acc, model) => {
+            if (!acc[model.providerName]) acc[model.providerName] = []
+            acc[model.providerName].push(model)
+            return acc
+        }, {})
+    ), [connectedModels])
 
-    const groupedModels = connectedModels.reduce<Record<string, RuntimeModelCatalogEntry[]>>((acc, m) => {
-        if (!acc[m.providerName]) acc[m.providerName] = []
-        acc[m.providerName].push(m)
-        return acc
-    }, {})
-
-    const statusLabel = (() => {
+    const statusLabel = useMemo(() => {
         if (isLoading) return 'Thinking'
         if (activityKind === 'interactive') return 'Needs input'
         if (activityKind === 'parked') return 'Waiting'
@@ -205,9 +220,17 @@ export function AssistantChat() {
             default:
                 return 'Ready'
         }
-    })()
+    }, [activityKind, isLoading, sessionId, sessionStatus?.type])
 
-    const renderAssistantActionStatus = (messageId: string) => {
+    const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.nativeEvent.isComposing) return
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            handleSend()
+        }
+    }, [handleSend])
+
+    const renderAssistantActionStatus = useCallback((messageId: string) => {
         const result = assistantActionResults[messageId]
         if (!result) return null
 
@@ -227,7 +250,123 @@ export function AssistantChat() {
                 {label}
             </div>
         )
-    }
+    }, [assistantActionResults])
+
+    const renderEmpty = useCallback(() => (
+        <div className="assistant-empty">
+            <Sparkles size={48} className="assistant-empty__icon" />
+            <h3 className="assistant-empty__title">How can I help you design?</h3>
+            <p className="assistant-empty__desc">
+                Ask me to add performers, acts, or explain how DOT Studio works.
+            </p>
+        </div>
+    ), [])
+
+    const renderMessage = useCallback((msg: typeof messages[number], index: number) => {
+        const isStreamingAssistant = isStreamingAssistantMessage(messages, index, isLoading)
+        if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
+            return null
+        }
+        if (msg.role === 'assistant' && !hasVisibleAssistantMessageContent(msg)) {
+            return null
+        }
+        return (
+            <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`} data-scrollable>
+                {msg.role === 'user' ? (
+                    <div className="user-input-box">
+                        <span className="user-input-text">{msg.content}</span>
+                    </div>
+                ) : (
+                    <>
+                        <ChatMessageContent message={msg} streaming={isStreamingAssistant} />
+                        {renderAssistantActionStatus(msg.id)}
+                    </>
+                )}
+            </div>
+        )
+    }, [isLoading, messages, renderAssistantActionStatus])
+
+    const renderLoading = useCallback(() => (
+        <div className="thread-msg thread-msg--assistant" data-scrollable>
+            <div className="assistant-body">
+                <TextShimmer text="Thinking" active />
+            </div>
+        </div>
+    ), [])
+
+    const composer = useMemo(() => (
+        <div className="assistant-footer">
+            <div className="assistant-input-wrapper">
+                <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleInputKeyDown}
+                    placeholder={isLoading ? 'Assistant is working...' : 'Ask the assistant...'}
+                    className="assistant-input"
+                    rows={1}
+                    disabled={isLoading || !assistantModel}
+                />
+                {canAbort ? (
+                    <button
+                        className="assistant-submit"
+                        onClick={() => void abortChat(assistantChatKey)}
+                        title="Abort generation"
+                    >
+                        <Square size={14} fill="currentColor" />
+                    </button>
+                ) : (
+                    <button
+                        className="assistant-submit"
+                        onClick={handleSend}
+                        disabled={!input.trim() || !assistantModel}
+                        title="Send message"
+                    >
+                        <Send size={14} />
+                    </button>
+                )}
+            </div>
+
+            <div className="assistant-footer__model-row">
+                <DropdownMenu
+                    trigger={
+                        <button className="assistant-model-pill" title="Change model">
+                            <span className="assistant-model-pill__label">{currentModelLabel || 'Select model'}</span>
+                            <ChevronUp size={10} />
+                        </button>
+                    }
+                >
+                    {Object.entries(groupedModels).map(([providerName, providerModels]) => (
+                        <DropdownMenu.Group key={providerName} label={providerName}>
+                            {providerModels.map((model) => (
+                                <DropdownMenu.Item
+                                    key={`${model.provider}:${model.id}`}
+                                    active={assistantModel?.provider === model.provider && assistantModel?.modelId === model.id}
+                                    onClick={() => setAssistantModel({ provider: model.provider, modelId: model.id })}
+                                >
+                                    {model.name}
+                                </DropdownMenu.Item>
+                            ))}
+                        </DropdownMenu.Group>
+                    ))}
+                </DropdownMenu>
+            </div>
+        </div>
+    ), [
+        abortChat,
+        assistantChatKey,
+        assistantModel,
+        canAbort,
+        currentModelLabel,
+        groupedModels,
+        handleInputKeyDown,
+        handleSend,
+        input,
+        isLoading,
+        setAssistantModel,
+    ])
+
+    if (!isAssistantOpen) return null
 
     return (
         <div className="assistant-panel" style={{ width: panelWidth }}>
@@ -285,112 +424,12 @@ export function AssistantChat() {
                 <ThreadBody
                     messages={messages}
                     loading={shouldShowAssistantLoadingPlaceholder(messages, isLoading)}
+                    scrollStateKey={assistantChatKey}
                     historyClassName="assistant-content"
-                    endRef={chatEndRef}
-                    renderEmpty={() => (
-                        <div className="assistant-empty">
-                            <Sparkles size={48} className="assistant-empty__icon" />
-                            <h3 className="assistant-empty__title">How can I help you design?</h3>
-                            <p className="assistant-empty__desc">
-                                Ask me to add performers, acts, or explain how DOT Studio works.
-                            </p>
-                        </div>
-                    )}
-                    renderMessage={(msg, index) => {
-                        const isStreamingAssistant = isStreamingAssistantMessage(messages, index, isLoading)
-                        if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
-                            return null
-                        }
-                        if (msg.role === 'assistant' && !hasVisibleAssistantMessageContent(msg)) {
-                            return null
-                        }
-                        return (
-                            <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`} data-scrollable>
-                                {msg.role === 'user' ? (
-                                    <div className="user-input-box">
-                                        <span className="user-input-text">{msg.content}</span>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <ChatMessageContent message={msg} streaming={isStreamingAssistant} />
-                                        {renderAssistantActionStatus(msg.id)}
-                                    </>
-                                )}
-                            </div>
-                        )
-                    }}
-                    renderLoading={() => (
-                        <div className="thread-msg thread-msg--assistant" data-scrollable>
-                            <div className="assistant-body">
-                                <TextShimmer text="Thinking" active />
-                            </div>
-                        </div>
-                    )}
-                    composer={
-                        <div className="assistant-footer">
-                            <div className="assistant-input-wrapper">
-                                <textarea
-                                    ref={textareaRef}
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.nativeEvent.isComposing) return
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault()
-                                            handleSend()
-                                        }
-                                    }}
-                                    placeholder={isLoading ? 'Assistant is working...' : 'Ask the assistant...'}
-                                    className="assistant-input"
-                                    rows={1}
-                                    disabled={isLoading || !assistantModel}
-                                />
-                                {canAbort ? (
-                                    <button
-                                        className="assistant-submit"
-                                        onClick={() => void abortChat(assistantChatKey)}
-                                        title="Abort generation"
-                                    >
-                                        <Square size={14} fill="currentColor" />
-                                    </button>
-                                ) : (
-                                    <button
-                                        className="assistant-submit"
-                                        onClick={handleSend}
-                                        disabled={!input.trim() || !assistantModel}
-                                        title="Send message"
-                                    >
-                                        <Send size={14} />
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="assistant-footer__model-row">
-                                <DropdownMenu
-                                    trigger={
-                                        <button className="assistant-model-pill" title="Change model">
-                                            <span className="assistant-model-pill__label">{currentModelLabel || 'Select model'}</span>
-                                            <ChevronUp size={10} />
-                                        </button>
-                                    }
-                                >
-                                    {Object.entries(groupedModels).map(([providerName, providerModels]) => (
-                                        <DropdownMenu.Group key={providerName} label={providerName}>
-                                            {providerModels.map(m => (
-                                                <DropdownMenu.Item
-                                                    key={`${m.provider}:${m.id}`}
-                                                    active={assistantModel?.provider === m.provider && assistantModel?.modelId === m.id}
-                                                    onClick={() => setAssistantModel({ provider: m.provider, modelId: m.id })}
-                                                >
-                                                    {m.name}
-                                                </DropdownMenu.Item>
-                                            ))}
-                                        </DropdownMenu.Group>
-                                    ))}
-                                </DropdownMenu>
-                            </div>
-                        </div>
-                    }
+                    renderEmpty={renderEmpty}
+                    renderMessage={renderMessage}
+                    renderLoading={renderLoading}
+                    composer={composer}
                 />
             )}
         </div>

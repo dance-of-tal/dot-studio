@@ -1,546 +1,223 @@
+import { buildActParticipantChatKey } from '../../../shared/chat-targets'
 import { api } from '../../api'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
-import { logChatDebug, summarizeMessagesForChatDebug } from '../../lib/chat-debug'
-import { hasModelConfig, resolvePerformerRuntimeConfig } from '../../lib/performers'
+import { logChatDebug } from '../../lib/chat-debug'
+import { hasModelConfig } from '../../lib/performers'
 import type { AssetRef, ChatMessage } from '../../types'
 import {
-    parseActParticipantChatKey,
-} from '../../../shared/chat-targets'
-import {
-    addChatMessage,
-    appendPerformerSystemMessage,
-    getPerformerById,
-    syncPerformerMessages,
+    appendChatMessage,
+    appendChatSystemMessage,
+    syncChatMessages,
     type ChatGet,
     type ChatSet,
 } from './chat-internals'
-import {
-    createOptimisticActMessage,
-    ensureActSendSession,
-    primeExistingActSession,
-    resolveActSendContext,
-} from './act-chat-send-utils'
+import type { ChatRuntimeConfig } from './chat-runtime-target'
 import { resolveChatRuntimeTarget } from './chat-runtime-target'
 import {
     moveDraftMessageToSession,
     registerSessionBinding,
     resolveChatKeySession,
 } from '../session'
-import { resolveSessionActivity } from '../session/session-activity'
 import { collectRuntimeDraftIds, preparePendingRuntimeExecution } from '../runtime-execution'
-import {
-    ACT_THREAD_RECOVERY_MAX_POLLS,
-    createInitialActRecoveryState,
-    isActRecoverySettled,
-    syncActRecoveryParticipants,
-} from './act-chat-recovery'
+import { createSessionRecoveryCoordinator } from './session-recovery'
 
-const STREAM_RECOVERY_GRACE_MS = 1200
-const STREAM_RECOVERY_POLL_MS = 1000
-const STREAM_RECOVERY_MAX_POLLS = 45
-
-function sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function buildSnapshotSignature(messages: ChatMessage[]) {
-    return messages
-        .map((message) => `${message.id}:${message.role}:${message.timestamp}:${message.content.length}`)
-        .join('|')
-}
-
-function hasSettledAssistantReply(messages: ChatMessage[]) {
-    let latestUserIndex = -1
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-        if (messages[index].role === 'user') {
-            latestUserIndex = index
-            break
-        }
+function createOptimisticUserMessage(
+    text: string,
+    runtimeConfig: ChatRuntimeConfig,
+    attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
+): ChatMessage {
+    return {
+        id: `temp-${Date.now()}`,
+        role: 'user',
+        content: text,
+        timestamp: Date.now(),
+        attachments: attachments && attachments.length > 0
+            ? attachments.map((attachment) => ({
+                type: attachment.type,
+                filename: attachment.filename,
+                mime: attachment.mime,
+            }))
+            : undefined,
+        metadata: {
+            agentName: runtimeConfig.agentId || 'build',
+            modelId: runtimeConfig.model?.modelId,
+            provider: runtimeConfig.model?.provider,
+            variant: runtimeConfig.modelVariant || undefined,
+        },
     }
-
-    const tail = latestUserIndex >= 0 ? messages.slice(latestUserIndex + 1) : messages
-    return tail.some((message) => (
-        (message.role === 'assistant' || message.role === 'system')
-        && !message.id.startsWith('temp-')
-        && message.content.trim().length > 0
-    ))
-}
-
-function hasPendingInteractiveTurn(get: ChatGet, sessionId: string) {
-    const state = get()
-    return !!(state.sePermissions[sessionId] || state.seQuestions[sessionId])
 }
 
 export function createChatSendActions(
     set: ChatSet,
     get: ChatGet,
     createFreshSession: (
-        performerId: string,
+        chatKey: string,
         options?: {
             resetMessages?: Array<{ id: string; role: 'user' | 'assistant' | 'system'; content: string; timestamp: number }>
             actId?: string
             performerName?: string
             preserveDraftMessages?: boolean
         },
-    ) => Promise<{ sessionId: string | null; runtimeConfig: ReturnType<typeof resolvePerformerRuntimeConfig> }>,
+    ) => Promise<{ sessionId: string | null; runtimeConfig: ChatRuntimeConfig }>,
 ) {
-    const activeRecoveryPolls = new Map<string, symbol>()
+    const sessionRecovery = createSessionRecoveryCoordinator({
+        get,
+        set,
+        syncSessionMessages: (chatKey: string, sessionId: string) => syncChatMessages(set, get, chatKey, sessionId),
+        setSessionStatus: (sessionId, status) => get().setSessionStatus(sessionId, status),
+        setSessionLoading: (sessionId, loading) => get().setSessionLoading(sessionId, loading),
+    })
 
-    const scheduleStreamingRecoverySync = (chatKey: string, sessionId: string) => {
-        const recoveryToken = Symbol(sessionId)
-        activeRecoveryPolls.set(sessionId, recoveryToken)
-        const actTarget = parseActParticipantChatKey(chatKey)
+    const rollbackOptimisticMessage = (chatKey: string, messageId: string, sessionId?: string) => {
+        get().removeChatDraftMessage(chatKey, messageId)
+        if (sessionId) {
+            get().removeSessionMessage(sessionId, messageId)
+            get().setSessionLoading(sessionId, false)
+        }
+    }
 
-        void (async () => {
+    const sendMessage = async (
+        chatKey: string,
+        text: string,
+        attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
+        extraDanceRefs: AssetRef[] = [],
+    ) => {
+        let sessionId: string | undefined = resolveChatKeySession(get, chatKey) || undefined
+        const target = resolveChatRuntimeTarget(get, chatKey)
+        if (!target) {
+            return
+        }
+
+        if (target.notice) {
+            appendChatSystemMessage(set, get, chatKey, target.notice)
+            return
+        }
+
+        const { runtimeConfig } = target
+        if (!hasModelConfig(runtimeConfig.model)) {
+            return
+        }
+
+        logChatDebug('send', 'sendMessage start', {
+            chatKey,
+            existingSessionId: sessionId || null,
+            textLength: text.length,
+            attachmentCount: attachments?.length || 0,
+            target: target.kind,
+        })
+
+        const prepared = await preparePendingRuntimeExecution(get, {
+            performerId: target.executionScope.performerId,
+            actId: target.executionScope.actId,
+            runtimeConfig,
+        })
+        if (prepared.blocked) {
+            appendChatSystemMessage(
+                set,
+                get,
+                chatKey,
+                prepared.reason === 'projection_update_pending'
+                    ? 'New chats are blocked until the current run finishes and Studio reapplies the latest projection changes.'
+                    : 'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
+            )
+            return
+        }
+
+        const optimisticMsg = createOptimisticUserMessage(text, runtimeConfig, attachments)
+        appendChatMessage(set, get, chatKey, optimisticMsg)
+
+        const existingSessionId = resolveChatKeySession(get, chatKey) || undefined
+        if (existingSessionId) {
+            registerSessionBinding(set, get, chatKey, existingSessionId)
+            get().clearSessionRevert(existingSessionId)
+            get().setSessionLoading(existingSessionId, true)
+        }
+
+        get().initRealtimeEvents()
+
+        if (!sessionId) {
             try {
-                await sleep(STREAM_RECOVERY_GRACE_MS)
-                if (activeRecoveryPolls.get(sessionId) !== recoveryToken) {
-                    return
+                const freshSession = await createFreshSession(chatKey, {
+                    preserveDraftMessages: true,
+                    performerName: target.name,
+                })
+                sessionId = freshSession.sessionId || undefined
+                if (sessionId) {
+                    logChatDebug('send', 'created fresh session', { chatKey, sessionId, target: target.kind })
+                    registerSessionBinding(set, get, chatKey, sessionId)
+                    get().clearSessionRevert(sessionId)
+                    moveDraftMessageToSession(set, get, chatKey, sessionId, optimisticMsg.id)
+                    get().setSessionLoading(sessionId, true)
                 }
-
-                let lastSnapshotSignature: string | null = null
-                let stableSnapshotPolls = 0
-                let actRecoveryState = createInitialActRecoveryState(!!actTarget)
-                logChatDebug('fallback', 'start recovery polling', { chatKey, sessionId })
-
-                const recoveryMaxPolls = actTarget ? ACT_THREAD_RECOVERY_MAX_POLLS : STREAM_RECOVERY_MAX_POLLS
-
-                for (let attempt = 0; attempt < recoveryMaxPolls; attempt++) {
-                    if (activeRecoveryPolls.get(sessionId) !== recoveryToken) {
-                        return
-                    }
-
-                    const state = get()
-                    if (state.chatKeyToSession[chatKey] !== sessionId) {
-                        logChatDebug('fallback', 'stop recovery polling: binding changed', { chatKey, sessionId, attempt })
-                        return
-                    }
-
-                    try {
-                        let actThreadHasActiveSessions = false
-                        let status: Awaited<ReturnType<typeof api.chat.status>>['status'] | undefined
-                        if (actTarget) {
-                            const actRecovery = await syncActRecoveryParticipants({
-                                set,
-                                get,
-                                chatKey,
-                                sessionId,
-                                actTarget,
-                                attempt,
-                                state: actRecoveryState,
-                            })
-                            actRecoveryState = actRecovery.state
-                            actThreadHasActiveSessions = actRecovery.hasActiveSessions
-                            status = actRecovery.primaryStatus
-                        }
-
-                        if (typeof status === 'undefined') {
-                            const statusResult = await api.chat.status(sessionId)
-                            status = statusResult.status
-                        }
-                        const snapshot = await syncPerformerMessages(set, get, chatKey, sessionId).catch(() => null)
-                        if (get().chatKeyToSession[chatKey] !== sessionId) {
-                            return
-                        }
-
-                        if (snapshot) {
-                            const snapshotSignature = buildSnapshotSignature(snapshot.messages)
-                            stableSnapshotPolls = snapshotSignature === lastSnapshotSignature
-                                ? stableSnapshotPolls + 1
-                                : 0
-                            lastSnapshotSignature = snapshotSignature
-                            logChatDebug('fallback', 'polled session snapshot', {
-                                chatKey,
-                                sessionId,
-                                attempt,
-                                status: status?.type || null,
-                                stableSnapshotPolls,
-                                stableActThreadPolls: actRecoveryState.stableThreadPolls,
-                                messages: summarizeMessagesForChatDebug(snapshot.messages),
-                            })
-                        }
-
-                        const actThreadStableEnough = isActRecoverySettled(actTarget, actRecoveryState, actThreadHasActiveSessions)
-
-                        if (status?.type === 'busy' || status?.type === 'retry' || status?.type === 'idle' || status?.type === 'error') {
-                            get().setSessionStatus(sessionId, status)
-                            get().setSessionLoading(sessionId, false)
-                            if ((status.type === 'idle' || status.type === 'error') && actThreadStableEnough) {
-                                logChatDebug('fallback', 'stop recovery polling: status settled', {
-                                    chatKey,
-                                    sessionId,
-                                    attempt,
-                                    status: status.type,
-                                    stableActThreadPolls: actRecoveryState.stableThreadPolls,
-                                    lastActThreadActivityAt: actRecoveryState.lastThreadActivityAt,
-                                })
-                                return
-                            }
-                        }
-
-                        const currentActivity = resolveSessionActivity({
-                            loading: !!get().sessionLoading[sessionId],
-                            status: get().seStatuses[sessionId] || status,
-                            messages: get().seMessages[sessionId] || snapshot?.messages || [],
-                            permission: get().sePermissions[sessionId] || null,
-                            question: get().seQuestions[sessionId] || null,
-                        })
-
-                        if (
-                            snapshot
-                            && stableSnapshotPolls >= 1
-                            && hasSettledAssistantReply(snapshot.messages)
-                            && !hasPendingInteractiveTurn(get, sessionId)
-                            && actThreadStableEnough
-                            && (!status || status.type === 'busy' || status.type === 'retry')
-                        ) {
-                            get().setSessionStatus(sessionId, { type: 'idle' })
-                            get().setSessionLoading(sessionId, false)
-                            logChatDebug('fallback', 'stop recovery polling: snapshot heuristic settled stale status', {
-                                chatKey,
-                                sessionId,
-                                attempt,
-                                status: status?.type || null,
-                                stableActThreadPolls: actRecoveryState.stableThreadPolls,
-                                lastActThreadActivityAt: actRecoveryState.lastThreadActivityAt,
-                                messages: summarizeMessagesForChatDebug(snapshot.messages),
-                            })
-                            return
-                        }
-
-                        if (!currentActivity.isTransportActive && actThreadStableEnough) {
-                            logChatDebug('fallback', 'stop recovery polling: activity settled', {
-                                chatKey,
-                                sessionId,
-                                attempt,
-                                activityKind: currentActivity.kind,
-                                stableActThreadPolls: actRecoveryState.stableThreadPolls,
-                                lastActThreadActivityAt: actRecoveryState.lastThreadActivityAt,
-                            })
-                            return
-                        }
-                    } catch (error) {
-                        logChatDebug('fallback', 'poll iteration failed', {
-                            chatKey,
-                            sessionId,
-                            attempt,
-                            error: error instanceof Error ? error.message : String(error),
-                        })
-                        // Ignore fallback polling errors and keep waiting for SSE.
-                    }
-
-                    await sleep(STREAM_RECOVERY_POLL_MS)
-                }
-                logChatDebug('fallback', 'recovery polling exhausted', { chatKey, sessionId })
-            } finally {
-                if (activeRecoveryPolls.get(sessionId) === recoveryToken) {
-                    activeRecoveryPolls.delete(sessionId)
-                }
+            } catch (error) {
+                console.error('Failed to create session', error)
+                rollbackOptimisticMessage(chatKey, optimisticMsg.id)
+                appendChatSystemMessage(set, get, chatKey, formatStudioApiErrorMessage(error))
+                return
             }
-        })()
+        }
+
+        if (!sessionId) {
+            return
+        }
+
+        try {
+            logChatDebug('send', 'dispatch chat prompt', { chatKey, sessionId, target: target.kind })
+            await api.chat.send(sessionId, {
+                message: text,
+                performer: {
+                    performerId: target.requestTarget.performerId,
+                    performerName: target.requestTarget.performerName,
+                    talRef: runtimeConfig.talRef,
+                    danceRefs: runtimeConfig.danceRefs,
+                    extraDanceRefs,
+                    model: runtimeConfig.model,
+                    modelVariant: runtimeConfig.modelVariant,
+                    agentId: runtimeConfig.agentId,
+                    mcpServerNames: runtimeConfig.mcpServerNames,
+                    planMode: runtimeConfig.planMode,
+                },
+                attachments,
+                ...(target.requestTarget.actId ? { actId: target.requestTarget.actId } : {}),
+                ...(target.requestTarget.actThreadId ? { actThreadId: target.requestTarget.actThreadId } : {}),
+                assistantContext: target.assistantContext || null,
+            })
+
+            if (prepared.requiresDispose) {
+                get().clearProjectionDirty({
+                    performerIds: target.executionScope.clearPerformerIds,
+                    actIds: target.executionScope.clearActIds,
+                    draftIds: collectRuntimeDraftIds(runtimeConfig),
+                    workspaceWide: true,
+                })
+            }
+
+            sessionRecovery.schedule(chatKey, sessionId)
+        } catch (error) {
+            logChatDebug('send', 'chat prompt failed', {
+                chatKey,
+                sessionId,
+                target: target.kind,
+                error: error instanceof Error ? error.message : String(error),
+            })
+            rollbackOptimisticMessage(chatKey, optimisticMsg.id, sessionId)
+            appendChatMessage(set, get, chatKey, {
+                id: `msg-${Date.now()}`,
+                role: 'system',
+                content: formatStudioApiErrorMessage(error),
+                timestamp: Date.now(),
+            })
+            get().setSessionLoading(sessionId, false)
+        }
+    }
+
+    const sendActMessage = async (actId: string, threadId: string, participantKey: string, text: string) => {
+        const chatKey = buildActParticipantChatKey(actId, threadId, participantKey)
+        return sendMessage(chatKey, text)
     }
 
     return {
-        sendMessage: async (
-            performerId: string,
-            text: string,
-            attachments?: Array<{ type: 'file'; mime: string; url: string; filename?: string }>,
-            extraDanceRefs: AssetRef[] = [],
-        ) => {
-            const rollbackOptimisticMessage = (chatKey: string, messageId: string, sid?: string) => {
-                get().removeChatDraftMessage(chatKey, messageId)
-                if (sid) {
-                    get().removeSessionMessage(sid, messageId)
-                    get().setSessionLoading(sid, false)
-                }
-            }
-
-            let sessionId: string | undefined = resolveChatKeySession(get, performerId) || undefined
-            const target = resolveChatRuntimeTarget(get, performerId)
-            const performer = getPerformerById(get, performerId)
-            const runtimeConfig = target?.runtimeConfig || {
-                talRef: null,
-                danceRefs: [],
-                model: null,
-                modelVariant: null,
-                agentId: 'build',
-                mcpServerNames: [],
-                danceDeliveryMode: 'auto' as const,
-                planMode: false,
-            }
-            if (!hasModelConfig(runtimeConfig.model)) return
-            logChatDebug('send', 'sendMessage start', {
-                chatKey: performerId,
-                existingSessionId: sessionId || null,
-                textLength: text.length,
-                attachmentCount: attachments?.length || 0,
-            })
-
-            const prepared = await preparePendingRuntimeExecution(get, {
-                performerId,
-                runtimeConfig,
-            })
-            if (prepared.blocked) {
-                appendPerformerSystemMessage(
-                    set,
-                    get,
-                    performerId,
-                    prepared.reason === 'projection_update_pending'
-                        ? 'New chats are blocked until the current run finishes and Studio reapplies the latest projection changes.'
-                        : 'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
-                )
-                return
-            }
-
-            // Optimistic UI: show user message + loading state immediately
-            const optimisticMsg = {
-                id: `temp-${Date.now()}`,
-                role: 'user' as const,
-                content: text,
-                timestamp: Date.now(),
-                attachments: attachments && attachments.length > 0
-                    ? attachments.map((a) => ({ type: a.type, filename: a.filename, mime: a.mime }))
-                    : undefined,
-                metadata: {
-                    agentName: runtimeConfig.agentId || 'build',
-                    modelId: runtimeConfig.model?.modelId,
-                    provider: runtimeConfig.model?.provider,
-                    variant: runtimeConfig.modelVariant || undefined,
-                },
-            }
-            addChatMessage(set, get, performerId, optimisticMsg)
-
-            // Dual-write: entity store
-            const existingSessionId = resolveChatKeySession(get, performerId) || undefined
-            if (existingSessionId) {
-                registerSessionBinding(set, get, performerId, existingSessionId)
-                get().clearSessionRevert(existingSessionId)
-                get().setSessionLoading(existingSessionId, true)
-            }
-
-            // Ensure SSE is connected before session creation so we receive
-            // streaming deltas from the very first assistant response.
-            get().initRealtimeEvents()
-
-            if (!sessionId) {
-                try {
-                    const freshSession = await createFreshSession(performerId, { preserveDraftMessages: true })
-                    sessionId = freshSession.sessionId || undefined
-                    if (sessionId) {
-                        logChatDebug('send', 'created fresh performer session', { chatKey: performerId, sessionId })
-                        registerSessionBinding(set, get, performerId, sessionId)
-                        get().clearSessionRevert(sessionId)
-                        moveDraftMessageToSession(set, get, performerId, sessionId, optimisticMsg.id)
-                        get().setSessionLoading(sessionId, true)
-                    }
-                } catch (error) {
-                    console.error('Failed to create session', error)
-                    rollbackOptimisticMessage(performerId, optimisticMsg.id)
-                    appendPerformerSystemMessage(set, get, performerId, formatStudioApiErrorMessage(error))
-                    return
-                }
-            }
-
-            if (!sessionId) {
-                return
-            }
-
-            try {
-                logChatDebug('send', 'dispatch performer prompt', { chatKey: performerId, sessionId })
-                await api.chat.send(sessionId, {
-                    message: text,
-                    performer: {
-                        performerId,
-                        performerName: target?.name || performer?.name || 'Untitled Performer',
-                        talRef: runtimeConfig.talRef,
-                        danceRefs: runtimeConfig.danceRefs,
-                        extraDanceRefs,
-                        model: runtimeConfig.model,
-                        modelVariant: runtimeConfig.modelVariant,
-                        agentId: runtimeConfig.agentId,
-                        mcpServerNames: runtimeConfig.mcpServerNames,
-                        danceDeliveryMode: runtimeConfig.danceDeliveryMode,
-                        planMode: runtimeConfig.planMode,
-                    },
-                    attachments,
-                    assistantContext: target?.assistantContext || null,
-                })
-                if (prepared.requiresDispose) {
-                    get().clearProjectionDirty({
-                        performerIds: [performerId],
-                        draftIds: collectRuntimeDraftIds(runtimeConfig),
-                        workspaceWide: true,
-                    })
-                }
-                // Recover from missed streaming events by polling session snapshots
-                // until the turn settles.
-                scheduleStreamingRecoverySync(performerId, sessionId)
-            } catch (error) {
-                logChatDebug('send', 'performer prompt failed', {
-                    chatKey: performerId,
-                    sessionId,
-                    error: error instanceof Error ? error.message : String(error),
-                })
-                rollbackOptimisticMessage(performerId, optimisticMsg.id, sessionId)
-                const errorMsg = {
-                    id: `msg-${Date.now()}`,
-                    role: 'system' as const,
-                    content: formatStudioApiErrorMessage(error),
-                    timestamp: Date.now(),
-                }
-                addChatMessage(set, get, performerId, errorMsg)
-                if (sessionId) {
-                    get().setSessionLoading(sessionId, false)
-                }
-            }
-        },
-
-        sendActMessage: async (actId: string, threadId: string, participantKey: string, text: string) => {
-            const rollbackOptimisticMessage = (chatKey: string, messageId: string, sid?: string) => {
-                get().removeChatDraftMessage(chatKey, messageId)
-                if (sid) {
-                    get().removeSessionMessage(sid, messageId)
-                    get().setSessionLoading(sid, false)
-                }
-            }
-
-            const actContext = resolveActSendContext(get, actId, threadId, participantKey)
-            if (!actContext) {
-                return
-            }
-            if (actContext.kind === 'notice') {
-                appendPerformerSystemMessage(set, get, actContext.chatKey, actContext.message)
-                return
-            }
-
-            const { chatKey, performer, runtimeConfig } = actContext
-            logChatDebug('send', 'sendActMessage start', {
-                chatKey,
-                actId,
-                threadId,
-                participantKey,
-                textLength: text.length,
-            })
-
-            const prepared = await preparePendingRuntimeExecution(get, {
-                performerId: performer.id,
-                actId,
-                runtimeConfig,
-            })
-            if (prepared.blocked) {
-                appendPerformerSystemMessage(
-                    set,
-                    get,
-                    chatKey,
-                    prepared.reason === 'projection_update_pending'
-                        ? 'New chats are blocked until the current run finishes and Studio reapplies the latest projection changes.'
-                        : 'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
-                )
-                return
-            }
-
-            const optimisticActMsg = createOptimisticActMessage(text, runtimeConfig)
-            addChatMessage(set, get, chatKey, optimisticActMsg)
-
-            const hadExistingActSession = !!primeExistingActSession(set, get, chatKey)
-
-            // Ensure SSE is connected before session creation so we receive
-            // streaming deltas from the very first assistant response.
-            get().initRealtimeEvents()
-
-            let sessionId: string
-            try {
-                sessionId = await ensureActSendSession({
-                    set,
-                    get,
-                    chatKey,
-                    performerName: performer.name,
-                    optimisticMessageId: optimisticActMsg.id,
-                })
-                if (!hadExistingActSession) {
-                    logChatDebug('send', 'created fresh act session', { chatKey, sessionId })
-                }
-            } catch (error) {
-                console.error('Failed to create Act session', error)
-                rollbackOptimisticMessage(chatKey, optimisticActMsg.id)
-                appendPerformerSystemMessage(set, get, chatKey, formatStudioApiErrorMessage(error))
-                return
-            }
-
-            try {
-                await api.chat.send(sessionId, {
-                    message: text,
-                    performer: {
-                        performerId: chatKey,
-                        performerName: performer?.name || 'Performer',
-                        talRef: runtimeConfig.talRef,
-                        danceRefs: runtimeConfig.danceRefs,
-                        model: runtimeConfig.model,
-                        modelVariant: runtimeConfig.modelVariant,
-                        agentId: runtimeConfig.agentId,
-                        mcpServerNames: runtimeConfig.mcpServerNames,
-                        danceDeliveryMode: runtimeConfig.danceDeliveryMode,
-                        planMode: runtimeConfig.planMode,
-                    },
-                    actId,
-                    actThreadId: threadId,
-                })
-                if (prepared.requiresDispose) {
-                    get().clearProjectionDirty({
-                        performerIds: [performer.id],
-                        actIds: [actId],
-                        draftIds: collectRuntimeDraftIds(runtimeConfig),
-                        workspaceWide: true,
-                    })
-                }
-                // Settlement detection is now handled by entity store via session.idle SSE events.
-                scheduleStreamingRecoverySync(chatKey, sessionId)
-            } catch (error) {
-                logChatDebug('send', 'act prompt failed', {
-                    chatKey,
-                    sessionId,
-                    error: error instanceof Error ? error.message : String(error),
-                })
-                rollbackOptimisticMessage(chatKey, optimisticActMsg.id, sessionId)
-                const errorActMsg = {
-                    id: `msg-${Date.now()}`,
-                    role: 'system' as const,
-                    content: formatStudioApiErrorMessage(error),
-                    timestamp: Date.now(),
-                }
-                addChatMessage(set, get, chatKey, errorActMsg)
-                if (sessionId) {
-                    get().setSessionLoading(sessionId, false)
-                }
-            }
-        },
-
-        executeSlashCommand: async (performerId: string, cmd: string) => {
-            const state = get()
-            const sessionId = resolveChatKeySession(get, performerId)
-            if (!sessionId) return
-
-            get().setSessionLoading(sessionId, true)
-            try {
-                if (cmd === '/share') {
-                    const shareRes = await api.chat.share(sessionId)
-                    state.addChatMessage(performerId, {
-                        id: `msg-${Date.now()}`,
-                        role: 'assistant',
-                        content: `Session shared at: ${shareRes.url}`,
-                        timestamp: Date.now(),
-                    })
-                }
-            } catch (error) {
-                state.addChatMessage(performerId, {
-                    id: `msg-${Date.now()}`,
-                    role: 'system',
-                    content: formatStudioApiErrorMessage(error),
-                    timestamp: Date.now(),
-                })
-            } finally {
-                get().setSessionLoading(sessionId, false)
-            }
-        },
+        sendMessage,
+        sendActMessage,
     }
 }

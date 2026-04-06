@@ -46,9 +46,7 @@ interface ComposerMentionMenusProps {
     showSlashMenu: boolean
     setShowSlashMenu: (value: boolean) => void
     slashIndex: number
-    filteredCommands: Array<{ cmd: string; desc: string; mode: 'compose' | 'execute' }>
-    performerId: string
-    executeSlashCommand: (performerId: string, command: string) => void
+    filteredCommands: Array<{ cmd: string; desc: string; mode: 'compose' }>
 }
 
 export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
@@ -69,8 +67,6 @@ export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
         setShowSlashMenu,
         slashIndex,
         filteredCommands,
-        performerId,
-        executeSlashCommand,
     } = props
 
     return (
@@ -140,12 +136,7 @@ export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
                             key={command.cmd}
                             className={`slash-menu-item ${i === slashIndex ? 'active' : ''}`}
                             onClick={() => {
-                                if (command.mode === 'compose') {
-                                    setInput(`${command.cmd} `)
-                                } else {
-                                    executeSlashCommand(performerId, command.cmd)
-                                    setInput('')
-                                }
+                                setInput(`${command.cmd} `)
                                 setShowSlashMenu(false)
                             }}
                         >

@@ -11,6 +11,7 @@
 import { useRef, useEffect, useCallback, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { Handle, Position, useReactFlow } from '@xyflow/react'
+import { useShallow } from 'zustand/react/shallow'
 
 import { useStudioStore } from '../../store'
 import { useAgents, useAssetKind, useAssets, useMcpServers } from '../../hooks/queries'
@@ -18,7 +19,7 @@ import { hasModelConfig, resolvePerformerAgentId } from '../../lib/performers'
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
 import { api } from '../../api'
 import { showToast } from '../../lib/toast'
-import { getCanvasViewportSize, resolveFocusNodeId, scheduleFitView } from '../../lib/focus-utils'
+import { getCanvasViewportSize, isFocusTarget, scheduleFitView } from '../../lib/focus-utils'
 import { assetUrnAuthor, assetUrnDisplayName, assetUrnPath } from '../../lib/asset-urn'
 import type { AssetListItem } from '../../../shared/asset-contracts'
 import type { AssetRef, ModelConfig } from '../../types'
@@ -64,29 +65,47 @@ type AgentFrameProps = {
 export default function AgentFrame({ data, id }: AgentFrameProps) {
     // ─── Store ────────────────────────────────────────
     const {
-        selectedPerformerId, focusedPerformerId, editingTarget,
+        selectedPerformerId, editingTarget,
         setPerformerAgentId,
         togglePerformerVisibility, closeEditor,
         performers, drafts,
         openDraftEditor,
         updatePerformerName,
         updatePerformerAuthoringMeta,
-        setPerformerTalRef, setPerformerDanceDeliveryMode,
+        setPerformerTalRef,
         setPerformerModel, setPerformerModelVariant,
         removePerformerMcp, setPerformerMcpBinding, removePerformerDance,
         enterFocusMode, exitFocusMode,
         focusSnapshot,
-    } = useStudioStore()
+    } = useStudioStore(useShallow((state) => ({
+        selectedPerformerId: state.selectedPerformerId,
+        editingTarget: state.editingTarget,
+        setPerformerAgentId: state.setPerformerAgentId,
+        togglePerformerVisibility: state.togglePerformerVisibility,
+        closeEditor: state.closeEditor,
+        performers: state.performers,
+        drafts: state.drafts,
+        openDraftEditor: state.openDraftEditor,
+        updatePerformerName: state.updatePerformerName,
+        updatePerformerAuthoringMeta: state.updatePerformerAuthoringMeta,
+        setPerformerTalRef: state.setPerformerTalRef,
+        setPerformerModel: state.setPerformerModel,
+        setPerformerModelVariant: state.setPerformerModelVariant,
+        removePerformerMcp: state.removePerformerMcp,
+        setPerformerMcpBinding: state.setPerformerMcpBinding,
+        removePerformerDance: state.removePerformerDance,
+        enterFocusMode: state.enterFocusMode,
+        exitFocusMode: state.exitFocusMode,
+        focusSnapshot: state.focusSnapshot,
+    })))
 
     // ─── Local State ──────────────────────────────────
-    const chatEndRef = useRef<HTMLDivElement>(null)
     const bodyRef = useRef<HTMLDivElement>(null)
     const { fitView: rfFitView } = useReactFlow()
 
     // ─── Derived ──────────────────────────────────────
     const isSelected = selectedPerformerId === id
-    const focusNodeId = resolveFocusNodeId(focusSnapshot, focusedPerformerId)
-    const isFocused = focusSnapshot?.type === 'performer' && focusNodeId === id
+    const isFocused = isFocusTarget(focusSnapshot, id, 'performer')
     const chatSession = useChatSession(id)
     const messages = chatSession.messages
     const isLoading = chatSession.isLoading
@@ -156,11 +175,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
         el.addEventListener('wheel', handler, { passive: true })
         return () => el.removeEventListener('wheel', handler)
     }, [])
-
-    // ─── Scroll on new messages ───────────────────────
-    useEffect(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }, [messages, isLoading])
 
     const handleToggleFocus = useCallback(() => {
         if (isFocused) {
@@ -297,7 +311,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                         onNameChange={(value) => updatePerformerName(id, value)}
                         onDescriptionChange={(value) => updatePerformerAuthoringMeta(id, { description: value })}
                         onTalRefChange={(ref) => setPerformerTalRef(id, ref)}
-                        onDanceDeliveryModeChange={(value) => setPerformerDanceDeliveryMode(id, value)}
                         onModelChange={(model) => setPerformerModel(id, model)}
                         onModelVariantChange={(variant) => setPerformerModelVariant(id, variant)}
                         onRemoveDance={removePerformerDance}
@@ -323,7 +336,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                         runtimeTools={runtimeTools || null}
                         danceAssets={danceAssets}
                         drafts={drafts}
-                        chatEndRef={chatEndRef}
                         onSetAgentId={setPerformerAgentId}
                         onSetModelVariant={setPerformerModelVariant}
                     />

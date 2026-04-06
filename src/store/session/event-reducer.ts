@@ -101,8 +101,12 @@ export function reduceMessagePartUpdated(
     const messages = state.seMessages[sessionId] || []
 
     if (part.type === 'text') {
-        const content = typeof part.text === 'string' ? part.text : ''
-        const updated = upsertMessageText(messages, messageId, content)
+        const textPart: ChatMessagePart = {
+            id: part.id,
+            type: 'text',
+            content: typeof part.text === 'string' ? part.text : '',
+        }
+        const updated = upsertMessagePart(messages, messageId, textPart)
         set({ seMessages: { ...state.seMessages, [sessionId]: updated } })
         return
     }
@@ -194,9 +198,18 @@ export function reduceMessagePartDelta(
         return
     }
 
-    // Default: treat as text delta — accumulate into message content
-    const currentContent = existingMsg?.content || ''
-    const updated = upsertMessageText(messages, messageId, currentContent + delta)
+    const existingTextContent = existingPart?.type === 'text'
+        ? existingPart.content || ''
+        : (
+            existingMsg && !(existingMsg.parts || []).some((part) => part.type === 'text')
+                ? existingMsg.content || ''
+                : ''
+        )
+    const updated = upsertMessagePart(messages, messageId, {
+        id: partId,
+        type: 'text',
+        content: existingTextContent + delta,
+    })
     set({ seMessages: { ...state.seMessages, [sessionId]: updated } })
 }
 
@@ -408,13 +421,14 @@ function upsertMessagePart(messages: ChatMessage[], messageId: string, part: Cha
     const next = [...messages]
     const idx = next.findIndex((m) => m.id === messageId)
     if (idx === -1) {
-        next.push({
+        const created: ChatMessage = {
             id: messageId,
             role: 'assistant',
             content: '',
             timestamp: Date.now(),
             parts: [part],
-        })
+        }
+        next.push(applyMessageParts(created, [part], { preserveContentWithoutTextParts: false }))
         return next
     }
 
@@ -426,7 +440,9 @@ function upsertMessagePart(messages: ChatMessage[], messageId: string, part: Cha
     } else {
         existingParts[partIdx] = part
     }
-    next[idx] = { ...message, parts: existingParts }
+    next[idx] = applyMessageParts(message, existingParts, {
+        preserveContentWithoutTextParts: part.type !== 'text' && !hasTextParts(message.parts || []),
+    })
     return next
 }
 
@@ -438,8 +454,43 @@ function removeMessagePartFromMessages(messages: ChatMessage[], messageId: strin
     const message = next[idx]
     if (!message.parts?.length) return next
 
-    next[idx] = { ...message, parts: message.parts.filter((p) => p.id !== partId) }
+    const removedPart = message.parts.find((part) => part.id === partId)
+    const nextParts = message.parts.filter((p) => p.id !== partId)
+    next[idx] = applyMessageParts(message, nextParts, {
+        preserveContentWithoutTextParts: removedPart?.type !== 'text',
+    })
     return next
+}
+
+function hasTextParts(parts: ChatMessagePart[]) {
+    return parts.some((part) => part.type === 'text')
+}
+
+function buildContentFromTextParts(parts: ChatMessagePart[]) {
+    return parts
+        .filter((part) => part.type === 'text')
+        .map((part) => part.content || '')
+        .join('\n')
+}
+
+function applyMessageParts(
+    message: ChatMessage,
+    parts: ChatMessagePart[],
+    options: { preserveContentWithoutTextParts: boolean },
+): ChatMessage {
+    if (hasTextParts(parts)) {
+        return {
+            ...message,
+            parts,
+            content: buildContentFromTextParts(parts),
+        }
+    }
+
+    return {
+        ...message,
+        parts,
+        content: options.preserveContentWithoutTextParts ? message.content : '',
+    }
 }
 
 function findLatestTempUserMessageIndex(messages: ChatMessage[]): number {
@@ -488,30 +539,5 @@ function upsertMessageEnvelope(
         content: '',
         timestamp,
     })
-    return next
-}
-
-function upsertMessageText(
-    messages: ChatMessage[],
-    messageId: string,
-    content: string,
-    timestamp = Date.now(),
-): ChatMessage[] {
-    const next = [...messages]
-    const index = next.findIndex((message) => message.id === messageId)
-    if (index === -1) {
-        next.push({
-            id: messageId,
-            role: 'assistant',
-            content,
-            timestamp,
-        })
-        return next
-    }
-
-    next[index] = {
-        ...next[index],
-        content,
-    }
     return next
 }

@@ -28,7 +28,7 @@ export function resolvePerformerAgentId(
 }
 
 export function resolvePerformerRuntimeConfig(
-    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'model' | 'modelVariant' | 'mcpServerNames' | 'mcpBindingMap' | 'danceDeliveryMode' | 'planMode' | 'agentId'>,
+    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'model' | 'modelVariant' | 'mcpServerNames' | 'mcpBindingMap' | 'planMode' | 'agentId'>,
 ) {
     return {
         talRef: performer.talRef || null,
@@ -37,13 +37,12 @@ export function resolvePerformerRuntimeConfig(
         modelVariant: performer.modelVariant || null,
         agentId: resolvePerformerAgentId(performer),
         mcpServerNames: resolveMappedMcpServerNames(performer),
-        danceDeliveryMode: performer.danceDeliveryMode || 'auto',
         planMode: !!performer.planMode,
     }
 }
 
 export function buildPerformerConfigHash(
-    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig' | 'danceDeliveryMode' | 'planMode' | 'modelVariant' | 'agentId'> & {
+    performer: Pick<PerformerNode, 'talRef' | 'danceRefs' | 'mcpServerNames' | 'mcpBindingMap' | 'declaredMcpConfig' | 'planMode' | 'modelVariant' | 'agentId'> & {
         model: ModelConfig | null
     },
 ): string {
@@ -63,7 +62,6 @@ export function buildPerformerConfigHash(
         } : null,
         modelVariant: performer.modelVariant || null,
         agentId: resolvePerformerAgentId(performer),
-        danceDeliveryMode: performer.danceDeliveryMode,
     }
     return `cfg_${hashString(JSON.stringify(normalized))}`
 }

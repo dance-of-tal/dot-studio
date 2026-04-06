@@ -50,9 +50,6 @@ export const chatApi = {
     diff: (id: string) =>
         fetchJSON<Array<Record<string, unknown>>>(`/api/chat/sessions/${id}/diff`),
 
-    share: (id: string) =>
-        postJSON<{ url: string }>(`/api/chat/sessions/${id}/share`),
-
     summarize: (
         id: string,
         payload?: {

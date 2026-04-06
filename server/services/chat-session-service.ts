@@ -195,15 +195,6 @@ export async function listStudioSessionDiff(workingDir: string, sessionId: strin
     })) || []
 }
 
-export async function shareStudioChatSession(workingDir: string, sessionId: string) {
-    const oc = await getOpencode()
-    const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
-    return unwrapOpencodeResult<Record<string, unknown>>(await oc.session.share({
-        sessionID: sessionId,
-        ...directoryQuery,
-    }))
-}
-
 export async function summarizeStudioChatSession(
     workingDir: string,
     sessionId: string,

@@ -2,6 +2,11 @@
 
 import type { ModelProviderFilter } from './asset-library-utils'
 import { buildModelHaystack } from './asset-library-search'
+import {
+    buildRuntimeModelProviderGroups,
+    modelProviderFilterForProvider,
+    readProviderIdFromModelFilter,
+} from '../../lib/runtime-models'
 
 export const MAX_MODELS_PER_PROVIDER = 8
 
@@ -18,20 +23,16 @@ type ModelLike = {
 }
 
 export function classifyModelProvider(model: ModelLike): Exclude<ModelProviderFilter, 'all'> {
-    const key = `${model.provider || ''} ${model.providerName || ''}`.toLowerCase()
-    if (key.includes('anthropic')) return 'anthropic'
-    if (key.includes('openai')) return 'openai'
-    if (key.includes('google') || key.includes('gemini')) return 'google'
-    if (key.includes('xai') || key.includes('grok')) return 'xai'
-    return 'other'
+    return modelProviderFilterForProvider(model.provider || 'unknown') as Exclude<ModelProviderFilter, 'all'>
 }
 
 export function labelForModelProviderFilter(filter: Exclude<ModelProviderFilter, 'all'>) {
-    if (filter === 'anthropic') return 'Anthropic'
-    if (filter === 'openai') return 'OpenAI'
-    if (filter === 'google') return 'Google'
-    if (filter === 'xai') return 'xAI/Grok'
-    return 'Other'
+    const providerId = readProviderIdFromModelFilter(filter) || 'unknown'
+    return providerId
+        .split(/[-_]/g)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ')
 }
 
 export function scoreModel(model: ModelLike): number {
@@ -62,58 +63,20 @@ export function groupModels<T extends ModelLike>(
     queryText: string,
     modelProviderFilter: ModelProviderFilter,
 ) {
-    const searched = models.filter((model) => !queryText || buildModelHaystack(model).includes(queryText))
-    const availabilityFiltered = searched.filter((model) => !!model.connected)
-    const providerFiltered = availabilityFiltered.filter((model) => {
-        const category = classifyModelProvider(model)
-        if (modelProviderFilter === 'all') return true
-        return category === modelProviderFilter
-    })
-
-    const groups = new Map<string, {
-        key: string
-        category: Exclude<ModelProviderFilter, 'all'>
-        label: string
-        connected: boolean
-        items: T[]
-    }>()
-
-    for (const model of providerFiltered) {
-        const category = classifyModelProvider(model)
-        const key = model.provider || `${category}-provider`
-        const existing = groups.get(key)
-        if (existing) {
-            existing.items.push(model)
-            existing.connected = existing.connected || !!model.connected
-            continue
-        }
-        groups.set(key, {
-            key,
-            category,
-            label: model.providerName || labelForModelProviderFilter(category),
-            connected: !!model.connected,
-            items: [model],
-        })
-    }
-
-    return Array.from(groups.values())
-        .map((group) => ({
-            ...group,
-            items: [...group.items].sort((left, right) => {
+    return buildRuntimeModelProviderGroups(models, {
+        query: queryText,
+        connectedOnly: true,
+        providerFilter: modelProviderFilter,
+        buildSearchText: buildModelHaystack,
+        compareModels: (left, right) => {
                 const scoreDiff = scoreModel(right) - scoreModel(left)
                 if (scoreDiff !== 0) return scoreDiff
                 return String(left.name || left.id).localeCompare(String(right.name || right.id))
-            }),
-        }))
-        .sort((left, right) => {
-            const connectedDiff = Number(right.connected) - Number(left.connected)
-            if (connectedDiff !== 0) return connectedDiff
-            const providerSortOrder = ['anthropic', 'openai', 'google', 'xai']
-            const leftPriority = providerSortOrder.indexOf(left.category)
-            const rightPriority = providerSortOrder.indexOf(right.category)
-            const normalizedLeft = leftPriority === -1 ? 999 : leftPriority
-            const normalizedRight = rightPriority === -1 ? 999 : rightPriority
-            if (normalizedLeft !== normalizedRight) return normalizedLeft - normalizedRight
-            return left.label.localeCompare(right.label)
-        })
+        },
+    }).map((group) => ({
+        key: group.providerId,
+        label: group.providerName || labelForModelProviderFilter(group.filterKey as Exclude<ModelProviderFilter, 'all'>),
+        connected: group.connected,
+        items: group.models,
+    }))
 }

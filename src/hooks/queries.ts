@@ -206,7 +206,6 @@ export function useCompilePrompt() {
             agentId,
             mcpServerNames,
             planMode,
-            danceDeliveryMode,
             requestTargets,
         }: {
             performerId: string | null
@@ -218,8 +217,7 @@ export function useCompilePrompt() {
             agentId: string | null
             mcpServerNames: string[]
             planMode?: boolean
-            danceDeliveryMode?: 'auto' | 'tool' | 'inline'
             requestTargets?: Array<{ performerId: string; performerName: string }>
-        }) => api.compile(performerId, performerName, talRef, danceRefs, model, modelVariant, agentId, mcpServerNames, planMode || false, danceDeliveryMode || 'auto', requestTargets),
+        }) => api.compile(performerId, performerName, talRef, danceRefs, model, modelVariant, agentId, mcpServerNames, planMode || false, requestTargets),
     })
 }

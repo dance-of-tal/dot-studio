@@ -1,26 +1,129 @@
 import { api, setApiWorkingDirContext } from '../api'
 import { resolveActExpandedHeight } from '../lib/act-layout'
-import { getCanvasViewportSize, resolveFocusNodeId } from '../lib/focus-utils'
+import { getCanvasViewportSize, resolveFocusTarget } from '../lib/focus-utils'
 import { normalizePath, mapCanvasTerminals, resolveCanvasSpawnPosition } from './workspace-helpers'
-import type { StudioState } from './types'
+import type { FocusSnapshot, StudioState } from './types'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
+type FocusNodeType = FocusSnapshot['type']
+type FocusTarget = { id: string; type: FocusNodeType }
+type ViewportSize = { width: number; height: number }
+
+function resolveFocusNodeSize(state: StudioState, target: FocusTarget) {
+    if (target.type === 'performer') {
+        const performer = state.performers.find((entry) => entry.id === target.id)
+        return performer
+            ? { width: performer.width ?? 400, height: performer.height ?? 500 }
+            : null
+    }
+
+    const act = state.acts.find((entry) => entry.id === target.id)
+    return act
+        ? { width: act.width ?? 400, height: resolveActExpandedHeight(act.height) }
+        : null
+}
+
+function resolveFocusNodePosition(state: StudioState, target: FocusTarget) {
+    if (target.type === 'performer') {
+        return state.performers.find((entry) => entry.id === target.id)?.position || null
+    }
+
+    return state.acts.find((entry) => entry.id === target.id)?.position || null
+}
+
+function buildFocusSnapshot(state: StudioState, target: FocusTarget): FocusSnapshot | null {
+    const nodeSize = resolveFocusNodeSize(state, target)
+    const nodePosition = resolveFocusNodePosition(state, target)
+    if (!nodeSize || !nodePosition) {
+        return null
+    }
+
+    return {
+        nodeId: target.id,
+        type: target.type,
+        ...(target.type === 'act' ? { actId: target.id } : {}),
+        nodePosition,
+        nodeSize,
+        hiddenPerformerIds: state.performers.filter((performer) => performer.hidden).map((performer) => performer.id),
+        hiddenActIds: state.acts.filter((act) => act.hidden).map((act) => act.id),
+        hiddenEditorIds: state.markdownEditors.filter((editor) => editor.hidden).map((editor) => editor.id),
+        hiddenTerminalIds: [] as string[],
+        assetLibraryOpen: state.isAssetLibraryOpen,
+        assistantOpen: state.isAssistantOpen,
+        terminalOpen: state.isTerminalOpen,
+    }
+}
+
+function buildEnterFocusModeState(
+    state: StudioState,
+    target: FocusTarget,
+    viewportSize: ViewportSize,
+): Partial<StudioState> | null {
+    const snapshot = buildFocusSnapshot(state, target)
+    if (!snapshot) {
+        return null
+    }
+
+    const focusWidth = viewportSize.width
+    const focusHeight = viewportSize.height
+
+    return {
+        focusSnapshot: snapshot,
+        selectedPerformerId: target.type === 'performer' ? target.id : null,
+        selectedActId: target.type === 'act' ? target.id : null,
+        activeChatPerformerId: target.type === 'performer' ? target.id : state.activeChatPerformerId,
+        performers: state.performers.map((performer) => (
+            target.type === 'performer' && performer.id === target.id
+                ? { ...performer, hidden: false, position: { x: 0, y: 0 }, width: focusWidth, height: focusHeight }
+                : { ...performer, hidden: true }
+        )),
+        acts: state.acts.map((act) => (
+            target.type === 'act' && act.id === target.id
+                ? { ...act, hidden: false, position: { x: 0, y: 0 }, width: focusWidth, height: focusHeight }
+                : { ...act, hidden: true }
+        )),
+        markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: true })),
+        isAssetLibraryOpen: false,
+        isAssistantOpen: false,
+        isTerminalOpen: false,
+        editingTarget: null,
+        inspectorFocus: null,
+    }
+}
+
+function resolveCurrentFocusViewportSize(state: StudioState, target: FocusTarget): ViewportSize {
+    if (target.type === 'performer') {
+        const performer = state.performers.find((entry) => entry.id === target.id)
+        return getCanvasViewportSize(
+            typeof document !== 'undefined' ? document : undefined,
+            {
+                width: performer?.width || 800,
+                height: performer?.height || 600,
+            },
+        )
+    }
+
+    const act = state.acts.find((entry) => entry.id === target.id)
+    return getCanvasViewportSize(
+        typeof document !== 'undefined' ? document : undefined,
+        {
+            width: act?.width || 800,
+            height: act?.height || 600,
+        },
+    )
+}
 
 export function buildExitFocusModeState(state: StudioState): Partial<StudioState> | null {
     const snapshot = state.focusSnapshot
-    if (!snapshot) return null
+    const target = resolveFocusTarget(snapshot)
+    if (!snapshot || !target) return null
 
-    const focusedId = resolveFocusNodeId(snapshot, state.focusedPerformerId)
-    const focusedType = state.focusedNodeType || snapshot.type
-
-    if (focusedType === 'performer') {
+    if (target.type === 'performer') {
         return {
-            focusedPerformerId: null,
-            focusedNodeType: null,
             focusSnapshot: null,
             performers: state.performers.map((performer) => (
-                performer.id === focusedId
+                performer.id === target.id
                     ? {
                         ...performer,
                         position: snapshot.nodePosition || performer.position,
@@ -39,12 +142,10 @@ export function buildExitFocusModeState(state: StudioState): Partial<StudioState
     }
 
     return {
-        focusedPerformerId: null,
-        focusedNodeType: null,
         focusSnapshot: null,
         performers: state.performers.map((performer) => ({ ...performer, hidden: snapshot.hiddenPerformerIds.includes(performer.id) })),
         acts: state.acts.map((act) => (
-            act.id === focusedId
+            act.id === target.id
                 ? {
                     ...act,
                     width: snapshot.nodeSize.width,
@@ -65,90 +166,18 @@ export function enterFocusModeImpl(
     get: GetState,
     set: SetState,
     nodeId: string,
-    nodeType: 'performer' | 'act',
-    viewportSize: { width: number; height: number },
+    nodeType: FocusNodeType,
+    viewportSize: ViewportSize,
 ) {
     const state = get()
     if (state.focusSnapshot) {
         // Prevent corrupting the root snapshot if accidentally called again.
         return
     }
-    // No padding — focused node fills the entire canvas viewport
-    const focusWidth = viewportSize.width
-    const focusHeight = viewportSize.height
-
-    const focusSnapshotBase = {
-        nodeId,
-        hiddenPerformerIds: state.performers.filter((performer) => performer.hidden).map((performer) => performer.id),
-        hiddenActIds: state.acts.filter((act) => act.hidden).map((act) => act.id),
-        hiddenEditorIds: state.markdownEditors.filter((editor) => editor.hidden).map((editor) => editor.id),
-        hiddenTerminalIds: [] as string[],
-        assetLibraryOpen: state.isAssetLibraryOpen,
-        assistantOpen: state.isAssistantOpen,
-        terminalOpen: state.isTerminalOpen,
+    const patch = buildEnterFocusModeState(state, { id: nodeId, type: nodeType }, viewportSize)
+    if (patch) {
+        set(patch)
     }
-
-    if (nodeType === 'performer') {
-        const performer = state.performers.find((entry) => entry.id === nodeId)
-        if (!performer) return
-
-        set({
-            focusedPerformerId: nodeId,
-            focusedNodeType: 'performer',
-            focusSnapshot: {
-                ...focusSnapshotBase,
-                type: 'performer',
-                nodePosition: performer.position,
-                nodeSize: { width: performer.width ?? 400, height: performer.height ?? 500 },
-            },
-            selectedPerformerId: nodeId,
-            selectedPerformerSessionId: state.selectedPerformerSessionId,
-            activeChatPerformerId: nodeId,
-            selectedActId: null,
-            performers: state.performers.map((entry) => (
-                entry.id === nodeId
-                    ? { ...entry, hidden: false, position: { x: 0, y: 0 }, width: focusWidth, height: focusHeight }
-                    : { ...entry, hidden: true }
-            )),
-            acts: state.acts.map((act) => ({ ...act, hidden: true })),
-            markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: true })),
-            isAssetLibraryOpen: false,
-            isAssistantOpen: false,
-            isTerminalOpen: false,
-            editingTarget: null,
-            inspectorFocus: null,
-        })
-        return
-    }
-
-    const act = state.acts.find((entry) => entry.id === nodeId)
-    if (!act) return
-
-    set({
-        focusedPerformerId: nodeId,
-        focusedNodeType: 'act',
-        focusSnapshot: {
-            ...focusSnapshotBase,
-            type: 'act',
-            actId: nodeId,
-            nodeSize: { width: act.width ?? 400, height: resolveActExpandedHeight(act.height) },
-            nodePosition: act.position,
-        },
-        selectedActId: nodeId,
-        selectedPerformerId: null,
-        performers: state.performers.map((performer) => ({ ...performer, hidden: true })),
-        acts: state.acts.map((entry) => (
-            entry.id === nodeId
-                ? { ...entry, hidden: false, width: focusWidth, height: focusHeight, position: { x: 0, y: 0 } }
-                : { ...entry, hidden: true }
-        )),
-        markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: true })),
-        isAssetLibraryOpen: false,
-        isAssistantOpen: false,
-        isTerminalOpen: false,
-        editingTarget: null,
-        inspectorFocus: null,
-    })
 }
 
 export function exitFocusModeImpl(get: GetState, set: SetState) {
@@ -162,107 +191,25 @@ export function switchFocusTargetImpl(
     get: GetState,
     set: SetState,
     nodeId: string,
-    nodeType: 'performer' | 'act',
+    nodeType: FocusNodeType,
 ) {
     const state = get()
-    const snapshot = state.focusSnapshot
-    const prevId = resolveFocusNodeId(snapshot, state.focusedPerformerId)
-    if (!snapshot || !prevId) return
+    const currentTarget = resolveFocusTarget(state.focusSnapshot)
+    if (!currentTarget) return
 
-    const prevType = state.focusedNodeType || snapshot.type
+    if (nodeId === currentTarget.id && nodeType === currentTarget.type) return
 
-    if (nodeId === prevId && nodeType === prevType) return
-
-    const prevNodes = prevType === 'performer' ? state.performers : state.acts
-    const prev = prevNodes.find((node) => node.id === prevId)
-    const { width: focusWidth, height: focusHeight } = getCanvasViewportSize(
-        typeof document !== 'undefined' ? document : undefined,
-        {
-            width: prev?.width || 800,
-            height: prev?.height || 600,
-        },
-    )
-
-    if (nodeType === 'performer') {
-        const nextNode = state.performers.find((performer) => performer.id === nodeId)
-        if (!nextNode) return
-
-        set({
-            focusedPerformerId: nodeId,
-            focusedNodeType: 'performer',
-            selectedPerformerId: nodeId,
-            selectedActId: null,
-            activeChatPerformerId: nodeId,
-            focusSnapshot: {
-                ...snapshot,
-                nodeId,
-                type: 'performer',
-                nodePosition: nextNode.position,
-                nodeSize: { width: nextNode.width ?? 400, height: nextNode.height ?? 500 },
-            },
-            performers: state.performers.map((performer) => {
-                if (performer.id === prevId && prevType === 'performer') {
-                    return {
-                        ...performer,
-                        position: snapshot.nodePosition || performer.position,
-                        width: snapshot.nodeSize.width,
-                        height: snapshot.nodeSize.height,
-                        hidden: true,
-                    }
-                }
-                if (performer.id === nodeId) {
-                    return { ...performer, hidden: false, position: { x: 0, y: 0 }, width: focusWidth, height: focusHeight }
-                }
-                return { ...performer, hidden: true }
-            }),
-            acts: state.acts.map((act) => {
-                if (act.id === prevId && prevType === 'act') {
-                    return { ...act, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
-                }
-                return { ...act, hidden: true }
-            }),
-        })
+    const restoredPatch = buildExitFocusModeState(state)
+    if (!restoredPatch) {
         return
     }
 
-    const nextAct = state.acts.find((act) => act.id === nodeId)
-    if (!nextAct) return
-
-    set({
-        focusedPerformerId: nodeId,
-        focusedNodeType: 'act',
-        selectedActId: nodeId,
-        selectedPerformerId: null,
-        focusSnapshot: {
-            ...snapshot,
-            nodeId,
-            type: 'act',
-            actId: nodeId,
-            nodeSize: { width: nextAct.width ?? 400, height: resolveActExpandedHeight(nextAct.height) },
-            nodePosition: nextAct.position,
-        },
-        performers: state.performers.map((performer) => {
-            if (performer.id === prevId && prevType === 'performer') {
-                return { ...performer, width: snapshot.nodeSize.width, height: snapshot.nodeSize.height, hidden: true }
-            }
-            return { ...performer, hidden: true }
-        }),
-        acts: state.acts.map((act) => {
-            if (act.id === prevId && prevType === 'act') {
-                return {
-                    ...act,
-                    width: snapshot.nodeSize.width,
-                    height: snapshot.nodeSize.height,
-                    position: snapshot.nodePosition || act.position,
-                    hidden: true,
-                }
-            }
-            if (act.id === nodeId) {
-                return { ...act, hidden: false, width: focusWidth, height: focusHeight, position: { x: 0, y: 0 } }
-            }
-            return { ...act, hidden: true }
-        }),
-    })
+    const restoredState = { ...state, ...restoredPatch } as StudioState
+    const viewportSize = resolveCurrentFocusViewportSize(state, currentTarget)
+    const nextPatch = buildEnterFocusModeState(restoredState, { id: nodeId, type: nodeType }, viewportSize)
+    if (nextPatch) {
+        set(nextPatch)
+    }
 }
 
 export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
@@ -279,8 +226,6 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
         focusSnapshot: null,
         seEntities: {},
         seMessages: {},

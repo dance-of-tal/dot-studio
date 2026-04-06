@@ -64,7 +64,6 @@ export interface ModelConfig {
     maxTokens?: number
 }
 
-export type DanceDeliveryMode = 'auto' | 'tool' | 'inline'
 export type DraftAssetKind = 'tal' | 'dance' | 'performer' | 'act'
 export type MarkdownEditorKind = 'tal' | 'dance'
 
@@ -182,7 +181,6 @@ export interface PerformerNode {
     mcpServerNames: string[]
     mcpBindingMap?: Record<string, string>
     declaredMcpConfig?: Record<string, unknown> | null
-    danceDeliveryMode: DanceDeliveryMode
     planMode?: boolean
     hidden?: boolean
     meta?: {
@@ -309,7 +307,7 @@ export interface SavedWorkspaceSummary {
 export interface DanceCatalogEntry {
     urn: string
     description: string
-    loadMode: Exclude<DanceDeliveryMode, 'auto'>
+    loadMode: 'tool' | 'inline'
     inlineContent?: string
 }
 
@@ -331,7 +329,6 @@ export interface PromptPreview {
     system: string
     agent: string
     danceCatalog: DanceCatalogEntry[]
-    deliveryMode: Exclude<DanceDeliveryMode, 'auto'>
     capabilitySnapshot: ModelCapabilities | null
     toolName?: string
     toolResolution?: RuntimeToolResolution

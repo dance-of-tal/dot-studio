@@ -51,7 +51,6 @@ export interface PerformerDraftContent {
     modelVariant?: string | null
     mcpServerNames: string[]
     mcpBindingMap?: Record<string, string>
-    danceDeliveryMode?: 'auto' | 'tool' | 'inline'
     planMode?: boolean
     agentId?: string | null
 }

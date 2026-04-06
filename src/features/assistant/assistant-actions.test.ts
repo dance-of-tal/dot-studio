@@ -13,6 +13,18 @@ const deleteDraftMock = vi.fn()
 const writeDanceBundleFileMock = vi.fn()
 const deleteDanceBundleFileMock = vi.fn()
 
+function overlaps(
+    left: { x: number; y: number; width: number; height: number },
+    right: { x: number; y: number; width: number; height: number },
+) {
+    return !(
+        left.x + left.width <= right.x
+        || right.x + right.width <= left.x
+        || left.y + left.height <= right.y
+        || right.y + right.height <= left.y
+    )
+}
+
 vi.mock('../../api', () => ({
     api: {
         assets: {
@@ -72,6 +84,93 @@ afterEach(() => {
 })
 
 describe('assistant-actions', () => {
+    it('creates, updates, and deletes a tal draft through draft CRUD actions', async () => {
+        createDraftMock.mockResolvedValue({
+            id: 'tal-draft-1',
+            kind: 'tal',
+            name: 'Reviewer Tal',
+            content: '# Role',
+            updatedAt: Date.now(),
+        })
+        updateDraftMock.mockResolvedValue({
+            id: 'tal-draft-1',
+            kind: 'tal',
+            name: 'Senior Reviewer Tal',
+            content: '# Updated Role',
+            updatedAt: Date.now(),
+        })
+
+        const result = await applyAssistantActions([
+            {
+                type: 'createTalDraft',
+                ref: 'reviewer-tal',
+                name: 'Reviewer Tal',
+                content: '# Role',
+            },
+            {
+                type: 'updateTalDraft',
+                draftRef: 'reviewer-tal',
+                name: 'Senior Reviewer Tal',
+                content: '# Updated Role',
+            },
+            {
+                type: 'deleteTalDraft',
+                draftRef: 'reviewer-tal',
+            },
+        ])
+
+        expect(result).toEqual({ applied: 3, failed: 0 })
+        expect(updateDraftMock).toHaveBeenCalledWith('tal', 'tal-draft-1', {
+            name: 'Senior Reviewer Tal',
+            content: '# Updated Role',
+        })
+        expect(deleteDraftMock).toHaveBeenCalledWith('tal', 'tal-draft-1')
+        expect(useStudioStore.getState().drafts).toEqual({})
+    })
+
+    it('updates and deletes a saved dance draft through draft CRUD actions', async () => {
+        useStudioStore.setState({
+            drafts: {
+                'dance-draft-1': {
+                    id: 'dance-draft-1',
+                    kind: 'dance',
+                    name: 'Review Skill',
+                    content: '---\nname: review-skill\n---',
+                    updatedAt: Date.now(),
+                    saveState: 'saved',
+                },
+            },
+        })
+        updateDraftMock.mockResolvedValue({
+            id: 'dance-draft-1',
+            kind: 'dance',
+            name: 'Updated Review Skill',
+            content: '---\nname: updated-review-skill\n---',
+            updatedAt: Date.now(),
+        })
+
+        const result = await applyAssistantActions([
+            {
+                type: 'updateDanceDraft',
+                draftId: 'dance-draft-1',
+                name: 'Updated Review Skill',
+                content: '---\nname: updated-review-skill\n---',
+            },
+            {
+                type: 'deleteDanceDraft',
+                draftId: 'dance-draft-1',
+            },
+        ])
+
+        expect(result).toEqual({ applied: 2, failed: 0 })
+        expect(updateDraftMock).toHaveBeenCalledWith('dance', 'dance-draft-1', {
+            name: 'Updated Review Skill',
+            content: '---\nname: updated-review-skill\n---',
+        })
+        expect(deleteDraftMock).toHaveBeenCalledWith('dance', 'dance-draft-1')
+        expect(useStudioStore.getState().drafts).toEqual({})
+    })
+
     it('updates participant subscriptions using performer-name locators', async () => {
         useStudioStore.setState({
             performers: [
@@ -133,6 +232,61 @@ describe('assistant-actions', () => {
         })
     })
 
+    it('creates and updates a performer through Stage CRUD actions', async () => {
+        const result = await applyAssistantActions([
+            {
+                type: 'createPerformer',
+                ref: 'writer',
+                name: 'Writer',
+                model: { provider: 'openai', modelId: 'gpt-5.4' },
+            },
+            {
+                type: 'updatePerformer',
+                performerRef: 'writer',
+                name: 'Senior Writer',
+                model: { provider: 'anthropic', modelId: 'claude-sonnet-4' },
+            },
+        ])
+
+        expect(result).toEqual({ applied: 2, failed: 0 })
+
+        const performer = useStudioStore.getState().performers[0]
+        expect(performer?.name).toBe('Senior Writer')
+        expect(performer?.model).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-4' })
+    })
+
+    it('deletes a performer and removes attached act bindings', async () => {
+        const performerId = useStudioStore.getState().addPerformer('Reviewer')
+        const actId = useStudioStore.getState().addAct('Code Review')
+        const participantKey = useStudioStore.getState().attachPerformerToAct(actId, performerId)
+
+        expect(participantKey).toBeTruthy()
+
+        const result = await applyAssistantAction({
+            type: 'deletePerformer',
+            performerId,
+        })
+
+        expect(result.success).toBe(true)
+        expect(useStudioStore.getState().performers).toHaveLength(0)
+        expect(useStudioStore.getState().acts[0]?.participants).toEqual({})
+    })
+
+    it('fails cleanly when performer or act CRUD targets do not exist', async () => {
+        const performerResult = await applyAssistantAction({
+            type: 'updatePerformer',
+            performerName: 'Missing Performer',
+            name: 'Still Missing',
+        })
+        const actResult = await applyAssistantAction({
+            type: 'deleteAct',
+            actName: 'Missing Act',
+        })
+
+        expect(performerResult.success).toBe(false)
+        expect(actResult.success).toBe(false)
+    })
+
     it('creates and updates an act from same-block performer refs', async () => {
         const result = await applyAssistantActions([
             {
@@ -181,6 +335,27 @@ describe('assistant-actions', () => {
             direction: 'one-way',
             name: 'request review',
             description: 'Developer sends work to Reviewer.',
+        })
+
+        const performers = useStudioStore.getState().performers.map((performer) => ({
+            x: performer.position.x,
+            y: performer.position.y,
+            width: performer.width || 320,
+            height: performer.height || 400,
+        }))
+        const actRect = {
+            x: act!.position.x,
+            y: act!.position.y,
+            width: act!.width,
+            height: act!.height,
+        }
+
+        expect(performers.every((performer) => performer.y < actRect.y)).toBe(true)
+        expect(overlaps(performers[0], performers[1])).toBe(false)
+        expect(performers.every((performer) => overlaps(performer, actRect) === false)).toBe(true)
+        expect(useStudioStore.getState().canvasRevealTarget).toMatchObject({
+            id: act!.id,
+            type: 'act',
         })
     })
 

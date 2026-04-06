@@ -1,11 +1,15 @@
 import { api } from '../api'
-import type { AssetRef, DanceDeliveryMode, DraftAsset, MarkdownEditorNode, WorkspaceActParticipantBinding, ActRelation } from '../types'
+import type { AssetRef, DraftAsset, MarkdownEditorNode, WorkspaceActParticipantBinding, ActRelation } from '../types'
 import { ACT_DEFAULT_EXPANDED_HEIGHT, ACT_DEFAULT_WIDTH } from '../lib/act-layout'
 import {
     createPerformerNode,
     PERFORMER_DEFAULT_HEIGHT,
     PERFORMER_DEFAULT_WIDTH,
 } from '../lib/performers'
+import {
+    collectVisibleCanvasNodeRects,
+    resolveCanvasNodeSpawnPosition,
+} from '../lib/canvas-node-layout'
 import { createActParticipantKey } from './act-slice-helpers'
 import { defaultMarkdownContent, resolveCanvasSpawnPosition } from './workspace-helpers'
 import { buildExitFocusModeState } from './workspace-focus-actions'
@@ -21,7 +25,6 @@ type PerformerDraftContent = {
     modelVariant?: string | null
     mcpServerNames?: string[]
     mcpBindingMap?: Record<string, string>
-    danceDeliveryMode?: DanceDeliveryMode
     planMode?: boolean
 }
 
@@ -173,7 +176,6 @@ export async function savePerformerAsDraftImpl(get: GetState, set: SetState, per
         modelVariant: performer.modelVariant || null,
         mcpServerNames: performer.mcpServerNames || [],
         mcpBindingMap: performer.mcpBindingMap || {},
-        danceDeliveryMode: performer.danceDeliveryMode || 'auto',
         planMode: performer.planMode || false,
         agentId: performer.agentId || null,
     }
@@ -302,9 +304,9 @@ export function addPerformerFromDraftImpl(
     performerIdCounter.value++
     const id = `performer-${performerIdCounter.value}`
     const state = get()
-    const spawnPosition = resolveCanvasSpawnPosition({
+    const spawnPosition = resolveCanvasNodeSpawnPosition({
         canvasCenter: state.canvasCenter,
-        existingCount: state.performers.length,
+        occupiedRects: collectVisibleCanvasNodeRects(state.performers, state.acts),
         width: PERFORMER_DEFAULT_WIDTH,
         height: PERFORMER_DEFAULT_HEIGHT,
     })
@@ -323,7 +325,6 @@ export function addPerformerFromDraftImpl(
         modelVariant: draftContent.modelVariant || null,
         mcpServerNames: draftContent.mcpServerNames || [],
         mcpBindingMap: draftContent.mcpBindingMap || {},
-        danceDeliveryMode: draftContent.danceDeliveryMode || 'auto',
         planMode: draftContent.planMode || false,
         ...(authoringDescription
             ? {
@@ -343,6 +344,11 @@ export function addPerformerFromDraftImpl(
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
         activeChatPerformerId: id,
+        canvasRevealTarget: {
+            id,
+            type: 'performer',
+            nonce: (state.canvasRevealTarget?.nonce || 0) + 1,
+        },
         inspectorFocus: null,
         workspaceDirty: true,
     }))
@@ -463,7 +469,6 @@ export function importActFromDraftImpl(
             modelVariant: perfContent?.modelVariant || null,
             mcpServerNames: perfContent?.mcpServerNames || [],
             mcpBindingMap: perfContent?.mcpBindingMap || {},
-            danceDeliveryMode: perfContent?.danceDeliveryMode || 'auto',
             planMode: perfContent?.planMode || false,
             meta: { derivedFrom: derivedTag },
         })
@@ -564,8 +569,6 @@ export function createMarkdownEditorImpl(
             selectedMarkdownEditorId: editorId,
             selectedPerformerId: null,
             selectedPerformerSessionId: null,
-            focusedPerformerId: null,
-            focusedNodeType: null,
             focusSnapshot: null,
             inspectorFocus: null,
             workspaceDirty: true,
@@ -591,8 +594,6 @@ export function openDraftEditorImpl(
             selectedMarkdownEditorId: existing.id,
             selectedPerformerId: null,
             selectedPerformerSessionId: null,
-            focusedPerformerId: null,
-            focusedNodeType: null,
             focusSnapshot: null,
             inspectorFocus: null,
         })
@@ -641,8 +642,6 @@ export function openDraftEditorImpl(
             selectedMarkdownEditorId: editorId,
             selectedPerformerId: null,
             selectedPerformerSessionId: null,
-            focusedPerformerId: null,
-            focusedNodeType: null,
             focusSnapshot: null,
             inspectorFocus: null,
             workspaceDirty: true,

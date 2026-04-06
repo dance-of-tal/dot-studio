@@ -18,7 +18,6 @@ const performers: PerformerNode[] = [
         talRef: null,
         danceRefs: [],
         mcpServerNames: [],
-        danceDeliveryMode: 'auto',
     },
     {
         id: 'performer-2',
@@ -29,7 +28,6 @@ const performers: PerformerNode[] = [
         talRef: null,
         danceRefs: [],
         mcpServerNames: [],
-        danceDeliveryMode: 'auto',
     },
 ]
 

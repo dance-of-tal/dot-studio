@@ -86,6 +86,14 @@ function extractAssistantErrorMessage(message: SessionMessageLike): string | nul
 function mapPartToChatMessagePart(part: SessionPartLike): ChatMessagePart | null {
     if (!part.id || !part.type) return null
 
+    if (part.type === 'text') {
+        return {
+            id: part.id,
+            type: 'text',
+            content: part.text || '',
+        }
+    }
+
     if (part.type === 'reasoning') {
         return {
             id: part.id,

@@ -13,16 +13,12 @@ export type ProviderSummary = {
     connected: boolean
     modelCount: number
     defaultModel: string | null
+    hasPaidModels: boolean
 }
 
 export type ProviderCard = ProviderSummary & {
     authMethods: ProviderAuthMethod[]
 }
-
-export type ProviderConnections = Record<string, {
-    connected: boolean
-    authType?: string
-}>
 
 export type ProviderListFilter = 'popular' | 'connected' | 'all'
 export type McpStatusTone = 'connected' | 'disconnected' | 'needs_auth' | 'failed'
@@ -66,33 +62,43 @@ export function isRemoteServer(serverText: string): boolean {
 
 // ── Constants ───────────────────────────────────────────
 
-export const POPULAR_PROVIDER_HINTS = ['anthropic', 'openai', 'google', 'gemini', 'xai', 'grok', 'github-copilot', 'gitlab', 'opencode']
+export const POPULAR_PROVIDER_IDS = [
+    'opencode',
+    'opencode-go',
+    'anthropic',
+    'github-copilot',
+    'openai',
+    'google',
+    'openrouter',
+    'vercel',
+] as const
+
+type PopularProviderId = typeof POPULAR_PROVIDER_IDS[number]
 
 // ── Utility functions ───────────────────────────────────
 
-export function isPopularProvider(id: string) {
-    const normalized = id.toLowerCase()
-    return POPULAR_PROVIDER_HINTS.some((hint) => normalized === hint || normalized.includes(hint))
+function isPopularProvider(id: string): id is PopularProviderId {
+    return POPULAR_PROVIDER_IDS.includes(id as PopularProviderId)
 }
 
-export function providerRank(id: string) {
-    const normalized = id.toLowerCase()
-    const index = POPULAR_PROVIDER_HINTS.findIndex((hint) => normalized === hint || normalized.includes(hint))
+function providerRank(id: string) {
+    const index = POPULAR_PROVIDER_IDS.indexOf(id as PopularProviderId)
     return index === -1 ? Number.MAX_SAFE_INTEGER : index
+}
+
+function compareProviderCards(left: Pick<ProviderCard, 'id' | 'name' | 'connected'>, right: Pick<ProviderCard, 'id' | 'name' | 'connected'>) {
+    const rankDiff = providerRank(left.id) - providerRank(right.id)
+    if (rankDiff !== 0) {
+        return rankDiff
+    }
+    if (left.connected !== right.connected) {
+        return left.connected ? -1 : 1
+    }
+    return left.name.localeCompare(right.name)
 }
 
 export function providerSupportsApiKey(provider: ProviderCard) {
     return provider.authMethods.some((method) => method.type === 'api') || provider.env.length > 0
-}
-
-export function isBuiltinOpenCodeProvider(provider: Pick<ProviderSummary, 'id' | 'source'>) {
-    return provider.id === 'opencode' && provider.source !== 'custom'
-}
-
-export function shouldDisplayConnectedProvider(
-    provider: Pick<ProviderSummary, 'connected' | 'id' | 'source'>,
-) {
-    return provider.connected && !isBuiltinOpenCodeProvider(provider)
 }
 
 export function getProviderAuthSuccessAction(
@@ -115,58 +121,30 @@ function readProviderAuthMethods(value: ProviderAuthMethod[] | undefined): Provi
     return Array.isArray(value) ? value : []
 }
 
-function readProviderConnected(value: ProviderConnections[string] | undefined): boolean {
-    return value?.connected === true
-}
-
-export function mergeProviders(
+export function buildProviderCards(
     providers: ProviderSummary[],
     authMethods: Record<string, ProviderAuthMethod[]>,
-    connections: ProviderConnections,
 ): ProviderCard[] {
-    const providerMap = new Map<string, ProviderCard>()
-
-    for (const provider of providers) {
-        const providerAuthMethods = readProviderAuthMethods(authMethods[provider.id])
-        const providerConnections = connections[provider.id]
-        providerMap.set(provider.id, {
+    return providers
+        .map((provider) => ({
             ...provider,
-            connected: provider.connected || readProviderConnected(providerConnections),
-            authMethods: providerAuthMethods,
-        })
-    }
-
-    for (const id of new Set([
-        ...Object.keys(authMethods),
-        ...Object.keys(connections),
-    ])) {
-        const existing = providerMap.get(id)
-        const providerAuthMethods = readProviderAuthMethods(authMethods[id])
-        const providerConnections = connections[id]
-        providerMap.set(id, {
-            id,
-            name: existing?.name || id,
-            source: existing?.source || 'builtin',
-            env: existing?.env || [],
-            connected: existing?.connected || readProviderConnected(providerConnections),
-            modelCount: existing?.modelCount || 0,
-            defaultModel: existing?.defaultModel || null,
-            authMethods: providerAuthMethods,
-        })
-    }
-
-    return Array.from(providerMap.values())
+            authMethods: readProviderAuthMethods(authMethods[provider.id]),
+        }))
         .filter((provider) => provider.connected || provider.authMethods.length > 0 || isPopularProvider(provider.id))
-        .sort((a, b) => {
-            const rankDiff = providerRank(a.id) - providerRank(b.id)
-            if (rankDiff !== 0) {
-                return rankDiff
-            }
-            if (a.connected !== b.connected) {
-                return a.connected ? -1 : 1
-            }
-            return a.name.localeCompare(b.name)
-        })
+        .sort(compareProviderCards)
+}
+
+export function getConnectedProviderCards(providers: ProviderCard[]) {
+    return providers.filter((provider) => provider.connected && (provider.id !== 'opencode' || provider.hasPaidModels))
+}
+
+export function getPopularProviderCards(providers: ProviderCard[]) {
+    const connectedProviderIds = new Set(getConnectedProviderCards(providers).map((provider) => provider.id))
+
+    return providers.filter((provider) => (
+        !connectedProviderIds.has(provider.id)
+        && isPopularProvider(provider.id)
+    ))
 }
 
 export function parseKeyValueText(text: string): Record<string, string> | undefined {

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
 import { useSlashCommands } from '../../hooks/useSlashCommands'
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions'
@@ -38,7 +39,9 @@ export function usePerformerChatComposerState({
     danceAssets,
     drafts,
 }: Args) {
-    const { sendMessage, executeSlashCommand } = useStudioStore()
+    const { sendMessage } = useStudioStore(useShallow((state) => ({
+        sendMessage: state.sendMessage,
+    })))
 
     const [input, setInput] = useState('')
     const [attachments, setAttachments] = useState<FileMention[]>([])
@@ -53,7 +56,7 @@ export function usePerformerChatComposerState({
         filteredCommands,
         handleInputChange: onSlashInputChange,
         handleKeyDown: onSlashKeyDown,
-    } = useSlashCommands(performerId, input, setInput)
+    } = useSlashCommands(input, setInput)
 
     const {
         inputRef,
@@ -109,11 +112,6 @@ export function usePerformerChatComposerState({
             return
         }
 
-        if (/^\/(share)$/.test(text)) {
-            executeSlashCommand(performerId, text)
-            return
-        }
-
         const formattedAttachments = formatChatAttachments(attachments)
 
         if (runtimeTools && runtimeTools.selectedMcpServers.length > 0 && runtimeTools.resolvedTools.length === 0 && runtimeTools.unavailableDetails.length > 0) {
@@ -144,11 +142,9 @@ export function usePerformerChatComposerState({
     }, [
         attachments,
         danceSlashMatch,
-        executeSlashCommand,
         input,
         isLoading,
         modelConfigured,
-        performerId,
         runtimeTools,
         sendMessage,
         setIsFileMentioning,

@@ -20,11 +20,7 @@ import { mergeOpenCodeConfig, readGlobalConfigFile, writeGlobalConfigFile } from
 import { readGlobalMcpCatalog, readProjectMcpServerNames, summarizeMcpCatalog } from '../lib/mcp-catalog.js'
 import type { McpLiveStatusMap } from '../lib/mcp-catalog.js'
 import { invalidateProviderListCache } from '../lib/model-catalog.js'
-import {
-    buildStoredProviderConnections,
-    clearStoredProviderAuth,
-    listStoredProviderAuthTypes,
-} from '../lib/opencode-auth.js'
+import { clearStoredProviderAuth } from '../lib/opencode-auth.js'
 import {
     extractMcpCatalog,
     isMcpCatalog,
@@ -134,10 +130,6 @@ export async function getStudioMcpCatalog() {
 export async function getProviderAuthMethods(directory: string) {
     const oc = await getOpencode()
     return unwrapOpencodeResult<ProviderAuthStatus>(await oc.provider.auth({ directory })) || {}
-}
-
-export async function getProviderConnections() {
-    return buildStoredProviderConnections(await listStoredProviderAuthTypes())
 }
 
 export async function getLspStatus(directory: string) {

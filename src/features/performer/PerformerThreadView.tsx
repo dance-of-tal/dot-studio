@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
 import { Paperclip, Sparkles, GitCompare } from 'lucide-react'
-import type { RefObject } from 'react'
 import type { ChatMessage } from '../../types'
 import ThreadBody from '../chat/ThreadBody'
 import ChatMessageContent from '../chat/ChatMessageContent'
@@ -24,7 +23,6 @@ type Props = {
     prefixCount: number
     isLoading: boolean
     hasActiveSession: boolean
-    chatEndRef: RefObject<HTMLDivElement | null>
     onOpenRevert: (performerId: string, messageId: string, content: string) => void
     composer: React.ReactNode
 }
@@ -35,7 +33,6 @@ export default function PerformerThreadView({
     prefixCount,
     isLoading,
     hasActiveSession,
-    chatEndRef,
     onOpenRevert,
     composer,
 }: Props) {
@@ -75,19 +72,81 @@ export default function PerformerThreadView({
         setSessionTodos(sessionId, [])
     }, [sessionId, setSessionTodos])
 
-    const composerWithDock = (
+    const handleRestoreRevertedMessage = useCallback((messageId: string) => {
+        void restoreRevertedMessage(performerId, messageId)
+    }, [performerId, restoreRevertedMessage])
+
+    const renderEmpty = useCallback(() => (
+        <div className="chat-empty-state">
+            <Sparkles size={28} className="empty-icon" />
+            <p className="empty-title">Start a conversation</p>
+            <p className="empty-subtitle">Send a message to begin</p>
+        </div>
+    ), [])
+
+    const renderMessage = useCallback((msg: ChatMessage, index: number) => {
+        const isCurrentSession = index >= prefixCount
+        const isStreamingAssistant = isStreamingAssistantMessage(visibleMessages, index, isLoading)
+        if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
+            return null
+        }
+        if (msg.role === 'assistant' && !hasVisibleAssistantMessageContent(msg)) {
+            return null
+        }
+        return (
+            <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`} data-scrollable>
+                {msg.role === 'user' ? (
+                    <div className="user-input-box">
+                        <span className="user-input-text">{msg.content}</span>
+                        {msg.attachments && msg.attachments.length > 0 ? (
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                {msg.attachments.map((att, i) => (
+                                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'var(--bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                                        <Paperclip size={10} />
+                                        {att.filename || 'file'}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                ) : (
+                    <ChatMessageContent message={msg} streaming={isStreamingAssistant} />
+                )}
+                {msg.role === 'user' && isCurrentSession ? (
+                    <MessageActionBar
+                        message={msg}
+                        performerId={performerId}
+                        canRevert={hasActiveSession && !isMutating}
+                        onRevert={(pid, mid) => onOpenRevert(pid, mid, msg.content)}
+                    />
+                ) : null}
+            </div>
+        )
+    }, [hasActiveSession, isLoading, isMutating, onOpenRevert, performerId, prefixCount, visibleMessages])
+
+    const renderLoading = useCallback(() => (
+        <div className="thread-msg thread-msg--assistant" data-scrollable>
+            <div className="assistant-body">
+                <TextShimmer text="Thinking" active />
+            </div>
+        </div>
+    ), [])
+
+    const composerWithDock = useMemo(() => (
         <>
             <SessionRevertDock
                 items={rolledMessages}
                 disabled={isLoading || isMutating}
-                onRestore={(messageId) => {
-                    void restoreRevertedMessage(performerId, messageId)
-                }}
+                onRestore={handleRestoreRevertedMessage}
             />
             <TodoDock todos={todos} isLive={isTodoLive} onClear={handleTodoClear} />
             {composer}
         </>
-    )
+    ), [composer, handleRestoreRevertedMessage, handleTodoClear, isLoading, isMutating, isTodoLive, rolledMessages, todos])
+
+    const handleToggleReview = useCallback(() => {
+        setShowReview((current) => !current)
+    }, [])
 
     return (
         <>
@@ -97,66 +156,16 @@ export default function PerformerThreadView({
             <ThreadBody
                 messages={visibleMessages}
                 loading={shouldShowAssistantLoadingPlaceholder(visibleMessages, isLoading)}
-                renderEmpty={() => (
-                    <div className="chat-empty-state">
-                        <Sparkles size={28} className="empty-icon" />
-                        <p className="empty-title">Start a conversation</p>
-                        <p className="empty-subtitle">Send a message to begin</p>
-                    </div>
-                )}
-                renderMessage={(msg, index) => {
-                    const isCurrentSession = index >= prefixCount
-                    const isStreamingAssistant = isStreamingAssistantMessage(visibleMessages, index, isLoading)
-                    if (msg.role === 'user' && !hasVisibleUserMessageContent(msg)) {
-                        return null
-                    }
-                    if (msg.role === 'assistant' && !hasVisibleAssistantMessageContent(msg)) {
-                        return null
-                    }
-                    return (
-                        <div key={msg.id} className={`thread-msg thread-msg--${msg.role}`} data-scrollable>
-                            {msg.role === 'user' ? (
-                                <div className="user-input-box">
-                                    <span className="user-input-text">{msg.content}</span>
-                                    {msg.attachments && msg.attachments.length > 0 ? (
-                                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                                            {msg.attachments.map((att, i) => (
-                                                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'var(--bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', color: 'var(--text-secondary)' }}>
-                                                    <Paperclip size={10} />
-                                                    {att.filename || 'file'}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    ) : null}
-                                </div>
-                            ) : (
-                                <ChatMessageContent message={msg} streaming={isStreamingAssistant} />
-                            )}
-                            {msg.role === 'user' && isCurrentSession ? (
-                                <MessageActionBar
-                                    message={msg}
-                                    performerId={performerId}
-                                    canRevert={hasActiveSession && !isMutating}
-                                    onRevert={(pid, mid) => onOpenRevert(pid, mid, msg.content)}
-                                />
-                            ) : null}
-                        </div>
-                    )
-                }}
-                renderLoading={() => (
-                    <div className="thread-msg thread-msg--assistant" data-scrollable>
-                        <div className="assistant-body">
-                            <TextShimmer text="Thinking" active />
-                        </div>
-                    </div>
-                )}
-                endRef={chatEndRef}
+                scrollStateKey={performerId}
+                renderEmpty={renderEmpty}
+                renderMessage={renderMessage}
+                renderLoading={renderLoading}
                 composer={composerWithDock}
             />
             {hasDiffs && (
                 <button
                     className="session-review-toggle"
-                    onClick={() => setShowReview(!showReview)}
+                    onClick={handleToggleReview}
                     title={showReview ? 'Hide changes' : 'Review changes'}
                     type="button"
                 >

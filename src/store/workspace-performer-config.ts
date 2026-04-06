@@ -7,7 +7,7 @@
  */
 
 import type { StudioState } from './types'
-import type { AssetRef, DanceDeliveryMode } from '../types'
+import type { AssetRef } from '../types'
 import {
     assetRefKey,
     isSameAssetRef,
@@ -178,15 +178,6 @@ export function setPerformerAgentId(set: SetFn, get: GetFn, performerId: string,
                 planMode: agentId === 'plan',
             })
         }),
-        workspaceDirty: true,
-    }))
-    markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
-}
-
-export function setPerformerDanceDeliveryMode(set: SetFn, get: GetFn, performerId: string, danceDeliveryMode: DanceDeliveryMode) {
-    set((s) => ({
-        performers: mapPerformers(s.performers, performerId, (performer) => applyPerformerPatch(performer, { danceDeliveryMode })),
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)

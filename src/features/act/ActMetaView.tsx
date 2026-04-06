@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import {
     AlertTriangle, AlertCircle, CheckCircle2, User, ArrowRightLeft, Shield, Trash2,
 } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
 import { resolveActParticipantLabel } from './participant-labels'
 import { evaluateActReadiness } from './act-readiness'
@@ -22,8 +23,20 @@ export default function ActMetaView() {
         openActRelationEditor,
         unbindPerformerFromAct,
         removeRelation,
-    } = useStudioStore()
-    const updateActRules = useStudioStore((s) => s.updateActRules)
+        updateActRules,
+    } = useStudioStore(useShallow((state) => ({
+        acts: state.acts,
+        performers: state.performers,
+        actEditorState: state.actEditorState,
+        renameAct: state.renameAct,
+        updateActAuthoringMeta: state.updateActAuthoringMeta,
+        updateActDescription: state.updateActDescription,
+        openActParticipantEditor: state.openActParticipantEditor,
+        openActRelationEditor: state.openActRelationEditor,
+        unbindPerformerFromAct: state.unbindPerformerFromAct,
+        removeRelation: state.removeRelation,
+        updateActRules: state.updateActRules,
+    })))
     const activeActId = actEditorState?.actId || null
     const act = acts.find((a) => a.id === activeActId)
 

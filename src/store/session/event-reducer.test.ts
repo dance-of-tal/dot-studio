@@ -150,6 +150,41 @@ describe('Event Reducer', () => {
 
             const msg = state.seMessages[SESSION_ID]![0]
             expect(msg.content).toBe('Hello world')
+            expect(msg.parts).toEqual([
+                { id: 'part-1', type: 'text', content: 'Hello world' },
+            ])
+        })
+
+        it('keeps full assistant content when text and tool parts interleave', () => {
+            state.seMessages[SESSION_ID] = [
+                { id: 'msg-1', role: 'assistant', content: '', timestamp: 1000 },
+            ]
+
+            reduceMessagePartUpdated(SESSION_ID, 'msg-1', {
+                id: 'text-1',
+                type: 'text',
+                text: 'Hello',
+            }, get, set)
+            reduceMessagePartUpdated(SESSION_ID, 'msg-1', {
+                id: 'tool-1',
+                type: 'tool',
+                tool: 'wait_until',
+                state: { status: 'completed' },
+            }, get, set)
+            reduceMessagePartUpdated(SESSION_ID, 'msg-1', {
+                id: 'text-2',
+                type: 'text',
+                text: 'World',
+            }, get, set)
+
+            expect(state.seMessages[SESSION_ID]![0]).toMatchObject({
+                content: 'Hello\nWorld',
+                parts: [
+                    { id: 'text-1', type: 'text', content: 'Hello' },
+                    { id: 'tool-1', type: 'tool' },
+                    { id: 'text-2', type: 'text', content: 'World' },
+                ],
+            })
         })
 
         it('adds a reasoning part', () => {
@@ -212,6 +247,9 @@ describe('Event Reducer', () => {
             reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', ' world', get, set)
 
             expect(state.seMessages[SESSION_ID]![0].content).toBe('Hello world')
+            expect(state.seMessages[SESSION_ID]![0].parts).toEqual([
+                { id: 'part-1', type: 'text', content: 'Hello world' },
+            ])
         })
 
         it('appends reasoning delta to existing reasoning part', () => {
@@ -244,6 +282,23 @@ describe('Event Reducer', () => {
                 content: 'hello',
             })
         })
+
+        it('keeps text part content when delta arrives before message.updated', () => {
+            state.seMessages[SESSION_ID] = []
+
+            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', 'Hello', get, set)
+            reduceMessageUpdated(SESSION_ID, 'msg-1', 'assistant', 1000, get, set)
+
+            expect(state.seMessages[SESSION_ID]).toEqual([
+                {
+                    id: 'msg-1',
+                    role: 'assistant',
+                    content: 'Hello',
+                    timestamp: 1000,
+                    parts: [{ id: 'part-1', type: 'text', content: 'Hello' }],
+                },
+            ])
+        })
     })
 
     describe('reduceMessagePartRemoved', () => {
@@ -263,6 +318,32 @@ describe('Event Reducer', () => {
             const parts = state.seMessages[SESSION_ID]![0].parts
             expect(parts).toHaveLength(1)
             expect(parts![0].id).toBe('part-2')
+        })
+
+        it('recomputes content when removing a text part', () => {
+            state.seMessages[SESSION_ID] = [
+                {
+                    id: 'msg-1',
+                    role: 'assistant',
+                    content: 'Hello\nWorld',
+                    timestamp: 1000,
+                    parts: [
+                        { id: 'text-1', type: 'text', content: 'Hello' },
+                        { id: 'tool-1', type: 'tool', tool: { name: 'wait_until', callId: 'call-1', status: 'completed' } },
+                        { id: 'text-2', type: 'text', content: 'World' },
+                    ],
+                },
+            ]
+
+            reduceMessagePartRemoved(SESSION_ID, 'msg-1', 'text-2', get, set)
+
+            expect(state.seMessages[SESSION_ID]![0]).toMatchObject({
+                content: 'Hello',
+                parts: [
+                    { id: 'text-1', type: 'text', content: 'Hello' },
+                    { id: 'tool-1', type: 'tool' },
+                ],
+            })
         })
     })
 

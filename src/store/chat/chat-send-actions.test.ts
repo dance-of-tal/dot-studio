@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StudioState } from '../types'
+import type { ChatRuntimeConfig } from './chat-runtime-target'
 import { createChatSendActions } from './chat-send-actions'
 import { createEmptyProjectionDirtyState } from '../runtime-change-policy'
 
@@ -7,16 +8,14 @@ const {
     sendMock,
     statusMock,
     messagesMock,
-    syncPerformerMessagesMock,
+    syncChatMessagesMock,
     resolveChatRuntimeTargetMock,
-    resolvePerformerRuntimeConfigMock,
 } = vi.hoisted(() => ({
     sendMock: vi.fn(),
     statusMock: vi.fn(),
     messagesMock: vi.fn(),
-    syncPerformerMessagesMock: vi.fn(),
+    syncChatMessagesMock: vi.fn(),
     resolveChatRuntimeTargetMock: vi.fn(),
-    resolvePerformerRuntimeConfigMock: vi.fn(),
 }))
 
 vi.mock('../../api', () => ({
@@ -35,19 +34,75 @@ vi.mock('../../lib/api-errors', () => ({
 
 vi.mock('../../lib/performers', () => ({
     hasModelConfig: () => true,
-    resolvePerformerRuntimeConfig: resolvePerformerRuntimeConfigMock,
 }))
 
 vi.mock('./chat-internals', () => ({
-    addChatMessage: vi.fn(),
-    appendPerformerSystemMessage: vi.fn(),
-    getPerformerById: vi.fn(() => ({ id: 'performer-1', name: 'Performer 1' })),
-    syncPerformerMessages: syncPerformerMessagesMock,
+    appendChatMessage: vi.fn(),
+    appendChatSystemMessage: vi.fn(),
+    syncChatMessages: syncChatMessagesMock,
 }))
 
-vi.mock('./chat-runtime-target', () => ({
-    resolveChatRuntimeTarget: resolveChatRuntimeTargetMock,
-}))
+vi.mock('./chat-runtime-target', async () => {
+    const actual = await vi.importActual<typeof import('./chat-runtime-target')>('./chat-runtime-target')
+    return {
+        ...actual,
+        resolveChatRuntimeTarget: resolveChatRuntimeTargetMock,
+    }
+})
+
+function createRuntimeConfig(): ChatRuntimeConfig {
+    return {
+        talRef: null,
+        danceRefs: [],
+        model: { provider: 'openai', modelId: 'gpt-5.4' },
+        modelVariant: null,
+        agentId: 'build',
+        mcpServerNames: [],
+        planMode: false,
+    }
+}
+
+function createPerformerTarget(chatKey = 'performer-1') {
+    return {
+        chatKey,
+        kind: 'performer' as const,
+        name: 'Performer 1',
+        runtimeConfig: createRuntimeConfig(),
+        assistantContext: null,
+        executionScope: {
+            performerId: chatKey,
+            actId: null,
+            clearPerformerIds: [chatKey],
+            clearActIds: [],
+        },
+        requestTarget: {
+            performerId: chatKey,
+            performerName: 'Performer 1',
+        },
+    }
+}
+
+function createActTarget(chatKey: string, actId: string, threadId: string) {
+    return {
+        chatKey,
+        kind: 'act-participant' as const,
+        name: 'Lead',
+        runtimeConfig: createRuntimeConfig(),
+        assistantContext: null,
+        executionScope: {
+            performerId: 'local-performer',
+            actId,
+            clearPerformerIds: ['local-performer'],
+            clearActIds: [actId],
+        },
+        requestTarget: {
+            performerId: chatKey,
+            performerName: 'Lead',
+            actId,
+            actThreadId: threadId,
+        },
+    }
+}
 
 function createMinimalState(overrides: Partial<StudioState> = {}): StudioState {
     const state = {
@@ -110,9 +165,8 @@ describe('chat send actions', () => {
         sendMock.mockReset()
         statusMock.mockReset()
         messagesMock.mockReset()
-        syncPerformerMessagesMock.mockReset()
+        syncChatMessagesMock.mockReset()
         resolveChatRuntimeTargetMock.mockReset()
-        resolvePerformerRuntimeConfigMock.mockReset()
     })
 
     it('recovers session messages while status is still busy', async () => {
@@ -128,36 +182,24 @@ describe('chat send actions', () => {
             Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
         }
 
-        resolveChatRuntimeTargetMock.mockReturnValue({
-            name: 'Performer 1',
-            runtimeConfig: {
-                talRef: null,
-                danceRefs: [],
-                model: { provider: 'openai', modelId: 'gpt-5.4' },
-                modelVariant: null,
-                agentId: 'build',
-                mcpServerNames: [],
-                danceDeliveryMode: 'auto',
-                planMode: false,
-            },
-        })
+        resolveChatRuntimeTargetMock.mockReturnValue(createPerformerTarget())
         sendMock.mockResolvedValue(undefined)
         statusMock.mockResolvedValue({ status: { type: 'busy' } })
-        syncPerformerMessagesMock.mockImplementation(async () => {
+        syncChatMessagesMock.mockImplementation(async () => {
             state.sessionLoading[sessionId] = false
-            return []
+            return { messages: [], nextCursor: null }
         })
 
         const actions = createChatSendActions(set, get, async () => ({
             sessionId,
-            runtimeConfig: resolveChatRuntimeTargetMock().runtimeConfig,
+            runtimeConfig: createPerformerTarget().runtimeConfig,
         }))
 
         await actions.sendMessage('performer-1', 'hello')
         await vi.advanceTimersByTimeAsync(2200)
 
         expect(statusMock).toHaveBeenCalledWith(sessionId)
-        expect(syncPerformerMessagesMock).toHaveBeenCalledWith(set, get, 'performer-1', sessionId)
+        expect(syncChatMessagesMock).toHaveBeenCalledWith(set, get, 'performer-1', sessionId)
     })
 
     it('settles stale busy status after assistant output stops changing', async () => {
@@ -173,22 +215,10 @@ describe('chat send actions', () => {
             Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
         }
 
-        resolveChatRuntimeTargetMock.mockReturnValue({
-            name: 'Performer 1',
-            runtimeConfig: {
-                talRef: null,
-                danceRefs: [],
-                model: { provider: 'openai', modelId: 'gpt-5.4' },
-                modelVariant: null,
-                agentId: 'build',
-                mcpServerNames: [],
-                danceDeliveryMode: 'auto',
-                planMode: false,
-            },
-        })
+        resolveChatRuntimeTargetMock.mockReturnValue(createPerformerTarget())
         sendMock.mockResolvedValue(undefined)
         statusMock.mockResolvedValue({ status: { type: 'busy' } })
-        syncPerformerMessagesMock.mockResolvedValue({
+        syncChatMessagesMock.mockResolvedValue({
             messages: [
                 { id: 'user-1', role: 'user', content: 'hello', timestamp: 1000 },
                 { id: 'msg-1', role: 'assistant', content: 'done', timestamp: 1001 },
@@ -198,7 +228,7 @@ describe('chat send actions', () => {
 
         const actions = createChatSendActions(set, get, async () => ({
             sessionId,
-            runtimeConfig: resolveChatRuntimeTargetMock().runtimeConfig,
+            runtimeConfig: createPerformerTarget().runtimeConfig,
         }))
 
         await actions.sendMessage('performer-1', 'hello')
@@ -216,22 +246,6 @@ describe('chat send actions', () => {
         const chatKey = `act:${actId}:thread:${threadId}:participant:${participantKey}`
         const sessionId = 'session-1'
         const state = createMinimalState({
-            performers: [{
-                id: 'local-performer',
-                name: 'Lead',
-                meta: { derivedFrom: 'draft:performer-1' },
-            }] as unknown as StudioState['performers'],
-            acts: [{
-                id: actId,
-                name: 'Act',
-                participants: {
-                    [participantKey]: {
-                        performerRef: { kind: 'draft', draftId: 'performer-1' },
-                        displayName: 'Lead',
-                    },
-                },
-                relations: [],
-            }] as unknown as StudioState['acts'],
             chatKeyToSession: { [chatKey]: sessionId },
             sessionToChatKey: { [sessionId]: chatKey },
             sessionLoading: { [sessionId]: true },
@@ -243,34 +257,25 @@ describe('chat send actions', () => {
             Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
         }
 
-        resolvePerformerRuntimeConfigMock.mockReturnValue({
-            talRef: null,
-            danceRefs: [],
-            model: { provider: 'openai', modelId: 'gpt-5.4' },
-            modelVariant: null,
-            agentId: 'build',
-            mcpServerNames: [],
-            danceDeliveryMode: 'auto',
-            planMode: false,
-        })
+        resolveChatRuntimeTargetMock.mockReturnValue(createActTarget(chatKey, actId, threadId))
         sendMock.mockResolvedValue(undefined)
         statusMock.mockResolvedValue({ status: { type: 'busy' } })
         messagesMock.mockResolvedValue({ messages: [], nextCursor: null })
-        syncPerformerMessagesMock.mockImplementation(async () => {
+        syncChatMessagesMock.mockImplementation(async () => {
             delete state.sessionLoading[sessionId]
-            return []
+            return { messages: [], nextCursor: null }
         })
 
         const actions = createChatSendActions(set, get, async () => ({
             sessionId,
-            runtimeConfig: resolvePerformerRuntimeConfigMock.mock.results[0]?.value,
+            runtimeConfig: createActTarget(chatKey, actId, threadId).runtimeConfig,
         }))
 
         await actions.sendActMessage(actId, threadId, participantKey, 'hello')
         await vi.advanceTimersByTimeAsync(2200)
 
         expect(state.loadThreads).toHaveBeenCalledWith(actId)
-        expect(syncPerformerMessagesMock).toHaveBeenCalledWith(set, get, chatKey, sessionId)
+        expect(syncChatMessagesMock).toHaveBeenCalledWith(set, get, chatKey, sessionId)
     })
 
     it('syncs discovered act participant session status during streaming recovery', async () => {
@@ -283,26 +288,6 @@ describe('chat send actions', () => {
         const sessionId = 'session-1'
         const downstreamSessionId = 'session-2'
         const state = createMinimalState({
-            performers: [{
-                id: 'local-performer',
-                name: 'Lead',
-                meta: { derivedFrom: 'draft:performer-1' },
-            }] as unknown as StudioState['performers'],
-            acts: [{
-                id: actId,
-                name: 'Act',
-                participants: {
-                    [participantKey]: {
-                        performerRef: { kind: 'draft', draftId: 'performer-1' },
-                        displayName: 'Lead',
-                    },
-                    [downstreamKey]: {
-                        performerRef: { kind: 'draft', draftId: 'performer-1' },
-                        displayName: 'Support',
-                    },
-                },
-                relations: [],
-            }] as unknown as StudioState['acts'],
             chatKeyToSession: { [chatKey]: sessionId },
             sessionToChatKey: { [sessionId]: chatKey },
             sessionLoading: { [sessionId]: true },
@@ -338,28 +323,17 @@ describe('chat send actions', () => {
             Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
         }
 
-        resolvePerformerRuntimeConfigMock.mockReturnValue({
-            talRef: null,
-            danceRefs: [],
-            model: { provider: 'openai', modelId: 'gpt-5.4' },
-            modelVariant: null,
-            agentId: 'build',
-            mcpServerNames: [],
-            danceDeliveryMode: 'auto',
-            planMode: false,
-        })
+        resolveChatRuntimeTargetMock.mockReturnValue(createActTarget(chatKey, actId, threadId))
         sendMock.mockResolvedValue(undefined)
-        statusMock.mockImplementation(async (sid: string) => ({
-            status: sid === downstreamSessionId
-                ? { type: 'busy' as const }
-                : { type: 'busy' as const },
+        statusMock.mockImplementation(async () => ({
+            status: { type: 'busy' as const },
         }))
         messagesMock.mockResolvedValue({ messages: [], nextCursor: null })
-        syncPerformerMessagesMock.mockResolvedValue({ messages: [], nextCursor: null })
+        syncChatMessagesMock.mockResolvedValue({ messages: [], nextCursor: null })
 
         const actions = createChatSendActions(set, get, async () => ({
             sessionId,
-            runtimeConfig: resolvePerformerRuntimeConfigMock.mock.results[0]?.value,
+            runtimeConfig: createActTarget(chatKey, actId, threadId).runtimeConfig,
         }))
 
         await actions.sendActMessage(actId, threadId, participantKey, 'hello')
@@ -380,26 +354,6 @@ describe('chat send actions', () => {
         const sessionId = 'session-1'
         const downstreamSessionId = 'session-2'
         const state = createMinimalState({
-            performers: [{
-                id: 'local-performer',
-                name: 'Lead',
-                meta: { derivedFrom: 'draft:performer-1' },
-            }] as unknown as StudioState['performers'],
-            acts: [{
-                id: actId,
-                name: 'Act',
-                participants: {
-                    [participantKey]: {
-                        performerRef: { kind: 'draft', draftId: 'performer-1' },
-                        displayName: 'Lead',
-                    },
-                    [downstreamKey]: {
-                        performerRef: { kind: 'draft', draftId: 'performer-1' },
-                        displayName: 'Support',
-                    },
-                },
-                relations: [],
-            }] as unknown as StudioState['acts'],
             chatKeyToSession: { [chatKey]: sessionId },
             sessionToChatKey: { [sessionId]: chatKey },
             sessionLoading: { [sessionId]: true },
@@ -429,16 +383,7 @@ describe('chat send actions', () => {
             Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
         }
 
-        resolvePerformerRuntimeConfigMock.mockReturnValue({
-            talRef: null,
-            danceRefs: [],
-            model: { provider: 'openai', modelId: 'gpt-5.4' },
-            modelVariant: null,
-            agentId: 'build',
-            mcpServerNames: [],
-            danceDeliveryMode: 'auto',
-            planMode: false,
-        })
+        resolveChatRuntimeTargetMock.mockReturnValue(createActTarget(chatKey, actId, threadId))
         sendMock.mockResolvedValue(undefined)
         statusMock.mockImplementation(async (sid: string) => ({
             status: sid === sessionId
@@ -446,11 +391,11 @@ describe('chat send actions', () => {
                 : { type: 'busy' as const },
         }))
         messagesMock.mockResolvedValue({ messages: [], nextCursor: null })
-        syncPerformerMessagesMock.mockResolvedValue({ messages: [], nextCursor: null })
+        syncChatMessagesMock.mockResolvedValue({ messages: [], nextCursor: null })
 
         const actions = createChatSendActions(set, get, async () => ({
             sessionId,
-            runtimeConfig: resolvePerformerRuntimeConfigMock.mock.results[0]?.value,
+            runtimeConfig: createActTarget(chatKey, actId, threadId).runtimeConfig,
         }))
 
         await actions.sendActMessage(actId, threadId, participantKey, 'hello')

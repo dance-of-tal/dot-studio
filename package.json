@@ -31,7 +31,7 @@
     "start": "tsx server/start.ts",
     "dev": "vite",
     "kill-ports": "lsof -ti:5173,3001,4096 | xargs kill -9 2>/dev/null || true",
-    "dev:all": "npm run kill-ports && concurrently -k -n opencode,server,vite -c magenta,yellow,cyan \"opencode --port 4096 .\" \"tsx --watch server/index.ts\" \"vite\"",
+    "dev:all": "npm run kill-ports && tsx server/start.ts",
     "server": "tsx server/index.ts",
     "server:dev": "tsx --watch server/index.ts",
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); require('fs').rmSync('client', { recursive: true, force: true })\"",

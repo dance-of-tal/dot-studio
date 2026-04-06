@@ -16,6 +16,10 @@ import {
     resolveCanvasSpawnPosition,
 } from './workspace-helpers'
 import {
+    collectVisibleCanvasNodeRects,
+    resolveCanvasNodeSpawnPosition,
+} from '../lib/canvas-node-layout'
+import {
     newWorkspace as newWorkspaceImpl,
     saveWorkspace as saveWorkspaceImpl,
     loadWorkspace as loadWorkspaceImpl,
@@ -30,7 +34,6 @@ import {
     setPerformerModel as setPerformerModelImpl,
     setPerformerModelVariant as setPerformerModelVariantImpl,
     setPerformerAgentId as setPerformerAgentIdImpl,
-    setPerformerDanceDeliveryMode as setPerformerDanceDeliveryModeImpl,
     addPerformerMcp as addPerformerMcpImpl,
     removePerformerMcp as removePerformerMcpImpl,
     setPerformerMcpBinding as setPerformerMcpBindingImpl,
@@ -127,8 +130,6 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         activeThreadId: null,
         activeThreadParticipantKey: null,
         actThreads: {},
-        focusedPerformerId: null,
-        focusedNodeType: null,
         focusSnapshot: null,
         canvasRevealTarget: null,
         inspectorFocus: null,
@@ -172,8 +173,6 @@ export const createWorkspaceSlice: StateCreator<
     selectedPerformerId: null,
     selectedPerformerSessionId: null,
     selectedMarkdownEditorId: null,
-    focusedPerformerId: null,
-    focusedNodeType: null,
     focusSnapshot: null,
     canvasRevealTarget: null,
     inspectorFocus: null,
@@ -259,11 +258,10 @@ export const createWorkspaceSlice: StateCreator<
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
         const state = get()
-        const count = state.performers.length
         const safeName = uniquePerformerName(name, state.performers.map(p => p.name))
-        const spawnPosition = resolveCanvasSpawnPosition({
+        const spawnPosition = resolveCanvasNodeSpawnPosition({
             canvasCenter: state.canvasCenter,
-            existingCount: count,
+            occupiedRects: collectVisibleCanvasNodeRects(state.performers, state.acts),
             width: PERFORMER_DEFAULT_WIDTH,
             height: PERFORMER_DEFAULT_HEIGHT,
         })
@@ -278,6 +276,11 @@ export const createWorkspaceSlice: StateCreator<
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
             activeChatPerformerId: id,
+            canvasRevealTarget: {
+                id,
+                type: 'performer',
+                nonce: (s.canvasRevealTarget?.nonce || 0) + 1,
+            },
             inspectorFocus: null,
             workspaceDirty: true,
         }))
@@ -289,11 +292,10 @@ export const createWorkspaceSlice: StateCreator<
         performerIdCounter.value++
         const id = `performer-${performerIdCounter.value}`
         const state = get()
-        const count = state.performers.length
         const safeName = uniquePerformerName(asset.name, state.performers.map(p => p.name))
-        const spawnPosition = resolveCanvasSpawnPosition({
+        const spawnPosition = resolveCanvasNodeSpawnPosition({
             canvasCenter: state.canvasCenter,
-            existingCount: count,
+            occupiedRects: collectVisibleCanvasNodeRects(state.performers, state.acts),
             width: PERFORMER_DEFAULT_WIDTH,
             height: PERFORMER_DEFAULT_HEIGHT,
         })
@@ -308,6 +310,11 @@ export const createWorkspaceSlice: StateCreator<
             selectedPerformerSessionId: null,
             selectedMarkdownEditorId: null,
             activeChatPerformerId: id,
+            canvasRevealTarget: {
+                id,
+                type: 'performer',
+                nonce: (s.canvasRevealTarget?.nonce || 0) + 1,
+            },
             inspectorFocus: null,
             workspaceDirty: true,
         }))
@@ -451,9 +458,6 @@ export const createWorkspaceSlice: StateCreator<
         // Clear act selection only when selecting a real performer (not when deselecting)
         selectedActId: id ? null : s.selectedActId,
         actEditorState: id ? null : s.actEditorState,
-        // Preserve focus mode when switching performers in focus mode
-        focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
-        focusedNodeType: s.focusSnapshot ? s.focusedNodeType : null,
         inspectorFocus: null,
     })),
 
@@ -466,13 +470,9 @@ export const createWorkspaceSlice: StateCreator<
         selectedPerformerSessionId: null,
         selectedActId: id ? null : s.selectedActId,
         actEditorState: id ? null : s.actEditorState,
-        focusedPerformerId: (id && s.focusSnapshot) ? null : s.focusedPerformerId,
-        focusedNodeType: (id && s.focusSnapshot) ? null : s.focusedNodeType,
         focusSnapshot: (id && s.focusSnapshot) ? null : s.focusSnapshot,
         inspectorFocus: null,
     })),
-
-    setFocusedPerformer: (id) => set({ focusedPerformerId: id }),
 
     enterFocusMode: (nodeId, nodeType, viewportSize) => enterFocusModeImpl(get, set, nodeId, nodeType, viewportSize),
 
@@ -490,18 +490,15 @@ export const createWorkspaceSlice: StateCreator<
 
     setInspectorFocus: (focus) => set({ inspectorFocus: focus }),
 
-    openPerformerEditor: (id, focus = null) => set((s) => ({
+    openPerformerEditor: (id, focus = null) => set({
         editingTarget: { type: 'performer', id },
         selectedPerformerId: id,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
         selectedActId: null,
         actEditorState: null,
-        // Preserve focus mode — editor can open inside focus
-        focusedPerformerId: s.focusSnapshot ? s.focusedPerformerId : null,
-        focusedNodeType: s.focusSnapshot ? s.focusedNodeType : null,
         inspectorFocus: focus,
-    })),
+    }),
 
     closeEditor: () => set({
         editingTarget: null,
@@ -636,9 +633,6 @@ export const createWorkspaceSlice: StateCreator<
     setPerformerModelVariant: (performerId, modelVariant) => setPerformerModelVariantImpl(set, get, performerId, modelVariant),
 
     setPerformerAgentId: (performerId, agentId) => setPerformerAgentIdImpl(set, get, performerId, agentId),
-
-    setPerformerDanceDeliveryMode: (performerId, danceDeliveryMode) => setPerformerDanceDeliveryModeImpl(set, get, performerId, danceDeliveryMode),
-
     addPerformerMcp: (performerId, mcp) => addPerformerMcpImpl(set, get, performerId, mcp),
 
     removePerformerMcp: (performerId, mcpName) => removePerformerMcpImpl(set, get, performerId, mcpName),

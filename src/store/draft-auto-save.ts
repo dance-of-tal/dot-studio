@@ -22,7 +22,6 @@ function configHash(p: PerformerNode): string {
         modelVariant: p.modelVariant,
         mcpServerNames: p.mcpServerNames,
         mcpBindingMap: p.mcpBindingMap,
-        danceDeliveryMode: p.danceDeliveryMode,
         planMode: p.planMode,
         agentId: p.agentId,
     })
@@ -71,7 +70,6 @@ export function initDraftAutoSave(
                     modelVariant: performer.modelVariant || null,
                     mcpServerNames: performer.mcpServerNames || [],
                     mcpBindingMap: performer.mcpBindingMap || {},
-                    danceDeliveryMode: performer.danceDeliveryMode || 'auto',
                     planMode: performer.planMode || false,
                     agentId: performer.agentId || null,
                 }

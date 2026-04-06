@@ -136,23 +136,23 @@ describe('buildMcpHaystack', () => {
 
 describe('classifyModelProvider', () => {
     it('classifies anthropic', () => {
-        expect(classifyModelProvider({ provider: 'anthropic' })).toBe('anthropic')
+        expect(classifyModelProvider({ provider: 'anthropic' })).toBe('provider:anthropic')
     })
 
     it('classifies openai', () => {
-        expect(classifyModelProvider({ provider: 'openai' })).toBe('openai')
+        expect(classifyModelProvider({ provider: 'openai' })).toBe('provider:openai')
     })
 
-    it('classifies google/gemini', () => {
-        expect(classifyModelProvider({ providerName: 'Google AI' })).toBe('google')
+    it('uses provider id rather than provider name heuristics', () => {
+        expect(classifyModelProvider({ provider: 'google', providerName: 'Google AI' })).toBe('provider:google')
     })
 
-    it('classifies xai/grok', () => {
-        expect(classifyModelProvider({ provider: 'xai' })).toBe('xai')
+    it('keeps custom provider ids', () => {
+        expect(classifyModelProvider({ provider: 'github-copilot' })).toBe('provider:github-copilot')
     })
 
-    it('falls back to other', () => {
-        expect(classifyModelProvider({ provider: 'custom' })).toBe('other')
+    it('falls back to unknown without a provider id', () => {
+        expect(classifyModelProvider({ providerName: 'Custom Provider' })).toBe('provider:unknown')
     })
 })
 

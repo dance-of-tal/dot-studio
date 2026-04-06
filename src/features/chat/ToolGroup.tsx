@@ -343,7 +343,8 @@ function ToolFileAccordion({
    ═══════════════════════════════════════════════════════ */
 
 export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolInfo; compact?: boolean }) {
-    const { shellToolPartsExpanded, editToolPartsExpanded } = useUISettings()
+    const shellToolPartsExpanded = useUISettings((state) => state.shellToolPartsExpanded)
+    const editToolPartsExpanded = useUISettings((state) => state.editToolPartsExpanded)
     const isShell = SHELL_NAMES.has(tool.name)
     const isEdit = EDIT_NAMES.has(tool.name)
     const isWrite = WRITE_NAMES.has(tool.name)

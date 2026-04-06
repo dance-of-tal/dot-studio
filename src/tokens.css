@@ -32,11 +32,11 @@
     --radius-lg: 8px;
 
     /* Typography Scale */
-    --font-xs: 9px;
-    --font-sm: 10px;
-    --font-base: 11px;
-    --font-md: 12px;
-    --font-lg: 13px;
+    --font-xs: 10px;
+    --font-sm: 11px;
+    --font-base: 12px;
+    --font-md: 13px;
+    --font-lg: 14px;
 
     /* Spacing Scale (4px grid) */
     --space-1: 4px;

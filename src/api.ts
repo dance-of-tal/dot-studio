@@ -3,7 +3,6 @@
 import type {
     ActThreadStatus,
     AssetRef,
-    DanceDeliveryMode,
     DraftAsset,
     ModelConfig,
     PromptPreview,
@@ -89,7 +88,6 @@ export const api = {
         agentId: string | null,
         mcpServerNames: string[],
         planMode = false,
-        danceDeliveryMode: DanceDeliveryMode = 'auto',
         requestTargets?: Array<{
             performerId: string
             performerName: string
@@ -106,7 +104,6 @@ export const api = {
             agentId,
             mcpServerNames,
             planMode,
-            danceDeliveryMode,
             requestTargets,
         } satisfies CompilePromptRequest),
 

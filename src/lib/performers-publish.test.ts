@@ -247,7 +247,6 @@ describe('publish cascade builders', () => {
                     mcpServerNames: [],
                     mcpBindingMap: {},
                     declaredMcpConfig: null,
-                    danceDeliveryMode: 'auto',
                     meta: {
                         derivedFrom: 'draft:performer-draft-1',
                         authoring: {
@@ -327,7 +326,6 @@ describe('publish cascade builders', () => {
                     mcpServerNames: [],
                     mcpBindingMap: {},
                     declaredMcpConfig: null,
-                    danceDeliveryMode: 'auto',
                     meta: {
                         authoring: {
                             slug: 'reviewer-performer',
@@ -353,6 +351,85 @@ describe('publish cascade builders', () => {
         expect(result.providedAssets.map((asset) => asset.urn)).toEqual([
             'tal/@acme/workflows/reviewer-tal',
             'performer/@acme/workflows/reviewer-performer',
+        ])
+    })
+
+    it('promotes matching canvas performers even when the act stores a registry ref', () => {
+        const result = buildActPublishPayload({
+            id: 'act-1',
+            name: 'Exec Sync',
+            position: { x: 0, y: 0 },
+            width: 400,
+            height: 300,
+            participants: {
+                'participant-ceo': {
+                    performerRef: { kind: 'registry', urn: 'performer/@acme/moneymaker/ceo' },
+                    displayName: 'CEO',
+                    position: { x: 0, y: 0 },
+                },
+            },
+            relations: [],
+            createdAt: Date.now(),
+        }, {
+            slug: 'exec-sync',
+            description: 'Exec Sync',
+            tags: ['workflow'],
+        }, {
+            username: 'acme',
+            workingDir: '/tmp/moneymaker',
+            drafts: {
+                'tal-draft-1': {
+                    id: 'tal-draft-1',
+                    kind: 'tal',
+                    name: 'CEO Tal',
+                    slug: 'ceo-tal',
+                    description: 'CEO Tal',
+                    tags: ['tal'],
+                    content: '# Lead decisively',
+                    updatedAt: 1,
+                    saveState: 'saved',
+                },
+            },
+            performers: [
+                {
+                    id: 'performer-1',
+                    name: 'CEO',
+                    scope: 'shared',
+                    position: { x: 0, y: 0 },
+                    model: { provider: 'openai', modelId: 'gpt-5' },
+                    modelVariant: null,
+                    agentId: null,
+                    talRef: { kind: 'draft', draftId: 'tal-draft-1' },
+                    danceRefs: [],
+                    mcpServerNames: [],
+                    mcpBindingMap: {},
+                    declaredMcpConfig: null,
+                    meta: {
+                        derivedFrom: 'performer/@acme/moneymaker/ceo',
+                        authoring: {
+                            slug: 'ceo',
+                            description: 'CEO',
+                            tags: ['executive'],
+                        },
+                    },
+                },
+            ],
+        })
+
+        expect(result.payload).toMatchObject({
+            urn: 'act/@acme/moneymaker/exec-sync',
+            payload: {
+                participants: [
+                    expect.objectContaining({
+                        key: 'CEO',
+                        performer: 'performer/@acme/moneymaker/ceo',
+                    }),
+                ],
+            },
+        })
+        expect(result.providedAssets.map((asset) => asset.urn)).toEqual([
+            'tal/@acme/moneymaker/ceo-tal',
+            'performer/@acme/moneymaker/ceo',
         ])
     })
 
@@ -386,7 +463,6 @@ describe('publish cascade builders', () => {
                 mcpServerNames: [],
                 mcpBindingMap: {},
                 declaredMcpConfig: null,
-                danceDeliveryMode: 'auto',
                 meta: {
                     derivedFrom: 'draft:performer-draft-1',
                 },
@@ -426,7 +502,6 @@ describe('publish cascade builders', () => {
                 mcpServerNames: [],
                 mcpBindingMap: {},
                 declaredMcpConfig: null,
-                danceDeliveryMode: 'auto',
             },
         ], {})).toEqual([])
     })

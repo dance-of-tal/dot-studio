@@ -10,6 +10,10 @@ import type { AssetCard } from '../../types'
 import type { StudioState } from '../../store/types'
 import { useStudioStore } from '../../store'
 import { api } from '../../api'
+import {
+    collectVisibleCanvasNodeRects,
+    resolveActCreationClusterLayout,
+} from '../../lib/canvas-node-layout'
 import { buildDraftDeleteCascade } from '../../store/cascade-cleanup'
 import { removeMarkdownEditorsByDraftIds } from '../../store/workspace-helpers'
 
@@ -21,6 +25,7 @@ type AssistantRefState = {
     performers: Map<string, string>
     acts: Map<string, string>
     drafts: Map<string, DraftRef>
+    createdPerformers: Set<string>
 }
 
 function makeRefs(): AssistantRefState {
@@ -28,6 +33,7 @@ function makeRefs(): AssistantRefState {
         performers: new Map(),
         acts: new Map(),
         drafts: new Map(),
+        createdPerformers: new Set(),
     }
 }
 
@@ -246,6 +252,72 @@ function resolveSubscriptionMessagesFrom(
     }
 
     return Array.from(resolved)
+}
+
+function resolveActParticipantPerformerIds(
+    refs: AssistantRefState,
+    action: Extract<AssistantAction, { type: 'createAct' }>,
+) {
+    const performerIds: string[] = []
+    for (const performerId of action.participantPerformerIds || []) {
+        if (store().performers.some((performer) => performer.id === performerId)) {
+            performerIds.push(performerId)
+        }
+    }
+    for (const performerRef of action.participantPerformerRefs || []) {
+        const performerId = refs.performers.get(performerRef)
+        if (performerId) {
+            performerIds.push(performerId)
+        }
+    }
+    for (const performerName of action.participantPerformerNames || []) {
+        const performerId = resolvePerformerId(refs, { performerName })
+        if (performerId) {
+            performerIds.push(performerId)
+        }
+    }
+
+    return Array.from(new Set(performerIds))
+}
+
+function autoLayoutAssistantActCluster(
+    refs: AssistantRefState,
+    actId: string,
+    participantPerformerIds: string[],
+) {
+    if (participantPerformerIds.length === 0) return
+    if (!participantPerformerIds.every((performerId) => refs.createdPerformers.has(performerId))) return
+
+    const current = store()
+    const occupiedRects = collectVisibleCanvasNodeRects(
+        current.performers.filter((performer) => !participantPerformerIds.includes(performer.id)),
+        current.acts.filter((act) => act.id !== actId),
+    )
+    const layout = resolveActCreationClusterLayout({
+        canvasCenter: current.canvasCenter,
+        occupiedRects,
+        performerIds: participantPerformerIds,
+    })
+
+    useStudioStore.setState((state) => ({
+        performers: state.performers.map((performer) => {
+            const nextPosition = layout.performerPositions.get(performer.id)
+            return nextPosition
+                ? { ...performer, position: nextPosition }
+                : performer
+        }),
+        acts: state.acts.map((act) => (
+            act.id === actId
+                ? { ...act, position: layout.actPosition }
+                : act
+        )),
+        canvasRevealTarget: {
+            id: actId,
+            type: 'act',
+            nonce: (state.canvasRevealTarget?.nonce || 0) + 1,
+        },
+        workspaceDirty: true,
+    }))
 }
 
 // ── Draft helpers ─────────────────────────────────────────────────────────────
@@ -471,7 +543,7 @@ export async function applyAssistantAction(
                     name: action.actName,
                 })
                 if (!asset) return { success: false }
-                store().importActFromAsset(asset)
+                await store().importActFromAsset(asset)
                 return { success: true }
             }
 
@@ -571,6 +643,7 @@ export async function applyAssistantAction(
             case 'createPerformer': {
                 const performerId = store().addPerformer(action.name)
                 if (action.ref) refs.performers.set(action.ref, performerId)
+                refs.createdPerformers.add(performerId)
                 await applyPerformerFields(performerId, action, refs)
                 return { success: true }
             }
@@ -597,20 +670,14 @@ export async function applyAssistantAction(
                 if (action.ref) refs.acts.set(action.ref, actId)
                 if (action.description) store().updateActDescription(actId, action.description)
                 if (action.actRules !== undefined) store().updateActRules(actId, action.actRules)
-                for (const id of action.participantPerformerIds || []) {
+                const participantPerformerIds = resolveActParticipantPerformerIds(refs, action)
+                for (const id of participantPerformerIds) {
                     store().attachPerformerToAct(actId, id)
-                }
-                for (const ref of action.participantPerformerRefs || []) {
-                    const id = refs.performers.get(ref)
-                    if (id) store().attachPerformerToAct(actId, id)
-                }
-                for (const name of action.participantPerformerNames || []) {
-                    const id = resolvePerformerId(refs, { performerName: name })
-                    if (id) store().attachPerformerToAct(actId, id)
                 }
                 for (const relation of action.relations || []) {
                     await applyRelationBlueprint(actId, relation, refs)
                 }
+                autoLayoutAssistantActCluster(refs, actId, participantPerformerIds)
                 return { success: true }
             }
             case 'updateAct': {

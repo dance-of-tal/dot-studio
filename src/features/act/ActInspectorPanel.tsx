@@ -7,6 +7,7 @@
  * - relation detail
  */
 import { Settings, User, ArrowRightLeft, X } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
 import '../performer/AgentFrame.css'
 import ActMetaView from './ActMetaView'
@@ -20,7 +21,11 @@ type ActInspectorPanelProps = {
 }
 
 export default function ActInspectorPanel({ embedded = false }: ActInspectorPanelProps) {
-    const { acts, actEditorState, closeActEditor } = useStudioStore()
+    const { acts, actEditorState, closeActEditor } = useStudioStore(useShallow((state) => ({
+        acts: state.acts,
+        actEditorState: state.actEditorState,
+        closeActEditor: state.closeActEditor,
+    })))
 
     if (!actEditorState) return null
 

@@ -205,7 +205,7 @@ export function createDragEndHandler(
                     store.importActFromDraft(asset.name || 'Draft Act', cfg)
                     return true
                 }
-                store.importActFromAsset(asset as import('./types').AssetCard)
+                await store.importActFromAsset(asset as import('./types').AssetCard)
                 return true
             }
 

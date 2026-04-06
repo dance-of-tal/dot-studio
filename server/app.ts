@@ -1,7 +1,6 @@
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { logger } from 'hono/logger'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
@@ -17,6 +16,7 @@ import adapterRoutes from './routes/adapter.js'
 import draftRoutes from './routes/drafts.js'
 import actRuntimeRoutes from './routes/act-runtime.js'
 import { IS_PRODUCTION } from './lib/config.js'
+import { requestLogger } from './lib/server-logger.js'
 
 function resolveClientDir() {
     const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -69,8 +69,7 @@ function mountProductionClient(app: Hono) {
 export function createServerApp() {
     const app = new Hono()
 
-    // HTTP request logger — prints method, path, status, duration
-    app.use('*', logger())
+    app.use('*', requestLogger)
 
     if (!IS_PRODUCTION) {
         applyDevCors(app)

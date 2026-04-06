@@ -1,7 +1,10 @@
 import { useCallback, useRef, useState } from 'react'
 import { MessageSquare, Workflow } from 'lucide-react'
 import type { ExplorerRenamingSession, ThreadRow } from './workspace-explorer-utils'
+import { resolveActThreadActivityAt, resolveSessionActivityAt } from './workspace-explorer-utils'
 import type { PerformerEditorFocus, WorkspaceExplorerAct, WorkspaceExplorerActThread, WorkspaceExplorerEditingTarget } from './workspace-explorer-types'
+import type { ChatMessage } from '../../types'
+import type { SessionEntity } from '../../store/session'
 import WorkspaceExplorerActGroup from './WorkspaceExplorerActGroup'
 import WorkspaceExplorerPerformerGroup from './WorkspaceExplorerPerformerGroup'
 
@@ -16,6 +19,9 @@ type Props = {
     selectedActId: string | null
     activeThreadId: string | null
     actThreads: Record<string, WorkspaceExplorerActThread[]>
+    sessions: Array<{ id: string; title?: string; createdAt?: number; updatedAt?: number }>
+    seEntities: Record<string, SessionEntity>
+    seMessages: Record<string, ChatMessage[]>
     onToggleExpanded: (key: string) => void
     onSetPendingDelete: (key: string | null) => void
     onBeginRenamePerformerSession: (session: { id: string; title?: string }) => void
@@ -57,6 +63,9 @@ export default function WorkspaceExplorerThreadsSection({
     selectedActId,
     activeThreadId,
     actThreads,
+    sessions,
+    seEntities,
+    seMessages,
     onToggleExpanded,
     onSetPendingDelete,
     onBeginRenamePerformerSession,
@@ -88,6 +97,19 @@ export default function WorkspaceExplorerThreadsSection({
 }: Props) {
     const hasPerformers = threadRows.length > 0
     const hasActs = acts.length > 0
+    const sessionActivityById = Object.fromEntries(
+        sessions.map((session) => {
+            const entity = seEntities[session.id]
+            const latestMessageTimestamp = (seMessages[session.id] || []).reduce(
+                (latest, message) => Math.max(latest, message.timestamp || 0),
+                0,
+            )
+            return [session.id, resolveSessionActivityAt({
+                createdAt: Math.max(session.createdAt || 0, entity?.createdAt || 0),
+                updatedAt: Math.max(session.updatedAt || 0, entity?.updatedAt || 0),
+            }, latestMessageTimestamp)]
+        }),
+    )
 
     // ── Resizable divider between Performers and Acts ──
     const [performersFlex, setPerformersFlex] = useState(1)
@@ -214,7 +236,12 @@ export default function WorkspaceExplorerThreadsSection({
                         <div className="explorer__section-list">
                             {acts.map((act) => {
                                 const actKey = `act-${act.id}`
-                                const threads = actThreads[act.id] || []
+                                const threads = [...(actThreads[act.id] || [])].sort(
+                                    (left, right) => (
+                                        resolveActThreadActivityAt(right, sessionActivityById)
+                                        - resolveActThreadActivityAt(left, sessionActivityById)
+                                    ) || ((right.createdAt || 0) - (left.createdAt || 0)),
+                                )
                                 const isExpanded = expandedRows[actKey] ?? threads.length > 0
                                 return (
                                     <WorkspaceExplorerActGroup

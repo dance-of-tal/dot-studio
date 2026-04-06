@@ -21,7 +21,6 @@ const performerFixture: PerformerNode = {
     talRef: null,
     danceRefs: [],
     mcpServerNames: [],
-    danceDeliveryMode: 'auto',
     meta: { publishBindingUrn: 'urn:test' },
 }
 

@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
+import {
+    ALL_MODEL_PROVIDER_FILTER,
+    buildRuntimeModelProviderTabs,
+} from '../../lib/runtime-models'
 import { showToast } from '../../lib/toast'
 import { slugifyAssetName } from '../../lib/performers'
 import { buildDraftDeleteCascade, buildInstalledDeleteCascade } from '../../store/cascade-cleanup'
@@ -57,7 +61,7 @@ export function useAssetLibraryController() {
     const [installedKind, setInstalledKind] = useState<InstalledKind>('performer')
     const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>('models')
     const [registryKind, setRegistryKind] = useState<RegistryKind>('all')
-    const [modelProviderFilter, setModelProviderFilter] = useState<ModelProviderFilter>('all')
+    const [modelProviderFilter, setModelProviderFilter] = useState<ModelProviderFilter>(ALL_MODEL_PROVIDER_FILTER)
 
     const [registryQuery, setRegistryQuery] = useState('')
     const [searchEnabled, setSearchEnabled] = useState(false)
@@ -135,6 +139,18 @@ export function useAssetLibraryController() {
         setExpandedModelProviders({})
     }, [filter, modelProviderFilter])
 
+    const modelProviderTabs = useMemo(
+        () => buildRuntimeModelProviderTabs(models, { connectedOnly: true }),
+        [models],
+    )
+
+    useEffect(() => {
+        if (modelProviderTabs.some((tab) => tab.key === modelProviderFilter)) {
+            return
+        }
+        setModelProviderFilter(ALL_MODEL_PROVIDER_FILTER)
+    }, [modelProviderFilter, modelProviderTabs])
+
     const installedUrns = useMemo(
         () => new Set(assetInventory.map((asset) => getAssetUrn(asset)).filter(Boolean) as string[]),
         [assetInventory],
@@ -170,7 +186,7 @@ export function useAssetLibraryController() {
 
     const createNewPerformer = () => {
         const beforeIds = new Set(performers.map((performer) => performer.id))
-        addPerformer(`Performer ${performers.filter((performer) => performer.scope === 'shared').length + 1}`, 80, 80)
+        addPerformer(`Performer ${performers.filter((performer) => performer.scope === 'shared').length + 1}`)
         const created = useStudioStore.getState().performers.find((performer) => !beforeIds.has(performer.id))
         if (created) {
             selectPerformer(created.id)
@@ -426,15 +442,6 @@ export function useAssetLibraryController() {
         const urn = getAssetUrn(selectedAsset)
         return urn ? installedUrns.has(urn) : false
     }, [installedUrns, selectedAsset])
-
-    const modelProviderTabs: Array<{ key: ModelProviderFilter; label: string }> = [
-        { key: 'all', label: 'All' },
-        { key: 'anthropic', label: 'Anthropic' },
-        { key: 'openai', label: 'OpenAI' },
-        { key: 'google', label: 'Google' },
-        { key: 'xai', label: 'xAI/Grok' },
-        { key: 'other', label: 'Other' },
-    ]
 
     const localPlaceholder = placeholderForLocalSection(localSection, runtimeKind)
 

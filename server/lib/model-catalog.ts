@@ -1,5 +1,4 @@
 import { getOpencode } from './opencode.js'
-import { readStoredProviderAuthType } from './opencode-auth.js'
 import {
     normalizeRuntimeVariants,
     type RuntimeModelCatalogEntry,
@@ -26,6 +25,17 @@ type ProviderListData = {
     default?: Record<string, string>
 }
 
+type ProviderSnapshot = {
+    id: string
+    name: string
+    source: string
+    env: string[]
+    connected: boolean
+    defaultModel: string | null
+    models: ProviderModelRecord[]
+    hasPaidModels: boolean
+}
+
 function responseData<T>(response: unknown): T | undefined {
     if (!response || typeof response !== 'object' || !('data' in response)) {
         return undefined
@@ -37,14 +47,57 @@ function asRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
 
-const incompatibleModelsByAuthType: Record<string, Record<string, Set<string>>> = {
-    openai: {
-        // ChatGPT account-backed OpenAI auth rejects these at runtime today.
-        oauth: new Set([
-            'codex-mini-latest',
-            'gpt-5.3-codex-spark',
-        ]),
-    },
+function readStringArray(value: unknown) {
+    return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
+function readProviderModels(value: unknown): ProviderModelRecord[] {
+    if (!value || typeof value !== 'object') {
+        return []
+    }
+    return Object.values(value as Record<string, ProviderModelRecord>)
+}
+
+function hasPositiveInputCost(model: ProviderModelRecord) {
+    const cost = asRecord(asRecord(model).cost)
+    return typeof cost.input === 'number' && cost.input > 0
+}
+
+function normalizeProviderSnapshot(
+    provider: ProviderListEntry,
+    connectedProviderIds: ReadonlySet<string>,
+    defaultModels: Readonly<Record<string, string>>,
+): ProviderSnapshot | null {
+    const id = typeof provider.id === 'string' ? provider.id : ''
+    if (!id) {
+        return null
+    }
+
+    const models = readProviderModels(provider.models)
+
+    return {
+        id,
+        name: typeof provider.name === 'string' ? provider.name : id,
+        source: typeof provider.source === 'string' ? provider.source : 'builtin',
+        env: readStringArray(provider.env),
+        connected: connectedProviderIds.has(id),
+        defaultModel: defaultModels[id] || null,
+        models,
+        hasPaidModels: models.some(hasPositiveInputCost),
+    }
+}
+
+function buildProviderSnapshots(data: ProviderListData | undefined): ProviderSnapshot[] {
+    if (!data?.all || !Array.isArray(data.all)) {
+        return []
+    }
+
+    const connectedProviderIds = new Set(readStringArray(data.connected))
+    const defaultModels = data.default && typeof data.default === 'object' ? data.default : {}
+
+    return data.all
+        .map((provider) => normalizeProviderSnapshot(provider, connectedProviderIds, defaultModels))
+        .filter((provider): provider is ProviderSnapshot => Boolean(provider))
 }
 
 function readCapabilityFlag(model: ProviderModelRecord, ...keys: string[]) {
@@ -79,20 +132,6 @@ function readModalities(model: ProviderModelRecord) {
 
     return { input, output }
 }
-
-function isModelVisibleForAuthType(providerId: string, modelId: string, authType: string | null) {
-    if (!authType) {
-        return true
-    }
-
-    const blocked = incompatibleModelsByAuthType[providerId]?.[authType]
-    if (!blocked) {
-        return true
-    }
-
-    return !blocked.has(modelId)
-}
-
 // ── Cached provider.list() ──────────────────────────────
 // Both /api/providers and /api/models need the same raw data from
 // oc.provider.list().  We cache for a short window to avoid duplicate
@@ -148,75 +187,42 @@ export interface ProviderSummary {
     connected: boolean
     modelCount: number
     defaultModel: string | null
+    hasPaidModels: boolean
 }
 
 export async function listProviderSummaries(cwd: string): Promise<ProviderSummary[]> {
-    const data = await fetchProviderListData(cwd)
-
-    if (!data?.all || !Array.isArray(data.all)) {
-        return []
-    }
-
-    const connected = new Set<string>((data?.connected || []) as string[])
-
-    return data.all.map((provider) => ({
-        id: typeof provider.id === 'string' ? provider.id : '',
-        name: typeof provider.name === 'string' ? provider.name : (typeof provider.id === 'string' ? provider.id : ''),
-        source: typeof provider.source === 'string' ? provider.source : 'builtin',
-        env: Array.isArray(provider.env) ? provider.env.filter((value): value is string => typeof value === 'string') : [],
-        connected: typeof provider.id === 'string' ? connected.has(provider.id) : false,
-        modelCount: provider.models ? Object.keys(provider.models).length : 0,
-        defaultModel: typeof provider.id === 'string' ? data?.default?.[provider.id] || null : null,
+    return buildProviderSnapshots(await fetchProviderListData(cwd)).map((provider) => ({
+        id: provider.id,
+        name: provider.name,
+        source: provider.source,
+        env: provider.env,
+        connected: provider.connected,
+        modelCount: provider.models.length,
+        defaultModel: provider.defaultModel,
+        hasPaidModels: provider.hasPaidModels,
     }))
 }
 
 // ── Model catalog (used by /api/models) ─────────────────
 
 export async function listRuntimeModels(cwd: string): Promise<RuntimeModelCatalogEntry[]> {
-    const data = await fetchProviderListData(cwd)
-
-    if (!data?.all || !Array.isArray(data.all)) {
-        return []
-    }
-
-    const connectedProviders = new Set<string>(
-        Array.isArray(data.connected)
-            ? data.connected.filter((value: unknown): value is string => typeof value === 'string')
-            : [],
-    )
-    const authTypes = new Map<string, string | null>()
-
+    const providers = buildProviderSnapshots(await fetchProviderListData(cwd))
     const models: RuntimeModelCatalogEntry[] = []
-    for (const provider of data.all) {
-        const providerId = typeof provider.id === 'string' ? provider.id : ''
-        const providerName = typeof provider.name === 'string' ? provider.name : providerId
-        const connected = connectedProviders.has(providerId)
-        if (!authTypes.has(providerId)) {
-            authTypes.set(providerId, connected ? await readStoredProviderAuthType(providerId) : null)
-        }
-        const authType = authTypes.get(providerId) || null
-        const rawModels = provider.models && typeof provider.models === 'object'
-            ? provider.models as Record<string, Record<string, unknown>>
-            : {}
-
-        for (const model of Object.values(rawModels)) {
-            const record = model as ProviderModelRecord
+    for (const provider of providers) {
+        for (const record of provider.models) {
             const id = typeof record.id === 'string' ? record.id : ''
             if (!id) {
-                continue
-            }
-            if (!isModelVisibleForAuthType(providerId, id, authType)) {
                 continue
             }
 
             const limitRecord = asRecord(record.limit)
 
             models.push({
-                provider: providerId,
-                providerName,
+                provider: provider.id,
+                providerName: provider.name,
                 id,
                 name: typeof record.name === 'string' ? record.name : id,
-                connected,
+                connected: provider.connected,
                 context: Number(limitRecord.context || 0),
                 output: Number(limitRecord.output || 0),
                 toolCall: readCapabilityFlag(record, 'toolcall', 'toolCall', 'tool_call'),

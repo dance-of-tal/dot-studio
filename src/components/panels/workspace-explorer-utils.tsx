@@ -18,6 +18,7 @@ export type PerformerSessionRecord = {
     id: string
     title?: string
     createdAt?: number
+    updatedAt?: number
 }
 
 export type PerformerSessionRow = {
@@ -91,13 +92,36 @@ export function groupPerformerSessionsById(performerSessionRows: PerformerSessio
     })
     map.forEach((entries, performerId) => {
         map.set(performerId, [...entries].sort((left, right) => {
-            if (left.active !== right.active) {
-                return left.active ? -1 : 1
+            const activityDelta = resolveSessionActivityAt(right.session) - resolveSessionActivityAt(left.session)
+            if (activityDelta !== 0) {
+                return activityDelta
             }
             return (right.session.createdAt || 0) - (left.session.createdAt || 0)
         }))
     })
     return map
+}
+
+export function resolveSessionActivityAt(
+    session: Pick<PerformerSessionRecord, 'createdAt' | 'updatedAt'>,
+    latestMessageTimestamp?: number | null,
+) {
+    return Math.max(
+        session.updatedAt || 0,
+        session.createdAt || 0,
+        latestMessageTimestamp || 0,
+    )
+}
+
+export function resolveActThreadActivityAt(
+    thread: { createdAt?: number; participantSessions?: Record<string, string> },
+    sessionActivityById: Record<string, number>,
+) {
+    const participantActivity = Object.values(thread.participantSessions || {}).reduce(
+        (latest, sessionId) => Math.max(latest, sessionActivityById[sessionId] || 0),
+        0,
+    )
+    return Math.max(thread.createdAt || 0, participantActivity)
 }
 
 export function buildThreadRows(args: {

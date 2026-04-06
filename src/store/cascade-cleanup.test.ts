@@ -16,7 +16,6 @@ function makePerformer(overrides: Partial<PerformerNode> & { id: string }): Perf
         talRef: null,
         danceRefs: [],
         mcpServerNames: [],
-        danceDeliveryMode: 'auto',
         ...overrides,
     }
 }

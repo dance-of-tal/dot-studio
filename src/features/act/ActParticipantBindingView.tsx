@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { User, ArrowRightLeft, ChevronLeft, Hexagon, Trash2 } from 'lucide-react'
+import { useShallow } from 'zustand/react/shallow'
 import type { ParticipantSubscriptions } from '../../types'
 import { useStudioStore } from '../../store'
 import { assetUrnDisplayName } from '../../lib/asset-urn'
@@ -13,7 +14,15 @@ export default function ActParticipantBindingView() {
     const {
         acts, performers, actEditorState,
         openActEditor, openActRelationEditor, updatePerformerBinding, unbindPerformerFromAct,
-    } = useStudioStore()
+    } = useStudioStore(useShallow((state) => ({
+        acts: state.acts,
+        performers: state.performers,
+        actEditorState: state.actEditorState,
+        openActEditor: state.openActEditor,
+        openActRelationEditor: state.openActRelationEditor,
+        updatePerformerBinding: state.updatePerformerBinding,
+        unbindPerformerFromAct: state.unbindPerformerFromAct,
+    })))
 
     const activeActId = actEditorState?.actId || null
     const participantKey = actEditorState?.mode === 'participant' ? actEditorState.participantKey : null

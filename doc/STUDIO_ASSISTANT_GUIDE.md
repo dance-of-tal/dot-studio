@@ -13,6 +13,19 @@ It exists only as:
 - a client-side action application protocol
 - a server-side prompt layer that can inject workspace and asset discovery hints
 
+Within that action surface, the assistant can CRUD all four authoring asset families:
+
+- `Tal` draft CRUD
+- `Dance` draft CRUD
+- `Performer` Stage CRUD
+- `Act` Stage CRUD
+
+This CRUD scope is intentionally limited:
+
+- `Tal` and `Dance` CRUD mean local draft create/update/delete only
+- `Performer` and `Act` CRUD mean current Stage workspace create/update/delete only
+- `Save Local`, `Publish`, and registry lifecycle work are not part of assistant CRUD
+
 ## Identity
 
 - performer id: `studio-assistant`
@@ -156,33 +169,44 @@ Defined in `shared/assistant-actions.ts`.
 
 Current action types:
 
+- install/import helpers:
 - `installRegistryAsset`
 - `addDanceFromGitHub`
 - `importInstalledPerformer`
 - `importInstalledAct`
+- Tal draft CRUD:
 - `createTalDraft`
 - `updateTalDraft`
 - `deleteTalDraft`
+- Dance draft CRUD:
 - `createDanceDraft`
 - `updateDanceDraft`
 - `deleteDanceDraft`
+- Dance bundle file management:
 - `upsertDanceBundleFile`
 - `deleteDanceBundleEntry`
+- Performer Stage CRUD:
 - `createPerformer`
 - `updatePerformer`
 - `deletePerformer`
+- Act Stage CRUD:
 - `createAct`
 - `updateAct`
 - `deleteAct`
+- participant wiring:
 - `attachPerformerToAct`
 - `detachParticipantFromAct`
 - `updateParticipantSubscriptions`
+- relation wiring:
 - `connectPerformers`
 - `updateRelation`
 - `removeRelation`
 
 Resolution rules:
 
+- install/import helpers are support paths, not CRUD for Tal, Dance, Performer, or Act
+- `Tal` and `Dance` CRUD are draft-only
+- `Performer` and `Act` CRUD are Stage-only
 - prefer explicit ids from stage snapshot
 - same-message refs can be used for newly created performers, acts, and drafts
 - same-message refs are the primary cascade mechanism for dependent mutations
@@ -192,6 +216,7 @@ Resolution rules:
 - install/import is a separate path from direct draft creation
 - `addDanceFromGitHub` is the path for GitHub or `skills.sh` Dance installs
 - imported installed assets can then be brought onto the canvas for Performer and Act
+- `Save Local` and `Publish` remain outside the assistant mutation surface
 - `createDanceDraft` and `updateDanceDraft` are only for `SKILL.md`
 - Dance bundle sibling files use `upsertDanceBundleFile` and `deleteDanceBundleEntry`
 - Dance bundle file actions are limited to saved Dance drafts and relative bundle paths

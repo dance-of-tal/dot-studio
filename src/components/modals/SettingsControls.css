@@ -16,6 +16,13 @@
     padding: 20px 0 12px;
 }
 
+.stg-panel__header--split {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
 .stg-panel__title {
     font-size: 15px;
     font-weight: 600;
@@ -53,6 +60,10 @@
     border-bottom: 1px solid var(--border-light);
 }
 
+.stg-row--top {
+    align-items: flex-start;
+}
+
 .stg-row:last-child {
     border-bottom: none;
 }
@@ -71,10 +82,32 @@
     color: var(--text-primary);
 }
 
+.stg-row__inline-tag {
+    margin-left: 8px;
+}
+
 .stg-row__desc {
     font-size: var(--font-sm);
     color: var(--text-muted);
     line-height: 1.4;
+}
+
+.stg-select {
+    min-width: 92px;
+    flex-shrink: 0;
+}
+
+.stg-tool-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.stg-tool-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
 }
 
 /* ── Toggle switch ──────────────────────────────────── */

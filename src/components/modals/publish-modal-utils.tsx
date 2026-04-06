@@ -196,6 +196,20 @@ export function buildMarkdownAssetPayload(markdownEditor: NonNullable<ReturnType
     }
 }
 
+export function buildAuthoringPayloadForPublishApi(asset: {
+    description?: string
+    tags?: string[]
+    payload?: Record<string, unknown>
+}) {
+    return {
+        ...(typeof asset.description === 'string' && asset.description.trim()
+            ? { description: asset.description.trim() }
+            : {}),
+        ...(Array.isArray(asset.tags) ? { tags: asset.tags } : {}),
+        ...((asset.payload && typeof asset.payload === 'object') ? asset.payload : {}),
+    }
+}
+
 // ── Sub-components ──────────────────────────────────────
 
 export function itemDisplayName(item: PickerItem): string {

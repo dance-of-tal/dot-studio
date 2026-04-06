@@ -15,11 +15,6 @@ type ProviderAuthMethod = {
     label: string
 }
 
-type ProviderConnection = {
-    connected: boolean
-    authType?: string
-}
-
 export const opencodeApi = {
     health: () =>
         fetchJSON<{
@@ -113,12 +108,12 @@ export const opencodeApi = {
             connected: boolean
             modelCount: number
             defaultModel: string | null
+            hasPaidModels: boolean
         }>>('/api/providers'),
     },
 
     provider: {
         authMethods: () => fetchJSON<Record<string, ProviderAuthMethod[]>>('/api/provider/auth'),
-        connections: () => fetchJSON<Record<string, ProviderConnection>>('/api/provider/connections'),
         oauthAuthorize: (providerId: string, method: number) => postJSON<ProviderOauthResponse>(`/api/provider/${providerId}/oauth/authorize`, { method }),
         oauthCallback: (providerId: string, method: number, code?: string) => postJSON<ProviderOauthResponse>(`/api/provider/${providerId}/oauth/callback`, code ? { method, code } : { method }),
         setAuth: (

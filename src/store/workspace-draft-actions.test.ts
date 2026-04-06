@@ -28,8 +28,6 @@ function createDraftState(): StudioState {
         selectedPerformerId: null,
         selectedPerformerSessionId: null,
         selectedMarkdownEditorId: null,
-        focusedPerformerId: null,
-        focusedNodeType: null,
         focusSnapshot: null,
         canvasRevealTarget: null,
         inspectorFocus: null,

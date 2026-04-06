@@ -1,6 +1,5 @@
-import { useMemo, useState, type ReactNode, type RefObject } from 'react'
+import { memo, useMemo, useState, type ReactNode } from 'react'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
-import { ScrollToBottom } from '../../components/chat/ScrollToBottom'
 
 type ThreadMessage = {
     id: string
@@ -11,38 +10,37 @@ type ThreadMessage = {
 type ThreadBodyProps<TMessage extends ThreadMessage> = {
     messages: TMessage[]
     loading: boolean
+    scrollStateKey?: string | null
     renderMessage: (message: TMessage, index: number) => ReactNode
     renderEmpty?: () => ReactNode
     renderLoading?: () => ReactNode
     composer: ReactNode
-    endRef?: RefObject<HTMLDivElement | null>
-    historyRef?: RefObject<HTMLDivElement | null>
-    /** @deprecated Use useAutoScroll instead */
-    onHistoryScroll?: () => void
     historyClassName?: string
     recentMessageWindow?: number
     olderMessagesStep?: number
 }
 
-export default function ThreadBody<TMessage extends ThreadMessage>({
+type ThreadHistoryProps<TMessage extends ThreadMessage> = Omit<ThreadBodyProps<TMessage>, 'composer'>
+
+function ThreadHistoryInner<TMessage extends ThreadMessage>({
     messages,
     loading,
+    scrollStateKey,
     renderMessage,
     renderEmpty,
     renderLoading,
-    composer,
-    endRef,
     historyClassName = 'chat-history',
     recentMessageWindow = 120,
     olderMessagesStep = 120,
-}: ThreadBodyProps<TMessage>) {
+}: ThreadHistoryProps<TMessage>) {
     const {
         scrollRef,
         contentRef,
         handleScroll,
-        userScrolled,
-        resume,
-    } = useAutoScroll({ working: loading })
+    } = useAutoScroll({
+        stateKey: scrollStateKey,
+        contentVersion: messages,
+    })
     const [visibleCount, setVisibleCount] = useState(recentMessageWindow)
     const effectiveVisibleCount = Math.max(visibleCount, recentMessageWindow)
     const hiddenCount = Math.max(0, messages.length - effectiveVisibleCount)
@@ -59,7 +57,6 @@ export default function ThreadBody<TMessage extends ThreadMessage>({
                 }}
                 className={historyClassName}
                 onScroll={handleScroll}
-                style={{ position: 'relative' }}
             >
                 <div ref={(el) => { contentRef(el) }}>
                     {hiddenCount > 0 ? (
@@ -82,13 +79,37 @@ export default function ThreadBody<TMessage extends ThreadMessage>({
                         ))
                     )}
                     {loading && renderLoading ? renderLoading() : null}
-                    {endRef ? <div ref={endRef} /> : null}
                 </div>
-                <ScrollToBottom
-                    visible={userScrolled && messages.length > 0}
-                    onClick={resume}
-                />
             </div>
+        </>
+    )
+}
+
+const ThreadHistory = memo(
+    ThreadHistoryInner,
+    <TMessage extends ThreadMessage>(
+        prev: ThreadHistoryProps<TMessage>,
+        next: ThreadHistoryProps<TMessage>,
+    ) => (
+        prev.messages === next.messages
+        && prev.loading === next.loading
+        && prev.scrollStateKey === next.scrollStateKey
+        && prev.renderMessage === next.renderMessage
+        && prev.renderEmpty === next.renderEmpty
+        && prev.renderLoading === next.renderLoading
+        && prev.historyClassName === next.historyClassName
+        && prev.recentMessageWindow === next.recentMessageWindow
+        && prev.olderMessagesStep === next.olderMessagesStep
+    ),
+) as typeof ThreadHistoryInner
+
+export default function ThreadBody<TMessage extends ThreadMessage>({
+    composer,
+    ...historyProps
+}: ThreadBodyProps<TMessage>) {
+    return (
+        <>
+            <ThreadHistory {...historyProps} />
             {composer}
         </>
     )

@@ -17,7 +17,6 @@ export type CompilePromptRequest = {
     agentId?: string | null
     mcpServerNames?: string[]
     planMode?: boolean
-    danceDeliveryMode?: 'auto' | 'tool' | 'inline'
     requestTargets?: Array<{
         performerId: string
         performerName: string
@@ -57,7 +56,6 @@ export type ChatSendRequest = {
         modelVariant?: string | null
         agentId?: string | null
         mcpServerNames?: string[]
-        danceDeliveryMode?: 'auto' | 'tool' | 'inline'
         planMode?: boolean
         configHash?: string
     }

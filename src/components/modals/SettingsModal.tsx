@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Settings, X, Sliders, Server, LayoutGrid } from 'lucide-react'
+import { RefreshCw, Settings, X, Sliders, Server, LayoutGrid, Wrench } from 'lucide-react'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import { queryKeys } from '../../hooks/queries'
@@ -8,13 +8,14 @@ import './SettingsModal.css'
 import './SettingsControls.css'
 import { useProviderAuth } from './useProviderAuth'
 import type { ProviderCard } from './settings-utils'
-import { mergeProviders } from './settings-utils'
+import { buildProviderCards } from './settings-utils'
 
 import SettingsGeneral from './SettingsGeneral'
 import SettingsProviders from './SettingsProviders'
 import SettingsModels from './SettingsModels'
+import SettingsTools from './SettingsTools'
 
-type SettingsTab = 'general' | 'providers' | 'models'
+type SettingsTab = 'general' | 'providers' | 'models' | 'tools'
 
 interface SidebarSection {
     label: string
@@ -33,6 +34,7 @@ const SECTIONS: SidebarSection[] = [
         items: [
             { key: 'providers', label: 'Providers', icon: <Server size={14} /> },
             { key: 'models', label: 'Models', icon: <LayoutGrid size={14} /> },
+            { key: 'tools', label: 'Tools', icon: <Wrench size={14} /> },
         ],
     },
 ]
@@ -49,6 +51,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const [error, setError] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<SettingsTab>('general')
     const [statusMessage, setStatusMessage] = useState<string | null>(null)
+    const [refreshToken, setRefreshToken] = useState(0)
     const providersRef = useRef<ProviderCard[]>([])
     const loadRequestIdRef = useRef(0)
 
@@ -69,16 +72,14 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
         setError(null)
 
         try {
-            const [providerRes, authMethodsRes, providerConnectionsRes] = await Promise.all([
+            const [providerRes, authMethodsRes] = await Promise.all([
                 api.providers.list(),
                 api.provider.authMethods().catch(() => ({})),
-                api.provider.connections().catch(() => ({})),
             ])
 
-            const mergedProviders = mergeProviders(
+            const mergedProviders = buildProviderCards(
                 providerRes,
                 authMethodsRes || {},
-                providerConnectionsRes || {},
             )
             if (requestId !== loadRequestIdRef.current) {
                 return mergedProviders
@@ -121,6 +122,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     }, [auth.syncFlowsWithProviders])
 
     const refreshSettings = useCallback(async () => {
+        setRefreshToken((value) => value + 1)
         try {
             const mergedProviders = await loadSettingsState(
                 providersRef.current.length === 0,
@@ -170,7 +172,10 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 )
 
             case 'models':
-                return <SettingsModels />
+                return <SettingsModels key={`models-${refreshToken}`} />
+
+            case 'tools':
+                return <SettingsTools refreshToken={refreshToken} />
         }
     }
 

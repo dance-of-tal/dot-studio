@@ -5,6 +5,11 @@ import stripJsonComments from 'strip-json-comments'
 import { getOpencode } from './opencode.js'
 
 export function resolveGlobalConfigPath(): string {
+    const explicitConfigDir = process.env.OPENCODE_CONFIG_DIR?.trim()
+    if (explicitConfigDir) {
+        return path.join(explicitConfigDir, 'opencode.json')
+    }
+
     const configRoot = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
     return path.join(configRoot, 'opencode', 'opencode.json')
 }

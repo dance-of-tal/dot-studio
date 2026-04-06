@@ -87,7 +87,6 @@ export function applyPerformerPatch<T extends PerformerPatch>(performer: Perform
         || 'modelPlaceholder' in patch
         || 'mcpServerNames' in patch
         || 'declaredMcpConfig' in patch
-        || 'danceDeliveryMode' in patch
     ) && (patch.meta?.publishBindingUrn === undefined)
 
     const next = {

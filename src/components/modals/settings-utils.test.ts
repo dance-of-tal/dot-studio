@@ -1,36 +1,42 @@
 import { describe, expect, it } from 'vitest'
 import {
+    buildProviderCards,
     getProviderAuthSuccessAction,
-    isBuiltinOpenCodeProvider,
-    mergeProviders,
-    shouldDisplayConnectedProvider,
+    getConnectedProviderCards,
+    getPopularProviderCards,
 } from './settings-utils'
 
-describe('isBuiltinOpenCodeProvider', () => {
-    it('treats builtin opencode as hidden from connected providers', () => {
-        expect(isBuiltinOpenCodeProvider({ id: 'opencode', source: 'builtin' })).toBe(true)
+describe('provider card grouping', () => {
+    it('hides free-only opencode from the connected section', () => {
+        expect(getConnectedProviderCards([
+            {
+                id: 'opencode',
+                name: 'OpenCode Zen',
+                source: 'custom',
+                env: ['OPENCODE_API_KEY'],
+                connected: true,
+                modelCount: 5,
+                defaultModel: 'big-pickle',
+                hasPaidModels: false,
+                authMethods: [],
+            },
+        ])).toEqual([])
     })
 
-    it('keeps custom opencode providers visible', () => {
-        expect(isBuiltinOpenCodeProvider({ id: 'opencode', source: 'custom' })).toBe(false)
-    })
-})
-
-describe('shouldDisplayConnectedProvider', () => {
-    it('shows connected custom opencode providers', () => {
-        expect(shouldDisplayConnectedProvider({
-            id: 'opencode',
-            source: 'custom',
-            connected: true,
-        })).toBe(true)
-    })
-
-    it('hides disconnected providers', () => {
-        expect(shouldDisplayConnectedProvider({
-            id: 'openai',
-            source: 'builtin',
-            connected: false,
-        })).toBe(false)
+    it('keeps free-only opencode in the popular section', () => {
+        expect(getPopularProviderCards([
+            {
+                id: 'opencode',
+                name: 'OpenCode Zen',
+                source: 'custom',
+                env: ['OPENCODE_API_KEY'],
+                connected: true,
+                modelCount: 5,
+                defaultModel: 'big-pickle',
+                hasPaidModels: false,
+                authMethods: [],
+            },
+        ]).map((provider) => provider.id)).toEqual(['opencode'])
     })
 })
 
@@ -44,24 +50,23 @@ describe('getProviderAuthSuccessAction', () => {
     })
 })
 
-describe('mergeProviders', () => {
-    it('marks a provider connected when provider connections say connected', () => {
-        const merged = mergeProviders([
+describe('buildProviderCards', () => {
+    it('attaches auth methods to providers returned by opencode', () => {
+        const merged = buildProviderCards([
             {
                 id: 'openai',
                 name: 'OpenAI',
                 source: 'builtin',
                 env: [],
-                connected: false,
+                connected: true,
                 modelCount: 10,
                 defaultModel: 'gpt-5',
+                hasPaidModels: true,
             },
         ], {
             openai: [
                 { type: 'oauth', label: 'Browser OAuth' },
             ],
-        }, {
-            openai: { connected: true, authType: 'oauth' },
         })
 
         expect(merged).toHaveLength(1)
@@ -71,17 +76,30 @@ describe('mergeProviders', () => {
         ])
     })
 
-    it('creates a provider card from global auth state even when project providers are unavailable', () => {
-        const merged = mergeProviders([], {
-            openai: [
-                { type: 'oauth', label: 'Browser OAuth' },
-            ],
-        }, {
-            openai: { connected: true, authType: 'oauth' },
-        })
+    it('keeps popular providers visible even when they are disconnected', () => {
+        const merged = buildProviderCards([
+            {
+                id: 'openai',
+                name: 'OpenAI',
+                source: 'builtin',
+                env: [],
+                connected: false,
+                modelCount: 10,
+                defaultModel: 'gpt-5',
+                hasPaidModels: true,
+            },
+        ], {})
 
         expect(merged).toHaveLength(1)
         expect(merged[0].id).toBe('openai')
-        expect(merged[0].connected).toBe(true)
+        expect(merged[0].connected).toBe(false)
+    })
+
+    it('does not fabricate provider cards that are missing from provider.list', () => {
+        const merged = buildProviderCards([], {
+            openai: [{ type: 'oauth', label: 'Browser OAuth' }],
+        })
+
+        expect(merged).toEqual([])
     })
 })

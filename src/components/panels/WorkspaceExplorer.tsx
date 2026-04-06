@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { api } from '../../api';
 import { showToast } from '../../lib/toast';
 import { useStudioStore } from '../../store';
@@ -17,6 +18,7 @@ import {
     groupPerformerSessionsById,
     buildThreadRows,
     LayerRow,
+    resolveSessionActivityAt,
 } from './workspace-explorer-utils';
 import type { ExplorerRenamingSession } from './workspace-explorer-utils';
 import WorkspaceExplorerWorkspacesSection from './WorkspaceExplorerWorkspacesSection';
@@ -73,6 +75,8 @@ export default function WorkspaceExplorer() {
         workspaceList,
         performers,
         sessions,
+        seEntities,
+        seMessages,
         chatKeyToSession,
         editingTarget,
         selectedPerformerId,
@@ -94,7 +98,36 @@ export default function WorkspaceExplorer() {
         removePerformer,
         savePerformerAsDraft,
         saveActAsDraft,
-    } = useStudioStore();
+    } = useStudioStore(useShallow((state) => ({
+        workspaceId: state.workspaceId,
+        workingDir: state.workingDir,
+        workspaceList: state.workspaceList,
+        performers: state.performers,
+        sessions: state.sessions,
+        seEntities: state.seEntities,
+        seMessages: state.seMessages,
+        chatKeyToSession: state.chatKeyToSession,
+        editingTarget: state.editingTarget,
+        selectedPerformerId: state.selectedPerformerId,
+        selectedPerformerSessionId: state.selectedPerformerSessionId,
+        newWorkspace: state.newWorkspace,
+        closeWorkspace: state.closeWorkspace,
+        loadWorkspace: state.loadWorkspace,
+        listWorkspaces: state.listWorkspaces,
+        listSessions: state.listSessions,
+        deleteWorkspace: state.deleteWorkspace,
+        addPerformer: state.addPerformer,
+        selectPerformer: state.selectPerformer,
+        selectPerformerSession: state.selectPerformerSession,
+        setActiveChatPerformer: state.setActiveChatPerformer,
+        openPerformerEditor: state.openPerformerEditor,
+        closeEditor: state.closeEditor,
+        deleteSession: state.deleteSession,
+        togglePerformerVisibility: state.togglePerformerVisibility,
+        removePerformer: state.removePerformer,
+        savePerformerAsDraft: state.savePerformerAsDraft,
+        saveActAsDraft: state.saveActAsDraft,
+    })));
 
     const acts = useStudioStore((s) => s.acts);
     const selectedActId = useStudioStore((s) => s.selectedActId);
@@ -138,8 +171,29 @@ export default function WorkspaceExplorer() {
     );
 
     const performerSessionRows = useMemo(() => {
-        return buildPerformerSessionRows(sessions, performers, chatKeyToSession);
-    }, [chatKeyToSession, performers, sessions]);
+        const sessionActivityById = Object.fromEntries(
+            sessions.map((session) => {
+                const entity = seEntities[session.id];
+                const latestMessageTimestamp = (seMessages[session.id] || []).reduce(
+                    (latest, message) => Math.max(latest, message.timestamp || 0),
+                    0,
+                );
+                return [session.id, resolveSessionActivityAt({
+                    createdAt: Math.max(session.createdAt || 0, entity?.createdAt || 0),
+                    updatedAt: Math.max(session.updatedAt || 0, entity?.updatedAt || 0),
+                }, latestMessageTimestamp)];
+            }),
+        );
+
+        return buildPerformerSessionRows(
+            sessions.map((session) => ({
+                ...session,
+                updatedAt: sessionActivityById[session.id] || session.updatedAt,
+            })),
+            performers,
+            chatKeyToSession,
+        );
+    }, [chatKeyToSession, performers, seEntities, seMessages, sessions]);
 
     const performerSessionsById = useMemo(() => {
         return groupPerformerSessionsById(performerSessionRows);
@@ -260,8 +314,6 @@ export default function WorkspaceExplorer() {
     const openPerformer = (performerId: string) => {
         const {
             focusSnapshot: currentFocusSnapshot,
-            focusedPerformerId: currentFocusedId,
-            focusedNodeType: currentFocusedNodeType,
             performers: currentPerformers,
         } = useStudioStore.getState();
 
@@ -276,8 +328,8 @@ export default function WorkspaceExplorer() {
         closeEditor();
         selectPerformerSession(null);
         const shouldSwitchFocus = currentFocusSnapshot && (
-            currentFocusedId !== performerId
-            || currentFocusedNodeType !== 'performer'
+            currentFocusSnapshot.nodeId !== performerId
+            || currentFocusSnapshot.type !== 'performer'
         )
         if (shouldSwitchFocus) {
             switchFocusTarget(performerId, 'performer');
@@ -306,13 +358,11 @@ export default function WorkspaceExplorer() {
         }
         const {
             focusSnapshot: currentFocusSnapshot,
-            focusedPerformerId: currentFocusedId,
-            focusedNodeType: currentFocusedNodeType,
         } = useStudioStore.getState();
         closeEditor();
         const shouldSwitchFocus = currentFocusSnapshot && (
-            currentFocusedId !== performerId
-            || currentFocusedNodeType !== 'performer'
+            currentFocusSnapshot.nodeId !== performerId
+            || currentFocusSnapshot.type !== 'performer'
         )
         if (shouldSwitchFocus) {
             switchFocusTarget(performerId, 'performer');
@@ -327,8 +377,6 @@ export default function WorkspaceExplorer() {
     const openAct = useCallback((actId: string) => {
         const {
             focusSnapshot: currentFocusSnapshot,
-            focusedPerformerId: currentFocusedId,
-            focusedNodeType: currentFocusedNodeType,
             acts: currentActs,
         } = useStudioStore.getState();
 
@@ -342,8 +390,8 @@ export default function WorkspaceExplorer() {
 
         closeEditor();
         const shouldSwitchFocus = currentFocusSnapshot && (
-            currentFocusedId !== actId
-            || currentFocusedNodeType !== 'act'
+            currentFocusSnapshot.nodeId !== actId
+            || currentFocusSnapshot.type !== 'act'
         )
         if (shouldSwitchFocus) {
             switchFocusTarget(actId, 'act');
@@ -356,8 +404,6 @@ export default function WorkspaceExplorer() {
     const openActThread = useCallback((actId: string, threadId: string) => {
         const {
             focusSnapshot: currentFocusSnapshot,
-            focusedPerformerId: currentFocusedId,
-            focusedNodeType: currentFocusedNodeType,
             acts: currentActs,
         } = useStudioStore.getState();
 
@@ -370,8 +416,8 @@ export default function WorkspaceExplorer() {
 
         closeEditor();
         const shouldSwitchFocus = currentFocusSnapshot && (
-            currentFocusedId !== actId
-            || currentFocusedNodeType !== 'act'
+            currentFocusSnapshot.nodeId !== actId
+            || currentFocusSnapshot.type !== 'act'
         );
         if (shouldSwitchFocus) {
             switchFocusTarget(actId, 'act');
@@ -404,6 +450,9 @@ export default function WorkspaceExplorer() {
                 selectedActId={selectedActId}
                 activeThreadId={activeThreadId}
                 actThreads={actThreads}
+                sessions={sessions}
+                seEntities={seEntities}
+                seMessages={seMessages}
                 onToggleExpanded={toggleExpanded}
                 onSetPendingDelete={setPendingDelete}
                 onBeginRenamePerformerSession={beginRenamePerformerSession}

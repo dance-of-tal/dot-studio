@@ -30,7 +30,6 @@ export async function compileProjectionPreview(
             description: skill.description,
             loadMode: 'tool' as const,
         })),
-        deliveryMode: 'tool' as const,
         capabilitySnapshot: ensured.capabilitySnapshot,
         toolResolution: ensured.toolResolution,
     }

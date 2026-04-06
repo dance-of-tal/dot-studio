@@ -21,6 +21,10 @@ import { getProviderAuthSuccessAction } from './settings-utils'
 type ProjectConfigResponseLike = {
     config: {
         disabled_providers?: string[]
+        provider?: Record<string, {
+            npm?: string
+            models?: Record<string, unknown>
+        }>
     }
 }
 
@@ -262,17 +266,21 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
     async function disconnectProvider(providerId: string, providerName: string) {
         setError(null)
         setStatusMessage(null)
-        const provider = providers.find((p) => p.id === providerId)
-        const isCustomSource = provider?.source === 'custom'
         try {
+            const projectRes = await api.config.getProject().catch(
+                (): ProjectConfigResponseLike => ({ config: {} }),
+            ) as ProjectConfigResponseLike
+            const projectProvider = projectRes.config?.provider?.[providerId]
+            const isConfigCustom = Boolean(
+                projectProvider
+                && projectProvider.npm === '@ai-sdk/openai-compatible'
+                && projectProvider.models
+                && Object.keys(projectProvider.models).length > 0,
+            )
+
             await api.provider.clearAuth(providerId)
             useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
-            // For custom-source providers (e.g. OpenCode Zen), also add to disabled_providers
-            // to suppress them from the connected list — mirrors OpenCode web's disableProvider flow.
-            if (isCustomSource) {
-                const projectRes = await api.config.getProject().catch(
-                    (): ProjectConfigResponseLike => ({ config: {} }),
-                )
+            if (isConfigCustom) {
                 const current = Array.isArray(projectRes.config?.disabled_providers)
                     ? projectRes.config.disabled_providers
                     : []

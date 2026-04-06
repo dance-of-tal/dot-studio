@@ -17,6 +17,16 @@
     margin-bottom: 0;
 }
 
+.md-renderer__streaming-block {
+    margin: 0 0 6px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.md-renderer__streaming-block:last-child {
+    margin-bottom: 0;
+}
+
 .md-renderer h1,
 .md-renderer h2,
 .md-renderer h3,
