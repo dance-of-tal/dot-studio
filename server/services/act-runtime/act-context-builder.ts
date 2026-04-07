@@ -28,6 +28,28 @@ function directConnectionKeys(actDefinition: ActDefinition, participantKey: stri
     return [...partners]
 }
 
+function messageablePartnerKeys(actDefinition: ActDefinition, participantKey: string): string[] {
+    const partners = new Set<string>()
+
+    for (const rel of actDefinition.relations) {
+        const [left, right] = rel.between
+        if (rel.direction === 'one-way') {
+            if (left === participantKey && right) {
+                partners.add(right)
+            }
+            continue
+        }
+
+        if (left === participantKey && right) {
+            partners.add(right)
+        } else if (right === participantKey && left) {
+            partners.add(left)
+        }
+    }
+
+    return [...partners]
+}
+
 function coordinationSignalLines(
     actDefinition: ActDefinition,
     participantKeys: string[],
@@ -60,6 +82,7 @@ export function buildActContext(
     const lines: string[] = []
     const selfName = participantDisplayName(actDefinition, participantKey)
     const directPartners = directConnectionKeys(actDefinition, participantKey)
+    const messageablePartners = messageablePartnerKeys(actDefinition, participantKey)
 
     // ── Header ──────────────────────────────────────
     lines.push('# Collaboration Context')
@@ -87,7 +110,7 @@ export function buildActContext(
     lines.push('- Use `wait_until` when you are blocked on future input instead of polling the full shared board. Good self-wake conditions include `board_key_exists`, `message_received`, `timeout`, `all_of`, and `any_of`.')
     lines.push('')
 
-    const teammateNames = directPartners.map((key) => participantDisplayName(actDefinition, key))
+    const teammateNames = messageablePartners.map((key) => participantDisplayName(actDefinition, key))
     if (teammateNames.length > 0) {
         lines.push('# Valid Teammates')
         lines.push(`- Use these names as ` + '`recipient`' + ` values: ${teammateNames.join(', ')}`)

@@ -14,6 +14,7 @@ describe('SafetyGuard thread timeout', () => {
                 wakeConditions: [],
             },
             participantSessions: {},
+            participantStatuses: {},
             createdAt: Date.now() - (3 * 60 * 60 * 1000),
             status: 'active',
         }
@@ -33,6 +34,7 @@ describe('SafetyGuard thread timeout', () => {
                 wakeConditions: [],
             },
             participantSessions: {},
+            participantStatuses: {},
             createdAt: Date.now() - 2_000,
             status: 'active',
         }

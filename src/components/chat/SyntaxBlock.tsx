@@ -141,36 +141,216 @@ function escapeHtml(str: string): string {
         .replace(/"/g, '&quot;')
 }
 
+type DiffViewLine = {
+    kind: 'context' | 'add' | 'delete' | 'meta'
+    marker: string
+    text: string
+    oldLine: number | null
+    newLine: number | null
+}
+
+function splitContentLines(content: string): string[] {
+    return content === '' ? [] : content.split('\n')
+}
+
+function buildDiffLinesFromContent(before: string, after: string): DiffViewLine[] {
+    const beforeLines = splitContentLines(before)
+    const afterLines = splitContentLines(after)
+
+    let prefix = 0
+    while (
+        prefix < beforeLines.length
+        && prefix < afterLines.length
+        && beforeLines[prefix] === afterLines[prefix]
+    ) {
+        prefix += 1
+    }
+
+    let suffix = 0
+    while (
+        suffix < beforeLines.length - prefix
+        && suffix < afterLines.length - prefix
+        && beforeLines[beforeLines.length - 1 - suffix] === afterLines[afterLines.length - 1 - suffix]
+    ) {
+        suffix += 1
+    }
+
+    const rows: DiffViewLine[] = []
+    let oldLine = 1
+    let newLine = 1
+
+    for (let index = 0; index < prefix; index += 1) {
+        rows.push({
+            kind: 'context',
+            marker: ' ',
+            text: beforeLines[index] ?? '',
+            oldLine,
+            newLine,
+        })
+        oldLine += 1
+        newLine += 1
+    }
+
+    const beforeMiddle = beforeLines.slice(prefix, beforeLines.length - suffix)
+    const afterMiddle = afterLines.slice(prefix, afterLines.length - suffix)
+
+    for (const line of beforeMiddle) {
+        rows.push({
+            kind: 'delete',
+            marker: '-',
+            text: line,
+            oldLine,
+            newLine: null,
+        })
+        oldLine += 1
+    }
+
+    for (const line of afterMiddle) {
+        rows.push({
+            kind: 'add',
+            marker: '+',
+            text: line,
+            oldLine: null,
+            newLine,
+        })
+        newLine += 1
+    }
+
+    const suffixStartBefore = beforeLines.length - suffix
+    for (let index = 0; index < suffix; index += 1) {
+        rows.push({
+            kind: 'context',
+            marker: ' ',
+            text: beforeLines[suffixStartBefore + index] ?? '',
+            oldLine,
+            newLine,
+        })
+        oldLine += 1
+        newLine += 1
+    }
+
+    return rows
+}
+
+function buildDiffLinesFromRawDiff(rawDiff: string): DiffViewLine[] {
+    const rows: DiffViewLine[] = []
+    const lines = rawDiff.split('\n')
+    let oldLine = 0
+    let newLine = 0
+    let hasHunk = false
+
+    for (const line of lines) {
+        const hunkMatch = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
+        if (hunkMatch) {
+            oldLine = Number(hunkMatch[1])
+            newLine = Number(hunkMatch[2])
+            hasHunk = true
+            rows.push({
+                kind: 'meta',
+                marker: '@',
+                text: line,
+                oldLine: null,
+                newLine: null,
+            })
+            continue
+        }
+
+        if (line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ') || line.startsWith('\\')) {
+            rows.push({
+                kind: 'meta',
+                marker: '·',
+                text: line,
+                oldLine: null,
+                newLine: null,
+            })
+            continue
+        }
+
+        if (!hasHunk) {
+            rows.push({
+                kind: 'meta',
+                marker: '·',
+                text: line,
+                oldLine: null,
+                newLine: null,
+            })
+            continue
+        }
+
+        if (line.startsWith('+')) {
+            rows.push({
+                kind: 'add',
+                marker: '+',
+                text: line.slice(1),
+                oldLine: null,
+                newLine,
+            })
+            newLine += 1
+            continue
+        }
+
+        if (line.startsWith('-')) {
+            rows.push({
+                kind: 'delete',
+                marker: '-',
+                text: line.slice(1),
+                oldLine,
+                newLine: null,
+            })
+            oldLine += 1
+            continue
+        }
+
+        rows.push({
+            kind: 'context',
+            marker: ' ',
+            text: line.startsWith(' ') ? line.slice(1) : line,
+            oldLine,
+            newLine,
+        })
+        oldLine += 1
+        newLine += 1
+    }
+
+    return rows
+}
+
 /**
- * Inline diff view: side-by-side or unified diff of before/after
+ * Inline diff view: unified, IDE-like diff viewer for either raw patches or before/after content.
  */
-export function DiffBlock({
-    before,
-    after,
-    filename,
-    maxHeight = 400,
-}: {
+export function DiffBlock(props: {
     before: string
     after: string
     filename?: string
+    rawDiff?: string
     maxHeight?: number
 }) {
-    const lang = langFromFilename(filename || '')
+    const {
+        before,
+        after,
+        rawDiff,
+        maxHeight = 400,
+    } = props
+
+    const rows = useMemo(() => {
+        if (rawDiff) {
+            return buildDiffLinesFromRawDiff(rawDiff)
+        }
+        return buildDiffLinesFromContent(before, after)
+    }, [after, before, rawDiff])
 
     return (
         <div className="diff-block" style={{ maxHeight: `${maxHeight}px` }} data-scrollable>
-            {before && (
-                <div className="diff-block__section diff-block__section--old">
-                    <div className="diff-block__section-label">Before</div>
-                    <SyntaxBlock code={before} language={lang} lineNumbers={false} maxHeight={1e6} variant="diff-old" />
-                </div>
-            )}
-            {after && (
-                <div className="diff-block__section diff-block__section--new">
-                    <div className="diff-block__section-label">After</div>
-                    <SyntaxBlock code={after} language={lang} lineNumbers={false} maxHeight={1e6} variant="diff-new" />
-                </div>
-            )}
+            <div className="diff-block__rows">
+                {rows.map((row, index) => (
+                    <div key={`${row.kind}:${row.oldLine ?? 'x'}:${row.newLine ?? 'x'}:${index}`} className="diff-block__row" data-kind={row.kind}>
+                        <span className="diff-block__line-num">{row.oldLine ?? ''}</span>
+                        <span className="diff-block__line-num">{row.newLine ?? ''}</span>
+                        <span className="diff-block__marker">{row.marker}</span>
+                        <span className="diff-block__text">{row.text || ' '}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     )
 }

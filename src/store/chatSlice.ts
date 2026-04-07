@@ -2,7 +2,7 @@
  * Chat slice — thin composition root.
  *
  * Domain logic is split into:
- *   - chat/chat-internals.ts   — shared helpers (sync, fallback poller, system messages)
+ *   - chat/chat-internals.ts   — shared helpers (sync, system messages)
  *   - chat/chat-approvals.ts   — permission / question handlers
  *
  * This file owns performer standalone chat, session management, and slash commands.

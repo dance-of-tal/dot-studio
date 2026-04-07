@@ -1,39 +1,35 @@
 import { Hono } from 'hono'
 import type { ActDefinition } from '../../shared/act-types.js'
 import type { ConditionExpr } from '../../shared/act-types.js'
+import { resolveActSessionTarget } from '../services/act-runtime/act-session-runtime.js'
 import { getActDefinitionForThread, getActRuntimeService } from '../services/act-runtime/act-runtime-service.js'
-import {
-    parseActSessionOwnershipOwnerId,
-    resolveSessionOwnership,
-} from '../services/session-ownership-service.js'
 import { serverDebug } from '../lib/server-logger.js'
 import { requestWorkingDir } from './route-errors.js'
 
 const actRuntimeTools = new Hono()
-
-async function resolveActSessionTarget(sessionId: string) {
-    const context = await resolveSessionOwnership(sessionId)
-    if (!context || context.ownerKind !== 'act') {
-        return null
-    }
-
-    const parsed = parseActSessionOwnershipOwnerId(context.ownerId)
-    if (!parsed) {
-        return null
-    }
-
-    return {
-        workingDir: context.workingDir,
-        threadId: parsed.threadId,
-        participantKey: parsed.participantKey,
-    }
-}
 
 export function resolveParticipantRecipient(
     actDefinition: ActDefinition | null | undefined,
     senderKey: string,
     recipient: string,
 ) {
+    const canMessageParticipant = (participantKey: string) => {
+        if (!actDefinition) {
+            return true
+        }
+
+        return Object.values(actDefinition.relations || []).some((relation) => {
+            const [left, right] = relation.between
+            if (relation.direction === 'one-way') {
+                return left === senderKey && right === participantKey
+            }
+            return (
+                (left === senderKey && right === participantKey)
+                || (left === participantKey && right === senderKey)
+            )
+        })
+    }
+
     const normalizedRecipient = recipient.trim().toLowerCase()
     if (!normalizedRecipient) {
         return null
@@ -45,7 +41,10 @@ export function resolveParticipantRecipient(
 
     for (const [participantKey, binding] of Object.entries(actDefinition.participants || {})) {
         const displayName = (binding.displayName || participantKey).trim().toLowerCase()
-        if (displayName === normalizedRecipient || participantKey.toLowerCase() === normalizedRecipient) {
+        if (
+            canMessageParticipant(participantKey)
+            && (displayName === normalizedRecipient || participantKey.toLowerCase() === normalizedRecipient)
+        ) {
             return participantKey
         }
     }
@@ -54,10 +53,14 @@ export function resolveParticipantRecipient(
         if (!relation.between.includes(senderKey)) {
             continue
         }
+        const recipientKey = relation.between[0] === senderKey ? relation.between[1] : relation.between[0]
+        if (!canMessageParticipant(recipientKey)) {
+            continue
+        }
         if (relation.name.trim().toLowerCase() !== normalizedRecipient) {
             continue
         }
-        return relation.between[0] === senderKey ? relation.between[1] : relation.between[0]
+        return recipientKey
     }
 
     return null

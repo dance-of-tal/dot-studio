@@ -1,5 +1,14 @@
 import { nanoid } from 'nanoid'
-import type { ActDefinition, AssetCard, AssetRef, PerformerNode, WorkspaceAct, WorkspaceActParticipantBinding, ActRelation } from '../types'
+import type {
+    ActDefinition,
+    ActParticipantSessionStatus,
+    AssetCard,
+    AssetRef,
+    PerformerNode,
+    WorkspaceAct,
+    WorkspaceActParticipantBinding,
+    ActRelation,
+} from '../types'
 import { api } from '../api'
 import { parseActAsset } from 'dance-of-tal/contracts'
 import { assetUrnDisplayName, parseStudioAssetUrn } from '../lib/asset-urn'
@@ -22,6 +31,15 @@ type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partia
 type GetState = () => StudioState
 
 const actRuntimeSyncTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+type ActThreadRuntimeSnapshot = {
+    id: string
+    actId: string
+    status: 'active' | 'idle' | 'completed' | 'interrupted'
+    participantSessions: Record<string, string>
+    participantStatuses?: Record<string, ActParticipantSessionStatus>
+    createdAt: number
+}
 
 export function createActParticipantKey() {
     return `participant-${nanoid(8)}`
@@ -291,6 +309,104 @@ export function listActThreadChatKeys(
         const parsed = parseActParticipantChatKey(key)
         return parsed?.actId === actId && parsed.threadId === threadId
     })
+}
+
+function buildActThreadState(thread: ActThreadRuntimeSnapshot) {
+    return {
+        id: thread.id,
+        actId: thread.actId,
+        status: thread.status,
+        participantSessions: thread.participantSessions || {},
+        participantStatuses: thread.participantStatuses || {},
+        createdAt: thread.createdAt,
+    }
+}
+
+function transitionedToSettledStatus(
+    previous: ActParticipantSessionStatus | undefined,
+    next: ActParticipantSessionStatus | undefined,
+) {
+    const wasActive = previous?.type === 'busy' || previous?.type === 'retry'
+    const isSettled = next?.type === 'idle' || next?.type === 'error'
+    return wasActive && isSettled
+}
+
+export async function applyAuthoritativeActThreads(
+    get: GetState,
+    set: SetState,
+    actId: string,
+    threads: ActThreadRuntimeSnapshot[],
+) {
+    const previousThreads = get().actThreads[actId] || []
+    const previousById = new Map(previousThreads.map((thread) => [thread.id, thread]))
+    const nextThreadIds = new Set(threads.map((thread) => thread.id))
+    const authoritativeSessions: Record<string, string> = {}
+    const sessionsToFetch = new Set<string>()
+    const removedChatKeys: string[] = []
+
+    set((state: StudioState) => {
+        removedChatKeys.push(
+            ...collectRemovedActParticipantChatKeys(state, actId, nextThreadIds, Object.fromEntries(
+                threads.flatMap((thread) => Object.entries(thread.participantSessions || {}).map(([participantKey, sessionId]) => [
+                    buildActParticipantChatKey(actId, thread.id, participantKey),
+                    sessionId,
+                ])),
+            )),
+        )
+
+        for (const thread of threads) {
+            const previousThread = previousById.get(thread.id)
+            for (const [participantKey, sessionId] of Object.entries(thread.participantSessions || {})) {
+                if (!sessionId) continue
+                const chatKey = buildActParticipantChatKey(actId, thread.id, participantKey)
+                authoritativeSessions[chatKey] = sessionId
+
+                const previousSessionId = previousThread?.participantSessions?.[participantKey]
+                const previousStatus = previousThread?.participantStatuses?.[participantKey]
+                const nextStatus = thread.participantStatuses?.[participantKey]
+                const shouldFetch = state.chatKeyToSession[chatKey] !== sessionId
+                    || !(state.seMessages[sessionId]?.length)
+                    || transitionedToSettledStatus(previousStatus, nextStatus)
+                    || previousSessionId !== sessionId
+                if (shouldFetch) {
+                    sessionsToFetch.add(chatKey)
+                }
+            }
+        }
+
+        return {
+            actThreads: {
+                ...state.actThreads,
+                [actId]: threads.map(buildActThreadState),
+            },
+            ...resolveSelectedActThreadState(state, actId, threads),
+        }
+    })
+
+    for (const chatKey of removedChatKeys) {
+        clearChatSessionView(get, chatKey)
+    }
+
+    for (const [chatKey, sessionId] of Object.entries(authoritativeSessions)) {
+        registerSessionBinding(set, get, chatKey, sessionId)
+        const parsed = parseActParticipantChatKey(chatKey)
+        if (!parsed) continue
+        const thread = threads.find((entry) => entry.id === parsed.threadId)
+        const participantStatus = thread?.participantStatuses?.[parsed.participantKey]
+        if (!participantStatus) continue
+        get().setSessionStatus(sessionId, participantStatus)
+        if (participantStatus.type === 'idle' || participantStatus.type === 'error') {
+            get().setSessionLoading(sessionId, false)
+        }
+    }
+
+    for (const chatKey of sessionsToFetch) {
+        const sessionId = authoritativeSessions[chatKey]
+        if (!sessionId) continue
+        syncSessionSnapshot(set, get, chatKey, sessionId).catch(() => {
+            // Session may have been deleted or compacted — ignore background refresh failure.
+        })
+    }
 }
 
 function resolveParticipantDescription(
@@ -614,57 +730,5 @@ export async function createActThreadImpl(get: GetState, set: SetState, actId: s
 
 export async function loadActThreadsImpl(get: GetState, set: SetState, actId: string) {
     const result = await api.actRuntime.listThreads(actId)
-
-    const nextThreadIds = new Set(result.threads.map((thread) => thread.id))
-    const authoritativeSessions: Record<string, string> = {}
-    for (const thread of result.threads) {
-        for (const [participantKey, sessionId] of Object.entries(thread.participantSessions || {})) {
-            if (!sessionId) continue
-            authoritativeSessions[buildActParticipantChatKey(actId, thread.id, participantKey)] = sessionId
-        }
-    }
-
-    const sessionsToFetch: Array<{ chatKey: string; sessionId: string }> = []
-    const removedChatKeys: string[] = []
-    set((state: StudioState) => {
-        removedChatKeys.push(
-            ...collectRemovedActParticipantChatKeys(state, actId, nextThreadIds, authoritativeSessions),
-        )
-
-        for (const [chatKey, sessionId] of Object.entries(authoritativeSessions)) {
-            if (state.chatKeyToSession[chatKey] !== sessionId || !(state.seMessages[sessionId]?.length)) {
-                sessionsToFetch.push({ chatKey, sessionId })
-            }
-        }
-
-        return {
-            actThreads: {
-                ...state.actThreads,
-                [actId]: result.threads.map((thread) => ({
-                    id: thread.id,
-                    actId: thread.actId,
-                    status: thread.status,
-                    participantSessions: thread.participantSessions || {},
-                    createdAt: thread.createdAt,
-                })),
-            },
-            ...resolveSelectedActThreadState(state, actId, result.threads),
-        }
-    })
-
-    for (const chatKey of removedChatKeys) {
-        clearChatSessionView(get, chatKey)
-    }
-    for (const [chatKey, sessionId] of Object.entries(authoritativeSessions)) {
-        registerSessionBinding(set, get, chatKey, sessionId)
-    }
-
-    // Background-fetch messages for restored or changed sessions so participant tabs show chat history
-    if (sessionsToFetch.length > 0) {
-        for (const { chatKey, sessionId } of sessionsToFetch) {
-            syncSessionSnapshot(set, get, chatKey, sessionId).catch(() => {
-                // Session may have been deleted — ignore
-            })
-        }
-    }
+    await applyAuthoritativeActThreads(get, set, actId, result.threads)
 }

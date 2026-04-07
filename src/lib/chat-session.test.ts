@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { extractNonRetryableSessionError, waitForSessionToSettle } from '../../server/lib/chat-session.js'
+import {
+    deriveImplicitIdleSessionState,
+    extractNonRetryableSessionError,
+    waitForSessionToSettle,
+} from '../../server/lib/chat-session.js'
 
 describe('waitForSessionToSettle', () => {
     it('waits for a busy state before treating a missing status as settled when requested', async () => {
@@ -7,10 +11,11 @@ describe('waitForSessionToSettle', () => {
             .mockResolvedValueOnce({ data: {} })
             .mockResolvedValueOnce({ data: { 'session-1': { type: 'busy' } } })
             .mockResolvedValueOnce({ data: {} })
+        const messages = vi.fn().mockResolvedValue({ data: [] })
 
         const settled = await waitForSessionToSettle(
             {
-                session: { status },
+                session: { status, messages },
             } as never,
             'session-1',
             { directory: '/tmp/workspace' },
@@ -35,6 +40,60 @@ describe('waitForSessionToSettle', () => {
 
         expect(settled).toBe(true)
         expect(status).toHaveBeenCalledTimes(1)
+    })
+
+    it('treats a missing status as settled when a completed assistant snapshot exists', async () => {
+        const status = vi.fn().mockResolvedValueOnce({ data: {} })
+        const messages = vi.fn().mockResolvedValueOnce({
+            data: [
+                {
+                    info: {
+                        role: 'assistant',
+                        time: { completed: 123 },
+                    },
+                    parts: [
+                        { type: 'text', text: 'Done.' },
+                    ],
+                },
+            ],
+        })
+
+        const settled = await waitForSessionToSettle(
+            {
+                session: {
+                    status,
+                    messages,
+                },
+            } as never,
+            'session-1',
+            { directory: '/tmp/workspace' },
+            { timeoutMs: 50, pollMs: 1, requireObservedBusy: true },
+        )
+
+        expect(settled).toBe(true)
+        expect(messages).toHaveBeenCalledTimes(1)
+    })
+
+    it('derives an implicit idle state from a completed assistant snapshot', () => {
+        const derived = deriveImplicitIdleSessionState([
+            {
+                info: {
+                    role: 'assistant',
+                    time: { completed: 456 },
+                },
+                parts: [
+                    {
+                        type: 'tool',
+                        state: {
+                            status: 'running',
+                        },
+                    },
+                ],
+            },
+        ])
+
+        expect(derived.status).toEqual({ type: 'idle' })
+        expect((derived.messages[0]?.parts?.[0] as { state?: { status?: string } })?.state?.status).toBe('error')
     })
 
     it('extracts non-retryable assistant session errors', () => {

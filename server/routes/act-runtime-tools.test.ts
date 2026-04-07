@@ -59,4 +59,14 @@ describe('resolveParticipantRecipient', () => {
         )).toBeNull()
         expect(resolveParticipantRecipient(actDefinition, 'participant-lead', 'UnknownTeammate')).toBeNull()
     })
+
+    it('does not resolve recipients that are only connected by an incoming one-way relation', () => {
+        expect(resolveParticipantRecipient(actDefinition, 'participant-data', 'participant_1')).toBeNull()
+        expect(resolveParticipantRecipient(actDefinition, 'participant-data', 'participant-lead')).toBeNull()
+        expect(resolveParticipantRecipient(
+            actDefinition,
+            'participant-data',
+            'participant_1_to_participant_2',
+        )).toBeNull()
+    })
 })

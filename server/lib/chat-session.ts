@@ -17,6 +17,9 @@ type MessageWithParts = {
     info?: {
         role?: string
         error?: unknown
+        time?: {
+            completed?: number
+        }
     }
     role?: string
     parts?: unknown[]
@@ -28,6 +31,37 @@ function isToolPartLike(value: unknown): value is ToolPartLike {
 
 function sleep(ms: number) {
     return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function readMessageRole(message: MessageWithParts) {
+    return message.info?.role || message.role || null
+}
+
+function hasCompletedAssistantTurn(messages: MessageWithParts[]) {
+    return messages.some((message) => {
+        if (readMessageRole(message) !== 'assistant') {
+            return false
+        }
+
+        if (typeof message.info?.time?.completed === 'number') {
+            return true
+        }
+
+        return Array.isArray(message.parts) && message.parts.some((part) => {
+            if (!part || typeof part !== 'object') {
+                return false
+            }
+            const typedPart = part as { type?: string; state?: { status?: string } }
+            if (typedPart.type === 'step-finish') {
+                return true
+            }
+            if (typedPart.type === 'tool') {
+                const status = typedPart.state?.status
+                return status === 'completed' || status === 'error'
+            }
+            return typedPart.type === 'text' || typedPart.type === 'reasoning'
+        })
+    })
 }
 
 export function normalizeIncompleteToolParts<T extends MessageWithParts>(messages: T[], settledAt: number): T[] {
@@ -66,6 +100,16 @@ export function normalizeIncompleteToolParts<T extends MessageWithParts>(message
     })
 }
 
+export function deriveImplicitIdleSessionState<T extends MessageWithParts>(messages: T[], settledAt = Date.now()) {
+    const normalizedMessages = normalizeIncompleteToolParts(messages, settledAt)
+    return {
+        messages: normalizedMessages,
+        status: hasCompletedAssistantTurn(normalizedMessages)
+            ? ({ type: 'idle' } as const)
+            : null,
+    }
+}
+
 export async function waitForSessionToSettle(
     oc: Awaited<ReturnType<typeof getOpencode>>,
     sessionId: string,
@@ -91,6 +135,15 @@ export async function waitForSessionToSettle(
         }
         if (!status && (!options?.requireObservedBusy || observedBusy)) {
             return true
+        }
+        if (!status && options?.requireObservedBusy && !observedBusy) {
+            const rawMessages = unwrapOpencodeResult<MessageWithParts[] | null>(await oc.session.messages({
+                sessionID: sessionId,
+                ...directoryQuery,
+            })) || []
+            if (deriveImplicitIdleSessionState(rawMessages).status?.type === 'idle') {
+                return true
+            }
         }
         await sleep(options?.pollMs ?? 150)
     }

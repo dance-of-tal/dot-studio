@@ -1,11 +1,19 @@
 import { getOpencode } from '../lib/opencode.js'
 import { buildStudioSessionTitle } from '../../shared/session-metadata.js'
 import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/chat-contracts.js'
-import { extractNonRetryableSessionError, waitForSessionToSettle } from '../lib/chat-session.js'
 import { describeUnavailableRuntimeTools } from '../lib/runtime-tools.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { resolveActSessionPolicy, ACT_AGENT_POSTURE } from '../lib/act-session-policy.js'
 import { ensurePerformerProjection } from './opencode-projection/stage-projection-service.js'
+import {
+    parseActParticipantSessionOwner,
+    registerActParticipantSession,
+    syncActParticipantStatusForSession,
+} from './act-runtime/act-session-runtime.js'
+import {
+    formatActSessionError,
+    resolveActSessionSettlementOutcome,
+} from './act-runtime/act-session-settlement.js'
 import { projectActTools } from './act-runtime/act-tool-projection.js'
 import { getActDefinitionForThread, getActRuntimeService } from './act-runtime/act-runtime-service.js'
 import { prepareRuntimeForExecution, throwIfRuntimePreparationBlocked } from './runtime-preparation-service.js'
@@ -13,6 +21,13 @@ import { createSessionOwnership } from './session-ownership-service.js'
 
 function isAssistantOwnerId(ownerId: string) {
     return ownerId === 'studio-assistant' || ownerId.startsWith('studio-assistant--')
+}
+
+async function syncActParticipantSessionFailure(sessionId: string, error: unknown) {
+    await syncActParticipantStatusForSession(sessionId, {
+        type: 'error',
+        message: formatActSessionError(error),
+    }).catch(() => {})
 }
 
 export async function createStudioChatSession(
@@ -37,19 +52,11 @@ export async function createStudioChatSession(
         workingDir: cwd,
     })
 
-    // Persist participant→session mapping to thread.json for Act participants
-    // ChatKey format: `act:{actId}:thread:{threadId}:participant:{participantKey}`
-    if (request.actId && request.performerId.startsWith('act:')) {
-        const threadMatch = request.performerId.match(/^act:[^:]+:thread:([^:]+):participant:(.+)$/)
-        if (threadMatch) {
-            const [, threadId, participantKey] = threadMatch
-            try {
-                const { getActRuntimeService } = await import('./act-runtime/act-runtime-service.js')
-                const service = getActRuntimeService(cwd)
-                await service.registerParticipantSession(threadId, participantKey, session.id)
-            } catch {
-                // Non-fatal: session still works, just won't persist for reload
-            }
+    if (request.actId) {
+        try {
+            await registerActParticipantSession(cwd, contextOwnerId, session.id)
+        } catch {
+            // Non-fatal: session still works, just won't persist for reload.
         }
     }
 
@@ -72,17 +79,10 @@ export async function sendStudioChatMessage(
         )
     }
 
-    // Extract raw performer key for Act-namespaced chatKeys
-    // ChatKey format: `act:{actId}:thread:{threadId}:participant:{participantKey}`
-    // We need just the participantKey part for Act tool generation
-    let rawPerformerId = performer.performerId
-    if (request.actId && performer.performerId.startsWith('act:')) {
-        const participantPrefix = ':participant:'
-        const participantIdx = performer.performerId.indexOf(participantPrefix)
-        if (participantIdx !== -1) {
-            rawPerformerId = performer.performerId.slice(participantIdx + participantPrefix.length)
-        }
-    }
+    const actSessionOwner = request.actId
+        ? parseActParticipantSessionOwner(performer.performerId)
+        : null
+    const rawPerformerId = actSessionOwner?.participantKey || performer.performerId
 
     // ── Collaboration tool projection ───────────────────
     // When running in an Act thread, project stable collaboration context and
@@ -215,6 +215,7 @@ export async function sendStudioChatMessage(
             parts,
         }))
     } catch (error) {
+        await syncActParticipantSessionFailure(sessionId, error)
         if (actRuntime && rawPerformerId) {
             await actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId).catch(() => {})
         }
@@ -222,34 +223,37 @@ export async function sendStudioChatMessage(
     }
 
     if (actRuntime && rawPerformerId) {
-        void waitForSessionToSettle(
+        void resolveActSessionSettlementOutcome(
             oc,
             sessionId,
-            { directory: workingDir },
+            workingDir,
             { timeoutMs: 30 * 60_000, pollMs: 250, requireObservedBusy: true },
-        ).then((settled) => {
-            if (!settled) {
+        ).then((outcome) => {
+            if (outcome.kind === 'timeout') {
                 console.warn(`[chat-service] Session ${sessionId} for "${rawPerformerId}" did not settle before timeout`)
+                void syncActParticipantStatusForSession(sessionId, {
+                    type: 'error',
+                    message: outcome.message,
+                }).catch(() => {})
                 return actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
             }
-            return Promise.resolve(oc.session.messages({
-                sessionID: sessionId,
-                directory: workingDir,
-            })).then((response) => {
-                const rawMessages = unwrapOpencodeResult<unknown>(response)
-                const messages = Array.isArray(rawMessages) ? rawMessages : []
-                const fatalError = extractNonRetryableSessionError(messages)
-                if (fatalError) {
-                    void actRuntime.tripParticipantAutoWakeCircuit(request.actThreadId!, rawPerformerId, fatalError)
-                    console.warn(`[chat-service] Opened auto-wake circuit for "${rawPerformerId}": ${fatalError}`)
-                    return actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
-                }
 
-                void actRuntime.clearParticipantAutoWakeCircuit(request.actThreadId!, rawPerformerId)
+            if (outcome.kind === 'fatal_error') {
+                void syncActParticipantStatusForSession(sessionId, {
+                    type: 'error',
+                    message: outcome.message,
+                }).catch(() => {})
+                void actRuntime.tripParticipantAutoWakeCircuit(request.actThreadId!, rawPerformerId, outcome.message)
+                console.warn(`[chat-service] Opened auto-wake circuit for "${rawPerformerId}": ${outcome.message}`)
                 return actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
-            })
+            }
+
+            void syncActParticipantStatusForSession(sessionId, { type: 'idle' }).catch(() => {})
+            void actRuntime.clearParticipantAutoWakeCircuit(request.actThreadId!, rawPerformerId)
+            return actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
         }).catch((error) => {
             console.error(`[chat-service] Failed waiting for act session ${sessionId} to settle:`, error)
+            void syncActParticipantSessionFailure(sessionId, error)
             void actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId)
         })
     }

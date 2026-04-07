@@ -22,6 +22,28 @@ function getLastNonSystemMessage(messages: ChatMessage[]) {
     return null
 }
 
+function hasSettledAssistantSnapshot(messages: ChatMessage[]) {
+    const lastMessage = getLastNonSystemMessage(messages)
+    if (!lastMessage || lastMessage.role !== 'assistant') {
+        return false
+    }
+
+    const parts = lastMessage.parts || []
+    const tools = parts
+        .filter((part) => part.type === 'tool' && !!part.tool)
+        .map((part) => part.tool!)
+
+    if (tools.some((tool) => tool.status === 'pending' || tool.status === 'running')) {
+        return false
+    }
+
+    if (parts.some((part) => part.type === 'step-finish')) {
+        return true
+    }
+
+    return tools.length > 0 && tools.some((tool) => tool.status === 'completed' || tool.status === 'error')
+}
+
 export function isSessionParkedByWaitUntil(messages: ChatMessage[]) {
     const lastMessage = getLastNonSystemMessage(messages)
     if (!lastMessage || lastMessage.role !== 'assistant') {
@@ -83,6 +105,15 @@ export function resolveSessionActivity(params: {
             isActive: true,
             canAbort: true,
             isTransportActive: true,
+        } satisfies SessionActivity
+    }
+
+    if (isOptimisticSessionBridge({ loading, status }) && hasSettledAssistantSnapshot(messages)) {
+        return {
+            kind: 'idle',
+            isActive: false,
+            canAbort: false,
+            isTransportActive: false,
         } satisfies SessionActivity
     }
 

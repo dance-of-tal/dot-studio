@@ -1,6 +1,7 @@
 /* ── ActChatPanel ── */
 
 .act-chat {
+    --act-chat-running-indicator: var(--accent);
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -39,9 +40,9 @@
 }
 
 .act-chat__filter-tab--active {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
+    background: var(--bg-selected);
+    color: var(--accent);
+    border-color: var(--border-active);
 }
 
 /* ── Empty state ── */
@@ -266,9 +267,11 @@
 
 /* ── Loading dot (pulsing) ── */
 .act-chat__loading-dot {
-    color: var(--accent);
+    color: var(--act-chat-running-indicator);
     animation: act-pulse 1.2s ease-in-out infinite;
     fill: currentColor;
+    stroke: currentColor;
+    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--act-chat-running-indicator) 55%, transparent));
 }
 
 @keyframes act-pulse {
@@ -317,5 +320,3 @@
     color: var(--status-danger, #ef4444);
     line-height: 1.4;
 }
-
-

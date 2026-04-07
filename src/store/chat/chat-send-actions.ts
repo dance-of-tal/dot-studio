@@ -7,7 +7,6 @@ import type { AssetRef, ChatMessage } from '../../types'
 import {
     appendChatMessage,
     appendChatSystemMessage,
-    syncChatMessages,
     type ChatGet,
     type ChatSet,
 } from './chat-internals'
@@ -19,7 +18,6 @@ import {
     resolveChatKeySession,
 } from '../session'
 import { collectRuntimeDraftIds, preparePendingRuntimeExecution } from '../runtime-execution'
-import { createSessionRecoveryCoordinator } from './session-recovery'
 
 function createOptimisticUserMessage(
     text: string,
@@ -60,14 +58,6 @@ export function createChatSendActions(
         },
     ) => Promise<{ sessionId: string | null; runtimeConfig: ChatRuntimeConfig }>,
 ) {
-    const sessionRecovery = createSessionRecoveryCoordinator({
-        get,
-        set,
-        syncSessionMessages: (chatKey: string, sessionId: string) => syncChatMessages(set, get, chatKey, sessionId),
-        setSessionStatus: (sessionId, status) => get().setSessionStatus(sessionId, status),
-        setSessionLoading: (sessionId, loading) => get().setSessionLoading(sessionId, loading),
-    })
-
     const rollbackOptimisticMessage = (chatKey: string, messageId: string, sessionId?: string) => {
         get().removeChatDraftMessage(chatKey, messageId)
         if (sessionId) {
@@ -192,7 +182,9 @@ export function createChatSendActions(
                 })
             }
 
-            sessionRecovery.schedule(chatKey, sessionId)
+            if (target.kind !== 'act-participant') {
+                get().watchSessionLifecycle(chatKey, sessionId)
+            }
         } catch (error) {
             logChatDebug('send', 'chat prompt failed', {
                 chatKey,

@@ -69,32 +69,13 @@ async function resolveTalContent(
     return readDraftTextContent(cwd, 'tal', ref.draftId)
 }
 
-
-
-function buildTalSection(talContent: string | null) {
-    if (!talContent) {
-        return [
-            '# Core Instructions',
-            'No core instruction asset is configured. Follow the user request directly and stay consistent with the current session context.',
-        ].join('\n')
-    }
-
-    return [
-        '# Core Instructions',
-        '',
-        talContent,
-    ].join('\n')
-}
-
-
-
 function buildBody(input: {
     talContent: string | null
     collaborationPromptSection?: string | null
     relationPromptSection?: string | null
 }) {
     return [
-        buildTalSection(input.talContent),
+        input.talContent,
         input.collaborationPromptSection || null,
         input.relationPromptSection || null,
     ].filter(Boolean).join('\n\n')

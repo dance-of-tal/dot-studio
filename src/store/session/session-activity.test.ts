@@ -88,4 +88,28 @@ describe('session activity', () => {
             canAbort: false,
         })
     })
+
+    it('does not treat stale optimistic loading as active after a settled assistant step-finish snapshot', () => {
+        expect(resolveSessionActivity({
+            loading: true,
+            status: undefined,
+            messages: [{
+                id: 'msg-1',
+                role: 'assistant',
+                content: 'done',
+                timestamp: 1,
+                parts: [{
+                    id: 'part-1',
+                    type: 'step-finish',
+                }],
+            }],
+            permission: null,
+            question: null,
+        })).toMatchObject({
+            kind: 'idle',
+            isActive: false,
+            canAbort: false,
+            isTransportActive: false,
+        })
+    })
 })

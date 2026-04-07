@@ -96,6 +96,8 @@ Meaning:
 - `runtimeReloadPending` is only for OpenCode runtime reload work
 - `projectionDirty` is only for lazy projection work
 - these two flags must not be merged into one concept
+- runtime blocking should follow resolved session activity, not raw `sessionLoading` alone
+- stale optimistic loading must not keep runtime reload or projection adoption blocked once an authoritative idle status or a settled assistant snapshot is known
 
 ## Execution Flow
 
@@ -116,6 +118,12 @@ Current run rule:
 - a busy session keeps the runtime snapshot it started with
 - edits made during that run do not affect that run
 - the next run gets the new snapshot
+
+Performer projection rule:
+
+- performer TAL content, when configured, is inserted raw at the top of the projected agent body
+- Studio must not add a synthetic `Core Instructions` heading around TAL content
+- if no TAL is configured, Studio must not inject a fallback instruction block
 
 Preview rule:
 

@@ -3,9 +3,9 @@
    ═══════════════════════════════════════════ */
 
 [data-component="todo-dock"] {
-    border-top: 1px solid var(--border-subtle, #30363d);
-    background: var(--bg-surface, #161b22);
-    border-radius: var(--radius-md, 6px) var(--radius-md, 6px) 0 0;
+    border-top: 1px solid var(--border-main);
+    background: var(--bg-card);
+    border-radius: var(--radius) var(--radius) 0 0;
 }
 
 /* ── Header ── */
@@ -18,17 +18,17 @@
     padding: 8px 12px;
     border: none;
     background: transparent;
-    color: var(--text-primary, #e6edf3);
+    color: var(--text-primary);
     cursor: pointer;
-    font-size: 13px;
+    font-size: var(--font-sm);
     font-weight: 500;
     line-height: 1.4;
     text-align: left;
-    transition: background 0.15s;
+    transition: background 0.15s, color 0.15s;
 }
 
 .todo-dock__header:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+    background: var(--bg-hover);
 }
 
 .todo-dock__progress {
@@ -37,13 +37,16 @@
     gap: 0;
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
-    color: var(--text-primary, #e6edf3);
+    color: var(--text-primary);
     font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--bg-hover);
 }
 
 .todo-dock__slash {
     margin: 0 1px;
-    color: var(--text-muted, #7d8590);
+    color: var(--text-muted);
 }
 
 .todo-dock__preview {
@@ -52,9 +55,9 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text-secondary, #8b949e);
+    color: var(--text-secondary);
     font-weight: 400;
-    font-size: 12px;
+    font-size: var(--font-sm);
 }
 
 .todo-dock__chevron {
@@ -63,7 +66,7 @@
     justify-content: center;
     flex-shrink: 0;
     margin-left: auto;
-    color: var(--text-muted, #7d8590);
+    color: var(--text-muted);
     transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -76,8 +79,8 @@
 .todo-dock__body {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 0 12px 10px;
+    gap: 4px;
+    padding: 0 12px 12px;
     max-height: 168px;
     overflow-y: auto;
     overflow-anchor: none;
@@ -94,18 +97,21 @@
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    padding: 3px 4px;
-    border-radius: var(--radius-sm, 4px);
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
     transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
-                background 150ms ease;
+                background 150ms ease,
+                border-color 150ms ease;
 }
 
 .todo-dock__item--active {
-    background: rgba(88, 166, 255, 0.06);
+    background: var(--bg-selected);
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--border-main));
 }
 
 .todo-dock__item--done {
-    opacity: 0.55;
+    opacity: 0.7;
 }
 
 .todo-dock__check {
@@ -117,20 +123,20 @@
 }
 
 .todo-dock__text {
-    font-size: 13px;
+    font-size: var(--font-sm);
     line-height: 1.5;
     word-break: break-word;
     min-width: 0;
-    color: var(--text-primary, #e6edf3);
+    color: var(--text-primary);
 }
 
 .todo-dock__item--done .todo-dock__text {
     text-decoration: line-through;
-    color: var(--text-muted, #7d8590);
+    color: var(--text-secondary);
 }
 
 .todo-dock__item--active .todo-dock__text {
-    color: var(--text-primary, #e6edf3);
+    color: var(--text-primary);
     font-weight: 500;
 }
 
@@ -142,19 +148,19 @@
 }
 
 .todo-dock-icon--done {
-    color: #10b981;
+    color: var(--mcp-color);
 }
 
 .todo-dock-icon--active {
-    color: var(--accent, #58a6ff);
+    color: var(--accent);
 }
 
 .todo-dock-icon--cancelled {
-    color: var(--text-muted, #7d8590);
+    color: var(--text-muted);
 }
 
 .todo-dock-icon--pending {
-    color: var(--text-muted, #7d8590);
+    color: var(--text-muted);
     opacity: 0.6;
 }
 
@@ -177,6 +183,6 @@
     left: 0;
     right: 0;
     height: 16px;
-    background: linear-gradient(to bottom, var(--bg-surface, #161b22), transparent);
+    background: linear-gradient(to bottom, var(--bg-card), transparent);
     transition: opacity 150ms ease;
 }

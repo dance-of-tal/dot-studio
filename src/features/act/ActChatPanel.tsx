@@ -90,7 +90,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         void loadThreads(actId)
     }, [actId, loadThreads])
 
-    const participantKeys = act ? Object.keys(act.participants) : []
+    const participantKeys = useMemo(() => act ? Object.keys(act.participants) : [], [act])
     const { isCallboardView, activeParticipantKey } = useMemo(
         () => resolveActiveActParticipantKey(participantKeys, currentThread?.id || null, activeThreadParticipantKey),
         [participantKeys, currentThread, activeThreadParticipantKey],
@@ -109,12 +109,6 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const permissionRequest = chatSession.permission
     const questionRequest = chatSession.question
     const setSessionTodos = useStudioStore((state) => state.setSessionTodos)
-    const chatKeyToSession = useStudioStore((state) => state.chatKeyToSession)
-    const sessionLoading = useStudioStore((state) => state.sessionLoading)
-    const seMessages = useStudioStore((state) => state.seMessages)
-    const seStatuses = useStudioStore((state) => state.seStatuses)
-    const sePermissions = useStudioStore((state) => state.sePermissions)
-    const seQuestions = useStudioStore((state) => state.seQuestions)
     const hasPendingPermission = !!permissionRequest
     const isTodoLive = isLoading || hasPendingPermission
 
@@ -147,17 +141,10 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     )
     const participantLoadingStates = useMemo(() => {
         return buildActParticipantLoadingStates({
-            actId,
-            threadId: currentThread?.id || null,
+            currentThread,
             participantKeys,
-            chatKeyToSession,
-            sessionLoading,
-            seMessages,
-            seStatuses,
-            sePermissions,
-            seQuestions,
         })
-    }, [actId, chatKeyToSession, currentThread, participantKeys, sessionLoading, seMessages, seStatuses, sePermissions, seQuestions])
+    }, [currentThread, participantKeys])
 
     // Resolve performer model from ref binding
     const resolvedPerformer = useMemo(
@@ -191,8 +178,6 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
             void handleSend()
         }
     }, [handleSend])
-
-    if (!act) return null
 
     const noParticipants = participantKeys.length === 0
     const composerDisabled = noParticipants || !readiness.runnable || !currentThread || !modelConfigured || isLoading
@@ -398,6 +383,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         isTodoLive,
         sendDisabled,
     ])
+
+    if (!act) return null
 
     return (
         <div className="act-chat">

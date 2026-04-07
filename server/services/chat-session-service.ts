@@ -1,7 +1,12 @@
 import type { QuestionAnswer, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import { getOpencode } from '../lib/opencode.js'
-import { normalizeIncompleteToolParts, waitForSessionToSettle } from '../lib/chat-session.js'
+import {
+    deriveImplicitIdleSessionState,
+    normalizeIncompleteToolParts,
+    waitForSessionToSettle,
+} from '../lib/chat-session.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
+import { syncActParticipantStatusForSession } from './act-runtime/act-session-runtime.js'
 import { responseData } from './opencode-service.js'
 import { deleteSessionOwnership } from './session-ownership-service.js'
 
@@ -96,8 +101,19 @@ export async function getStudioChatSessionStatus(workingDir: string, sessionId: 
     const statuses = unwrapOpencodeResult<Record<string, OpenCodeSessionStatus>>(await oc.session.status({
         ...directoryQuery,
     })) || {}
+    const directStatus = statuses[sessionId] || null
+    if (directStatus) {
+        return {
+            status: directStatus,
+        }
+    }
+
+    const rawMessages = unwrapOpencodeResult<SessionMessageLike[]>(await oc.session.messages({
+        sessionID: sessionId,
+        ...directoryQuery,
+    })) || []
     return {
-        status: statuses[sessionId] || null,
+        status: deriveImplicitIdleSessionState(rawMessages).status,
     }
 }
 
@@ -109,6 +125,7 @@ export async function abortStudioChatSession(workingDir: string, sessionId: stri
         ...directoryQuery,
     }))
     await waitForSessionToSettle(oc, sessionId, directoryQuery).catch(() => {})
+    await syncActParticipantStatusForSession(sessionId, { type: 'idle' }).catch(() => {})
     return { ok: true as const }
 }
 

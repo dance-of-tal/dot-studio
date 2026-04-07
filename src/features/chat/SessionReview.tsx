@@ -1,9 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
-import { useState, useMemo } from 'react'
-import { FileEdit, ChevronDown, ChevronRight } from 'lucide-react'
+import { useMemo } from 'react'
+import { FileEdit } from 'lucide-react'
 import type { ChatMessage } from '../../types'
 import { DiffChanges } from '../../components/chat/DiffChanges'
-import { SyntaxBlock, DiffBlock } from '../../components/chat/SyntaxBlock'
+import { DiffBlock } from '../../components/chat/SyntaxBlock'
 import './SessionReview.css'
 
 /* ═══════════════════════════════════════════
@@ -122,8 +122,7 @@ export function collectSessionDiffs(messages: ChatMessage[]): FileDiffInfo[] {
    SessionReview Component
    ═══════════════════════════════════════════ */
 
-function FileAccordionItem({ diff }: { diff: FileDiffInfo }) {
-    const [open, setOpen] = useState(false)
+function FileDiffItem({ diff }: { diff: FileDiffInfo }) {
     const filename = getFilename(diff.file)
     const directory = getDirectory(diff.file)
 
@@ -134,12 +133,8 @@ function FileAccordionItem({ diff }: { diff: FileDiffInfo }) {
         : null
 
     return (
-        <div className="session-review__file" data-open={open ? 'true' : 'false'}>
-            <button
-                className="session-review__file-header"
-                onClick={() => setOpen(!open)}
-                type="button"
-            >
+        <section className="session-review__file">
+            <div className="session-review__file-header">
                 <span className="session-review__file-icon">
                     <FileEdit size={12} />
                 </span>
@@ -155,22 +150,17 @@ function FileAccordionItem({ diff }: { diff: FileDiffInfo }) {
                         <DiffChanges changes={diff} />
                     )}
                 </span>
-                <span className="session-review__chevron">
-                    {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                </span>
-            </button>
-            {open && (
-                <div className="session-review__file-content">
-                    {diff.rawDiff ? (
-                        <SyntaxBlock code={diff.rawDiff} language="diff" lineNumbers={false} maxHeight={500} />
-                    ) : (diff.before || diff.after) ? (
-                        <DiffBlock before={diff.before} after={diff.after} filename={filename} maxHeight={500} />
-                    ) : (
-                        <div className="session-review__empty-diff">No content available</div>
-                    )}
-                </div>
-            )}
-        </div>
+            </div>
+            <div className="session-review__file-content">
+                {diff.rawDiff ? (
+                    <DiffBlock before="" after="" rawDiff={diff.rawDiff} filename={filename} maxHeight={500} />
+                ) : (diff.before || diff.after) ? (
+                    <DiffBlock before={diff.before} after={diff.after} filename={filename} maxHeight={500} />
+                ) : (
+                    <div className="session-review__empty-diff">No content available</div>
+                )}
+            </div>
+        </section>
     )
 }
 
@@ -183,15 +173,13 @@ export interface SessionReviewProps {
  * SessionReview — diff review panel showing all file changes in the session.
  *
  * Scans chat messages for edit/write/patch tool parts and displays
- * per-file diffs in an accordion layout with DiffChanges badges.
+ * per-file diffs inline so opening the panel immediately reveals changes.
  */
 export function SessionReview({ messages, className = '' }: SessionReviewProps) {
     const diffs = useMemo(() => collectSessionDiffs(messages), [messages])
 
     const totalAdditions = useMemo(() => diffs.reduce((s, d) => s + d.additions, 0), [diffs])
     const totalDeletions = useMemo(() => diffs.reduce((s, d) => s + d.deletions, 0), [diffs])
-
-    const [allOpen, setAllOpen] = useState(false)
 
     if (diffs.length === 0) return null
 
@@ -205,17 +193,10 @@ export function SessionReview({ messages, className = '' }: SessionReviewProps) 
                 <span className="session-review__summary">
                     <DiffChanges changes={{ additions: totalAdditions, deletions: totalDeletions }} />
                 </span>
-                <button
-                    className="session-review__toggle-all"
-                    onClick={() => setAllOpen(!allOpen)}
-                    type="button"
-                >
-                    {allOpen ? 'Collapse All' : 'Expand All'}
-                </button>
             </div>
             <div className="session-review__files">
                 {diffs.map((diff, idx) => (
-                    <FileAccordionItem key={diff.file || idx} diff={diff} />
+                    <FileDiffItem key={diff.file || idx} diff={diff} />
                 ))}
             </div>
         </div>

@@ -16,10 +16,7 @@ import type { Mailbox } from './mailbox.js'
 import type { ThreadManager } from './thread-manager.js'
 import { ACT_AGENT_POSTURE } from '../../lib/act-session-policy.js'
 import { serverDebug } from '../../lib/server-logger.js'
-
-function errorMessage(error: unknown) {
-    return error instanceof Error ? error.message : 'Unknown error'
-}
+import { formatActSessionError, resolveActSessionSettlementOutcome } from './act-session-settlement.js'
 
 // Module-level session queue (one per thread)
 const sessionQueues: Map<string, SessionQueue> = new Map()
@@ -322,7 +319,7 @@ async function injectWakeTarget(
                 await threadManager.getOrCreateSession(threadId, participantKey, () => sessionId!)
                 serverDebug('wake-cascade', `Auto-created session ${sessionId} for participant "${participantKey}"`)
             } catch (createErr) {
-                result.errors.push(`Failed to auto-create session for ${participantKey}: ${errorMessage(createErr)}`)
+                result.errors.push(`Failed to auto-create session for ${participantKey}: ${formatActSessionError(createErr)}`)
                 const drainResult = await drainParticipantQueueAfterSettlement(
                     participantKey,
                     actDefinition,
@@ -342,6 +339,7 @@ async function injectWakeTarget(
             ? await resolveSessionOwnership(sessionId)
             : null
         const executionDir = sessionContext?.workingDir || threadManager.workingDir
+        await threadManager.setParticipantStatus(threadId, participantKey, { type: 'busy' })
 
         // ── Performer projection (TAL, Dance, MCP, model) ──────────
         // Project Act tools for this participant
@@ -384,6 +382,7 @@ async function injectWakeTarget(
                 if (prepared.blocked) {
                     console.warn(`[wake-cascade] Projection update blocked for "${participantKey}" while another working-dir session is running`)
                     clearParticipantQueueRunning(threadId, participantKey)
+                    await threadManager.setParticipantStatus(threadId, participantKey, { type: 'idle' })
                     getSessionQueue(threadId).enqueue(participantKey, target)
                     result.queued.push(participantKey)
                     scheduleBlockedWakeRetry(
@@ -437,15 +436,18 @@ async function injectWakeTarget(
 
         result.injected.push(participantKey)
 
-        const { waitForSessionToSettle } = await import('../../lib/chat-session.js')
-        void waitForSessionToSettle(
+        void resolveActSessionSettlementOutcome(
             oc,
             sessionId,
-            { directory: executionDir },
+            executionDir,
             { timeoutMs: 30 * 60_000, pollMs: 250, requireObservedBusy: true },
-        ).then((settled) => {
-            if (!settled) {
+        ).then((outcome) => {
+            if (outcome.kind === 'timeout') {
                 console.warn(`[wake-cascade] Session ${sessionId} for "${participantKey}" did not settle before timeout`)
+                void threadManager.setParticipantStatus(threadId, participantKey, {
+                    type: 'error',
+                    message: outcome.message,
+                }).catch(() => {})
                 return drainParticipantQueueAfterSettlement(
                     participantKey,
                     actDefinition,
@@ -455,32 +457,15 @@ async function injectWakeTarget(
                     workingDir,
                 )
             }
-            return Promise.all([
-                import('../../lib/opencode-errors.js'),
-                import('../../lib/chat-session.js'),
-            ]).then(async ([{ unwrapOpencodeResult }, { extractNonRetryableSessionError }]) => {
-                const rawMessages = unwrapOpencodeResult<unknown>(await oc.session.messages({
-                    sessionID: sessionId,
-                    directory: executionDir,
-                }))
-                const messages = Array.isArray(rawMessages) ? rawMessages : []
-                const fatalError = extractNonRetryableSessionError(messages)
-                if (fatalError) {
-                    tripParticipantCircuit(threadId, participantKey, fatalError)
-                    console.warn(
-                        `[wake-cascade] Opened circuit for "${participantKey}" after non-retryable session error: ${fatalError}`,
-                    )
-                    return drainParticipantQueueAfterSettlement(
-                        participantKey,
-                        actDefinition,
-                        mailbox,
-                        threadManager,
-                        threadId,
-                        workingDir,
-                    )
-                }
-
-                clearParticipantCircuit(threadId, participantKey)
+            if (outcome.kind === 'fatal_error') {
+                void threadManager.setParticipantStatus(threadId, participantKey, {
+                    type: 'error',
+                    message: outcome.message,
+                }).catch(() => {})
+                tripParticipantCircuit(threadId, participantKey, outcome.message)
+                console.warn(
+                    `[wake-cascade] Opened circuit for "${participantKey}" after non-retryable session error: ${outcome.message}`,
+                )
                 return drainParticipantQueueAfterSettlement(
                     participantKey,
                     actDefinition,
@@ -489,7 +474,18 @@ async function injectWakeTarget(
                     threadId,
                     workingDir,
                 )
-            })
+            }
+
+            void threadManager.setParticipantStatus(threadId, participantKey, { type: 'idle' }).catch(() => {})
+            clearParticipantCircuit(threadId, participantKey)
+            return drainParticipantQueueAfterSettlement(
+                participantKey,
+                actDefinition,
+                mailbox,
+                threadManager,
+                threadId,
+                workingDir,
+            )
         }).then((drainResult) => {
             if (!drainResult) {
                 return
@@ -499,6 +495,10 @@ async function injectWakeTarget(
             result.errors.push(...drainResult.errors)
         }).catch((settleErr) => {
             console.error(`[wake-cascade] Failed waiting for session settle for "${participantKey}":`, settleErr)
+            void threadManager.setParticipantStatus(threadId, participantKey, {
+                type: 'error',
+                message: formatActSessionError(settleErr),
+            }).catch(() => {})
             void drainParticipantQueueAfterSettlement(
                 participantKey,
                 actDefinition,
@@ -511,7 +511,11 @@ async function injectWakeTarget(
 
         return result
     } catch (error: unknown) {
-        result.errors.push(`Wake injection failed for ${participantKey}: ${errorMessage(error)}`)
+        await threadManager.setParticipantStatus(threadId, participantKey, {
+            type: 'error',
+            message: formatActSessionError(error),
+        }).catch(() => {})
+        result.errors.push(`Wake injection failed for ${participantKey}: ${formatActSessionError(error)}`)
         const drainResult = await drainParticipantQueueAfterSettlement(
             participantKey,
             actDefinition,

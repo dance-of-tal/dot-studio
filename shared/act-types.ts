@@ -153,11 +153,23 @@ export type CallboardState = MailboxState
 
 export type ActThreadStatus = 'active' | 'idle' | 'completed' | 'interrupted'
 
+export interface ActParticipantSessionStatus {
+    type: 'idle' | 'busy' | 'retry' | 'error'
+    updatedAt: number
+    message?: string
+}
+
 export interface ActThread {
     id: string
     actId: string
     mailbox: MailboxState
     participantSessions: Record<string, string>
+    participantStatuses: Record<string, ActParticipantSessionStatus>
     createdAt: number
     status: ActThreadStatus
 }
+
+export type ActThreadSummary = Pick<
+    ActThread,
+    'id' | 'actId' | 'participantSessions' | 'participantStatuses' | 'createdAt' | 'status'
+>

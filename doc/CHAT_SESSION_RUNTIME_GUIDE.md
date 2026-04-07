@@ -163,6 +163,7 @@ Rule:
 - idle/compaction resync should go back through session commands
 - coalesced streaming text must never drop accumulated `message.part.delta` content when non-delta events arrive in the same flush window
 - session snapshot reconciliation must not regress in-flight assistant/system message content while the session is still busy or retrying
+- when OpenCode no longer reports a session status, Studio should treat a completed assistant snapshot as authoritative settlement and collapse the local optimistic loading bridge instead of waiting indefinitely for an explicit idle event
 - optimistic user mirrors and streamed assistant content should be reconciled in session commands, not patched ad hoc in UI components
 
 ## Runtime Guard Rules

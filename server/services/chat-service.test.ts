@@ -17,6 +17,8 @@ vi.mock('./opencode-projection/stage-projection-service.js', () => ({
 
 vi.mock('./session-ownership-service.js', () => ({
     createSessionOwnership: vi.fn(),
+    parseActSessionOwnershipOwnerId: vi.fn(),
+    resolveSessionOwnership: vi.fn(),
 }))
 
 vi.mock('./act-runtime/act-runtime-service.js', () => ({

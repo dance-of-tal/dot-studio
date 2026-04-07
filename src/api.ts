@@ -2,6 +2,7 @@
 
 import type {
     ActThreadStatus,
+    ActParticipantSessionStatus,
     AssetRef,
     DraftAsset,
     ModelConfig,
@@ -111,17 +112,47 @@ export const api = {
 
     actRuntime: {
         createThread: (actId: string, actDefinition?: Record<string, unknown>) =>
-            postJSON<{ ok: boolean; thread: { id: string; actId: string; status: ActThreadStatus; createdAt: number } }>(
+            postJSON<{
+                ok: boolean
+                thread: {
+                    id: string
+                    actId: string
+                    status: ActThreadStatus
+                    createdAt: number
+                    participantSessions: Record<string, string>
+                    participantStatuses: Record<string, ActParticipantSessionStatus>
+                }
+            }>(
                 `/api/act/${actId}/threads`,
                 actDefinition ? { actDefinition } : undefined,
             ),
         syncDefinition: (actId: string, actDefinition: Record<string, unknown>) =>
-            patchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: ActThreadStatus; createdAt: number; participantSessions: Record<string, string> }> }>(
+            patchJSON<{
+                ok: boolean
+                threads: Array<{
+                    id: string
+                    actId: string
+                    status: ActThreadStatus
+                    createdAt: number
+                    participantSessions: Record<string, string>
+                    participantStatuses: Record<string, ActParticipantSessionStatus>
+                }>
+            }>(
                 `/api/act/${actId}/runtime-definition`,
                 { actDefinition },
             ),
         listThreads: (actId: string) =>
-            fetchJSON<{ ok: boolean; threads: Array<{ id: string; actId: string; status: ActThreadStatus; createdAt: number; participantSessions: Record<string, string> }> }>(
+            fetchJSON<{
+                ok: boolean
+                threads: Array<{
+                    id: string
+                    actId: string
+                    status: ActThreadStatus
+                    createdAt: number
+                    participantSessions: Record<string, string>
+                    participantStatuses: Record<string, ActParticipantSessionStatus>
+                }>
+            }>(
                 `/api/act/${actId}/threads`,
             ),
         getThread: (actId: string, threadId: string) =>

@@ -1,9 +1,7 @@
-import type { PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import type { PerformerNode, WorkspaceAct } from '../../types'
 import { buildActParticipantChatKey } from '../../../shared/chat-targets'
 import { resolveActParticipantPerformer as resolveParticipantPerformer } from '../../lib/act-participants'
-import type { SessionStatus } from '../../store/session'
-import { resolveSessionActivity } from '../../store/session/session-activity'
+import type { ActThreadState } from '../../store/types'
 
 export function resolveActiveActParticipantKey(
     participantKeys: string[],
@@ -32,42 +30,21 @@ export function buildActiveActParticipantChatKey(
 }
 
 export function buildActParticipantLoadingStates(params: {
-    actId: string
-    threadId: string | null
+    currentThread: ActThreadState | null
     participantKeys: string[]
-    chatKeyToSession: Record<string, string>
-    sessionLoading: Record<string, boolean>
-    seMessages: Record<string, import('../../types').ChatMessage[]>
-    seStatuses: Record<string, SessionStatus>
-    sePermissions: Record<string, PermissionRequest>
-    seQuestions: Record<string, QuestionRequest>
 }) {
     const {
-        actId,
-        threadId,
+        currentThread,
         participantKeys,
-        chatKeyToSession,
-        sessionLoading,
-        seMessages,
-        seStatuses,
-        sePermissions,
-        seQuestions,
     } = params
-    if (!threadId) {
+    if (!currentThread) {
         return new Map<string, boolean>()
     }
 
     return new Map(
         participantKeys.map((participantKey) => {
-            const participantChatKey = buildActParticipantChatKey(actId, threadId, participantKey)
-            const participantSessionId = chatKeyToSession[participantChatKey]
-            return [participantKey, participantSessionId ? resolveSessionActivity({
-                loading: !!sessionLoading[participantSessionId],
-                status: seStatuses[participantSessionId],
-                messages: seMessages[participantSessionId] || [],
-                permission: sePermissions[participantSessionId] || null,
-                question: seQuestions[participantSessionId] || null,
-            }).isActive : false]
+            const status = currentThread.participantStatuses?.[participantKey]?.type
+            return [participantKey, status === 'busy' || status === 'retry']
         }),
     )
 }

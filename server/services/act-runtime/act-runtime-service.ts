@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid'
-import type { ActDefinition, ConditionExpr, MailboxEvent } from '../../../shared/act-types.js'
+import type { ActDefinition, ConditionExpr, MailboxEvent, ActThreadSummary } from '../../../shared/act-types.js'
 import { SafetyGuard } from './safety-guard.js'
 import { ThreadManager } from './thread-manager.js'
 import {
@@ -382,7 +382,10 @@ class ActRuntimeService {
     async createThread(actId: string, actDefinition?: ActDefinition) {
         const thread = await this.threadManager.createThread(actId, actDefinition)
         await this.prewarmActParticipantProjections(actDefinition)
-        return { ok: true as const, thread }
+        return {
+            ok: true as const,
+            thread: this.threadManager.getThreadSummary(thread.id) as ActThreadSummary,
+        }
     }
 
     async getActDefinition(threadId: string) {
@@ -405,7 +408,7 @@ class ActRuntimeService {
 
     async getThread(threadId: string) {
         await this.ensureThreadsLoaded()
-        const thread = this.threadManager.getThread(threadId)
+        const thread = this.threadManager.getThreadSummary(threadId)
         if (!thread) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
         }
@@ -431,11 +434,22 @@ class ActRuntimeService {
     async markParticipantSessionBusy(threadId: string, participantKey: string) {
         await this.ensureThreadsLoaded()
         markParticipantQueueRunning(threadId, participantKey)
+        await this.threadManager.setParticipantStatus(threadId, participantKey, { type: 'busy' })
     }
 
     async clearParticipantSessionBusy(threadId: string, participantKey: string) {
         await this.ensureThreadsLoaded()
         clearParticipantQueueRunning(threadId, participantKey)
+        await this.threadManager.setParticipantStatus(threadId, participantKey, { type: 'idle' })
+    }
+
+    async setParticipantSessionStatus(
+        threadId: string,
+        participantKey: string,
+        status: { type: 'idle' | 'busy' | 'retry' | 'error'; message?: string },
+    ) {
+        await this.ensureThreadsLoaded()
+        await this.threadManager.setParticipantStatus(threadId, participantKey, status)
     }
 
     async tripParticipantAutoWakeCircuit(threadId: string, participantKey: string, reason: string) {

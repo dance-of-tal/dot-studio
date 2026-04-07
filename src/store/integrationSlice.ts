@@ -21,19 +21,34 @@ import { createEventIngest } from './session/event-ingest'
 import { selectStreamTarget } from './session/session-selectors'
 import type { SessionStreamTarget } from './session/session-selectors'
 import {
+    clearChatSessionView,
     registerSessionBinding,
     syncSessionSnapshot,
 } from './session'
 import { hasRunningStudioSessions } from './runtime-reload-utils'
 import {
-    createSessionRecoveryCoordinator,
-    shouldStartActSessionRecovery,
-    shouldStopSessionRecovery,
+    applyAuthoritativeActThreads,
+    buildDeletedActThreadState,
+    listActThreadChatKeys,
+} from './act-slice-helpers'
+import {
+    createSessionSupervisor,
+    shouldStartSessionSupervision,
+    shouldStopSessionSupervision,
 } from './chat/session-recovery'
 
 type ChatEvent = {
     type?: string
     properties?: Record<string, unknown>
+}
+
+type ActThreadRuntimeSnapshot = {
+    id: string
+    actId: string
+    status: 'active' | 'idle' | 'completed' | 'interrupted'
+    participantSessions: Record<string, string>
+    participantStatuses: Record<string, { type: 'idle' | 'busy' | 'retry' | 'error'; updatedAt: number; message?: string }>
+    createdAt: number
 }
 
 const CHAT_EVENT_TYPES = new Set([
@@ -43,6 +58,12 @@ const CHAT_EVENT_TYPES = new Set([
     'permission.asked', 'permission.replied',
     'question.asked', 'question.replied', 'question.rejected',
     'todo.updated',
+])
+
+const ACT_STATUS_TRANSPORT_EVENT_TYPES = new Set([
+    'session.status',
+    'session.idle',
+    'session.error',
 ])
 
 const FAILED_RESOLVE_RETRY_MS = 2_000
@@ -138,7 +159,7 @@ export const createIntegrationSlice: StateCreator<
         pendingSessionEvents.set(sessionId, queue)
     }
 
-    function flushPendingSessionEvents(sessionId: string) {
+    function takePendingSessionEvents(sessionId: string) {
         const queue = pendingSessionEvents.get(sessionId)
         if (!queue?.length) {
             return []
@@ -148,9 +169,6 @@ export const createIntegrationSlice: StateCreator<
             sessionId,
             count: queue.length,
         })
-        for (const bufferedEvent of queue) {
-            eventIngest.enqueue(bufferedEvent)
-        }
         return queue
     }
 
@@ -234,7 +252,7 @@ export const createIntegrationSlice: StateCreator<
         }
     }
 
-    const sessionRecovery = createSessionRecoveryCoordinator({
+    const sessionSupervisor = createSessionSupervisor({
         get,
         set,
         syncSessionMessages: (chatKey, sessionId) => syncSessionSnapshot(set, get, chatKey, sessionId),
@@ -242,33 +260,73 @@ export const createIntegrationSlice: StateCreator<
         setSessionLoading: (sessionId, loading) => get().setSessionLoading(sessionId, loading),
     })
 
-    function reconcileActSessionRecovery(
+    function reconcileSessionSupervision(
         target: SessionStreamTarget | null,
         sessionId: string,
         events: ChatEvent[],
     ) {
-        if (!target || target.kind !== 'act-participant') {
+        if (!target || target.kind === 'act-participant') {
             return
         }
 
         let nextAction: 'start' | 'stop' | null = null
         for (const event of events) {
-            if (shouldStopSessionRecovery(event)) {
+            if (shouldStopSessionSupervision(event)) {
                 nextAction = 'stop'
                 continue
             }
-            if (shouldStartActSessionRecovery(event)) {
+            if (shouldStartSessionSupervision(event)) {
                 nextAction = 'start'
             }
         }
 
         if (nextAction === 'stop') {
-            sessionRecovery.stop(sessionId)
+            sessionSupervisor.stop(sessionId)
             return
         }
 
         if (nextAction === 'start') {
-            sessionRecovery.schedule(target.chatKey, sessionId)
+            sessionSupervisor.schedule(streamTargetToChatKey(target), sessionId)
+        }
+    }
+
+    function shouldIgnoreTransportEvent(target: SessionStreamTarget | null, event: ChatEvent) {
+        return target?.kind === 'act-participant' && !!event.type && ACT_STATUS_TRANSPORT_EVENT_TYPES.has(event.type)
+    }
+
+    function processResolvedSessionEvents(
+        target: SessionStreamTarget | null,
+        sessionId: string,
+        events: ChatEvent[],
+    ) {
+        if (!target) {
+            return
+        }
+
+        reconcileSessionSupervision(target, sessionId, events)
+        for (const event of events) {
+            if (!event.type || !CHAT_EVENT_TYPES.has(event.type) || shouldIgnoreTransportEvent(target, event)) {
+                continue
+            }
+            eventIngest.enqueue(event)
+        }
+    }
+
+    async function handleActThreadUpdated(thread: ActThreadRuntimeSnapshot) {
+        const existingThreads = get().actThreads[thread.actId] || []
+        const nextThreads = existingThreads.some((entry) => entry.id === thread.id)
+            ? existingThreads.map((entry) => (entry.id === thread.id ? thread : entry))
+            : [...existingThreads, thread]
+
+        await applyAuthoritativeActThreads(get, set, thread.actId, nextThreads)
+    }
+
+    function handleActThreadDeleted(actId: string, threadId: string) {
+        const state = get()
+        const removedChatKeys = listActThreadChatKeys(state, actId, threadId)
+        set((current) => buildDeletedActThreadState(current, actId, threadId))
+        for (const chatKey of removedChatKeys) {
+            clearChatSessionView(get, chatKey)
         }
     }
 
@@ -303,10 +361,10 @@ export const createIntegrationSlice: StateCreator<
                     ownerKind: result.ownerKind,
                 })
                 registerResolvedSessionBinding(sessionId, result.ownerId)
-                const queuedEvents = flushPendingSessionEvents(sessionId)
+                const queuedEvents = takePendingSessionEvents(sessionId)
                 const target = repairKnownSessionBinding(sessionId) || resolveSessionTarget(get(), sessionId)
                 if (target) {
-                    reconcileActSessionRecovery(target, sessionId, queuedEvents)
+                    processResolvedSessionEvents(target, sessionId, queuedEvents)
                     void syncSessionMessages(target, sessionId, { reason: 'lazy-resolve' })
                 }
             })
@@ -352,6 +410,22 @@ export const createIntegrationSlice: StateCreator<
                     return
                 }
 
+                 if (event.type === 'act.thread.updated') {
+                    const thread = (event.properties as { thread?: ActThreadRuntimeSnapshot } | undefined)?.thread
+                    if (thread) {
+                        void handleActThreadUpdated(thread)
+                    }
+                    return
+                }
+
+                if (event.type === 'act.thread.deleted') {
+                    const properties = event.properties as { actId?: string; threadId?: string } | undefined
+                    if (properties?.actId && properties.threadId) {
+                        handleActThreadDeleted(properties.actId, properties.threadId)
+                    }
+                    return
+                }
+
                 const rawProps = event.properties as {
                     sessionID?: string
                     sessionId?: string
@@ -387,8 +461,11 @@ export const createIntegrationSlice: StateCreator<
                         tryLazyResolveSession(sessionID)
                         return
                     }
-                    flushPendingSessionEvents(sessionID)
-                    reconcileActSessionRecovery(knownTarget, sessionID, [event])
+                    processResolvedSessionEvents(knownTarget, sessionID, [
+                        ...takePendingSessionEvents(sessionID),
+                        event,
+                    ])
+                    return
                 }
 
                 if (event.type && CHAT_EVENT_TYPES.has(event.type)) {
@@ -412,7 +489,7 @@ export const createIntegrationSlice: StateCreator<
             reconnectEventSource()
         },
         onSessionIdle: (sessionId: string) => {
-            sessionRecovery.stop(sessionId)
+            sessionSupervisor.stop(sessionId)
             logChatDebug('integration', 'session idle callback', { sessionId })
             void ensureSessionTarget(sessionId).then((target) => {
                 if (target) {
@@ -516,12 +593,20 @@ export const createIntegrationSlice: StateCreator<
             chatSlot.setWorkingDir(null)
             adapterSlot.setWorkingDir(null)
             eventIngest.dispose()
-            sessionRecovery.dispose()
+            sessionSupervisor.dispose()
             syncingSessions.clear()
             pendingResolves.clear()
             failedResolves.clear()
             lastSyncedAt.clear()
             pendingSessionEvents.clear()
+        },
+
+        watchSessionLifecycle: (chatKey, sessionId) => {
+            sessionSupervisor.schedule(chatKey, sessionId)
+        },
+
+        stopWatchingSessionLifecycle: (sessionId) => {
+            sessionSupervisor.stop(sessionId)
         },
 
         compilePrompt: async (performerId) => {

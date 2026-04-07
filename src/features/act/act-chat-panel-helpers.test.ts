@@ -76,60 +76,42 @@ describe('act chat panel helpers', () => {
         expect(buildActiveActParticipantChatKey('act-1', null, 'alpha')).toBeNull()
 
         expect(buildActParticipantLoadingStates({
-            actId: 'act-1',
-            threadId: 'thread-1',
+            currentThread: {
+                id: 'thread-1',
+                actId: 'act-1',
+                status: 'idle',
+                participantSessions: {
+                    alpha: 'session-1',
+                    beta: 'session-2',
+                },
+                participantStatuses: {
+                    alpha: { type: 'busy', updatedAt: 1 },
+                    beta: { type: 'idle', updatedAt: 1 },
+                },
+                createdAt: 1,
+            },
             participantKeys: ['alpha', 'beta'],
-            chatKeyToSession: {
-                'act:act-1:thread:thread-1:participant:alpha': 'session-1',
-                'act:act-1:thread:thread-1:participant:beta': 'session-2',
-            },
-            sessionLoading: {
-                'session-1': true,
-                'session-2': false,
-            },
-            seMessages: {},
-            seStatuses: {},
-            sePermissions: {},
-            seQuestions: {},
         })).toEqual(new Map([
             ['alpha', true],
             ['beta', false],
         ]))
     })
 
-    it('treats wait_until parked sessions as not loading', () => {
+    it('treats idle participant runtime states as not loading', () => {
         expect(buildActParticipantLoadingStates({
-            actId: 'act-1',
-            threadId: 'thread-1',
+            currentThread: {
+                id: 'thread-1',
+                actId: 'act-1',
+                status: 'idle',
+                participantSessions: {
+                    alpha: 'session-1',
+                },
+                participantStatuses: {
+                    alpha: { type: 'idle', updatedAt: 1 },
+                },
+                createdAt: 1,
+            },
             participantKeys: ['alpha'],
-            chatKeyToSession: {
-                'act:act-1:thread:thread-1:participant:alpha': 'session-1',
-            },
-            sessionLoading: {
-                'session-1': true,
-            },
-            seMessages: {
-                'session-1': [{
-                    id: 'msg-1',
-                    role: 'assistant',
-                    content: '',
-                    timestamp: 1,
-                    parts: [{
-                        id: 'tool-1',
-                        type: 'tool',
-                        tool: {
-                            name: 'wait_until',
-                            callId: 'call-1',
-                            status: 'completed',
-                        },
-                    }],
-                }],
-            },
-            seStatuses: {
-                'session-1': { type: 'busy' },
-            },
-            sePermissions: {},
-            seQuestions: {},
         })).toEqual(new Map([
             ['alpha', false],
         ]))

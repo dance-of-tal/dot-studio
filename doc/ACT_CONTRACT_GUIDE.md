@@ -211,8 +211,16 @@ Thread runtime state includes:
 - shared board entries
 - wake conditions
 - `participantSessions`
+- `participantStatuses`
 - event history
 - thread status
+
+Runtime ownership rules:
+
+- OpenCode remains the raw source of truth for a session id's execution state
+- Studio runtime is the canonical source of truth for Act-visible participant state
+- Studio server derives and persists `participantStatuses` per thread participant
+- Studio server pushes `act.thread.updated` snapshots so the client does not have to infer Act participant busy/idle state from raw OpenCode transport events
 
 These runtime fields must never be written into installed or published Act assets.
 Within runtime persistence, `board.json` is the only durable source of truth for board entries.
@@ -229,6 +237,7 @@ Participant sessions receive four generic collaboration tools:
 `message_teammate` recipient rules:
 
 - pass the participant display name exactly as shown in the current agent context
+- the `Valid Teammates` list only includes participants that the current participant may message under the configured relation direction
 - do not pass relation names such as `participant_1_to_participant_2`
 
 Runtime behavior rules:

@@ -46,10 +46,31 @@ describe('performer prompt projection', () => {
         )
 
         const system = compiled.agentContents.build
-        expect(system).toContain('# Core Instructions')
-        expect(system).toContain('No core instruction asset is configured.')
         expect(system).toContain('# Collaboration Context')
         expect(system).toContain('# Available Agents')
         expect(system).toContain('agent="agent_peer"')
+    })
+
+    it('omits a synthetic TAL section when no TAL is configured', async () => {
+        const compiled = await compilePerformer(
+            '/Users/junhoyoon/windsurfpjt/dance-of-tal/studio',
+            {
+                performerId: 'reviewer',
+                performerName: 'Reviewer',
+                talRef: null,
+                model: { provider: 'openai', modelId: 'gpt-5' },
+                modelVariant: null,
+                workspaceHash: 'workspacehash',
+                executionDir: '/tmp/performer-projection-test',
+                scope: 'stage',
+                skillNames: [],
+                toolMap: {},
+            },
+            [],
+        )
+
+        const system = compiled.agentContents.build
+        expect(system).not.toContain('# Core Instructions')
+        expect(system).not.toContain('No core instruction asset is configured.')
     })
 })

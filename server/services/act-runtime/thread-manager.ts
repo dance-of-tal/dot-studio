@@ -13,12 +13,20 @@
 import { nanoid } from 'nanoid'
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
-import type { ActThread, ActThreadStatus, MailboxEvent, ActDefinition } from '../../../shared/act-types.js'
+import type {
+    ActThread,
+    ActThreadStatus,
+    MailboxEvent,
+    ActDefinition,
+    ActParticipantSessionStatus,
+    ActThreadSummary,
+} from '../../../shared/act-types.js'
 import type { SharedAssetRef } from '../../../shared/chat-contracts.js'
 import { Mailbox } from './mailbox.js'
 import { EventLogger } from './event-logger.js'
 import { saveBoardToFile, loadBoardFromFile } from './board-persistence.js'
 import { workspaceActRuntimeDir } from '../../lib/config.js'
+import { publishActThreadDeleted, publishActThreadUpdated } from './act-runtime-events.js'
 
 // ── Thread runtime state ────────────────────────────────
 
@@ -36,6 +44,7 @@ interface PersistedThreadState {
     id: string
     actId: string
     participantSessions: Record<string, string>
+    participantStatuses: Record<string, ActParticipantSessionStatus>
     retiredParticipantSessions: Record<string, string[]>
     createdAt: number
     status: ActThreadStatus
@@ -57,6 +66,12 @@ function sameSharedAssetRef(left: SharedAssetRef, right: SharedAssetRef) {
         return left.urn === right.urn
     }
     return false
+}
+
+function cloneParticipantStatuses(participantStatuses: Record<string, ActParticipantSessionStatus>) {
+    return Object.fromEntries(
+        Object.entries(participantStatuses || {}).map(([participantKey, status]) => [participantKey, { ...status }]),
+    )
 }
 
 
@@ -91,6 +106,7 @@ export class ThreadManager {
                 id: runtime.thread.id,
                 actId: runtime.thread.actId,
                 participantSessions: { ...runtime.thread.participantSessions },
+                participantStatuses: cloneParticipantStatuses(runtime.thread.participantStatuses),
                 retiredParticipantSessions: Object.fromEntries(
                     Object.entries(runtime.retiredParticipantSessions).map(([key, sessionIds]) => [key, [...sessionIds]]),
                 ),
@@ -152,6 +168,7 @@ export class ThreadManager {
                             actId: persistedThread.actId,
                             mailbox: mailbox.getState(),
                             participantSessions: { ...(persistedThread.participantSessions || {}) },
+                            participantStatuses: cloneParticipantStatuses(persistedThread.participantStatuses || {}),
                             createdAt: persistedThread.createdAt,
                             status: persistedThread.status,
                         },
@@ -179,6 +196,7 @@ export class ThreadManager {
                 wakeConditions: [],
             },
             participantSessions: {},
+            participantStatuses: {},
             createdAt: Date.now(),
             status: 'active',
         }
@@ -197,6 +215,7 @@ export class ThreadManager {
 
         // WS5: persist immediately
         await this.persistThread(runtime)
+        this.publishThreadSummary(runtime)
 
         return thread
     }
@@ -207,6 +226,12 @@ export class ThreadManager {
         // Sync mailbox state snapshot into thread
         runtime.thread.mailbox = runtime.mailbox.getState()
         return runtime.thread
+    }
+
+    getThreadSummary(threadId: string): ActThreadSummary | null {
+        const runtime = this.threads.get(threadId)
+        if (!runtime) return null
+        return this.buildThreadSummary(runtime)
     }
 
     getThreadRuntime(threadId: string): ThreadRuntime | null {
@@ -224,12 +249,11 @@ export class ThreadManager {
         return ids
     }
 
-    listThreads(actId: string): ActThread[] {
-        const results: ActThread[] = []
+    listThreads(actId: string): ActThreadSummary[] {
+        const results: ActThreadSummary[] = []
         for (const runtime of this.threads.values()) {
             if (runtime.thread.actId === actId) {
-                runtime.thread.mailbox = runtime.mailbox.getState()
-                results.push(runtime.thread)
+                results.push(this.buildThreadSummary(runtime))
             }
         }
         return results
@@ -240,6 +264,7 @@ export class ThreadManager {
         if (!runtime) return false
         const actId = runtime.thread.actId
         this.threads.delete(threadId)
+        publishActThreadDeleted(this._workingDir, actId, threadId)
         // Remove persisted directory
         const dir = join(workspaceActRuntimeDir(this._workspaceId, actId, threadId))
         try {
@@ -278,6 +303,7 @@ export class ThreadManager {
         if (runtime) {
             runtime.thread.status = status
             await this.persistThread(runtime)
+            this.publishThreadSummary(runtime)
         }
     }
 
@@ -296,7 +322,12 @@ export class ThreadManager {
 
         const sessionId = createSessionId()
         runtime.thread.participantSessions[participantKey] = sessionId
+        runtime.thread.participantStatuses[participantKey] = runtime.thread.participantStatuses[participantKey] || {
+            type: 'idle',
+            updatedAt: Date.now(),
+        }
         await this.persistThread(runtime)
+        this.publishThreadSummary(runtime)
         return sessionId
     }
 
@@ -331,13 +362,39 @@ export class ThreadManager {
             if (removed || performerChanged) {
                 this.retireParticipantSession(runtime, participantKey, sessionId)
                 delete nextSessions[participantKey]
+                delete runtime.thread.participantStatuses[participantKey]
             }
         }
 
         runtime.thread.participantSessions = nextSessions
         runtime.actDefinition = nextActDefinition
         await this.persistThread(runtime)
+        this.publishThreadSummary(runtime)
         return true
+    }
+
+    async setParticipantStatus(
+        threadId: string,
+        participantKey: string,
+        status: Pick<ActParticipantSessionStatus, 'type' | 'message'>,
+    ): Promise<ActParticipantSessionStatus | null> {
+        const runtime = this.threads.get(threadId)
+        if (!runtime) {
+            return null
+        }
+
+        const nextStatus: ActParticipantSessionStatus = {
+            type: status.type,
+            updatedAt: Date.now(),
+            ...(status.message ? { message: status.message } : {}),
+        }
+        runtime.thread.participantStatuses = {
+            ...runtime.thread.participantStatuses,
+            [participantKey]: nextStatus,
+        }
+        await this.persistThread(runtime)
+        this.publishThreadSummary(runtime)
+        return nextStatus
     }
 
     // ── Event logging ───────────────────────────────
@@ -443,5 +500,20 @@ export class ThreadManager {
             }
         }
         return count
+    }
+
+    private buildThreadSummary(runtime: ThreadRuntime): ActThreadSummary {
+        return {
+            id: runtime.thread.id,
+            actId: runtime.thread.actId,
+            participantSessions: { ...runtime.thread.participantSessions },
+            participantStatuses: cloneParticipantStatuses(runtime.thread.participantStatuses),
+            createdAt: runtime.thread.createdAt,
+            status: runtime.thread.status,
+        }
+    }
+
+    private publishThreadSummary(runtime: ThreadRuntime) {
+        publishActThreadUpdated(this._workingDir, this.buildThreadSummary(runtime))
     }
 }

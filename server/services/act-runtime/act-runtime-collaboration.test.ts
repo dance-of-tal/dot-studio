@@ -83,6 +83,40 @@ describe('collaboration context rewrite', () => {
         expect(context).not.toContain('act_send_message')
     })
 
+    it('lists only outbound or bidirectional teammates as valid message recipients', () => {
+        const oneWayActDefinition: ActDefinition = {
+            id: 'act-one-way',
+            name: 'One Way Team',
+            participants: {
+                Lead: {
+                    performerRef: { kind: 'draft', draftId: 'lead-performer' },
+                },
+                Researcher: {
+                    performerRef: { kind: 'draft', draftId: 'researcher-performer' },
+                },
+            },
+            relations: [
+                {
+                    id: 'rel-1',
+                    between: ['Lead', 'Researcher'],
+                    direction: 'one-way',
+                    name: 'Lead Delegates',
+                    description: 'Lead can delegate work to Researcher.',
+                },
+            ],
+        }
+
+        const researcherContext = buildActContext(oneWayActDefinition, 'Researcher')
+
+        expect(researcherContext).toContain('# Direct Connections')
+        expect(researcherContext).toContain('Researcher ← Lead')
+        expect(researcherContext).not.toContain('# Valid Teammates')
+
+        const leadContext = buildActContext(oneWayActDefinition, 'Lead')
+        expect(leadContext).toContain('# Valid Teammates')
+        expect(leadContext).toContain('Use these names as `recipient` values: Researcher')
+    })
+
     it('builds wake prompts from transient updates only', () => {
         const mailbox = new Mailbox()
         mailbox.addMessage({

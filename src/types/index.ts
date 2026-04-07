@@ -213,6 +213,8 @@ export type {
     MailboxState,
     CallboardState,
     ActThread,
+    ActThreadSummary,
+    ActParticipantSessionStatus,
     ActThreadStatus,
 } from '../../shared/act-types'
 

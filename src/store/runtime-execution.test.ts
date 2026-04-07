@@ -145,6 +145,52 @@ describe('preparePendingRuntimeExecution', () => {
         expect(result.requiresDispose).toBe(true)
     })
 
+    it('ignores stale optimistic loading once a settled assistant snapshot exists even without explicit idle status', async () => {
+        const state = createState({
+            projectionDirty: {
+                performerIds: ['performer-2'],
+                actIds: [],
+                draftIds: [],
+                workspaceWide: false,
+            },
+            sessionLoading: { 'session-1': true },
+            seMessages: {
+                'session-1': [{
+                    id: 'msg-1',
+                    role: 'assistant',
+                    content: 'done',
+                    timestamp: 1,
+                    parts: [{
+                        id: 'part-1',
+                        type: 'step-finish',
+                    }],
+                }],
+            },
+            sessionToChatKey: { 'session-1': 'performer-2' },
+            performers: [
+                {
+                    id: 'performer-2',
+                    name: 'Performer 2',
+                    talRef: null,
+                    danceRefs: [],
+                    model: null,
+                    mcpServerNames: [],
+                    scope: 'shared',
+                    position: { x: 0, y: 0 },
+                },
+            ],
+            acts: [],
+        })
+
+        const result = await preparePendingRuntimeExecution(() => state, {
+            performerId: 'performer-2',
+            runtimeConfig: { talRef: null, danceRefs: [] },
+        })
+
+        expect(result.blocked).toBe(false)
+        expect(result.requiresDispose).toBe(true)
+    })
+
     it('blocks when a running session shares the same runtime draft', async () => {
         const state = createState({
             projectionDirty: {

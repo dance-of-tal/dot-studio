@@ -1,6 +1,7 @@
 import { getOpencode } from '../lib/opencode.js'
 import { sseEncode } from '../lib/sse.js'
 import { resolveSessionOwnership } from './session-ownership-service.js'
+import { subscribeActRuntimeEvents } from './act-runtime/act-runtime-events.js'
 
 const HEARTBEAT_INTERVAL_MS = 30_000
 const EXECUTION_DIRECTORY_REFRESH_MS = 1_000
@@ -24,6 +25,9 @@ export async function buildStudioChatEventStream(workingDir: string, abortSignal
             const connectingDirectories = new Set<string>()
             let heartbeatTimer: ReturnType<typeof setInterval> | null = null
             let refreshTimer: ReturnType<typeof setInterval> | null = null
+            const unsubscribeActRuntime = subscribeActRuntimeEvents(workingDir, (event) => {
+                enqueueEvent(event)
+            })
 
             const close = () => {
                 if (!active) {
@@ -38,6 +42,7 @@ export async function buildStudioChatEventStream(workingDir: string, abortSignal
                     clearInterval(refreshTimer)
                     refreshTimer = null
                 }
+                unsubscribeActRuntime()
                 subscribedDirectories.clear()
                 connectingDirectories.clear()
                 abortSignal?.removeEventListener('abort', close)

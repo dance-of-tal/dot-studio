@@ -3,9 +3,13 @@
    ═══════════════════════════════════════════ */
 
 .session-review {
-    border: 1px solid var(--border-subtle, #30363d);
+    --session-review-bg: var(--bg-panel);
+    --session-review-header-bg: color-mix(in srgb, var(--bg-hover) 80%, var(--bg-panel));
+    --session-review-border: var(--border-main);
+    --session-review-card-bg: var(--bg-main);
+    border: 1px solid var(--session-review-border);
     border-radius: 8px;
-    background: var(--bg-surface, #161b22);
+    background: var(--session-review-bg);
     overflow: hidden;
 }
 
@@ -14,14 +18,14 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid var(--border-subtle, #30363d);
-    background: var(--bg-base, #0d1117);
+    border-bottom: 1px solid var(--session-review-border);
+    background: var(--session-review-header-bg);
 }
 
 .session-review__title {
     font-size: 12px;
     font-weight: 600;
-    color: var(--text-primary, #e6edf3);
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     gap: 6px;
@@ -29,7 +33,7 @@
 
 .session-review__count {
     font-weight: 400;
-    color: var(--text-muted, #7d8590);
+    color: var(--text-muted);
     font-size: 11px;
 }
 
@@ -37,67 +41,39 @@
     margin-left: auto;
 }
 
-.session-review__toggle-all {
-    border: none;
-    background: transparent;
-    color: var(--accent, #58a6ff);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-
-.session-review__toggle-all:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.04));
-}
-
-/* ── File accordion ── */
+/* ── File panels ── */
 
 .session-review__files {
     display: flex;
     flex-direction: column;
+    gap: 10px;
+    padding: 10px;
 }
 
 .session-review__file {
-    border-bottom: 1px solid var(--border-subtle, #30363d);
-}
-
-.session-review__file:last-child {
-    border-bottom: none;
+    border: 1px solid var(--session-review-border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--session-review-card-bg);
 }
 
 .session-review__file-header {
     display: flex;
     align-items: center;
     gap: 6px;
-    width: 100%;
-    padding: 6px 12px;
-    border: none;
-    background: transparent;
-    color: var(--text-primary, #e6edf3);
-    cursor: pointer;
+    padding: 8px 12px;
+    background: var(--session-review-header-bg);
+    color: var(--text-primary);
     font-size: 12px;
     text-align: left;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-}
-
-.session-review__file-header:hover {
-    background: var(--bg-hover, rgba(255, 255, 255, 0.04));
-}
-
-.session-review__file[data-open="true"] .session-review__file-header {
-    background: var(--bg-base, #0d1117);
-    border-bottom: 1px solid var(--border-subtle, #30363d);
+    border-bottom: 1px solid var(--session-review-border);
 }
 
 .session-review__file-icon {
     display: flex;
     align-items: center;
     flex-shrink: 0;
-    color: var(--text-muted, #7d8590);
+    color: var(--text-muted);
 }
 
 .session-review__file-info {
@@ -109,13 +85,13 @@
 
 .session-review__filename {
     font-weight: 600;
-    color: var(--text-primary, #e6edf3);
+    color: var(--text-primary);
     font-size: 12px;
 }
 
 .session-review__directory {
     font-size: 10px;
-    color: var(--text-muted, #7d8590);
+    color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -148,20 +124,20 @@
     background: color-mix(in srgb, #f85149 12%, transparent);
 }
 
-.session-review__chevron {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    color: var(--text-muted, #7d8590);
-}
-
 .session-review__file-content {
-    background: var(--bg-base, #0d1117);
+    background: var(--session-review-card-bg);
 }
 
 .session-review__empty-diff {
     padding: 12px;
     text-align: center;
-    color: var(--text-muted, #7d8590);
+    color: var(--text-muted);
     font-size: 11px;
+}
+
+[data-theme="dark"] .session-review {
+    --session-review-bg: #161b22;
+    --session-review-header-bg: #0d1117;
+    --session-review-border: #30363d;
+    --session-review-card-bg: #0d1117;
 }

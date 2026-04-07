@@ -16,6 +16,7 @@ import type {
     WorkspaceAct,
     WorkspaceActParticipantBinding,
     ActRelation,
+    ActParticipantSessionStatus,
 } from '../types'
 import type { AdapterViewProjection } from '../../shared/adapter-view'
 import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
@@ -223,6 +224,8 @@ export interface IntegrationSlice {
     initRealtimeEvents: () => void
     forceReconnectRealtimeEvents: () => void
     cleanupRealtimeEvents: () => void
+    watchSessionLifecycle: (chatKey: string, sessionId: string) => void
+    stopWatchingSessionLifecycle: (sessionId: string) => void
 
     // Compile Prompt (imperative, used by chat)
     compilePrompt: (performerId: string) => Promise<string>
@@ -240,6 +243,7 @@ export interface ActThreadState {
     name?: string  // client-side display name
     status: 'active' | 'idle' | 'completed' | 'interrupted'
     participantSessions: Record<string, string>  // participantKey → sessionId
+    participantStatuses: Record<string, ActParticipantSessionStatus>
     createdAt: number
 }
 
