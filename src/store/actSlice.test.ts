@@ -131,4 +131,55 @@ describe('actSlice', () => {
             type: 'act',
         })
     })
+
+    it('keeps focus mode active when toggling another act visibility', () => {
+        const harness = createHarness({
+            ...createBaseState(),
+            acts: [
+                {
+                    id: 'act-1',
+                    name: 'Focused Act',
+                    position: { x: 100, y: 120 },
+                    width: 960,
+                    height: 720,
+                    participants: {},
+                    relations: [],
+                    createdAt: Date.now(),
+                    hidden: false,
+                },
+                {
+                    id: 'act-2',
+                    name: 'Hidden Target',
+                    position: { x: 520, y: 120 },
+                    width: 640,
+                    height: 800,
+                    participants: {},
+                    relations: [],
+                    createdAt: Date.now(),
+                    hidden: true,
+                },
+            ],
+            focusSnapshot: {
+                nodeId: 'act-1',
+                type: 'act',
+                nodePosition: { x: 100, y: 120 },
+                nodeSize: { width: 640, height: 800 },
+                hiddenPerformerIds: [],
+                hiddenActIds: [],
+                hiddenEditorIds: [],
+                hiddenTerminalIds: [],
+                assetLibraryOpen: false,
+                assistantOpen: false,
+                terminalOpen: false,
+            },
+        } as StudioState)
+
+        harness.get().toggleActVisibility('act-2')
+
+        expect(harness.get().focusSnapshot).toMatchObject({
+            nodeId: 'act-1',
+            hiddenActIds: ['act-2'],
+        })
+        expect(harness.get().acts.find((entry) => entry.id === 'act-2')?.hidden).toBe(true)
+    })
 })

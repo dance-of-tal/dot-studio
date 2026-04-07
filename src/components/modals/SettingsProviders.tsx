@@ -7,7 +7,11 @@
 import { useMemo, useState } from 'react'
 import type { ProviderAuthMethod, ProviderCard, OauthFlow } from './settings-utils'
 import type { ConnectedModel, ModelPickerState } from './settings-utils'
-import { getConnectedProviderCards, getPopularProviderCards } from './settings-utils'
+import {
+    getConnectedProviderCards,
+    getPopularProviderCards,
+    shouldShowProviderConnectModal,
+} from './settings-utils'
 import ProviderConnectModal from './ProviderConnectModal'
 
 interface SettingsProvidersProps {
@@ -17,8 +21,8 @@ interface SettingsProvidersProps {
     modelPicker: ModelPickerState | null
     setModelPicker: React.Dispatch<React.SetStateAction<ModelPickerState | null>>
     visibleModelPickerModels: ConnectedModel[]
-    openApiKeyFlow: (provider: ProviderCard) => void
     handleAuthMethod: (provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) => void
+    handleOauthPromptSubmit: (providerId: string) => void
     handleOauthCallback: (providerId: string) => void
     handleApiAuthSave: (providerId: string) => void
     dismissOauthFlow: (providerId: string) => void
@@ -31,7 +35,7 @@ interface SettingsProvidersProps {
 export default function SettingsProviders(props: SettingsProvidersProps) {
     const {
         providers, oauthFlows, setOauthFlows, modelPicker, setModelPicker,
-        visibleModelPickerModels, openApiKeyFlow, handleAuthMethod,
+        visibleModelPickerModels, handleAuthMethod, handleOauthPromptSubmit,
         handleOauthCallback, handleApiAuthSave, dismissOauthFlow,
         disconnectProvider, applyPickedModel,
         retryBrowserOauth, statusMessage,
@@ -48,13 +52,10 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
     )
     const connectFlow = connectTargetId ? oauthFlows[connectTargetId] : undefined
     const connectModelPicker = modelPicker?.providerId === connectTargetId ? modelPicker : null
-    const shouldShowConnectModal = Boolean(
-        connectTarget
-        && (
-            !connectTarget.connected
-            || connectFlow
-            || connectModelPicker
-        ),
+    const shouldShowConnectModal = shouldShowProviderConnectModal(
+        connectTarget,
+        connectFlow,
+        connectModelPicker,
     )
 
     return (
@@ -125,8 +126,8 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                     modelPicker={connectModelPicker}
                     visibleModelPickerModels={visibleModelPickerModels}
                     onClose={() => setConnectTargetId(null)}
-                    openApiKeyFlow={openApiKeyFlow}
                     handleAuthMethod={handleAuthMethod}
+                    handleOauthPromptSubmit={handleOauthPromptSubmit}
                     handleOauthCallback={handleOauthCallback}
                     handleApiAuthSave={handleApiAuthSave}
                     dismissOauthFlow={dismissOauthFlow}

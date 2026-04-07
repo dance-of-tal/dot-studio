@@ -2,8 +2,8 @@
  * useProviderAuth – Provider OAuth / API-key authentication logic
  * extracted from SettingsModal.
  *
- * Manages: OAuth flow state, browser-auth wait, API key save,
- * model picker, provider disconnect.
+ * Manages: OAuth flow state, browser-auth wait, provider-defined auth prompts,
+ * API key save, model picker, provider disconnect.
  */
 
 import { useMemo, useState } from 'react'
@@ -16,7 +16,13 @@ import type {
     ConnectedModel,
     ModelPickerState,
 } from './settings-utils'
-import { getProviderAuthSuccessAction } from './settings-utils'
+import {
+    areVisibleProviderPromptsComplete,
+    buildApiKeyProviderAuth,
+    buildVisibleProviderPromptInputs,
+    createPromptValueDraft,
+    getProviderAuthSuccessAction,
+} from './settings-utils'
 
 type ProjectConfigResponseLike = {
     config: {
@@ -27,8 +33,6 @@ type ProjectConfigResponseLike = {
         }>
     }
 }
-
-// ── Pure helpers ────────────────────────────────────────
 
 function sortConnectedModels(models: ConnectedModel[], providerId: string) {
     return models
@@ -51,7 +55,33 @@ function filterModelPickerModels(modelPicker: ModelPickerState) {
     })
 }
 
-// ── Hook ────────────────────────────────────────────────
+function buildApiInstructions(provider: ProviderCard, method?: ProviderAuthMethod) {
+    const hasPrompts = (method?.prompts || []).length > 0
+    if (!hasPrompts && provider.env.length > 0) {
+        return `Paste the credential for ${provider.name}. OpenCode will store it in its auth store for ${provider.env.join(', ')}.`
+    }
+    if (!hasPrompts) {
+        return `Paste the credential for ${provider.name}. OpenCode will store it in its auth store.`
+    }
+    return `Provide the required details for ${provider.name}. OpenCode will store the credential and provider metadata in its auth store.`
+}
+
+function findProviderMethod(
+    providers: ProviderCard[],
+    providerId: string,
+    methodIndex: number,
+) {
+    if (methodIndex < 0) {
+        return null
+    }
+
+    const provider = providers.find((entry) => entry.id === providerId)
+    if (!provider) {
+        return null
+    }
+
+    return provider.authMethods[methodIndex] || null
+}
 
 interface UseProviderAuthOptions {
     providers: ProviderCard[]
@@ -79,8 +109,6 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         () => modelPicker ? filterModelPickerModels(modelPicker) : [],
         [modelPicker],
     )
-
-    // ── Internal helpers ────────────────────────────────
 
     function clearProviderFlow(providerId: string) {
         setOauthFlows((current) => {
@@ -148,42 +176,94 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         }
     }
 
-    // ── Public operations ───────────────────────────────
-
-    function openApiKeyFlow(provider: ProviderCard, methodIndex = 0, label = 'API Key') {
+    function openApiKeyFlow(provider: ProviderCard, methodIndex = -1, method?: ProviderAuthMethod) {
         setModelPicker(null)
         setOauthFlows((current) => ({
             ...current,
             [provider.id]: {
+                authType: 'api',
                 methodIndex,
-                label,
+                label: method?.label || 'API Key',
                 mode: 'api',
-                instructions: provider.env.length > 0
-                    ? `Paste the credential for ${provider.name}. OpenCode will store it in its auth store for ${provider.env.join(', ')}.`
-                    : `Paste the credential for ${provider.name}. OpenCode will store it in its auth store.`,
+                instructions: buildApiInstructions(provider, method),
                 code: '',
                 submitting: false,
+                error: undefined,
+                prompts: method?.prompts || [],
+                promptValues: createPromptValueDraft(method?.prompts),
             },
         }))
     }
 
-    async function handleAuthMethod(provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) {
-        setError(null)
-        setStatusMessage(null)
+    function openOauthPromptFlow(provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) {
+        setModelPicker(null)
+        setOauthFlows((current) => ({
+            ...current,
+            [provider.id]: {
+                authType: 'oauth',
+                methodIndex,
+                label: method.label,
+                mode: 'prompt',
+                instructions: `Provide the required details for ${provider.name} to continue authorization.`,
+                code: '',
+                submitting: false,
+                error: undefined,
+                prompts: method.prompts || [],
+                promptValues: createPromptValueDraft(method.prompts),
+            },
+        }))
+    }
 
-        if (method.type === 'api') {
-            openApiKeyFlow(provider, methodIndex, method.label)
-            return
-        }
+    async function startOauthAuthorization(
+        provider: ProviderCard,
+        methodIndex: number,
+        method: ProviderAuthMethod,
+        promptValues: Record<string, string>,
+    ) {
+        const nextPromptValues = createPromptValueDraft(method.prompts, promptValues)
+
+        setOauthFlows((current) => ({
+            ...current,
+            [provider.id]: {
+                authType: 'oauth',
+                methodIndex,
+                label: method.label,
+                mode: 'prompt',
+                instructions: `Starting authorization for ${provider.name}…`,
+                code: '',
+                submitting: true,
+                error: undefined,
+                prompts: method.prompts || [],
+                promptValues: nextPromptValues,
+            },
+        }))
 
         try {
-            const authorization = await api.provider.oauthAuthorize(provider.id, methodIndex)
+            const promptFlow: OauthFlow = {
+                authType: 'oauth',
+                methodIndex,
+                label: method.label,
+                mode: 'prompt',
+                instructions: '',
+                code: '',
+                submitting: false,
+                prompts: method.prompts || [],
+                promptValues: nextPromptValues,
+            }
+            const authorization = await api.provider.oauthAuthorize(
+                provider.id,
+                methodIndex,
+                buildVisibleProviderPromptInputs(promptFlow.prompts, promptFlow.promptValues),
+            )
+
             if (authorization.url) {
                 window.open(authorization.url, '_blank', 'noopener,noreferrer')
             }
+
             setOauthFlows((current) => ({
                 ...current,
                 [provider.id]: {
+                    authType: 'oauth',
                     methodIndex,
                     label: method.label,
                     mode: authorization.method,
@@ -191,6 +271,9 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
                     instructions: authorization.instructions || '',
                     code: '',
                     submitting: authorization.method === 'auto',
+                    error: undefined,
+                    prompts: method.prompts || [],
+                    promptValues: nextPromptValues,
                 },
             }))
 
@@ -198,8 +281,57 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
                 void waitForBrowserOauth(provider.id, methodIndex)
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : String(err))
+            const message = err instanceof Error ? err.message : String(err)
+            setOauthFlows((current) => ({
+                ...current,
+                [provider.id]: {
+                    authType: 'oauth',
+                    methodIndex,
+                    label: method.label,
+                    mode: 'prompt',
+                    instructions: `Provide the required details for ${provider.name} to continue authorization.`,
+                    code: '',
+                    submitting: false,
+                    error: message,
+                    prompts: method.prompts || [],
+                    promptValues: nextPromptValues,
+                },
+            }))
         }
+    }
+
+    async function handleAuthMethod(provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) {
+        setError(null)
+        setStatusMessage(null)
+
+        if (method.type === 'api') {
+            openApiKeyFlow(provider, methodIndex, method)
+            return
+        }
+
+        if ((method.prompts || []).length > 0) {
+            openOauthPromptFlow(provider, methodIndex, method)
+            return
+        }
+
+        await startOauthAuthorization(provider, methodIndex, method, {})
+    }
+
+    async function handleOauthPromptSubmit(providerId: string) {
+        const flow = oauthFlows[providerId]
+        if (!flow || flow.authType !== 'oauth' || flow.mode !== 'prompt') {
+            return
+        }
+
+        const provider = providers.find((entry) => entry.id === providerId)
+        const method = findProviderMethod(providers, providerId, flow.methodIndex)
+        if (!provider || !method || method.type !== 'oauth') {
+            return
+        }
+
+        setError(null)
+        setStatusMessage(null)
+        await startOauthAuthorization(provider, flow.methodIndex, method, flow.promptValues)
     }
 
     async function handleOauthCallback(providerId: string) {
@@ -231,7 +363,17 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
 
     async function handleApiAuthSave(providerId: string) {
         const flow = oauthFlows[providerId]
-        if (!flow || flow.mode !== 'api' || !flow.code.trim()) {
+        if (
+            !flow
+            || flow.authType !== 'api'
+            || flow.mode !== 'api'
+            || !areVisibleProviderPromptsComplete(flow.prompts, flow.promptValues)
+        ) {
+            return
+        }
+
+        const payload = buildApiKeyProviderAuth(flow.code, flow.prompts, flow.promptValues)
+        if (!payload) {
             return
         }
 
@@ -242,10 +384,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         }))
 
         try {
-            await api.provider.setAuth(providerId, {
-                type: 'api',
-                key: flow.code.trim(),
-            })
+            await api.provider.setAuth(providerId, payload)
             useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
             const provider = providers.find((entry) => entry.id === providerId)
             await handleAuthSuccess(providerId, provider?.name || providerId)
@@ -287,7 +426,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
                 if (!current.includes(providerId)) {
                     await api.config.updateProject({
                         disabled_providers: [...current, providerId],
-                    }).catch(() => { /* best-effort */ })
+                    }).catch(() => {})
                     useStudioStore.getState().recordStudioChange({ kind: 'runtime_config' })
                 }
             }
@@ -314,7 +453,7 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
 
     async function retryBrowserOauth(providerId: string) {
         const flow = oauthFlows[providerId]
-        if (!flow || flow.mode !== 'auto') {
+        if (!flow || flow.authType !== 'oauth' || flow.mode !== 'auto') {
             return
         }
 
@@ -328,10 +467,6 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         void waitForBrowserOauth(providerId, flow.methodIndex)
     }
 
-    /**
-     * Call this when providers list is refreshed to clean up
-     * flows for providers that have become connected.
-     */
     function syncFlowsWithProviders(mergedProviders: ProviderCard[]) {
         setOauthFlows((current) => {
             let changed = false
@@ -352,8 +487,8 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         modelPicker,
         setModelPicker,
         visibleModelPickerModels,
-        openApiKeyFlow,
         handleAuthMethod,
+        handleOauthPromptSubmit,
         handleOauthCallback,
         handleApiAuthSave,
         dismissOauthFlow,

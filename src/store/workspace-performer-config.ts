@@ -19,6 +19,11 @@ import {
 import { buildExitFocusModeState } from './workspace-focus-actions'
 import { isPerformerAttachedToAct } from '../features/act/act-inspector-helpers'
 import { scheduleActRuntimeSync } from './act-slice-helpers'
+import {
+    resolveFocusTarget,
+    resolveNodeBaselineHidden,
+    setFocusSnapshotNodeHidden,
+} from '../lib/focus-utils'
 
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
@@ -267,6 +272,22 @@ export function updatePerformerAuthoringMeta(set: SetFn, get: GetFn, performerId
 
 export function togglePerformerVisibility(set: SetFn, _get: GetFn, id: string) {
     set((state) => {
+        const focusedTarget = resolveFocusTarget(state.focusSnapshot)
+        const currentHidden = resolveNodeBaselineHidden(
+            state.focusSnapshot,
+            id,
+            'performer',
+            !!state.performers.find((performer) => performer.id === id)?.hidden,
+        )
+        const nextHidden = !currentHidden
+
+        if (state.focusSnapshot && (focusedTarget?.id !== id || focusedTarget?.type !== 'performer')) {
+            return {
+                focusSnapshot: setFocusSnapshotNodeHidden(state.focusSnapshot, id, 'performer', nextHidden),
+                workspaceDirty: true,
+            }
+        }
+
         const focusExit = buildExitFocusModeState(state)
         const performers = (focusExit?.performers as StudioState['performers'] | undefined) || state.performers
 
@@ -274,7 +295,7 @@ export function togglePerformerVisibility(set: SetFn, _get: GetFn, id: string) {
             ...focusExit,
             performers: performers.map((performer) => (
                 performer.id === id
-                    ? { ...performer, hidden: !performer.hidden }
+                    ? { ...performer, hidden: nextHidden }
                     : performer
             )),
             workspaceDirty: true,

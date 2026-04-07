@@ -27,7 +27,11 @@ describe('createSessionSupervisor', () => {
         const syncSessionMessages = vi.fn().mockResolvedValue({ messages: [] })
         const setSessionStatus = vi.fn()
         const setSessionLoading = vi.fn()
-        const state = {
+        const state: {
+            sessionLoading: Record<string, boolean>
+            chatKeyToSession: Record<string, string>
+            sessionToChatKey: Record<string, string>
+        } = {
             sessionLoading: { 'session-1': true },
             chatKeyToSession: { 'performer-1': 'session-1' },
             sessionToChatKey: { 'session-1': 'performer-1' },

@@ -27,15 +27,14 @@ import {
     mergeMcpToolOverrides,
     type McpCatalog,
 } from '../../shared/mcp-catalog.js'
+import type {
+    ProviderAuthInput,
+    ProviderOauthAuthorization,
+} from '../../shared/provider-auth.js'
 
 type ResponseEnvelope<T> = { data?: T | null | undefined }
 type ProviderAuthStatus = Record<string, unknown>
-type OauthResponse = Record<string, unknown>
 type McpAuthResponse = Record<string, unknown>
-type ProviderAuthInput =
-    | { type: 'oauth'; refresh: string; access: string; expires: number; enterpriseUrl?: string; accountId?: string }
-    | { type: 'api'; key: string }
-    | { type: 'wellknown'; key: string; token: string }
 
 function extractResponseData<T>(response: unknown): T | undefined {
     if (!response || typeof response !== 'object' || !('data' in response)) {
@@ -67,11 +66,31 @@ function isProviderAuthInput(value: unknown): value is ProviderAuthInput {
     }
     if (auth.type === 'api') {
         return typeof auth.key === 'string'
+            && (auth.metadata === undefined || isStringRecord(auth.metadata))
     }
     if (auth.type === 'wellknown') {
         return typeof auth.key === 'string' && typeof auth.token === 'string'
     }
     return false
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return false
+    }
+    return Object.values(value as Record<string, unknown>).every((entry) => typeof entry === 'string')
+}
+
+function sanitizePromptInputs(inputs: unknown): Record<string, string> | undefined {
+    if (!isStringRecord(inputs)) {
+        return undefined
+    }
+
+    const entries = Object.entries(inputs)
+        .map(([key, value]) => [key.trim(), value] as const)
+        .filter(([key]) => key.length > 0)
+
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
 // ── Read-only OpenCode queries ─────────────────────────
@@ -231,18 +250,20 @@ export async function updateProjectOpenCodeConfig(directory: string, patch: unkn
     return nextConfig
 }
 
-export async function authorizeProviderOauth(directory: string, providerId: string, method: number) {
+export async function authorizeProviderOauth(directory: string, providerId: string, method: number, inputs?: unknown) {
     const oc = await getOpencode()
-    return unwrapOpencodeResult<OauthResponse>(await oc.provider.oauth.authorize({
+    const promptInputs = sanitizePromptInputs(inputs)
+    return unwrapOpencodeResult<ProviderOauthAuthorization>(await oc.provider.oauth.authorize({
         providerID: providerId,
         directory,
         method,
+        ...(promptInputs ? { inputs: promptInputs } : {}),
     }))
 }
 
 export async function completeProviderOauth(directory: string, providerId: string, method: number, code?: string) {
     const oc = await getOpencode()
-    const data = unwrapOpencodeResult<OauthResponse>(await oc.provider.oauth.callback({
+    const data = unwrapOpencodeResult<ProviderOauthAuthorization>(await oc.provider.oauth.callback({
         providerID: providerId,
         directory,
         method,

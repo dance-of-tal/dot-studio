@@ -40,7 +40,7 @@ AGENT.md
 AGENTS.md
 REFACTOR.md
 prd/
-# doc/
+doc/
 
 # Local config (may contain API keys or sensitive values)
 config.json

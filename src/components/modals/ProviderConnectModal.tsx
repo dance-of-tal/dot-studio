@@ -9,7 +9,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { X, Key, ExternalLink } from 'lucide-react'
 import type { ProviderCard, ProviderAuthMethod, OauthFlow, ConnectedModel, ModelPickerState } from './settings-utils'
-import { providerSupportsApiKey, labelForAuthMethod } from './settings-utils'
+import {
+    areVisibleProviderPromptsComplete,
+    buildProviderAuthOptions,
+    getVisibleProviderAuthPrompts,
+    labelForAuthMethod,
+} from './settings-utils'
 import './ProviderConnectModal.css'
 
 type Step = 'choose' | 'api' | 'oauth' | 'pick-model'
@@ -20,8 +25,8 @@ interface ProviderConnectModalProps {
     modelPicker: ModelPickerState | null
     visibleModelPickerModels: ConnectedModel[]
     onClose: () => void
-    openApiKeyFlow: (provider: ProviderCard) => void
     handleAuthMethod: (provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) => void
+    handleOauthPromptSubmit: (providerId: string) => void
     handleOauthCallback: (providerId: string) => void
     handleApiAuthSave: (providerId: string) => void
     dismissOauthFlow: (providerId: string) => void
@@ -37,8 +42,8 @@ export default function ProviderConnectModal({
     modelPicker,
     visibleModelPickerModels,
     onClose,
-    openApiKeyFlow,
     handleAuthMethod,
+    handleOauthPromptSubmit,
     handleOauthCallback,
     handleApiAuthSave,
     dismissOauthFlow,
@@ -47,33 +52,32 @@ export default function ProviderConnectModal({
     applyPickedModel,
     setModelPicker,
 }: ProviderConnectModalProps) {
-    const supportsApi = providerSupportsApiKey(provider)
-    const oauthMethods = provider.authMethods
-        .map((method, methodIndex) => ({ method, methodIndex }))
-        .filter(({ method }) => method.type === 'oauth')
+    const availableMethods = buildProviderAuthOptions(provider)
+    const defaultMethod = availableMethods.length === 1 ? availableMethods[0] : null
 
     // Determine current step
     const [selectedStep, setSelectedStep] = useState<Step | null>(null)
     const baseStep = useMemo<Step>(() => {
-        // If only one auth method, skip method chooser
-        if (supportsApi && oauthMethods.length === 0) return 'api'
-        if (!supportsApi && oauthMethods.length === 1) return 'oauth'
+        if (defaultMethod) {
+            return defaultMethod.method.type === 'api' ? 'api' : 'oauth'
+        }
         return 'choose'
-    }, [oauthMethods.length, supportsApi])
+    }, [defaultMethod])
 
     const step: Step = useMemo(() => {
         if (modelPicker) return 'pick-model'
-        if (flow?.mode === 'api') return 'api'
-        if (flow?.mode === 'code' || flow?.mode === 'auto') return 'oauth'
+        if (flow?.authType === 'api') return 'api'
+        if (flow?.authType === 'oauth') return 'oauth'
         return selectedStep ?? baseStep
-    }, [baseStep, flow?.mode, modelPicker, selectedStep])
+    }, [baseStep, flow?.authType, modelPicker, selectedStep])
 
-    // If step is 'api' and no flow yet, open it
     useEffect(() => {
-        if (step === 'api' && !flow) {
-            openApiKeyFlow(provider)
+        if (!defaultMethod || flow || modelPicker || selectedStep !== null) {
+            return
         }
-    }, [step, flow, provider, openApiKeyFlow])
+        setSelectedStep(defaultMethod.method.type === 'api' ? 'api' : 'oauth')
+        void handleAuthMethod(provider, defaultMethod.methodIndex, defaultMethod.method)
+    }, [defaultMethod, flow, handleAuthMethod, modelPicker, provider, selectedStep])
 
     function handleClose() {
         if (flow) dismissOauthFlow(provider.id)
@@ -83,11 +87,70 @@ export default function ProviderConnectModal({
 
     function handleMethodClick(methodIndex: number, method: ProviderAuthMethod) {
         setSelectedStep(method.type === 'api' ? 'api' : 'oauth')
-        if (method.type === 'api') {
-            openApiKeyFlow(provider)
-        } else {
-            handleAuthMethod(provider, methodIndex, method)
+        void handleAuthMethod(provider, methodIndex, method)
+    }
+
+    const visiblePrompts = useMemo(
+        () => flow ? getVisibleProviderAuthPrompts(flow.prompts, flow.promptValues) : [],
+        [flow],
+    )
+
+    const promptsComplete = flow
+        ? areVisibleProviderPromptsComplete(flow.prompts, flow.promptValues)
+        : false
+
+    function updatePromptValue(key: string, value: string) {
+        if (!flow) {
+            return
         }
+        setOauthFlows((current) => ({
+            ...current,
+            [provider.id]: {
+                ...flow,
+                promptValues: {
+                    ...flow.promptValues,
+                    [key]: value,
+                },
+                error: undefined,
+            },
+        }))
+    }
+
+    function renderPromptInputs() {
+        if (!flow || visiblePrompts.length === 0) {
+            return null
+        }
+
+        return (
+            <div className="provider-connect-modal__prompt-list">
+                {visiblePrompts.map((prompt) => (
+                    <label key={prompt.key} className="provider-connect-modal__prompt-field">
+                        <span className="provider-connect-modal__prompt-label">{prompt.message}</span>
+                        {prompt.type === 'select' ? (
+                            <select
+                                className="select"
+                                value={flow.promptValues[prompt.key] || ''}
+                                onChange={(event) => updatePromptValue(prompt.key, event.target.value)}
+                            >
+                                {prompt.options.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.hint ? `${option.label} - ${option.hint}` : option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                            <input
+                                className="input"
+                                value={flow.promptValues[prompt.key] || ''}
+                                onChange={(event) => updatePromptValue(prompt.key, event.target.value)}
+                                placeholder={prompt.placeholder}
+                                type="text"
+                            />
+                        )}
+                    </label>
+                ))}
+            </div>
+        )
     }
 
     return (
@@ -108,22 +171,15 @@ export default function ProviderConnectModal({
                     {/* Step: Choose auth method */}
                     {step === 'choose' && (
                         <div className="provider-connect-modal__methods">
-                            {supportsApi && (
+                            {availableMethods.map(({ method, methodIndex }) => (
                                 <button
-                                    className="provider-connect-modal__method-btn"
-                                    onClick={() => handleMethodClick(0, { type: 'api', label: 'API Key' })}
-                                >
-                                    <Key size={14} className="provider-connect-modal__method-icon" />
-                                    <span className="provider-connect-modal__method-label">API Key</span>
-                                </button>
-                            )}
-                            {oauthMethods.map(({ method, methodIndex }) => (
-                                <button
-                                    key={`${provider.id}-${methodIndex}`}
+                                    key={`${provider.id}-${methodIndex}-${method.label}`}
                                     className="provider-connect-modal__method-btn"
                                     onClick={() => handleMethodClick(methodIndex, method)}
                                 >
-                                    <ExternalLink size={14} className="provider-connect-modal__method-icon" />
+                                    {method.type === 'api'
+                                        ? <Key size={14} className="provider-connect-modal__method-icon" />
+                                        : <ExternalLink size={14} className="provider-connect-modal__method-icon" />}
                                     <span className="provider-connect-modal__method-label">{labelForAuthMethod(method)}</span>
                                 </button>
                             ))}
@@ -134,6 +190,7 @@ export default function ProviderConnectModal({
                     {step === 'api' && flow && (
                         <div className="provider-connect-modal__api-section">
                             <div className="stg-note">{flow.instructions || `Paste the API key for ${provider.name}.`}</div>
+                            {renderPromptInputs()}
                             <div className="provider-connect-modal__api-row">
                                 <input
                                     className="input"
@@ -152,7 +209,7 @@ export default function ProviderConnectModal({
                                 <button
                                     className="btn btn--primary"
                                     onClick={() => handleApiAuthSave(provider.id)}
-                                    disabled={flow.submitting || !flow.code.trim()}
+                                    disabled={flow.submitting || !flow.code.trim() || !promptsComplete}
                                 >
                                     {flow.submitting ? 'Saving…' : 'Save'}
                                 </button>
@@ -164,7 +221,21 @@ export default function ProviderConnectModal({
                     {/* Step: OAuth flow */}
                     {step === 'oauth' && flow && (
                         <div className="provider-connect-modal__oauth-section">
-                            {flow.mode === 'code' ? (
+                            {flow.mode === 'prompt' ? (
+                                <>
+                                    <div className="stg-note">{flow.instructions || 'Provide the required details to continue authorization.'}</div>
+                                    {renderPromptInputs()}
+                                    <div className="stg-actions">
+                                        <button
+                                            className="btn btn--primary"
+                                            onClick={() => handleOauthPromptSubmit(provider.id)}
+                                            disabled={flow.submitting || !promptsComplete}
+                                        >
+                                            {flow.submitting ? 'Starting…' : 'Continue'}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : flow.mode === 'code' ? (
                                 <>
                                     <div className="stg-note">{flow.instructions || 'Complete authorization in the opened browser window.'}</div>
                                     <div className="provider-connect-modal__api-row">

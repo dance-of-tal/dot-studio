@@ -253,3 +253,60 @@ describe('workspace runtime reload', () => {
         expect(removeSession).toHaveBeenCalledWith('session-1')
     })
 })
+
+describe('workspace visibility toggles', () => {
+    it('keeps focus mode active when toggling another performer visibility', () => {
+        const harness = createHarness({
+            ...createBaseState(),
+            performers: [
+                {
+                    id: 'performer-1',
+                    name: 'Alpha',
+                    position: { x: 0, y: 0 },
+                    width: 960,
+                    height: 720,
+                    hidden: false,
+                    scope: 'shared',
+                    model: null,
+                    talRef: null,
+                    danceRefs: [],
+                    mcpServerNames: [],
+                },
+                {
+                    id: 'performer-2',
+                    name: 'Beta',
+                    position: { x: 220, y: 0 },
+                    width: 320,
+                    height: 400,
+                    hidden: true,
+                    scope: 'shared',
+                    model: null,
+                    talRef: null,
+                    danceRefs: [],
+                    mcpServerNames: [],
+                },
+            ],
+            focusSnapshot: {
+                nodeId: 'performer-1',
+                type: 'performer',
+                nodePosition: { x: 0, y: 0 },
+                nodeSize: { width: 320, height: 400 },
+                hiddenPerformerIds: [],
+                hiddenActIds: [],
+                hiddenEditorIds: [],
+                hiddenTerminalIds: [],
+                assetLibraryOpen: true,
+                assistantOpen: false,
+                terminalOpen: false,
+            },
+        } as StudioState)
+
+        harness.get().togglePerformerVisibility('performer-2')
+
+        expect(harness.get().focusSnapshot).toMatchObject({
+            nodeId: 'performer-1',
+            hiddenPerformerIds: ['performer-2'],
+        })
+        expect(harness.get().performers.find((entry) => entry.id === 'performer-2')?.hidden).toBe(true)
+    })
+})

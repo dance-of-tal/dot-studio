@@ -1,19 +1,16 @@
 import type { RuntimeModelCatalogEntry } from '../../shared/model-variants'
 import type { AdapterViewActionRequest, AdapterViewProjection } from '../../shared/adapter-view'
 import type { McpCatalog } from '../../shared/mcp-catalog'
+import type {
+    ProviderAuthInput,
+    ProviderAuthMethodMap,
+    ProviderOauthAuthorization,
+    ProviderOauthAuthorizeRequest,
+    ProviderOauthCallbackRequest,
+    ProviderSummary,
+} from '../../shared/provider-auth'
 import type { FileStatus, ModelConfig, LspServerInfo } from '../types'
 import { createApiEventSource, deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
-
-type ProviderOauthResponse = {
-    method: 'auto' | 'code' | 'api'
-    url?: string
-    instructions?: string
-}
-
-type ProviderAuthMethod = {
-    type: 'oauth' | 'api'
-    label: string
-}
 
 export const opencodeApi = {
     health: () =>
@@ -100,28 +97,24 @@ export const opencodeApi = {
     },
 
     providers: {
-        list: () => fetchJSON<Array<{
-            id: string
-            name: string
-            source: string
-            env: string[]
-            connected: boolean
-            modelCount: number
-            defaultModel: string | null
-            hasPaidModels: boolean
-        }>>('/api/providers'),
+        list: () => fetchJSON<ProviderSummary[]>('/api/providers'),
     },
 
     provider: {
-        authMethods: () => fetchJSON<Record<string, ProviderAuthMethod[]>>('/api/provider/auth'),
-        oauthAuthorize: (providerId: string, method: number) => postJSON<ProviderOauthResponse>(`/api/provider/${providerId}/oauth/authorize`, { method }),
-        oauthCallback: (providerId: string, method: number, code?: string) => postJSON<ProviderOauthResponse>(`/api/provider/${providerId}/oauth/callback`, code ? { method, code } : { method }),
+        authMethods: () => fetchJSON<ProviderAuthMethodMap>('/api/provider/auth'),
+        oauthAuthorize: (providerId: string, method: number, inputs?: Record<string, string>) =>
+            postJSON<ProviderOauthAuthorization>(
+                `/api/provider/${providerId}/oauth/authorize`,
+                (inputs ? { method, inputs } : { method }) satisfies ProviderOauthAuthorizeRequest,
+            ),
+        oauthCallback: (providerId: string, method: number, code?: string) =>
+            postJSON<ProviderOauthAuthorization>(
+                `/api/provider/${providerId}/oauth/callback`,
+                (code ? { method, code } : { method }) satisfies ProviderOauthCallbackRequest,
+            ),
         setAuth: (
             providerId: string,
-            auth:
-                | { type: 'api'; key: string }
-                | { type: 'oauth'; refresh: string; access: string; expires: number; enterpriseUrl?: string }
-                | { type: 'wellknown'; key: string; token: string },
+            auth: ProviderAuthInput,
         ) => putJSON<boolean>(`/api/provider/${providerId}/auth`, auth),
         clearAuth: (providerId: string) => deleteJSON<{ ok: boolean }>(`/api/provider/${providerId}/auth`),
     },

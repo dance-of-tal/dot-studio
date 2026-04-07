@@ -159,8 +159,8 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                         modelPicker={auth.modelPicker}
                         setModelPicker={auth.setModelPicker}
                         visibleModelPickerModels={auth.visibleModelPickerModels}
-                        openApiKeyFlow={auth.openApiKeyFlow}
                         handleAuthMethod={auth.handleAuthMethod}
+                        handleOauthPromptSubmit={auth.handleOauthPromptSubmit}
                         handleOauthCallback={auth.handleOauthCallback}
                         handleApiAuthSave={auth.handleApiAuthSave}
                         dismissOauthFlow={auth.dismissOauthFlow}

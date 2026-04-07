@@ -111,6 +111,54 @@ export function resolveFocusTarget(focusSnapshot: FocusSnapshot | null) {
     }
 }
 
+function toggleHiddenId(ids: string[], id: string, hidden: boolean) {
+    if (hidden) {
+        return ids.includes(id) ? ids : [...ids, id]
+    }
+
+    return ids.filter((entryId) => entryId !== id)
+}
+
+export function resolveNodeBaselineHidden(
+    focusSnapshot: FocusSnapshot | null,
+    nodeId: string,
+    nodeType: FocusSnapshot['type'],
+    fallbackHidden: boolean,
+) {
+    if (!focusSnapshot) {
+        return fallbackHidden
+    }
+
+    const hiddenIds = nodeType === 'performer'
+        ? focusSnapshot.hiddenPerformerIds
+        : focusSnapshot.hiddenActIds
+
+    return hiddenIds.includes(nodeId)
+}
+
+export function setFocusSnapshotNodeHidden(
+    focusSnapshot: FocusSnapshot | null,
+    nodeId: string,
+    nodeType: FocusSnapshot['type'],
+    hidden: boolean,
+) {
+    if (!focusSnapshot) {
+        return null
+    }
+
+    if (nodeType === 'performer') {
+        return {
+            ...focusSnapshot,
+            hiddenPerformerIds: toggleHiddenId(focusSnapshot.hiddenPerformerIds, nodeId, hidden),
+        }
+    }
+
+    return {
+        ...focusSnapshot,
+        hiddenActIds: toggleHiddenId(focusSnapshot.hiddenActIds, nodeId, hidden),
+    }
+}
+
 export function getCanvasViewportSize(
     root: QueryableRoot = typeof document !== 'undefined' ? document : undefined,
     fallback: ViewportSize = DEFAULT_FOCUS_VIEWPORT,

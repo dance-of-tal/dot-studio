@@ -1,6 +1,6 @@
 {
   "name": "dot-studio",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "DOT Studio visual workspace for composing and running Dance of Tal performers and acts on top of OpenCode.",
   "license": "MIT",
   "author": "monarchjuno",
@@ -44,7 +44,7 @@
     "test": "vitest run",
     "lint": "eslint .",
     "preview": "vite preview",
-    "opencode": "opencode --port 4096 .",
+    "opencode": "opencode serve --port 4096",
     "prepublishOnly": "npm run build:all"
   },
   "bin": {
@@ -61,7 +61,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@hono/node-server": "^1.19.11",
-    "@opencode-ai/sdk": "^1.2.17",
+    "@opencode-ai/sdk": "^1.3.17",
     "@tanstack/react-query": "^5.90.21",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",

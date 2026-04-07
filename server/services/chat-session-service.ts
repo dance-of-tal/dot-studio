@@ -185,10 +185,15 @@ export async function listStudioSessionMessages(
         params.limit = options.limit
     }
     if (typeof options.before === 'string' && options.before.trim()) {
-        params.$query_before = options.before.trim()
+        params.before = options.before.trim()
     }
 
-    const messageResult = await oc.session.messages(params as { sessionID: string; directory?: string; limit?: number })
+    const messageResult = await oc.session.messages(params as {
+        sessionID: string
+        directory?: string
+        limit?: number
+        before?: string
+    })
     const data = unwrapOpencodeResult<SessionMessageLike[]>(messageResult)
     const statuses = unwrapOpencodeResult<Record<string, OpenCodeSessionStatus>>(await oc.session.status({
         ...directoryQuery,

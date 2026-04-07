@@ -3,6 +3,7 @@ import {
     normalizeRuntimeVariants,
     type RuntimeModelCatalogEntry,
 } from '../../shared/model-variants.js'
+import type { ProviderSummary } from '../../shared/provider-auth.js'
 
 type ProviderModelRecord = Record<string, unknown>
 
@@ -178,17 +179,6 @@ export function invalidateProviderListCache() {
 }
 
 // ── Provider summary (used by /api/providers) ───────────
-
-export interface ProviderSummary {
-    id: string
-    name: string
-    source: string
-    env: string[]
-    connected: boolean
-    modelCount: number
-    defaultModel: string | null
-    hasPaidModels: boolean
-}
 
 export async function listProviderSummaries(cwd: string): Promise<ProviderSummary[]> {
     return buildProviderSnapshots(await fetchProviderListData(cwd)).map((provider) => ({

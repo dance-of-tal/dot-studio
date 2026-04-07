@@ -1,37 +1,43 @@
 // Types and utility functions extracted from SettingsModal.tsx
 
-export type ProviderAuthMethod = {
-    type: 'oauth' | 'api'
-    label: string
-}
+import type {
+    ProviderApiKeyAuth,
+    ProviderAuthMethod,
+    ProviderAuthPrompt,
+    ProviderSummary,
+} from '../../../shared/provider-auth'
 
-export type ProviderSummary = {
-    id: string
-    name: string
-    source: string
-    env: string[]
-    connected: boolean
-    modelCount: number
-    defaultModel: string | null
-    hasPaidModels: boolean
-}
+export type {
+    ProviderAuthMethod,
+    ProviderAuthPrompt,
+    ProviderSummary,
+} from '../../../shared/provider-auth'
 
 export type ProviderCard = ProviderSummary & {
     authMethods: ProviderAuthMethod[]
+}
+
+export type ProviderAuthOption = {
+    method: ProviderAuthMethod
+    methodIndex: number
+    source: 'provider' | 'compat'
 }
 
 export type ProviderListFilter = 'popular' | 'connected' | 'all'
 export type McpStatusTone = 'connected' | 'disconnected' | 'needs_auth' | 'failed'
 
 export type OauthFlow = {
+    authType: 'oauth' | 'api'
     methodIndex: number
     label: string
-    mode: 'auto' | 'code' | 'api'
+    mode: 'prompt' | 'auto' | 'code' | 'api'
     url?: string
     instructions: string
     code: string
     submitting: boolean
     error?: string
+    prompts: ProviderAuthPrompt[]
+    promptValues: Record<string, string>
 }
 
 export type ConnectedModel = {
@@ -97,8 +103,44 @@ function compareProviderCards(left: Pick<ProviderCard, 'id' | 'name' | 'connecte
     return left.name.localeCompare(right.name)
 }
 
-export function providerSupportsApiKey(provider: ProviderCard) {
-    return provider.authMethods.some((method) => method.type === 'api') || provider.env.length > 0
+export function buildProviderAuthOptions(provider: ProviderCard): ProviderAuthOption[] {
+    const authMethods = provider.authMethods.map((method, methodIndex) => ({
+        method,
+        methodIndex,
+        source: 'provider' as const,
+    }))
+    const apiMethods = authMethods.filter(({ method }) => method.type === 'api')
+    const oauthMethods = authMethods.filter(({ method }) => method.type === 'oauth')
+
+    if (provider.env.length === 0 || apiMethods.length > 0) {
+        return [...apiMethods, ...oauthMethods]
+    }
+
+    // Compatibility fallback while some OpenCode providers still expose only env-backed API auth.
+    return [
+        {
+            method: { type: 'api', label: 'API Key' },
+            methodIndex: -1,
+            source: 'compat',
+        },
+        ...oauthMethods,
+    ]
+}
+
+export function shouldShowProviderConnectModal(
+    provider: ProviderCard | null | undefined,
+    flow: OauthFlow | undefined,
+    modelPicker: ModelPickerState | null,
+) {
+    if (!provider) {
+        return false
+    }
+
+    if (flow || modelPicker) {
+        return true
+    }
+
+    return buildProviderAuthOptions(provider).length > 0 || !provider.connected
 }
 
 export function getProviderAuthSuccessAction(
@@ -115,6 +157,74 @@ export function labelForAuthMethod(method: ProviderAuthMethod) {
     if (normalized.includes('browser')) return method.label
     if (normalized.includes('code')) return method.label
     return `Connect with ${method.label}`
+}
+
+export function createPromptValueDraft(
+    prompts: ProviderAuthPrompt[] | undefined,
+    current: Record<string, string> = {},
+) {
+    const next = { ...current }
+    for (const prompt of prompts || []) {
+        if (typeof next[prompt.key] === 'string') {
+            continue
+        }
+        if (prompt.type === 'select') {
+            next[prompt.key] = prompt.options[0]?.value || ''
+            continue
+        }
+        next[prompt.key] = ''
+    }
+    return next
+}
+
+export function getVisibleProviderAuthPrompts(
+    prompts: ProviderAuthPrompt[] | undefined,
+    values: Record<string, string>,
+) {
+    return (prompts || []).filter((prompt) => {
+        if (!prompt.when) {
+            return true
+        }
+        const actual = values[prompt.when.key] || ''
+        return prompt.when.op === 'eq'
+            ? actual === prompt.when.value
+            : actual !== prompt.when.value
+    })
+}
+
+export function buildVisibleProviderPromptInputs(
+    prompts: ProviderAuthPrompt[] | undefined,
+    values: Record<string, string>,
+) {
+    const entries = getVisibleProviderAuthPrompts(prompts, values)
+        .map((prompt) => [prompt.key, (values[prompt.key] || '').trim()] as const)
+        .filter(([, value]) => value.length > 0)
+
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+export function areVisibleProviderPromptsComplete(
+    prompts: ProviderAuthPrompt[] | undefined,
+    values: Record<string, string>,
+) {
+    return getVisibleProviderAuthPrompts(prompts, values)
+        .every((prompt) => (values[prompt.key] || '').trim().length > 0)
+}
+
+export function buildApiKeyProviderAuth(
+    key: string,
+    prompts: ProviderAuthPrompt[] | undefined,
+    values: Record<string, string>,
+): ProviderApiKeyAuth | null {
+    const trimmedKey = key.trim()
+    if (!trimmedKey) {
+        return null
+    }
+
+    const metadata = buildVisibleProviderPromptInputs(prompts, values)
+    return metadata
+        ? { type: 'api', key: trimmedKey, metadata }
+        : { type: 'api', key: trimmedKey }
 }
 
 function readProviderAuthMethods(value: ProviderAuthMethod[] | undefined): ProviderAuthMethod[] {

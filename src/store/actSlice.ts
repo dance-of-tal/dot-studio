@@ -33,6 +33,11 @@ import {
     resolveCanvasNodeSpawnPosition,
 } from '../lib/canvas-node-layout'
 import { buildExitFocusModeState } from './workspace-focus-actions'
+import {
+    resolveFocusTarget,
+    resolveNodeBaselineHidden,
+    setFocusSnapshotNodeHidden,
+} from '../lib/focus-utils'
 import { clearChatSessionView } from './session'
 
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
@@ -150,12 +155,28 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
 
     toggleActVisibility: (id) => {
         set((s) => {
+            const focusedTarget = resolveFocusTarget(s.focusSnapshot)
+            const currentHidden = resolveNodeBaselineHidden(
+                s.focusSnapshot,
+                id,
+                'act',
+                !!s.acts.find((act) => act.id === id)?.hidden,
+            )
+            const nextHidden = !currentHidden
+
+            if (s.focusSnapshot && (focusedTarget?.id !== id || focusedTarget?.type !== 'act')) {
+                return {
+                    focusSnapshot: setFocusSnapshotNodeHidden(s.focusSnapshot, id, 'act', nextHidden),
+                    workspaceDirty: true,
+                }
+            }
+
             const focusExit = buildExitFocusModeState(s)
             const acts = (focusExit?.acts as StudioState['acts'] | undefined) || s.acts
 
             return {
                 ...focusExit,
-                acts: acts.map((act) => (act.id === id ? { ...act, hidden: !act.hidden } : act)),
+                acts: acts.map((act) => (act.id === id ? { ...act, hidden: nextHidden } : act)),
                 workspaceDirty: true,
             }
         })

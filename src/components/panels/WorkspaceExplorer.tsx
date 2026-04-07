@@ -20,6 +20,10 @@ import {
     LayerRow,
     resolveSessionActivityAt,
 } from './workspace-explorer-utils';
+import {
+    resolveNodeBaselineHidden,
+    setFocusSnapshotNodeHidden,
+} from '../../lib/focus-utils';
 import type { ExplorerRenamingSession } from './workspace-explorer-utils';
 import WorkspaceExplorerWorkspacesSection from './WorkspaceExplorerWorkspacesSection';
 import WorkspaceExplorerThreadsSection from './WorkspaceExplorerThreadsSection';
@@ -143,6 +147,7 @@ export default function WorkspaceExplorer() {
     const renameThread = useStudioStore((s) => s.renameThread);
     const startNewSession = useStudioStore((s) => s.startNewSession);
     const openActEditor = useStudioStore((s) => s.openActEditor);
+    const focusSnapshot = useStudioStore((s) => s.focusSnapshot);
 
     const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
     const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -204,10 +209,16 @@ export default function WorkspaceExplorer() {
             sharedPerformers,
             editingTarget: editingTarget?.type === 'performer' ? editingTarget : null,
             performerSessionsById,
+            focusSnapshot,
             selectedPerformerId,
             selectedPerformerSessionId,
         });
-    }, [editingTarget, performerSessionsById, selectedPerformerId, selectedPerformerSessionId, sharedPerformers]);
+    }, [editingTarget, focusSnapshot, performerSessionsById, selectedPerformerId, selectedPerformerSessionId, sharedPerformers]);
+
+    const visibleActs = useMemo(() => acts.map((act) => ({
+        ...act,
+        hidden: resolveNodeBaselineHidden(focusSnapshot, act.id, 'act', !!act.hidden),
+    })), [acts, focusSnapshot]);
 
     const workspaceRows = workspaceList.map((entry) => {
         const segments = entry.workingDir.trim().replace(/\/+$/, '').split('/');
@@ -311,19 +322,58 @@ export default function WorkspaceExplorer() {
     const switchFocusTarget = useStudioStore((s) => s.switchFocusTarget);
     const revealCanvasNode = useStudioStore((s) => s.revealCanvasNode);
 
+    const ensurePerformerVisible = useCallback((performerId: string) => {
+        const state = useStudioStore.getState();
+        const performer = state.performers.find((entry) => entry.id === performerId);
+        const isHidden = resolveNodeBaselineHidden(state.focusSnapshot, performerId, 'performer', !!performer?.hidden);
+        if (!isHidden) {
+            return;
+        }
+
+        useStudioStore.setState((s) => {
+            if (s.focusSnapshot) {
+                return {
+                    focusSnapshot: setFocusSnapshotNodeHidden(s.focusSnapshot, performerId, 'performer', false),
+                };
+            }
+
+            return {
+                performers: s.performers.map((entry) => (
+                    entry.id === performerId ? { ...entry, hidden: false } : entry
+                )),
+            };
+        });
+    }, []);
+
+    const ensureActVisible = useCallback((actId: string) => {
+        const state = useStudioStore.getState();
+        const actEntry = state.acts.find((entry) => entry.id === actId);
+        const isHidden = resolveNodeBaselineHidden(state.focusSnapshot, actId, 'act', !!actEntry?.hidden);
+        if (!isHidden) {
+            return;
+        }
+
+        useStudioStore.setState((s) => {
+            if (s.focusSnapshot) {
+                return {
+                    focusSnapshot: setFocusSnapshotNodeHidden(s.focusSnapshot, actId, 'act', false),
+                };
+            }
+
+            return {
+                acts: s.acts.map((entry) => (
+                    entry.id === actId ? { ...entry, hidden: false } : entry
+                )),
+            };
+        });
+    }, []);
+
     const openPerformer = (performerId: string) => {
         const {
             focusSnapshot: currentFocusSnapshot,
-            performers: currentPerformers,
         } = useStudioStore.getState();
 
-        // Auto-unhide performer when clicking it in the sidebar
-        const perf = currentPerformers.find((p) => p.id === performerId);
-        if (perf?.hidden) {
-            useStudioStore.setState((s) => ({
-                performers: s.performers.map((p) => (p.id === performerId ? { ...p, hidden: false } : p)),
-            }));
-        }
+        ensurePerformerVisible(performerId);
 
         closeEditor();
         selectPerformerSession(null);
@@ -359,6 +409,7 @@ export default function WorkspaceExplorer() {
         const {
             focusSnapshot: currentFocusSnapshot,
         } = useStudioStore.getState();
+        ensurePerformerVisible(performerId);
         closeEditor();
         const shouldSwitchFocus = currentFocusSnapshot && (
             currentFocusSnapshot.nodeId !== performerId
@@ -377,16 +428,9 @@ export default function WorkspaceExplorer() {
     const openAct = useCallback((actId: string) => {
         const {
             focusSnapshot: currentFocusSnapshot,
-            acts: currentActs,
         } = useStudioStore.getState();
 
-        // Auto-unhide act when clicking it in the sidebar
-        const actEntry = currentActs.find((a) => a.id === actId);
-        if (actEntry?.hidden) {
-            useStudioStore.setState((s) => ({
-                acts: s.acts.map((a) => (a.id === actId ? { ...a, hidden: false } : a)),
-            }));
-        }
+        ensureActVisible(actId);
 
         closeEditor();
         const shouldSwitchFocus = currentFocusSnapshot && (
@@ -399,20 +443,14 @@ export default function WorkspaceExplorer() {
             selectAct(actId);
         }
         revealCanvasNode(actId, 'act');
-    }, [closeEditor, revealCanvasNode, selectAct, switchFocusTarget]);
+    }, [closeEditor, ensureActVisible, revealCanvasNode, selectAct, switchFocusTarget]);
 
     const openActThread = useCallback((actId: string, threadId: string) => {
         const {
             focusSnapshot: currentFocusSnapshot,
-            acts: currentActs,
         } = useStudioStore.getState();
 
-        const actEntry = currentActs.find((a) => a.id === actId);
-        if (actEntry?.hidden) {
-            useStudioStore.setState((s) => ({
-                acts: s.acts.map((a) => (a.id === actId ? { ...a, hidden: false } : a)),
-            }));
-        }
+        ensureActVisible(actId);
 
         closeEditor();
         const shouldSwitchFocus = currentFocusSnapshot && (
@@ -426,7 +464,7 @@ export default function WorkspaceExplorer() {
         }
         selectThread(actId, threadId);
         revealCanvasNode(actId, 'act');
-    }, [closeEditor, revealCanvasNode, selectAct, selectThread, switchFocusTarget]);
+    }, [closeEditor, ensureActVisible, revealCanvasNode, selectAct, selectThread, switchFocusTarget]);
 
     return (
         <div className="explorer explorer--stacked">
@@ -441,7 +479,7 @@ export default function WorkspaceExplorer() {
 
             <WorkspaceExplorerThreadsSection
                 workspaceId={workspaceId}
-                acts={acts}
+                acts={visibleActs}
                 threadRows={threadRows}
                 expandedRows={expandedRows}
                 pendingDelete={pendingDelete}

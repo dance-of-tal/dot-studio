@@ -11,6 +11,8 @@ import type { ReactNode } from 'react'
 import { Check, Pencil, Trash2, X } from 'lucide-react'
 import type { PerformerNode } from '../../types'
 import { parseStudioSessionTitle } from '../../../shared/session-metadata'
+import type { FocusSnapshot } from '../../store/types'
+import { resolveNodeBaselineHidden } from '../../lib/focus-utils'
 
 // ── Types ───────────────────────────────────────────────
 
@@ -128,6 +130,7 @@ export function buildThreadRows(args: {
     sharedPerformers: PerformerNode[]
     editingTarget: { type: 'performer'; id: string } | null
     performerSessionsById: Map<string, PerformerSessionRow[]>
+    focusSnapshot: FocusSnapshot | null
     selectedPerformerId: string | null
     selectedPerformerSessionId: string | null
 }): ThreadRow[] {
@@ -136,7 +139,7 @@ export function buildThreadRows(args: {
         kind: 'performer',
         label: performer.name,
         meta: performer.model?.modelId || 'No model selected',
-        hidden: !!performer.hidden,
+        hidden: resolveNodeBaselineHidden(args.focusSnapshot, performer.id, 'performer', !!performer.hidden),
         active: (args.selectedPerformerId === performer.id) || (args.editingTarget?.type === 'performer' && args.editingTarget.id === performer.id),
         children: args.performerSessionsById.get(performer.id) || [],
     }))
