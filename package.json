@@ -1,6 +1,6 @@
 {
   "name": "dot-studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DOT Studio visual workspace for composing and running Dance of Tal performers and acts on top of OpenCode.",
   "license": "MIT",
   "author": "monarchjuno",
@@ -81,6 +81,7 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "strip-json-comments": "^3.1.1",
     "tsx": "^4.21.0",
     "ws": "^8.19.0",
     "xstate": "^5.28.0",
