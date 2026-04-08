@@ -37,7 +37,7 @@
     "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true }); require('fs').rmSync('client', { recursive: true, force: true })\"",
     "build": "npm run build:all",
     "build:client": "vite build --outDir client",
-    "build:server": "tsc -p tsconfig.server.json",
+    "build:server": "tsc -p tsconfig.server.json && node scripts/copy-runtime-assets.mjs",
     "build:all": "npm run clean && npm run build:client && npm run build:server",
     "pack:check": "npm run build:all && npm pack --dry-run",
     "type-check": "tsc -b --noEmit && tsc -p tsconfig.server.json --noEmit",
@@ -48,7 +48,7 @@
     "prepublishOnly": "npm run build:all"
   },
   "bin": {
-    "dot-studio": "./dist/cli.js"
+    "dot-studio": "dist/cli.js"
   },
   "files": [
     "dist/",
