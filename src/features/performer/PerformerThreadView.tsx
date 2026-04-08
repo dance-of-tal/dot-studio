@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Paperclip, Sparkles, GitCompare } from 'lucide-react'
 import type { ChatMessage } from '../../types'
 import ThreadBody from '../chat/ThreadBody'
@@ -13,7 +13,8 @@ import MessageActionBar from '../chat/MessageActionBar'
 import { SessionRevertDock } from '../../components/chat/SessionRevertDock'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
-import { SessionReview, collectSessionDiffs } from '../chat/SessionReview'
+import { SessionReview } from '../chat/SessionReview'
+import { collectSessionDiffs, normalizeSessionDiffEntries } from '../chat/session-review-diffs'
 import { useStudioStore } from '../../store'
 import { useChatSession } from '../../store/session/use-chat-session'
 
@@ -40,7 +41,9 @@ export default function PerformerThreadView({
     const { sessionId, todos, revert: revertState, permission, isMutating } = chatSession
     const restoreRevertedMessage = useStudioStore((state) => state.restoreRevertedMessage)
     const setSessionTodos = useStudioStore((state) => state.setSessionTodos)
+    const getDiff = useStudioStore((state) => state.getDiff)
     const [showReview, setShowReview] = useState(false)
+    const [sessionDiffEntries, setSessionDiffEntries] = useState<Array<Record<string, unknown>> | null>(null)
     const revertMessageId = revertState?.messageId ?? null
 
     const visibleMessages = useMemo(() => {
@@ -62,7 +65,33 @@ export default function PerformerThreadView({
             }))
     }, [messages, revertMessageId])
 
-    const hasDiffs = useMemo(() => collectSessionDiffs(visibleMessages).length > 0, [visibleMessages])
+    useEffect(() => {
+        if (!sessionId) {
+            setSessionDiffEntries(null)
+            return
+        }
+
+        let active = true
+        void getDiff(performerId).then((entries) => {
+            if (active) {
+                setSessionDiffEntries(entries || [])
+            }
+        })
+
+        return () => {
+            active = false
+        }
+    }, [getDiff, performerId, sessionId])
+
+    const sessionDiffs = useMemo(
+        () => normalizeSessionDiffEntries(sessionDiffEntries),
+        [sessionDiffEntries],
+    )
+    const fallbackDiffs = useMemo(
+        () => collectSessionDiffs(visibleMessages),
+        [visibleMessages],
+    )
+    const hasDiffs = sessionDiffs.length > 0 || fallbackDiffs.length > 0
 
     // TodoDock lifecycle: live when loading or blocked on permission
     const isTodoLive = isLoading || !!permission
@@ -99,9 +128,13 @@ export default function PerformerThreadView({
                     <div className="user-input-box">
                         <span className="user-input-text">{msg.content}</span>
                         {msg.attachments && msg.attachments.length > 0 ? (
-                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                            <div className="thread-attachment-list">
                                 {msg.attachments.map((att, i) => (
-                                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', background: 'var(--bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                                    <span
+                                        key={i}
+                                        className="thread-attachment-chip"
+                                        title={att.filename || 'file'}
+                                    >
                                         <Paperclip size={10} />
                                         {att.filename || 'file'}
                                     </span>
@@ -151,7 +184,11 @@ export default function PerformerThreadView({
     return (
         <>
             {showReview && (
-                <SessionReview messages={visibleMessages} className="performer-session-review" />
+                <SessionReview
+                    messages={visibleMessages}
+                    diffEntries={sessionDiffEntries}
+                    className="performer-session-review"
+                />
             )}
             <ThreadBody
                 messages={visibleMessages}

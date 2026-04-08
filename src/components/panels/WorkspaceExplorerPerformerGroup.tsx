@@ -74,6 +74,39 @@ export default function WorkspaceExplorerPerformerGroup({
     const visibleChildren = showAll ? row.children : row.children.slice(0, THREAD_LIMIT)
     const hiddenCount = row.children.length - THREAD_LIMIT
 
+    const renderSessionEntry = (entry: ThreadRow['children'][number]) => (
+        <div key={entry.session.id} style={{ marginLeft: `${entry.depth * 14}px` }}>
+            <LayerRow
+                icon={<MessageSquare size={11} className={entry.active ? 'icon-active' : 'icon-muted'} />}
+                label={(
+                    <SessionNameEditor
+                        renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
+                        display={performerSessionLabel(entry.session)}
+                        onChange={onSetRenamingValue}
+                        onCommit={() => void onCommitRenameSession()}
+                        onCancel={onCancelRenameSession}
+                    />
+                )}
+                meta={entry.active ? 'Current thread' : entry.children.length > 0 ? 'Subagent thread' : 'Saved thread'}
+                metaTone={entry.active ? 'success' : 'default'}
+                active={false}
+                onClick={renamingSession?.key === `performer:${entry.session.id}` ? undefined : () => void onOpenPerformerSession(row.id, entry.session)}
+                actions={(
+                    <SessionRowActions
+                        renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
+                        onCommit={() => void onCommitRenameSession()}
+                        onCancel={onCancelRenameSession}
+                        onRename={() => onBeginRenamePerformerSession(entry.session)}
+                        onDelete={() => onDeleteSession(entry.session.id)}
+                        renameTitle="Rename session"
+                        deleteTitle="Delete session"
+                    />
+                )}
+            />
+            {entry.children.map((child) => renderSessionEntry(child))}
+        </div>
+    )
+
     return (
         <div className="thread-group">
             <div
@@ -183,36 +216,7 @@ export default function WorkspaceExplorerPerformerGroup({
                 <div className="thread-children">
                     {row.children.length > 0 ? (
                         <>
-                            {visibleChildren.map((entry) => (
-                                <LayerRow
-                                    key={entry.session.id}
-                                    icon={<MessageSquare size={11} className={entry.active ? 'icon-active' : 'icon-muted'} />}
-                                    label={(
-                                        <SessionNameEditor
-                                            renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
-                                            display={performerSessionLabel(entry.session)}
-                                            onChange={onSetRenamingValue}
-                                            onCommit={() => void onCommitRenameSession()}
-                                            onCancel={onCancelRenameSession}
-                                        />
-                                    )}
-                                    meta={entry.active ? 'Current thread' : 'Saved thread'}
-                                    metaTone={entry.active ? 'success' : 'default'}
-                                    active={false}
-                                    onClick={renamingSession?.key === `performer:${entry.session.id}` ? undefined : () => void onOpenPerformerSession(row.id, entry.session)}
-                                    actions={(
-                                        <SessionRowActions
-                                            renaming={renamingSession?.key === `performer:${entry.session.id}` ? renamingSession : null}
-                                            onCommit={() => void onCommitRenameSession()}
-                                            onCancel={onCancelRenameSession}
-                                            onRename={() => onBeginRenamePerformerSession(entry.session)}
-                                            onDelete={() => onDeleteSession(entry.session.id)}
-                                            renameTitle="Rename session"
-                                            deleteTitle="Delete session"
-                                        />
-                                    )}
-                                />
-                            ))}
+                            {visibleChildren.map((entry) => renderSessionEntry(entry))}
                             {hiddenCount > 0 ? (
                                 <button
                                     className="show-more-btn"

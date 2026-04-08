@@ -1,73 +1,99 @@
 /* ═══════════════════════════════════════════
-   TOOL DISPLAY — OpenCode-style
+   TOOL DISPLAY — text-first timeline style
    ═══════════════════════════════════════════ */
 
-/* ── BasicTool ── */
+.tool-group-v2 {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 6px 0 10px;
+    padding-left: 12px;
+}
+
+/* ── BasicTool rows ── */
+
 .basic-tool {
-    margin: 2px 0;
-    border: 1px solid var(--border-light);
-    border-radius: 6px;
-    overflow: hidden;
-    background: var(--bg-panel);
-    transition: border-color 0.15s;
-}
-
-.basic-tool--running,
-.basic-tool--pending {
-    border-color: color-mix(in srgb, var(--accent) 30%, var(--border-light));
-}
-
-.basic-tool--error {
-    border-color: color-mix(in srgb, var(--status-danger, #ef4444) 30%, var(--border-light));
+    margin: 1px 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
 }
 
 .basic-tool__trigger {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     width: 100%;
-    padding: 5px 8px;
-    background: transparent;
+    min-height: 28px;
+    padding: 4px 0;
     border: none;
+    background: transparent;
     color: var(--text-secondary);
     font-size: var(--font-sm);
     line-height: 1.4;
-    transition: background 0.12s;
     text-align: left;
 }
 
-.basic-tool__trigger:hover {
-    background: var(--bg-hover);
+.basic-tool__disclosure {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.basic-tool__disclosure-spacer {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+}
+
+.basic-tool__status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--text-muted) 72%, transparent);
+}
+
+.basic-tool--running .basic-tool__status-dot,
+.basic-tool--pending .basic-tool__status-dot {
+    background: var(--accent);
+}
+
+.basic-tool--completed .basic-tool__status-dot {
+    background: #10b981;
+}
+
+.basic-tool__status-dot--error,
+.basic-tool--error .basic-tool__status-dot {
+    background: var(--status-danger, #ef4444);
 }
 
 .basic-tool__badge {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
     flex-shrink: 0;
-    min-width: 42px;
-    padding: 1px 6px;
-    border-radius: 999px;
-    border: 1px solid var(--border-light);
     color: var(--text-muted);
-    background: var(--bg-default);
-    font-size: 9px;
+    background: transparent;
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.06em;
-}
-
-.basic-tool--completed .basic-tool__badge {
-    color: #10b981;
-}
-
-.basic-tool__badge--error {
-    color: var(--status-danger, #ef4444) !important;
-    border-color: color-mix(in srgb, var(--status-danger, #ef4444) 25%, var(--border-light));
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .basic-tool--running .basic-tool__badge,
 .basic-tool--pending .basic-tool__badge {
-    color: var(--accent);
+    color: color-mix(in srgb, var(--accent) 74%, var(--text-primary));
+}
+
+.basic-tool--completed .basic-tool__badge {
+    color: color-mix(in srgb, #10b981 78%, var(--text-primary));
+}
+
+.basic-tool__badge--error {
+    color: var(--status-danger, #ef4444) !important;
 }
 
 .basic-tool__trigger-content {
@@ -111,37 +137,35 @@
 }
 
 .basic-tool__duration {
-    font-size: 10px;
-    color: var(--text-muted);
     flex-shrink: 0;
     margin-left: auto;
-}
-
-.basic-tool__arrow {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    color: var(--text-muted);
-    margin-left: 4px;
     font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    color: var(--text-muted);
 }
 
 .basic-tool__content {
-    border-top: 1px solid var(--border-light);
+    margin: 2px 0 8px 26px;
+    padding: 8px 0 0 0;
+    background: transparent;
 }
 
-/* ── EditWriteTrigger (two-line trigger) ── */
+/* ── Summary trigger layouts ── */
+
+.edit-trigger,
+.shell-trigger,
+.search-trigger,
+.agent-trigger,
+.skill-trigger {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+}
 
 .edit-trigger {
-    display: flex;
-    align-items: flex-start;
     justify-content: space-between;
-    gap: 8px;
-    width: 100%;
-    min-width: 0;
+    align-items: flex-start;
 }
 
 .edit-trigger__title-area {
@@ -155,35 +179,39 @@
     display: flex;
     align-items: baseline;
     gap: 6px;
+    min-width: 0;
 }
 
-.edit-trigger__title-text {
+.edit-trigger__title-text,
+.shell-trigger__title,
+.search-trigger__title,
+.agent-trigger__title,
+.skill-trigger__title {
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
     flex-shrink: 0;
 }
 
-.edit-trigger__filename {
-    font-weight: 600;
-    color: var(--text-primary);
-    font-size: 11px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.agent-trigger__title,
+.skill-trigger__title {
+    text-transform: capitalize;
 }
 
 .edit-trigger__path {
     margin-top: 1px;
 }
 
-.edit-trigger__directory {
+.edit-trigger__directory,
+.search-trigger__query,
+.tool-file-accordion__dir,
+.context-tool-path {
     font-size: 10px;
     color: var(--text-muted);
     font-family: var(--font-mono);
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .edit-trigger__actions {
@@ -192,48 +220,13 @@
     flex-shrink: 0;
 }
 
-/* ── Shell trigger ── */
-
-.shell-trigger {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
-    overflow: hidden;
-    width: 100%;
-}
-
-.shell-trigger__title {
-    font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.shell-trigger__desc {
+.shell-trigger__desc,
+.agent-trigger__desc {
     font-size: 10px;
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-/* ── Search trigger ── */
-
-.search-trigger {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
-    overflow: hidden;
-    width: 100%;
-}
-
-.search-trigger__title {
-    font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
-    flex-shrink: 0;
 }
 
 .search-trigger__link {
@@ -249,15 +242,6 @@
     text-decoration: underline;
 }
 
-.search-trigger__query {
-    font-size: 10px;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--font-mono);
-}
-
 .search-trigger__ext {
     flex-shrink: 0;
     color: var(--text-muted);
@@ -266,36 +250,7 @@
     letter-spacing: 0.04em;
 }
 
-/* ── Agent / Skill trigger ── */
-
-.agent-trigger,
-.skill-trigger {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
-    overflow: hidden;
-    width: 100%;
-}
-
-.agent-trigger__title,
-.skill-trigger__title {
-    font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
-    flex-shrink: 0;
-    text-transform: capitalize;
-}
-
-.agent-trigger__desc {
-    font-size: 10px;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* ── Tool content sections ── */
+/* ── Content blocks ── */
 
 .tool-content-terminal {
     position: relative;
@@ -303,8 +258,10 @@
     color: var(--terminal-fg, #d4d4d4);
     font-family: var(--font-mono);
     font-size: 11px;
-    max-height: 300px;
+    max-height: 320px;
     overflow: auto;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--border-light) 72%, transparent);
 }
 
 .tool-copy-btn {
@@ -317,12 +274,12 @@
     min-width: 46px;
     height: 22px;
     border-radius: 4px;
-    border: 1px solid var(--border-light);
-    background: var(--bg-panel);
-    color: var(--text-muted);
+    border: 1px solid color-mix(in srgb, var(--terminal-fg, var(--text-primary)) 18%, transparent);
+    background: color-mix(in srgb, var(--terminal-bg, var(--bg-panel)) 82%, var(--bg-panel) 18%);
+    color: color-mix(in srgb, var(--terminal-fg, var(--text-primary)) 72%, transparent);
     cursor: pointer;
     opacity: 0;
-    transition: opacity 0.15s, background 0.1s;
+    transition: opacity 0.15s, color 0.15s, background 0.15s, border-color 0.15s;
     z-index: 1;
     font-size: 10px;
     font-weight: 600;
@@ -333,20 +290,31 @@
 }
 
 .tool-copy-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+    background: color-mix(in srgb, var(--terminal-bg, var(--bg-panel)) 64%, white 12%);
+    color: var(--terminal-fg, var(--text-primary));
+    border-color: color-mix(in srgb, var(--terminal-fg, var(--text-primary)) 28%, transparent);
 }
 
 .tool-pre {
     margin: 0;
-    padding: 6px 8px;
+    padding: 8px 10px;
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1.45;
     color: inherit;
-    word-break: break-all;
+    word-break: break-word;
     white-space: pre-wrap;
+}
+
+.tool-pre--panel {
+    border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
+}
+
+.tool-content-terminal .tool-pre code {
+    color: inherit;
 }
 
 .tool-pre--error {
@@ -358,29 +326,17 @@
     background: var(--bg-default);
 }
 
-.tool-content-edit,
-.tool-content-write {
-    overflow: hidden;
-    background: var(--bg-default);
-    max-height: 400px;
-    overflow-y: auto;
-}
-
-.edit-file-path {
-    font-size: 10px;
-    padding: 3px 8px;
-    background: var(--bg-panel);
-    border-bottom: 1px solid var(--border-light);
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-}
-
 .tool-content-generic {
     padding: 0;
 }
 
+.tool-content-generic .tool-pre {
+    border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
+}
+
 .tool-content-error {
-    background: color-mix(in srgb, var(--status-danger, #ef4444) 5%, var(--bg-default));
     color: var(--status-danger, #ef4444);
 }
 
@@ -391,57 +347,21 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted);
-    padding: 4px 8px 2px;
+    padding: 4px 0 2px;
 }
 
-/* ── Diff sections ── */
-
-.tool-content-diff {
-    display: flex;
-    flex-direction: column;
-}
-
-.diff-section {
-    border-bottom: 1px solid var(--border-light);
-}
-
-.diff-section:last-child {
-    border-bottom: none;
-}
-
-.diff-section__label {
-    display: block;
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 3px 8px 0;
-}
-
-.diff-section--old .diff-section__label {
-    color: var(--color-diff-del, #ef4444);
-}
-
-.diff-section--new .diff-section__label {
-    color: var(--color-diff-add, #22c55e);
-}
-
-.diff-section--old .tool-pre {
-    background: color-mix(in srgb, var(--color-diff-del, #ef4444) 6%, var(--bg-default));
-}
-
-.diff-section--new .tool-pre {
-    background: color-mix(in srgb, var(--color-diff-add, #22c55e) 6%, var(--bg-default));
-}
-
-/* ── ToolFileAccordion ── */
+/* ── File accordions ── */
 
 .tool-file-accordion {
-    border-bottom: 1px solid var(--border-light);
+    margin: 0 0 10px 0;
+    border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
+    overflow: hidden;
 }
 
-.tool-file-accordion:last-child {
-    border-bottom: none;
+.tool-file-accordion--open {
+    border-color: color-mix(in srgb, var(--border-main) 72%, transparent);
 }
 
 .tool-file-accordion__header {
@@ -449,22 +369,26 @@
     align-items: center;
     gap: 6px;
     width: 100%;
-    padding: 4px 8px;
-    background: var(--bg-panel);
+    padding: 8px 10px;
+    background: transparent;
     border: none;
-    border-bottom: 1px solid var(--border-light);
     cursor: pointer;
     font-size: 11px;
     color: var(--text-secondary);
     text-align: left;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    transition: background 0.12s;
 }
 
 .tool-file-accordion__header:hover {
-    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.tool-file-accordion__disclosure {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    flex-shrink: 0;
+    color: var(--text-muted);
 }
 
 .tool-file-accordion__name {
@@ -473,60 +397,42 @@
     white-space: nowrap;
 }
 
-.tool-file-accordion__dir {
-    font-size: 10px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .tool-file-accordion__badge {
     margin-left: auto;
     flex-shrink: 0;
 }
 
-.tool-file-accordion__arrow {
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    color: var(--text-muted);
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
 .tool-file-accordion__content {
-    max-height: 400px;
+    max-height: 420px;
     overflow-y: auto;
+    margin: 0;
+    padding: 0 10px 10px 24px;
+    background: transparent;
 }
 
-/* ── ToolErrorCard ── */
+/* ── Error lines ── */
 
 .tool-error-card {
-    border-top: 1px solid color-mix(in srgb, var(--status-danger, #ef4444) 20%, var(--border-light));
-    background: color-mix(in srgb, var(--status-danger, #ef4444) 5%, var(--bg-default));
+    margin: 4px 0 2px;
+    background: transparent;
 }
 
 .tool-error-card__header {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 8px 2px;
+    padding: 0 0 2px;
 }
 
 .tool-error-card__pill {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 1px 6px;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--status-danger, #ef4444) 25%, var(--border-light));
+    padding: 0;
+    border: none;
     color: var(--status-danger, #ef4444);
-    background: color-mix(in srgb, var(--status-danger, #ef4444) 8%, var(--bg-default));
-    font-size: 9px;
+    background: transparent;
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.06em;
     flex-shrink: 0;
@@ -536,8 +442,7 @@
     font-size: 10px;
     font-weight: 600;
     color: var(--status-danger, #ef4444);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.04em;
 }
 
 .tool-error-card__copy {
@@ -567,9 +472,10 @@
     align-items: flex-start;
     gap: 4px;
     width: 100%;
-    padding: 0 8px 5px;
-    border: none;
-    background: transparent;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--status-danger, #ef4444) 26%, var(--border-light));
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--status-danger, #ef4444) 5%, var(--bg-panel));
     cursor: pointer;
     text-align: left;
 }
@@ -580,7 +486,7 @@
     font-size: 11px;
     color: var(--status-danger, #ef4444);
     white-space: pre-wrap;
-    word-break: break-all;
+    word-break: break-word;
     line-height: 1.4;
     flex: 1;
 }
@@ -599,74 +505,82 @@
 
 .patch-badge {
     font-size: 9px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 1px 5px;
-    border-radius: 3px;
+    letter-spacing: 0.06em;
 }
 
 .patch-badge--add {
     color: var(--color-diff-add, #22c55e);
-    background: color-mix(in srgb, var(--color-diff-add, #22c55e) 12%, transparent);
 }
 
 .patch-badge--del {
     color: var(--color-diff-del, #ef4444);
-    background: color-mix(in srgb, var(--color-diff-del, #ef4444) 12%, transparent);
 }
 
 .patch-badge--move {
     color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-/* ── ContextToolGroup ── */
+/* ── Context group ── */
 
 .context-group {
-    margin: 2px 0;
-    border: 1px solid var(--border-light);
-    border-radius: 6px;
-    overflow: hidden;
-    background: var(--bg-panel);
+    margin: 1px 0;
+    border: none;
+    background: transparent;
 }
 
 .context-group__trigger {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     width: 100%;
-    padding: 5px 8px;
+    min-height: 28px;
+    padding: 4px 0;
     background: transparent;
     border: none;
     cursor: pointer;
     color: var(--text-secondary);
     font-size: var(--font-sm);
-    transition: background 0.12s;
     text-align: left;
 }
 
-.context-group__trigger:hover {
-    background: var(--bg-hover);
-}
-
-.context-group__badge {
+.context-group__disclosure {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 14px;
     flex-shrink: 0;
     color: var(--text-muted);
-    min-width: 42px;
-    padding: 1px 6px;
-    border-radius: 999px;
-    border: 1px solid var(--border-light);
-    background: var(--bg-default);
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
 }
 
-.context-group__title {
+.context-group__status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.context-group__status-dot--error {
+    background: var(--status-danger, #ef4444);
+}
+
+.context-group__badge,
+.context-tool-badge {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--text-muted);
+    background: transparent;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.context-group__title,
+.context-tool-name {
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
@@ -679,29 +593,15 @@
 }
 
 .context-group__error-badge {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--status-danger, #ef4444);
-    background: color-mix(in srgb, var(--status-danger, #ef4444) 12%, transparent);
-    padding: 1px 6px;
-    border-radius: 999px;
-}
-
-.context-group__arrow {
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-    color: var(--text-muted);
     margin-left: auto;
     font-size: 10px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    color: var(--status-danger, #ef4444);
 }
 
 .context-group__list {
-    border-top: 1px solid var(--border-light);
-    padding: 4px 8px;
+    margin: 2px 0 8px 26px;
+    padding: 8px 0 0 0;
 }
 
 .context-tool-item {
@@ -713,37 +613,6 @@
     color: var(--text-secondary);
 }
 
-.context-tool-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--text-muted);
-    min-width: 32px;
-    padding: 1px 5px;
-    border-radius: 999px;
-    border: 1px solid var(--border-light);
-    background: var(--bg-default);
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-}
-
-.context-tool-name {
-    font-weight: 500;
-    color: var(--text-primary);
-    white-space: nowrap;
-}
-
-.context-tool-path {
-    font-size: 10px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .context-tool-error {
     color: var(--status-danger, #ef4444);
     font-weight: 600;
@@ -753,15 +622,7 @@
     letter-spacing: 0.04em;
 }
 
-/* ── ToolGroup v2 wrapper ── */
-
-.tool-group-v2 {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-}
-
-/* ── Todo Inline ── */
+/* ── Todos ── */
 
 .todo-inline-list {
     display: flex;
@@ -773,27 +634,25 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 6px;
-    border-radius: var(--radius-sm);
+    padding: 2px 0;
     font-size: var(--font-sm);
     color: var(--text-primary);
-    transition: background 0.1s;
 }
 
 .todo-inline-status {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 38px;
-    padding: 1px 5px;
-    border-radius: 999px;
-    border: 1px solid var(--border-light);
-    background: var(--bg-default);
+    min-width: auto;
+    padding: 0;
+    border: none;
+    background: transparent;
     color: var(--text-muted);
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
     flex-shrink: 0;
+    text-transform: uppercase;
 }
 
 .todo-inline-status--active {
@@ -806,10 +665,6 @@
 
 .todo-inline-status--cancelled {
     color: var(--text-muted);
-}
-
-.todo-inline-item--active {
-    background: var(--bg-selected);
 }
 
 .todo-inline-item--done {

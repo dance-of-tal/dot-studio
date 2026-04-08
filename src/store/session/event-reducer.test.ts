@@ -224,6 +224,44 @@ describe('Event Reducer', () => {
             expect(msg.parts![0].tool!.status).toBe('running')
         })
 
+        it('preserves tool metadata for rich tool rendering', () => {
+            state.seMessages[SESSION_ID] = [
+                { id: 'msg-1', role: 'assistant', content: '', timestamp: 1000 },
+            ]
+
+            reduceMessagePartUpdated(SESSION_ID, 'msg-1', {
+                id: 'part-1',
+                type: 'tool',
+                tool: 'apply_patch',
+                callID: 'call-1',
+                state: {
+                    status: 'completed',
+                    metadata: {
+                        files: [
+                            {
+                                filePath: '/tmp/example.ts',
+                                relativePath: 'src/example.ts',
+                                type: 'update',
+                            },
+                        ],
+                    },
+                },
+            }, get, set)
+
+            expect(state.seMessages[SESSION_ID]?.[0]?.parts?.[0]).toMatchObject({
+                type: 'tool',
+                tool: {
+                    metadata: {
+                        files: [
+                            expect.objectContaining({
+                                relativePath: 'src/example.ts',
+                            }),
+                        ],
+                    },
+                },
+            })
+        })
+
         it('creates message if missing', () => {
             state.seMessages[SESSION_ID] = []
 

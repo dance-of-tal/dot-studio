@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
-    buildFocusFitViewOptions,
     DEFAULT_FOCUS_VIEWPORT,
     getCanvasViewportSize,
     revealCanvasNodeWithoutZoom,
@@ -43,17 +42,6 @@ describe('getCanvasViewportSize', () => {
     it('returns the provided fallback when no measurable element is found', () => {
         expect(getCanvasViewportSize(undefined, { width: 900, height: 700 })).toEqual({ width: 900, height: 700 })
         expect(getCanvasViewportSize(undefined)).toEqual(DEFAULT_FOCUS_VIEWPORT)
-    })
-})
-
-describe('buildFocusFitViewOptions', () => {
-    it('targets the focused node without animation padding', () => {
-        expect(buildFocusFitViewOptions('performer-1')).toEqual({
-            padding: 0,
-            minZoom: 1,
-            maxZoom: 1,
-            nodes: [{ id: 'performer-1' }],
-        })
     })
 })
 

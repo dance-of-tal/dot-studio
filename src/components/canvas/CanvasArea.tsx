@@ -16,6 +16,7 @@ import { useCanvasTransformTarget } from './useCanvasTransformTarget';
 import { useCanvasFocusFit } from './useCanvasFocusFit';
 import { useCanvasPresentation } from './useCanvasPresentation';
 import { resolveFocusNodeId, syncFocusViewport } from '../../lib/focus-utils';
+import { buildSyncFocusViewportState } from '../../store/workspace-focus-actions';
 import OffsetBezierEdge from './OffsetBezierEdge';
 
 const WorkspaceToolbar = lazy(() => import('../toolbar/WorkspaceToolbar'));
@@ -219,36 +220,8 @@ export default function CanvasArea() {
             }
 
             useStudioStore.setState((state) => {
-                if (!state.focusSnapshot) {
-                    return {}
-                }
-
-                if (state.focusSnapshot.type === 'performer') {
-                    const performer = state.performers.find((entry) => entry.id === focusNodeId)
-                    if (!performer || (performer.width === width && performer.height === height)) {
-                        return {}
-                    }
-                    return {
-                        performers: state.performers.map((entry) => (
-                            entry.id === focusNodeId
-                                ? { ...entry, width, height }
-                                : entry
-                        )),
-                    }
-                }
-
-                const act = state.acts.find((entry) => entry.id === focusNodeId)
-                if (!act || (act.width === width && act.height === height)) {
-                    return {}
-                }
-
-                return {
-                    acts: state.acts.map((entry) => (
-                        entry.id === focusNodeId
-                            ? { ...entry, width, height }
-                            : entry
-                    )),
-                }
+                const patch = buildSyncFocusViewportState(state, { width, height })
+                return patch || {}
             })
 
             if (reactFlowInstance) {

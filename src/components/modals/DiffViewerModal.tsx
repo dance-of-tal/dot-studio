@@ -1,35 +1,32 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { useStudioStore } from '../../store';
-import { X, Code, Loader2 } from 'lucide-react';
-import './DiffViewerModal.css';
-
-type DiffItem = {
-    diff?: string
-    post_name?: string
-    pre_name?: string
-}
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useStudioStore } from '../../store'
+import { X, Code, Loader2 } from 'lucide-react'
+import { SessionReview } from '../../features/chat/SessionReview'
+import { normalizeSessionDiffEntries } from '../../features/chat/session-review-diffs'
+import './DiffViewerModal.css'
 
 export default function DiffViewerModal({ performerId, onClose }: { performerId: string, onClose: () => void }) {
-    const { getDiff, performers } = useStudioStore();
-    const [diffs, setDiffs] = useState<DiffItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const performerName = performers.find(a => a.id === performerId)?.name || "Performer";
+    const { getDiff, performers } = useStudioStore()
+    const [diffEntries, setDiffEntries] = useState<Array<Record<string, unknown>>>([])
+    const [loading, setLoading] = useState(true)
+    const performerName = performers.find(a => a.id === performerId)?.name || 'Performer'
 
     useEffect(() => {
-        let active = true;
+        let active = true
         getDiff(performerId).then((data) => {
             if (active) {
-                setDiffs((data || []).map((entry) => ({
-                    diff: typeof entry.diff === 'string' ? entry.diff : undefined,
-                    post_name: typeof entry.post_name === 'string' ? entry.post_name : undefined,
-                    pre_name: typeof entry.pre_name === 'string' ? entry.pre_name : undefined,
-                })));
-                setLoading(false);
+                setDiffEntries(data || [])
+                setLoading(false)
             }
-        });
-        return () => { active = false; };
-    }, [performerId, getDiff]);
+        })
+        return () => { active = false }
+    }, [performerId, getDiff])
+
+    const normalizedDiffs = useMemo(
+        () => normalizeSessionDiffEntries(diffEntries),
+        [diffEntries],
+    )
 
     const modalContent = (
         <div className="diff-modal-overlay" onClick={onClose}>
@@ -50,24 +47,21 @@ export default function DiffViewerModal({ performerId, onClose }: { performerId:
                             <Loader2 size={24} className="spin-icon" />
                             <span>Loading diffs...</span>
                         </div>
-                    ) : diffs.length === 0 ? (
+                    ) : normalizedDiffs.length === 0 ? (
                         <div className="diff-empty">
                             No uncommitted code changes in this session.
                         </div>
                     ) : (
-                        <div className="diff-list">
-                            {diffs.map((diffItem, idx) => (
-                                <div key={idx} className="diff-item">
-                                    <div className="diff-file-path">{diffItem.post_name || diffItem.pre_name}</div>
-                                    <pre className="diff-code-block">{diffItem.diff}</pre>
-                                </div>
-                            ))}
-                        </div>
+                        <SessionReview
+                            messages={[]}
+                            diffEntries={diffEntries}
+                            className="diff-modal-review"
+                        />
                     )}
                 </div>
             </div>
         </div>
-    );
+    )
 
-    return createPortal(modalContent, document.body);
+    return createPortal(modalContent, document.body)
 }

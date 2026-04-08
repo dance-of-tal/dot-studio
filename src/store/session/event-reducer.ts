@@ -82,6 +82,7 @@ export function reduceMessagePartUpdated(
             status?: 'pending' | 'running' | 'completed' | 'error'
             title?: string
             input?: unknown
+            metadata?: unknown
             output?: unknown
             error?: unknown
             time?: { start: number; end?: number }
@@ -133,6 +134,7 @@ export function reduceMessagePartUpdated(
                 status: s.status || 'pending',
                 title: s.title,
                 input: s.input as Record<string, unknown> | undefined,
+                metadata: s.metadata as Record<string, unknown> | undefined,
                 output: s.output as string | undefined,
                 error: s.error as string | undefined,
                 time: s.time,

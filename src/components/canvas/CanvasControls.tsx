@@ -4,7 +4,7 @@ import type { Viewport } from '@xyflow/react'
 import { Maximize, Maximize2, Minimize } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
-import { getCanvasViewportSize, scheduleFitView } from '../../lib/focus-utils'
+import { getCanvasViewportSize } from '../../lib/focus-utils'
 
 export default function CanvasControls() {
     const { fitView, zoomIn, zoomOut, getViewport, setViewport } = useReactFlow()
@@ -45,7 +45,7 @@ export default function CanvasControls() {
         if (!nodeId) return
 
         enterFocusMode(nodeId, nodeType, getCanvasViewportSize())
-    }, [selectedPerformerId, selectedActId, enterFocusMode, fitView])
+    }, [selectedPerformerId, selectedActId, enterFocusMode])
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -54,19 +54,17 @@ export default function CanvasControls() {
             if (focusSnapshot?.type === 'act') {
                 exitActLayoutMode()
                 exitFocusMode()
-                scheduleFitView(fitView, 'exit')
                 return
             }
 
             if (isFocusActive) {
                 exitFocusMode()
-                scheduleFitView(fitView, 'exit')
             }
         }
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isFocusActive, exitFocusMode, focusSnapshot, exitActLayoutMode, fitView])
+    }, [isFocusActive, exitFocusMode, focusSnapshot, exitActLayoutMode])
 
     if (isFocusActive) {
         return null

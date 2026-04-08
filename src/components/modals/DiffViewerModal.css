@@ -64,6 +64,15 @@
     flex: 1;
 }
 
+.diff-modal-review {
+    border: none;
+    border-radius: 0;
+}
+
+.diff-modal-review .session-review__files {
+    padding: 0;
+}
+
 .diff-loading {
     display: flex;
     flex-direction: column;
@@ -79,37 +88,4 @@
     color: var(--text-muted);
     padding: 40px;
     font-size: var(--font-lg);
-}
-
-.diff-list {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.diff-item {
-    border: 1px solid var(--border-main);
-    border-radius: var(--radius);
-    overflow: hidden;
-}
-
-.diff-file-path {
-    background: var(--bg-hover);
-    padding: 8px 12px;
-    font-size: var(--font-md);
-    font-weight: 600;
-    border-bottom: 1px solid var(--border-main);
-    color: var(--text-primary);
-}
-
-.diff-code-block {
-    margin: 0;
-    padding: 12px;
-    background: var(--bg-panel);
-    color: var(--text-primary);
-    font-size: var(--font-md);
-    line-height: 1.5;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
 }

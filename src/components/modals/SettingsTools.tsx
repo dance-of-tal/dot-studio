@@ -128,7 +128,7 @@ export default function SettingsTools({ refreshToken }: SettingsToolsProps) {
                 <div>
                     <h2 className="stg-panel__title">Tools</h2>
                     <div className="stg-note stg-note--muted">
-                        Tool permissions are OpenCode runtime config, so changes are queued and adopted at the next execution boundary.
+                        Tool permissions and auto-accept behavior live in OpenCode runtime config, not performer projection, so changes are queued and adopted at the next execution boundary.
                     </div>
                 </div>
                 <button className="btn btn--primary" onClick={() => { void handleSave() }} disabled={!dirty || saving || loading}>

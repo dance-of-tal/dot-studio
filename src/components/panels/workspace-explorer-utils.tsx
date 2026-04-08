@@ -21,12 +21,18 @@ export type PerformerSessionRecord = {
     title?: string
     createdAt?: number
     updatedAt?: number
+    parentId?: string | null
 }
 
 export type PerformerSessionRow = {
     session: PerformerSessionRecord
     performerId: string
     active: boolean
+}
+
+export type PerformerSessionTreeRow = PerformerSessionRow & {
+    children: PerformerSessionTreeRow[]
+    depth: number
 }
 
 export type ExplorerRenamingSession = null | {
@@ -44,7 +50,7 @@ export type ThreadRow = {
     meta: string
     hidden: boolean
     active: boolean
-    children: PerformerSessionRow[]
+    children: PerformerSessionTreeRow[]
 }
 
 // ── Pure helpers ────────────────────────────────────────
@@ -85,21 +91,58 @@ export function buildPerformerSessionRows(
     })
 }
 
-export function groupPerformerSessionsById(performerSessionRows: PerformerSessionRow[]) {
-    const map = new Map<string, PerformerSessionRow[]>()
-    performerSessionRows.forEach((entry) => {
-        const current = map.get(entry.performerId) || []
-        current.push(entry)
-        map.set(entry.performerId, current)
+function compareSessionRows(left: PerformerSessionRow, right: PerformerSessionRow) {
+    const activityDelta = resolveSessionActivityAt(right.session) - resolveSessionActivityAt(left.session)
+    if (activityDelta !== 0) {
+        return activityDelta
+    }
+    return (right.session.createdAt || 0) - (left.session.createdAt || 0)
+}
+
+function buildPerformerSessionTree(entries: PerformerSessionRow[]): PerformerSessionTreeRow[] {
+    const nodeById = new Map<string, PerformerSessionTreeRow>()
+    entries.forEach((entry) => {
+        nodeById.set(entry.session.id, {
+            ...entry,
+            children: [],
+            depth: 0,
+        })
     })
-    map.forEach((entries, performerId) => {
-        map.set(performerId, [...entries].sort((left, right) => {
-            const activityDelta = resolveSessionActivityAt(right.session) - resolveSessionActivityAt(left.session)
-            if (activityDelta !== 0) {
-                return activityDelta
-            }
-            return (right.session.createdAt || 0) - (left.session.createdAt || 0)
-        }))
+
+    const roots: PerformerSessionTreeRow[] = []
+    nodeById.forEach((node) => {
+        const parentId = node.session.parentId || null
+        const parent = parentId ? nodeById.get(parentId) || null : null
+        if (parent && parent.performerId === node.performerId) {
+            parent.children.push(node)
+            return
+        }
+        roots.push(node)
+    })
+
+    const sortTree = (nodes: PerformerSessionTreeRow[], depth = 0): PerformerSessionTreeRow[] => (
+        [...nodes]
+            .sort(compareSessionRows)
+            .map((node) => ({
+                ...node,
+                depth,
+                children: sortTree(node.children, depth + 1),
+            }))
+    )
+
+    return sortTree(roots)
+}
+
+export function groupPerformerSessionsById(performerSessionRows: PerformerSessionRow[]) {
+    const groupedRows = new Map<string, PerformerSessionRow[]>()
+    performerSessionRows.forEach((entry) => {
+        const current = groupedRows.get(entry.performerId) || []
+        current.push(entry)
+        groupedRows.set(entry.performerId, current)
+    })
+    const map = new Map<string, PerformerSessionTreeRow[]>()
+    groupedRows.forEach((entries, performerId) => {
+        map.set(performerId, buildPerformerSessionTree(entries))
     })
     return map
 }
@@ -129,7 +172,7 @@ export function resolveActThreadActivityAt(
 export function buildThreadRows(args: {
     sharedPerformers: PerformerNode[]
     editingTarget: { type: 'performer'; id: string } | null
-    performerSessionsById: Map<string, PerformerSessionRow[]>
+    performerSessionsById: Map<string, PerformerSessionTreeRow[]>
     focusSnapshot: FocusSnapshot | null
     selectedPerformerId: string | null
     selectedPerformerSessionId: string | null

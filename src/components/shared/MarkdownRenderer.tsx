@@ -2,7 +2,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { memo, useState, useCallback, Children, isValidElement } from 'react';
+import { memo, useState, useCallback, Children, isValidElement, useEffect } from 'react';
 import { Check, Copy, ChevronDown, ChevronRight } from 'lucide-react';
 import 'highlight.js/styles/github-dark.min.css';
 import './MarkdownRenderer.css';
@@ -62,14 +62,23 @@ function CopyButton({ text }: { text: string }) {
     )
 }
 
-function ThinkingBlock({ content }: { content: string }) {
-    const [expanded, setExpanded] = useState(false)
+function ThinkingBlock({ content, streaming = false }: { content: string; streaming?: boolean }) {
+    const [expanded, setExpanded] = useState(streaming)
+
+    useEffect(() => {
+        setExpanded(streaming)
+    }, [streaming])
+
+    const handleToggle = useCallback(() => {
+        if (streaming) return
+        setExpanded((current) => !current)
+    }, [streaming])
 
     return (
         <div className="thinking-block">
             <button
                 className="thinking-toggle"
-                onClick={() => setExpanded(!expanded)}
+                onClick={handleToggle}
                 type="button"
             >
                 {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -112,7 +121,7 @@ function MarkdownRenderer({ content, showThinking = true, streaming = false }: M
 
     return (
         <div className={`md-renderer${streaming ? ' md-renderer--streaming' : ''}`}>
-            {visibleThinking && <ThinkingBlock content={visibleThinking} />}
+            {visibleThinking && <ThinkingBlock content={visibleThinking} streaming={streaming} />}
             {streaming ? (
                 <StreamingMarkdown content={response} />
             ) : (

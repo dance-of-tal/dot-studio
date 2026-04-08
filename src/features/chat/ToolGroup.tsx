@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, type ReactNode } from 'react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { Todo } from '@opencode-ai/sdk/v2'
 import type { ChatMessageToolInfo } from '../../types'
 import { useUISettings } from '../../store/settingsSlice'
@@ -52,6 +53,10 @@ function extractFileContent(input: Record<string, unknown> | undefined): string 
     return String(input.content || input.CodeContent || input.new_string || input.newString || '')
 }
 
+function extractToolMetadata(tool: ChatMessageToolInfo): Record<string, unknown> | undefined {
+    return tool.metadata
+}
+
 function extractOldContent(input: Record<string, unknown> | undefined): string {
     if (!input) return ''
     return String(input.old_string || input.oldString || input.TargetContent || '')
@@ -77,6 +82,36 @@ function extractPatchText(input: Record<string, unknown> | undefined): string {
     if (typeof input.patch === 'string') return input.patch
     if (typeof input.content === 'string') return input.content
     return ''
+}
+
+function readToolString(record: Record<string, unknown> | undefined, ...keys: string[]): string {
+    if (!record) return ''
+    for (const key of keys) {
+        const value = record[key]
+        if (typeof value === 'string' && value) {
+            return value
+        }
+    }
+    return ''
+}
+
+type ApplyPatchMetadataFile = {
+    filePath?: string
+    relativePath?: string
+    type?: 'add' | 'update' | 'delete' | 'move'
+    diff?: string
+    before?: string
+    after?: string
+    additions?: number
+    deletions?: number
+    movePath?: string
+}
+
+function extractApplyPatchFiles(tool: ChatMessageToolInfo): ApplyPatchMetadataFile[] {
+    const metadata = extractToolMetadata(tool)
+    const files = metadata?.files
+    if (!Array.isArray(files)) return []
+    return files.filter((file): file is ApplyPatchMetadataFile => !!file && typeof file === 'object')
 }
 
 function parsePatchFiles(patchText: string): Array<{ filename: string; diff: string; type: 'add' | 'update' | 'delete' }> {
@@ -184,8 +219,15 @@ function BasicTool({
             <button
                 className="basic-tool__trigger"
                 onClick={() => canToggle && setOpen(!open)}
+                type="button"
                 style={{ cursor: canToggle ? 'pointer' : 'default' }}
             >
+                <span className="basic-tool__disclosure" aria-hidden="true">
+                    {canToggle ? (open ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : (
+                        <span className="basic-tool__disclosure-spacer" />
+                    )}
+                </span>
+                <span className={`basic-tool__status-dot${isError ? ' basic-tool__status-dot--error' : ''}`} />
                 <span className={`basic-tool__badge${isError ? ' basic-tool__badge--error' : ''}`}>
                     {badgeLabel}
                 </span>
@@ -205,11 +247,6 @@ function BasicTool({
                 )}
                 {!pending && actions && <span className="basic-tool__actions">{actions}</span>}
                 {!pending && duration && <span className="basic-tool__duration">{duration}</span>}
-                {canToggle && !pending && (
-                    <span className="basic-tool__arrow">
-                        {open ? 'Hide' : 'Show'}
-                    </span>
-                )}
             </button>
             {open && hasContent && (
                 <div className="basic-tool__content">{children}</div>
@@ -249,6 +286,7 @@ function ToolErrorCard({ error, toolName }: { error: string; toolName: string })
             <button
                 className="tool-error-card__body"
                 onClick={() => setExpanded(!expanded)}
+                type="button"
             >
                 <pre className="tool-error-card__text">{expanded ? error : preview}</pre>
                 {error.length > 120 && (
@@ -283,11 +321,8 @@ function EditWriteTrigger({
             <div className="edit-trigger__title-area">
                 <div className="edit-trigger__title">
                     <span className="edit-trigger__title-text">
-                        <TextShimmer text={label} active={pending} />
+                        <TextShimmer text={filename || label} active={pending} />
                     </span>
-                    {!pending && filename && (
-                        <span className="edit-trigger__filename">{filename}</span>
-                    )}
                 </div>
                 {!pending && directory && (
                     <div className="edit-trigger__path">
@@ -311,25 +346,27 @@ function EditWriteTrigger({
 function ToolFileAccordion({
     path,
     badge,
+    defaultOpen = false,
     children,
 }: {
     path: string
     badge?: ReactNode
+    defaultOpen?: boolean
     children?: ReactNode
 }) {
-    const [open, setOpen] = useState(false)
+    const [open, setOpen] = useState(defaultOpen)
     const filename = getFilename(path)
     const directory = getDirectory(path)
 
     return (
-        <div className="tool-file-accordion">
-            <button className="tool-file-accordion__header" onClick={() => setOpen(!open)}>
+        <div className={`tool-file-accordion${open ? ' tool-file-accordion--open' : ''}`}>
+            <button className="tool-file-accordion__header" onClick={() => setOpen(!open)} type="button">
+                <span className="tool-file-accordion__disclosure" aria-hidden="true">
+                    {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                </span>
                 <span className="tool-file-accordion__name">{filename}</span>
                 {directory && <span className="tool-file-accordion__dir">{directory}</span>}
                 {badge && <span className="tool-file-accordion__badge">{badge}</span>}
-                <span className="tool-file-accordion__arrow">
-                    {open ? 'Hide' : 'Show'}
-                </span>
             </button>
             {open && children && (
                 <div className="tool-file-accordion__content">{children}</div>
@@ -370,9 +407,11 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
     /* ── Shell/Bash ── */
     if (isShell) {
         const cmd = extractShellCommand(tool.input)
-        const desc = tool.input?.description ? String(tool.input.description) : undefined
-        const output = tool.output || ''
+        const metadata = extractToolMetadata(tool)
+        const desc = readToolString(tool.input, 'description') || readToolString(metadata, 'description') || undefined
+        const output = tool.output || readToolString(metadata, 'output', 'stdout')
         const combined = `$ ${cmd}${output ? '\n\n' + output : ''}`
+        const summary = desc || cmd || 'Running command'
 
         return (
             <BasicTool
@@ -380,10 +419,10 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
                 trigger={
                     <div className="shell-trigger">
                         <span className="shell-trigger__title">
-                            <TextShimmer text="Shell" active={pending} />
+                            <TextShimmer text={summary} active={pending} />
                         </span>
-                        {!pending && desc && (
-                            <span className="shell-trigger__desc">{desc}</span>
+                        {!pending && desc && cmd && desc !== cmd && (
+                            <span className="shell-trigger__desc">{cmd}</span>
                         )}
                     </div>
                 }
@@ -408,12 +447,14 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
 
     /* ── Edit (str_replace, multi_replace, etc.) ── */
     if (isEdit) {
+        const metadata = extractToolMetadata(tool)
         const filePath = extractFilePath(tool.input)
         const filename = getFilename(filePath)
         const directory = getDirectory(filePath)
         const oldContent = extractOldContent(tool.input)
         const newContent = extractNewContent(tool.input)
         const diff = oldContent || newContent ? countDiffLines(oldContent, newContent) : null
+        const metadataDiff = readToolString(metadata, 'diff')
 
         return (
             <BasicTool
@@ -431,17 +472,15 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
                 duration={durationLabel}
                 defaultOpen={editToolPartsExpanded}
             >
-                {filePath && (oldContent || newContent) && (
-                    <ToolFileAccordion
-                        path={filePath}
-                        badge={diff ? <DiffChanges changes={diff} /> : undefined}
-                    >
-                        <DiffBlock
-                            before={oldContent}
-                            after={newContent}
-                            filename={filename}
-                        />
-                    </ToolFileAccordion>
+                {filePath && metadataDiff && (
+                    <SyntaxBlock code={metadataDiff} language="diff" lineNumbers={false} maxHeight={400} />
+                )}
+                {filePath && !metadataDiff && (oldContent || newContent) && (
+                    <DiffBlock
+                        before={oldContent}
+                        after={newContent}
+                        filename={filename}
+                    />
                 )}
                 {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
             </BasicTool>
@@ -471,17 +510,15 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
                 defaultOpen={editToolPartsExpanded}
             >
                 {filePath && (
-                    <ToolFileAccordion path={filePath}>
-                        {content ? (
-                            <SyntaxBlock
-                                code={content.length > 3000 ? content.slice(0, 3000) + '\n\n… (truncated)' : content}
-                                filename={filename}
-                                maxHeight={400}
-                            />
-                        ) : tool.output ? (
-                            <pre className="tool-pre">{tool.output}</pre>
-                        ) : null}
-                    </ToolFileAccordion>
+                    content ? (
+                        <SyntaxBlock
+                            code={content.length > 3000 ? content.slice(0, 3000) + '\n\n… (truncated)' : content}
+                            filename={filename}
+                            maxHeight={400}
+                        />
+                    ) : tool.output ? (
+                        <pre className="tool-pre tool-pre--panel">{tool.output}</pre>
+                    ) : null
                 )}
                 {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
             </BasicTool>
@@ -491,60 +528,104 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
     /* ── apply_patch (unified diff) ── */
     if (isPatch) {
         const patchText = extractPatchText(tool.input)
-        const patchFiles = parsePatchFiles(patchText)
+        const metadataFiles = extractApplyPatchFiles(tool)
+        const patchFiles: ApplyPatchMetadataFile[] = metadataFiles.length > 0
+            ? metadataFiles
+            : parsePatchFiles(patchText).map((file) => ({
+                filePath: file.filename,
+                relativePath: file.filename,
+                type: file.type,
+                diff: file.diff,
+            }))
 
         // Single file or unknown format — show whole diff
         if (patchFiles.length <= 1) {
-            const singlePath = patchFiles[0]?.filename || extractFilePath(tool.input)
+            const singlePath = patchFiles[0]?.relativePath || patchFiles[0]?.filePath || extractFilePath(tool.input)
             const singleFilename = singlePath ? getFilename(singlePath) : 'patch'
             const singleDir = singlePath ? getDirectory(singlePath) : ''
+            const singleFile = patchFiles[0]
+            const singleChanges = typeof singleFile?.additions === 'number' || typeof singleFile?.deletions === 'number'
+                ? {
+                    additions: typeof singleFile?.additions === 'number' ? singleFile.additions : 0,
+                    deletions: typeof singleFile?.deletions === 'number' ? singleFile.deletions : 0,
+                }
+                : null
+            const singleLabel = singlePath ? 'Patch' : (pending ? 'Preparing patch' : '1 file changed')
 
             return (
                 <BasicTool
                     badge="PATCH"
                     trigger={
                         <EditWriteTrigger
-                            label="Patch"
+                            label={singleLabel}
                             pending={pending}
-                            filename={singleFilename}
+                            filename={singlePath ? singleFilename : ''}
                             directory={singleDir}
+                            diffChanges={singleChanges}
                         />
                     }
                     status={tool.status}
                     duration={durationLabel}
                     defaultOpen={editToolPartsExpanded}
                 >
-                    {patchText && (
+                    {singleFile?.before !== undefined || singleFile?.after !== undefined ? (
+                        <DiffBlock
+                            before={singleFile?.before || ''}
+                            after={singleFile?.after || ''}
+                            filename={singleFilename}
+                        />
+                    ) : patchText ? (
                         <SyntaxBlock code={patchText} language="diff" lineNumbers={false} maxHeight={500} />
-                    )}
+                    ) : singleFile?.diff ? (
+                        <SyntaxBlock code={singleFile.diff} language="diff" lineNumbers={false} maxHeight={500} />
+                    ) : null}
                     {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
                 </BasicTool>
             )
         }
 
-        // Multi-file patch — accordion per file
         return (
             <BasicTool
                 badge="PATCH"
-                title="Patch"
-                subtitle={!pending ? `${patchFiles.length} files` : undefined}
+                title={!pending ? `${patchFiles.length} files changed` : 'Preparing files'}
                 status={tool.status}
                 duration={durationLabel}
                 defaultOpen={editToolPartsExpanded}
             >
-                {patchFiles.map((file, idx) => (
-                    <ToolFileAccordion
-                        key={idx}
-                        path={file.filename}
-                        badge={
-                            file.type === 'add' ? <span className="patch-badge patch-badge--add">created</span>
-                            : file.type === 'delete' ? <span className="patch-badge patch-badge--del">deleted</span>
-                            : null
+                {patchFiles.map((file, idx) => {
+                    const displayPath = file.relativePath || file.filePath || `patch-${idx + 1}`
+                    const changeType = file.type || 'update'
+                    const changes = typeof file.additions === 'number' || typeof file.deletions === 'number'
+                        ? {
+                            additions: typeof file.additions === 'number' ? file.additions : 0,
+                            deletions: typeof file.deletions === 'number' ? file.deletions : 0,
                         }
-                    >
-                        <SyntaxBlock code={file.diff} language="diff" lineNumbers={false} maxHeight={400} />
-                    </ToolFileAccordion>
-                ))}
+                        : null
+
+                    return (
+                        <ToolFileAccordion
+                            key={`${displayPath}:${idx}`}
+                            path={displayPath}
+                            defaultOpen={changeType !== 'delete'}
+                            badge={
+                                changeType === 'add' ? <span className="patch-badge patch-badge--add">created</span>
+                                : changeType === 'delete' ? <span className="patch-badge patch-badge--del">deleted</span>
+                                : changeType === 'move' ? <span className="patch-badge patch-badge--move">moved</span>
+                                : changes ? <DiffChanges changes={changes} /> : null
+                            }
+                        >
+                            {file.before !== undefined || file.after !== undefined ? (
+                                <DiffBlock
+                                    before={file.before || ''}
+                                    after={file.after || ''}
+                                    filename={getFilename(displayPath)}
+                                />
+                            ) : file.diff ? (
+                                <SyntaxBlock code={file.diff} language="diff" lineNumbers={false} maxHeight={400} />
+                            ) : null}
+                        </ToolFileAccordion>
+                    )
+                })}
                 {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
             </BasicTool>
         )
@@ -752,7 +833,11 @@ function ContextToolGroup({ tools }: { tools: ChatMessageToolInfo[] }) {
 
     return (
         <div className="context-group">
-            <button className="context-group__trigger" onClick={() => setOpen(!open)}>
+            <button className="context-group__trigger" onClick={() => setOpen(!open)} type="button">
+                <span className="context-group__disclosure" aria-hidden="true">
+                    {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                </span>
+                <span className={`context-group__status-dot${errorCount > 0 ? ' context-group__status-dot--error' : ''}`} />
                 <span className="context-group__badge">
                     {running ? 'RUN' : 'CTX'}
                 </span>
@@ -768,9 +853,6 @@ function ContextToolGroup({ tools }: { tools: ChatMessageToolInfo[] }) {
                 {errorCount > 0 && (
                     <span className="context-group__error-badge">{errorCount} error{errorCount > 1 ? 's' : ''}</span>
                 )}
-                <span className="context-group__arrow">
-                    {open ? 'Hide' : 'Show'}
-                </span>
             </button>
             {open && (
                 <div className="context-group__list">
@@ -816,7 +898,7 @@ function TodoInlineList({ input, output }: { input?: Record<string, unknown>; ou
         if (allTodos.length > 0) items = allTodos.map(t => ({ content: t.content, status: t.status }))
     }
     if (items.length === 0 && input) {
-        return <pre className="tool-pre">{JSON.stringify(input, null, 2)}</pre>
+        return <pre className="tool-pre tool-pre--panel">{JSON.stringify(input, null, 2)}</pre>
     }
 
     const iconFor = (s: string) => {

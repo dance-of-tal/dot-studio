@@ -31,7 +31,11 @@ export default function ComposerPillBar({
                 </div>
             ))}
             {attachments.map((attachment, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-hover)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px' }}>
+                <div
+                    key={idx}
+                    className="composer-attachment-pill"
+                    title={attachment.name}
+                >
                     <FileIcon size={10} style={{ marginRight: '4px' }} />
                     {attachment.name}
                     <X size={10} style={{ marginLeft: '4px', cursor: 'pointer' }} onClick={() => setAttachments((current) => current.filter((_, index) => index !== idx))} />

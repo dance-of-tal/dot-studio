@@ -342,6 +342,7 @@ export interface ChatMessageToolInfo {
     status: 'pending' | 'running' | 'completed' | 'error'
     title?: string
     input?: Record<string, unknown>
+    metadata?: Record<string, unknown>
     output?: string
     error?: string
     time?: { start: number; end?: number }

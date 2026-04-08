@@ -1,4 +1,4 @@
-import { memo, useState, useMemo, useCallback, useDeferredValue } from 'react'
+import { memo, useState, useMemo, useCallback, useDeferredValue, useEffect } from 'react'
 import { ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import type { ChatMessage, ChatMessagePart, ChatMessageToolInfo } from '../../types'
@@ -18,17 +18,27 @@ function stripMarkdownMarkers(text: string) {
         .trim()
 }
 
-function ReasoningBlock({ content }: { content: string }) {
-    const [expanded, setExpanded] = useState(false)
+function ReasoningBlock({ content, streaming = false }: { content: string; streaming?: boolean }) {
+    const [expanded, setExpanded] = useState(streaming)
     const preview = stripMarkdownMarkers(content).slice(0, 200)
+
+    useEffect(() => {
+        setExpanded(streaming)
+    }, [streaming])
+
+    const handleToggle = useCallback(() => {
+        if (streaming) return
+        setExpanded((current) => !current)
+    }, [streaming])
+
     return (
         <div className="thinking-row">
-            <button className="thinking-row__header" onClick={() => setExpanded(!expanded)}>
+            <button className="thinking-row__header" onClick={handleToggle} type="button">
                 <span className="thinking-row__chevron">
                     {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                 </span>
                 <span className="thinking-row__label">
-                    <TextShimmer text="Thinking" active={false} />
+                    <TextShimmer text="Thinking" active={streaming} />
                 </span>
                 {!expanded && preview ? (
                     <span className="thinking-row__preview">
@@ -38,7 +48,7 @@ function ReasoningBlock({ content }: { content: string }) {
             </button>
             {expanded ? (
                 <div className="thinking-row__content">
-                    <MarkdownRenderer content={content} />
+                    <MarkdownRenderer content={content} streaming={streaming} />
                 </div>
             ) : null}
         </div>
@@ -71,7 +81,15 @@ function groupParts(parts: ChatMessagePart[]): Array<{ kind: 'tool-group'; tools
     return groups
 }
 
-function MessageParts({ parts, showReasoningSummaries }: { parts: ChatMessagePart[]; showReasoningSummaries: boolean }) {
+function MessageParts({
+    parts,
+    showReasoningSummaries,
+    streaming = false,
+}: {
+    parts: ChatMessagePart[]
+    showReasoningSummaries: boolean
+    streaming?: boolean
+}) {
     const grouped = useMemo(() => groupParts(parts), [parts])
 
     return (
@@ -82,7 +100,7 @@ function MessageParts({ parts, showReasoningSummaries }: { parts: ChatMessagePar
                 }
                 const { part } = group
                 if (part.type === 'reasoning' && part.content && showReasoningSummaries) {
-                    return <ReasoningBlock key={part.id} content={part.content} />
+                    return <ReasoningBlock key={part.id} content={part.content} streaming={streaming} />
                 }
                 if (part.type === 'compaction') {
                     return (
@@ -138,7 +156,7 @@ function ChatMessageContent({
     return (
         <div className={className}>
             {message.parts && message.parts.length > 0 ? (
-                <MessageParts parts={message.parts} showReasoningSummaries={showThinking} />
+                <MessageParts parts={message.parts} showReasoningSummaries={showThinking} streaming={streaming} />
             ) : null}
             {displayContent ? (
                 <>

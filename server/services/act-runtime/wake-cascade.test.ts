@@ -135,6 +135,7 @@ describe('wake-cascade participant scheduling', () => {
                 participantKey === 'Researcher' ? 'session-researcher' : null,
             ),
             getOrCreateSession: vi.fn(),
+            setParticipantStatus: vi.fn().mockResolvedValue(undefined),
         } as const
 
         markParticipantQueueRunning(threadId, 'Researcher')
@@ -239,6 +240,7 @@ describe('wake-cascade participant scheduling', () => {
                 return null
             }),
             getOrCreateSession: vi.fn(),
+            setParticipantStatus: vi.fn().mockResolvedValue(undefined),
         } as const
 
         markParticipantQueueRunning(threadId, 'Lead')
@@ -333,6 +335,7 @@ describe('wake-cascade participant scheduling', () => {
             getRecentEvents: vi.fn().mockResolvedValue([]),
             getPerformerSession: vi.fn().mockReturnValue('session-researcher'),
             getOrCreateSession: vi.fn(),
+            setParticipantStatus: vi.fn().mockResolvedValue(undefined),
         } as const
 
         const cascade = await processWakeCascade(

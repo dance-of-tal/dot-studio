@@ -1,9 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { Node, ReactFlowInstance } from '@xyflow/react'
 import {
-    buildFocusFitViewOptions,
+    FOCUS_EXIT_FIT,
+    FOCUS_VIEWPORT_SYNC_DELAY,
     resolveFocusNodeId,
     revealCanvasNodeWithoutZoom,
+    syncFocusViewport,
 } from '../../lib/focus-utils'
 import type { CanvasRevealTarget, FocusSnapshot } from '../../store/types'
 
@@ -14,23 +16,35 @@ export function useCanvasFocusFit(args: {
     nodeCount: number
 }) {
     const { focusSnapshot, canvasRevealTarget, reactFlowInstance, nodeCount } = args
+    const wasFocusActiveRef = useRef(false)
 
     useEffect(() => {
-        const focusNodeId = canvasRevealTarget?.id || resolveFocusNodeId(focusSnapshot)
-
-        if (!reactFlowInstance || !focusNodeId) {
+        if (!reactFlowInstance) {
+            wasFocusActiveRef.current = !!focusSnapshot
             return
         }
 
-        const isFocusMode = !!focusSnapshot && focusNodeId === resolveFocusNodeId(focusSnapshot)
+        const isFocusActive = !!focusSnapshot
+        const focusNodeId = resolveFocusNodeId(focusSnapshot)
+        const wasFocusActive = wasFocusActiveRef.current
+
         const timer = window.setTimeout(() => {
-            if (isFocusMode) {
-                reactFlowInstance.fitView(buildFocusFitViewOptions(focusNodeId))
+            if (isFocusActive && focusNodeId) {
+                syncFocusViewport(reactFlowInstance)
                 return
             }
 
-            revealCanvasNodeWithoutZoom(reactFlowInstance, focusNodeId)
-        }, 80)
+            if (wasFocusActive) {
+                reactFlowInstance.fitView(FOCUS_EXIT_FIT)
+                return
+            }
+
+            if (canvasRevealTarget?.id) {
+                revealCanvasNodeWithoutZoom(reactFlowInstance, canvasRevealTarget.id)
+            }
+        }, FOCUS_VIEWPORT_SYNC_DELAY)
+
+        wasFocusActiveRef.current = isFocusActive
 
         return () => {
             window.clearTimeout(timer)

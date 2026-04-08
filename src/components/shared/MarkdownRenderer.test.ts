@@ -1,5 +1,7 @@
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { splitThinking } from './MarkdownRenderer'
+import MarkdownRenderer, { splitThinking } from './MarkdownRenderer'
 
 describe('splitThinking', () => {
     it('extracts a completed think block', () => {
@@ -21,5 +23,29 @@ describe('splitThinking', () => {
             thinking: null,
             response: '<think>Plan in progress',
         })
+    })
+})
+
+describe('MarkdownRenderer thinking visibility', () => {
+    it('keeps completed thinking collapsed by default', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(MarkdownRenderer, {
+                content: '<think>Plan first</think>\n\nAnswer next',
+                streaming: false,
+            }),
+        )
+
+        expect(html).not.toContain('thinking-content')
+    })
+
+    it('starts expanded when think content is streaming', () => {
+        const html = renderToStaticMarkup(
+            React.createElement(MarkdownRenderer, {
+                content: '<think>Plan in progress',
+                streaming: true,
+            }),
+        )
+
+        expect(html).toContain('thinking-content')
     })
 })

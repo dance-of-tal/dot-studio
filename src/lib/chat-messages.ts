@@ -1,16 +1,22 @@
 import type { ChatMessage, ChatMessagePart } from '../types'
 import { extractAssistantActionEnvelope } from '../features/assistant/assistant-protocol'
 
+type AssistantActions = NonNullable<NonNullable<ChatMessage['metadata']>['assistantActions']>
+
 type SessionPartLike = {
     id?: string
     type?: string
     text?: string
+    filename?: string
+    mime?: string
+    url?: string
     tool?: string
     callID?: string
     state?: {
         status?: string
         title?: string
         input?: Record<string, unknown>
+        metadata?: Record<string, unknown>
         output?: string
         error?: string
         time?: { start: number; end?: number }
@@ -25,9 +31,26 @@ type SessionPartLike = {
 export type SessionMessageLike = {
     id?: string
     role?: string
+    agent?: string
+    variant?: string
+    providerID?: string
+    providerId?: string
+    modelID?: string
+    modelId?: string
+    model?: {
+        providerID?: string
+        providerId?: string
+        provider?: string
+        modelID?: string
+        modelId?: string
+        id?: string
+        variant?: string
+    }
     info?: {
         id?: string
         role?: string
+        agent?: string
+        variant?: string
         error?: {
             data?: {
                 message?: string
@@ -42,7 +65,7 @@ export type SessionMessageLike = {
     parts?: Array<SessionPartLike>
     text?: string
     created_at?: string
-}
+} & Record<string, unknown>
 
 function readSessionString(value: unknown, ...keys: string[]): string | null {
     let current: unknown = value
@@ -83,6 +106,39 @@ function extractAssistantErrorMessage(message: SessionMessageLike): string | nul
     return 'OpenCode session failed.'
 }
 
+function buildMessageMetadata(
+    message: SessionMessageLike,
+    assistantActions: AssistantActions,
+): ChatMessage['metadata'] | undefined {
+    const agentName = readSessionString(message, 'agent')
+        || readSessionString(message, 'info', 'agent')
+    const provider = readSessionString(message, 'model', 'providerID')
+        || readSessionString(message, 'model', 'providerId')
+        || readSessionString(message, 'model', 'provider')
+        || readSessionString(message, 'providerID')
+        || readSessionString(message, 'providerId')
+    const modelId = readSessionString(message, 'model', 'modelID')
+        || readSessionString(message, 'model', 'modelId')
+        || readSessionString(message, 'model', 'id')
+        || readSessionString(message, 'modelID')
+        || readSessionString(message, 'modelId')
+    const variant = readSessionString(message, 'model', 'variant')
+        || readSessionString(message, 'variant')
+        || readSessionString(message, 'info', 'variant')
+
+    if (!agentName && !provider && !modelId && !variant && !assistantActions?.length) {
+        return undefined
+    }
+
+    return {
+        ...(agentName ? { agentName } : {}),
+        ...(provider ? { provider } : {}),
+        ...(modelId ? { modelId } : {}),
+        ...(variant ? { variant } : {}),
+        ...(assistantActions?.length ? { assistantActions } : {}),
+    }
+}
+
 function mapPartToChatMessagePart(part: SessionPartLike): ChatMessagePart | null {
     if (!part.id || !part.type) return null
 
@@ -116,6 +172,7 @@ function mapPartToChatMessagePart(part: SessionPartLike): ChatMessagePart | null
                 status,
                 title: s.title,
                 input: s.input,
+                metadata: s.metadata,
                 output: s.output,
                 error: s.error,
                 time: s.time,
@@ -181,6 +238,10 @@ export function mapSessionMessageToChatMessage(message: SessionMessageLike): Cha
     const errorContent = extractAssistantErrorMessage(message)
     const parsedAssistantEnvelope = extractAssistantActionEnvelope(strippedText.trim() || errorContent || '')
     const textContent = parsedAssistantEnvelope.content
+    const metadata = buildMessageMetadata(
+        message,
+        parsedAssistantEnvelope.envelope?.actions || [],
+    )
     const role = (
         errorContent && rawRole === 'assistant'
             ? 'system'
@@ -198,19 +259,23 @@ export function mapSessionMessageToChatMessage(message: SessionMessageLike): Cha
         }
     }
 
+    const attachments = message.parts
+        ?.filter((part) => part.type === 'file')
+        .map((part) => ({
+            type: 'file',
+            filename: part.filename,
+            mime: part.mime,
+        }))
+        .filter((attachment) => attachment.filename || attachment.mime)
+
     return {
         id: message.info?.id || message.id || `msg-${Date.now()}`,
         role,
         content: textContent,
         timestamp: message.info?.time?.created || Date.parse(message.created_at || new Date().toISOString()),
         ...(structuredParts.length > 0 ? { parts: structuredParts } : {}),
-        ...(parsedAssistantEnvelope.envelope?.actions.length
-            ? {
-                metadata: {
-                    assistantActions: parsedAssistantEnvelope.envelope.actions,
-                },
-            }
-            : {}),
+        ...(attachments?.length ? { attachments } : {}),
+        ...(metadata ? { metadata } : {}),
     }
 }
 
@@ -299,6 +364,42 @@ function chooseLongerString(left: string | undefined, right: string | undefined)
     return (right || '').length > (left || '').length ? right : left
 }
 
+function mergeToolMetadata(
+    serverMetadata: Record<string, unknown> | undefined,
+    currentMetadata: Record<string, unknown> | undefined,
+) {
+    if (!serverMetadata) {
+        return currentMetadata
+    }
+    if (!currentMetadata) {
+        return serverMetadata
+    }
+    return {
+        ...serverMetadata,
+        ...currentMetadata,
+    }
+}
+
+function mergeMessageMetadata(
+    serverMetadata: ChatMessage['metadata'],
+    currentMetadata: ChatMessage['metadata'],
+): ChatMessage['metadata'] | undefined {
+    if (!serverMetadata) {
+        return currentMetadata
+    }
+    if (!currentMetadata) {
+        return serverMetadata
+    }
+    return {
+        agentName: serverMetadata.agentName || currentMetadata.agentName,
+        provider: serverMetadata.provider || currentMetadata.provider,
+        modelId: serverMetadata.modelId || currentMetadata.modelId,
+        variant: serverMetadata.variant || currentMetadata.variant,
+        isWakeUp: serverMetadata.isWakeUp || currentMetadata.isWakeUp,
+        assistantActions: serverMetadata.assistantActions || currentMetadata.assistantActions,
+    }
+}
+
 function mergeAssistantLikeParts(
     serverParts: ChatMessage['parts'],
     currentParts: ChatMessage['parts'],
@@ -338,6 +439,7 @@ function mergeAssistantLikeParts(
                     output: chooseLongerString(serverPart.tool.output, currentPart.tool.output),
                     error: chooseLongerString(serverPart.tool.error, currentPart.tool.error),
                     input: currentPart.tool.input || serverPart.tool.input,
+                    metadata: mergeToolMetadata(serverPart.tool.metadata, currentPart.tool.metadata),
                     time: currentPart.tool.time || serverPart.tool.time,
                 },
             }
@@ -360,7 +462,7 @@ function mergeInFlightAssistantLikeMessage(serverMessage: ChatMessage, currentMe
         ...serverMessage,
         content: chooseLongerString(serverMessage.content, currentMessage.content) || '',
         parts: mergeAssistantLikeParts(serverMessage.parts, currentMessage.parts),
-        metadata: serverMessage.metadata || currentMessage.metadata,
+        metadata: mergeMessageMetadata(serverMessage.metadata, currentMessage.metadata),
     }
 }
 

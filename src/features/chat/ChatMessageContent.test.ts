@@ -61,6 +61,25 @@ describe('ChatMessageContent', () => {
         expect(html).toContain('Investigating the request carefully.')
     })
 
+    it('starts expanded while reasoning is streaming', () => {
+        const html = renderMessage(
+            {
+                content: '',
+                parts: [
+                    {
+                        id: 'part-1',
+                        type: 'reasoning',
+                        content: 'Investigating the request carefully.',
+                    },
+                ],
+            },
+            { streaming: true },
+        )
+
+        expect(html).toContain('data-content="Investigating the request carefully."')
+        expect(html).toContain('data-streaming="true"')
+    })
+
     it('keeps thinking blocks enabled for completed markdown responses', () => {
         const html = renderMessage({
             content: '<think>Hidden plan</think>\n\nVisible answer',

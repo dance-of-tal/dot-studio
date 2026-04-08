@@ -10,6 +10,7 @@ import {
   createDragStartHandler,
   createDragEndHandler,
 } from './app-dnd-handlers';
+import { resolveStartupWorkspaceTarget } from './lib/startup-workspace';
 
 const LeftSidebar = lazy(() =>
   import('./features/workspace').then((module) => ({ default: module.LeftSidebar })),
@@ -74,16 +75,30 @@ export default function App() {
     const store = useStudioStore.getState();
     store.initRealtimeEvents();
 
-    // Auto-restore: load studio config → apply theme → load last workspace
+    // Auto-restore: load studio config → apply theme → restore the requested workspace path
     api.studio.getConfig()
-      .then((config) => {
+      .then(async (config) => {
         setApiWorkingDirContext(config.projectDir || null);
         if (isStudioTheme(config.theme) && config.theme !== useStudioStore.getState().theme) {
           useStudioStore.setState({ theme: config.theme });
           localStorage.setItem('dot-theme', config.theme);
         }
-        if (config.lastWorkspaceId) {
-          useStudioStore.getState().loadWorkspace(config.lastWorkspaceId);
+
+        const workspaces = config.projectDir
+          ? await api.workspaces.list(true).catch(() => [])
+          : [];
+        const startupTarget = resolveStartupWorkspaceTarget(config, workspaces);
+
+        if (startupTarget.kind === 'workspace') {
+          await useStudioStore.getState().loadWorkspace(startupTarget.workspaceId);
+          return;
+        }
+
+        if (startupTarget.kind === 'project-dir') {
+          const currentWorkingDir = useStudioStore.getState().workingDir;
+          if (currentWorkingDir !== startupTarget.projectDir) {
+            useStudioStore.getState().setWorkingDir(startupTarget.projectDir);
+          }
         }
       })
       .catch(() => { /* server not up yet, skip restore */ });

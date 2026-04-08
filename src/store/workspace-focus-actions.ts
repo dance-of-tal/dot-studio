@@ -9,6 +9,7 @@ type GetState = () => StudioState
 type FocusNodeType = FocusSnapshot['type']
 type FocusTarget = { id: string; type: FocusNodeType }
 type ViewportSize = { width: number; height: number }
+const FOCUS_WINDOW_ORIGIN = { x: 0, y: 0 } as const
 
 function resolveFocusNodeSize(state: StudioState, target: FocusTarget) {
     if (target.type === 'performer') {
@@ -75,12 +76,12 @@ function buildEnterFocusModeState(
         activeChatPerformerId: target.type === 'performer' ? target.id : state.activeChatPerformerId,
         performers: state.performers.map((performer) => (
             target.type === 'performer' && performer.id === target.id
-                ? { ...performer, hidden: false, position: { x: 0, y: 0 }, width: focusWidth, height: focusHeight }
+                ? { ...performer, hidden: false, position: FOCUS_WINDOW_ORIGIN, width: focusWidth, height: focusHeight }
                 : { ...performer, hidden: true }
         )),
         acts: state.acts.map((act) => (
             target.type === 'act' && act.id === target.id
-                ? { ...act, hidden: false, position: { x: 0, y: 0 }, width: focusWidth, height: focusHeight }
+                ? { ...act, hidden: false, position: FOCUS_WINDOW_ORIGIN, width: focusWidth, height: focusHeight }
                 : { ...act, hidden: true }
         )),
         markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: true })),
@@ -159,6 +160,76 @@ export function buildExitFocusModeState(state: StudioState): Partial<StudioState
         isAssetLibraryOpen: snapshot.assetLibraryOpen,
         isAssistantOpen: snapshot.assistantOpen,
         isTerminalOpen: snapshot.terminalOpen,
+    }
+}
+
+export function buildSyncFocusViewportState(
+    state: StudioState,
+    viewportSize: ViewportSize,
+): Partial<StudioState> | null {
+    const target = resolveFocusTarget(state.focusSnapshot)
+    if (!target) {
+        return null
+    }
+
+    if (target.type === 'performer') {
+        const performer = state.performers.find((entry) => entry.id === target.id)
+        if (!performer) {
+            return null
+        }
+
+        const isLayoutStable = performer.position.x === 0
+            && performer.position.y === 0
+            && performer.width === viewportSize.width
+            && performer.height === viewportSize.height
+            && performer.hidden === false
+
+        if (isLayoutStable) {
+            return null
+        }
+
+        return {
+            performers: state.performers.map((entry) => (
+                entry.id === target.id
+                    ? {
+                        ...entry,
+                        hidden: false,
+                        position: FOCUS_WINDOW_ORIGIN,
+                        width: viewportSize.width,
+                        height: viewportSize.height,
+                    }
+                    : entry
+            )),
+        }
+    }
+
+    const act = state.acts.find((entry) => entry.id === target.id)
+    if (!act) {
+        return null
+    }
+
+    const isLayoutStable = act.position.x === 0
+        && act.position.y === 0
+        && act.width === viewportSize.width
+        && act.height === viewportSize.height
+        && act.hidden === false
+
+    if (isLayoutStable) {
+        return null
+    }
+
+    return {
+        acts: state.acts.map((entry) => (
+            entry.id === target.id
+                ? {
+                    ...entry,
+                    hidden: false,
+                    position: FOCUS_WINDOW_ORIGIN,
+                    width: viewportSize.width,
+                    height: viewportSize.height,
+                }
+                : entry
+        )),
     }
 }
 

@@ -2,7 +2,6 @@
  * ActFrame — runtime-first Act canvas window with explicit edit mode.
  */
 import { useEffect, useMemo, useRef, useCallback } from 'react'
-import { useReactFlow } from '@xyflow/react'
 import type { Node, NodeProps } from '@xyflow/react'
 import { Workflow } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
@@ -16,7 +15,7 @@ import {
 import { resolveActThreadOrdinal, resolveDisplayedActThread } from '../../lib/act-threads'
 import ActHeaderActions from './ActHeaderActions'
 import ActSurfacePanel from './ActSurfacePanel'
-import { getCanvasViewportSize, isFocusTarget, scheduleFitView } from '../../lib/focus-utils'
+import { getCanvasViewportSize, isFocusTarget } from '../../lib/focus-utils'
 import { evaluateActReadiness } from './act-readiness'
 import './ActFrame.css'
 
@@ -82,8 +81,6 @@ export default function ActFrame({ data, id }: NodeProps<Node<ActFrameData, 'act
         [displayedThread?.id, threads],
     )
 
-    const { fitView: rfFitView } = useReactFlow()
-
     useEffect(() => {
         const el = bodyRef.current
         if (!el) return
@@ -103,12 +100,11 @@ export default function ActFrame({ data, id }: NodeProps<Node<ActFrameData, 'act
     const handleToggleFocus = useCallback(() => {
         if (isFocused) {
             exitFocusMode()
-            scheduleFitView(rfFitView, 'exit')
             return
         }
 
         enterFocusMode(id, 'act', getCanvasViewportSize())
-    }, [enterFocusMode, exitFocusMode, id, isFocused, rfFitView])
+    }, [enterFocusMode, exitFocusMode, id, isFocused])
 
     if (!act) {
         return null

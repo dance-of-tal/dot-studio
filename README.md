@@ -109,7 +109,8 @@ Start Studio in a project folder:
 dot-studio
 ```
 
-Studio opens in your browser and restores the workspace for that directory when available.
+Studio opens in your browser and restores the saved workspace for that directory when available.
+If there is no saved workspace yet, Studio opens that directory as a fresh workspace instead of jumping to the last workspace from another path.
 You can also point it at another folder with `dot-studio /path/to/project`.
 
 ### 2. Create or import assets
@@ -211,6 +212,7 @@ Behavior:
 
 - `dot-studio` opens the current directory as a workspace
 - `dot-studio <path>` opens that directory as a workspace
+- startup restore is scoped by working directory, so `dot-studio .` and `dot-studio <path>` reopen that directory's saved workspace when one exists
 - if the target directory is not initialized yet, Studio initializes the workspace automatically
 - `dot-studio doctor` checks Node.js, workspace path, Studio port, and OpenCode readiness
 - `dot-studio --help` shows the built-in CLI help

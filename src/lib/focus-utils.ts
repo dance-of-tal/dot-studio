@@ -8,11 +8,8 @@ import type { FocusSnapshot } from '../store/types'
  * so every call-site stays consistent.
  */
 
-/** Delay (ms) before calling fitView – gives React Flow time to reconcile node sizes. */
-export const FOCUS_FIT_DELAY = 50
-
-/** fitView options when *entering* focus mode — zero padding for true fullscreen. */
-export const FOCUS_ENTER_FIT = { padding: 0, minZoom: 1, maxZoom: 1 } as const
+/** Delay (ms) before syncing the viewport after focus layout changes settle. */
+export const FOCUS_VIEWPORT_SYNC_DELAY = 80
 
 /** fitView options when *exiting* focus mode (wider padding to show the restored layout). */
 export const FOCUS_EXIT_FIT = { duration: 400, padding: 0.2, maxZoom: 1 } as const
@@ -31,25 +28,6 @@ type QueryableRoot = {
         clientHeight?: number
     } | null
 } | null | undefined
-
-/**
- * Schedule a fitView after a short delay.
- * Used after entering/exiting focus mode so the viewport catches up to the new node sizes.
- */
-export function scheduleFitView(
-    fitView: (opts: { duration?: number; padding?: number; minZoom?: number; maxZoom?: number }) => void,
-    mode: 'enter' | 'exit',
-) {
-    const opts = mode === 'enter' ? FOCUS_ENTER_FIT : FOCUS_EXIT_FIT
-    setTimeout(() => { fitView(opts) }, FOCUS_FIT_DELAY)
-}
-
-export function buildFocusFitViewOptions(nodeId: string) {
-    return {
-        ...FOCUS_ENTER_FIT,
-        nodes: [{ id: nodeId }],
-    }
-}
 
 function resolveNumericDimension(value: unknown) {
     return typeof value === 'number' && Number.isFinite(value) ? value : null

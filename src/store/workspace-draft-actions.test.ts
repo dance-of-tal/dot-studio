@@ -58,6 +58,7 @@ function createDraftState(): StudioState {
         assistantAvailableModels: [],
         appliedAssistantActionMessageIds: {},
         assistantActionResults: {},
+        recordStudioChange: () => {},
     } as unknown as StudioState
 }
 

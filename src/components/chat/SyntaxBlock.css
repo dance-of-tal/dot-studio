@@ -1,44 +1,46 @@
 /* ═══════════════════════════════════════════
    SYNTAX BLOCK — IDE-like code viewer
-   Uses github-dark theme from highlight.js
-   (already loaded by MarkdownRenderer)
    ═══════════════════════════════════════════ */
 
 .syntax-block {
-    --syntax-block-bg: var(--bg-panel);
-    --syntax-block-gutter-bg: color-mix(in srgb, var(--bg-hover) 70%, var(--bg-panel));
-    --syntax-block-gutter-border: var(--border-main);
-    --syntax-block-line-num: var(--text-muted);
-    --diff-block-bg: var(--bg-panel);
-    --diff-block-meta-bg: color-mix(in srgb, var(--bg-hover) 82%, var(--bg-panel));
-    --diff-block-divider: var(--border-main);
-    --diff-block-text: var(--text-primary);
-    --diff-block-meta-text: var(--text-secondary);
-    --diff-block-marker: var(--text-secondary);
+    --syntax-block-bg: #0d1117;
+    --syntax-block-gutter-bg: #161b22;
+    --syntax-block-gutter-border: #30363d;
+    --syntax-block-line-num: #6e7681;
+    --syntax-block-border: #263041;
+    --diff-block-bg: #0d1117;
+    --diff-block-meta-bg: #161b22;
+    --diff-block-divider: #1f2937;
+    --diff-block-text: #e6edf3;
+    --diff-block-meta-text: #7d8590;
+    --diff-block-marker: #8b949e;
     overflow: auto;
     background: var(--syntax-block-bg);
+    border: 1px solid var(--syntax-block-border);
+    border-radius: 10px;
     font-size: 11px;
     line-height: 1.5;
 }
 
 .syntax-block--diff-old {
-    background: color-mix(in srgb, var(--status-danger) 8%, var(--syntax-block-bg));
+    background: color-mix(in srgb, var(--status-danger) 6%, var(--syntax-block-bg));
 }
 
 .syntax-block--diff-new {
-    background: color-mix(in srgb, #22c55e 8%, var(--syntax-block-bg));
+    background: color-mix(in srgb, #22c55e 6%, var(--syntax-block-bg));
 }
 
 .syntax-block__pre {
     margin: 0;
     display: flex;
     padding: 0;
+    min-width: max-content;
 }
 
 .syntax-block__gutter {
     display: flex;
     flex-direction: column;
-    padding: 6px 0;
+    padding: 10px 0;
     text-align: right;
     user-select: none;
     flex-shrink: 0;
@@ -48,17 +50,17 @@
 
 .syntax-block__line-num {
     display: block;
-    padding: 0 8px;
+    padding: 0 10px;
     font-family: var(--font-mono);
     font-size: 10px;
     line-height: 1.5;
     color: var(--syntax-block-line-num);
-    min-width: 32px;
+    min-width: 38px;
 }
 
 .syntax-block__code {
     flex: 1;
-    padding: 6px 10px;
+    padding: 10px 12px;
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: 11px;
@@ -73,6 +75,8 @@
     overflow: auto;
     background: var(--diff-block-bg);
     font-family: var(--font-mono);
+    border: 1px solid var(--syntax-block-border);
+    border-radius: 10px;
 }
 
 .diff-block__rows {
@@ -83,7 +87,7 @@
     display: grid;
     grid-template-columns: 44px 44px 18px minmax(0, 1fr);
     align-items: stretch;
-    min-height: 22px;
+    min-height: 24px;
 }
 
 .diff-block__row[data-kind="context"] {
@@ -91,11 +95,11 @@
 }
 
 .diff-block__row[data-kind="add"] {
-    background: color-mix(in srgb, #22c55e 12%, var(--diff-block-bg));
+    background: color-mix(in srgb, #22c55e 16%, var(--diff-block-bg));
 }
 
 .diff-block__row[data-kind="delete"] {
-    background: color-mix(in srgb, var(--status-danger) 12%, var(--diff-block-bg));
+    background: color-mix(in srgb, var(--status-danger) 16%, var(--diff-block-bg));
 }
 
 .diff-block__row[data-kind="meta"] {
@@ -105,8 +109,8 @@
 .diff-block__line-num,
 .diff-block__marker,
 .diff-block__text {
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding-top: 4px;
+    padding-bottom: 4px;
     line-height: 1.5;
     font-size: 11px;
     white-space: pre;
@@ -150,17 +154,4 @@
 
 .diff-block__row[data-kind="meta"] .diff-block__text {
     font-style: italic;
-}
-
-[data-theme="dark"] .syntax-block {
-    --syntax-block-bg: #0d1117;
-    --syntax-block-gutter-bg: #161b22;
-    --syntax-block-gutter-border: #30363d;
-    --syntax-block-line-num: #6e7681;
-    --diff-block-bg: #0d1117;
-    --diff-block-meta-bg: #161b22;
-    --diff-block-divider: #1f2937;
-    --diff-block-text: #e6edf3;
-    --diff-block-meta-text: #7d8590;
-    --diff-block-marker: #8b949e;
 }

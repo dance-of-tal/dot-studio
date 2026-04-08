@@ -5,6 +5,7 @@ import {
 } from '../lib/act-layout'
 import { createPerformerNode } from '../lib/performers'
 import {
+    buildSyncFocusViewportState,
     buildExitFocusModeState,
     enterFocusModeImpl,
     exitFocusModeImpl,
@@ -250,6 +251,29 @@ describe('workspace focus actions', () => {
         expect(state.markdownEditors[0]).toMatchObject({
             id: 'markdown-editor-1',
             hidden: false,
+        })
+    })
+
+    it('keeps the focused performer pinned to the canvas origin while syncing viewport size', () => {
+        const harness = createStateHarness()
+
+        enterFocusModeImpl(harness.get, harness.set, 'performer-1', 'performer', { width: 900, height: 700 })
+        harness.set((state) => ({
+            performers: state.performers.map((entry) => (
+                entry.id === 'performer-1'
+                    ? { ...entry, hidden: true, position: { x: 48, y: 36 }, width: 860, height: 640 }
+                    : entry
+            )),
+        }))
+
+        const patch = buildSyncFocusViewportState(harness.read(), { width: 960, height: 720 })
+
+        expect((patch?.performers as StudioState['performers'])[0]).toMatchObject({
+            id: 'performer-1',
+            hidden: false,
+            position: { x: 0, y: 0 },
+            width: 960,
+            height: 720,
         })
     })
 })

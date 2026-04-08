@@ -10,7 +10,7 @@
  */
 import { useRef, useEffect, useCallback, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
-import { Handle, Position, useReactFlow } from '@xyflow/react'
+import { Handle, Position } from '@xyflow/react'
 import { useShallow } from 'zustand/react/shallow'
 
 import { useStudioStore } from '../../store'
@@ -19,7 +19,7 @@ import { hasModelConfig, resolvePerformerAgentId } from '../../lib/performers'
 import { usePerformerPresentation } from '../../hooks/usePerformerPresentation'
 import { api } from '../../api'
 import { showToast } from '../../lib/toast'
-import { getCanvasViewportSize, isFocusTarget, scheduleFitView } from '../../lib/focus-utils'
+import { getCanvasViewportSize, isFocusTarget } from '../../lib/focus-utils'
 import { assetUrnAuthor, assetUrnDisplayName, assetUrnPath } from '../../lib/asset-urn'
 import type { AssetListItem } from '../../../shared/asset-contracts'
 import type { AssetRef, ModelConfig } from '../../types'
@@ -101,7 +101,6 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
 
     // ─── Local State ──────────────────────────────────
     const bodyRef = useRef<HTMLDivElement>(null)
-    const { fitView: rfFitView } = useReactFlow()
 
     // ─── Derived ──────────────────────────────────────
     const isSelected = selectedPerformerId === id
@@ -179,12 +178,11 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
     const handleToggleFocus = useCallback(() => {
         if (isFocused) {
             exitFocusMode()
-            scheduleFitView(rfFitView, 'exit')
             return
         }
 
         enterFocusMode(id, 'performer', getCanvasViewportSize())
-    }, [enterFocusMode, exitFocusMode, id, isFocused, rfFitView])
+    }, [enterFocusMode, exitFocusMode, id, isFocused])
 
     const openAssetEditor = useCallback(async (
         kind: 'tal' | 'dance',

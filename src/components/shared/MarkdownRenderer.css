@@ -85,9 +85,9 @@
 
 .code-block-wrapper {
     margin: 6px 0;
-    border-radius: 6px;
+    border-radius: 10px;
     overflow: hidden;
-    border: 1px solid var(--border-main);
+    border: 1px solid #263041;
     background: #0d1117;
 }
 
@@ -95,7 +95,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 10px;
+    padding: 6px 10px;
     background: #161b22;
     border-bottom: 1px solid #30363d;
 }
@@ -132,7 +132,7 @@
     font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1.5;
-    background: #0d1117 !important;
+    background: transparent !important;
 }
 
 .code-block-wrapper code {
@@ -161,7 +161,7 @@
 }
 
 .thinking-row {
-    margin: 2px 0;
+    margin: 4px 0 8px;
 }
 
 .thinking-row__header {
@@ -169,14 +169,15 @@
     align-items: center;
     gap: 5px;
     width: 100%;
-    padding: 3px 2px;
+    min-height: 28px;
+    padding: 4px 0;
     background: transparent;
     border: none;
     cursor: pointer;
     color: var(--text-muted);
     font-size: var(--font-sm);
     line-height: 1.4;
-    transition: color 0.15s;
+    transition: color 0.15s, background 0.15s;
 }
 
 .thinking-row__header:hover {
@@ -191,14 +192,16 @@
 }
 
 .thinking-row__label {
-    font-weight: 500;
-    color: var(--text-secondary);
+    font-weight: 600;
+    color: color-mix(in srgb, var(--accent) 52%, var(--text-primary));
     flex-shrink: 0;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .thinking-row__preview {
     color: var(--text-muted);
-    font-style: italic;
     font-size: var(--font-xs);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -208,9 +211,11 @@
 }
 
 .thinking-row__content {
-    margin-left: 18px;
-    padding: 4px 0 4px 10px;
-    border-left: 2px solid var(--border-light);
+    margin: 2px 0 8px 18px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
     font-size: var(--font-sm);
     line-height: 1.5;
     color: var(--text-muted);

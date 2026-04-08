@@ -162,9 +162,124 @@ describe('mapSessionMessagesToChatMessages', () => {
             text: 'World',
         }, get, set)
 
-        expect(state.seMessages['session-1']![0]).toMatchObject({
-            content: mapped.content,
-            parts: mapped.parts,
+            expect(state.seMessages['session-1']![0]).toMatchObject({
+                content: mapped.content,
+                parts: mapped.parts,
+            })
+        })
+
+    it('preserves tool metadata from session snapshots', () => {
+        const rawMessage = {
+            id: 'msg-1',
+            info: {
+                id: 'msg-1',
+                role: 'assistant',
+                time: { created: 1000 },
+            },
+            parts: [
+                {
+                    id: 'tool-1',
+                    type: 'tool',
+                    tool: 'apply_patch',
+                    state: {
+                        status: 'completed',
+                        metadata: {
+                            files: [
+                                {
+                                    filePath: '/tmp/example.ts',
+                                    relativePath: 'src/example.ts',
+                                    type: 'update',
+                                    additions: 2,
+                                    deletions: 1,
+                                },
+                            ],
+                        },
+                    },
+                },
+            ],
+        }
+
+        const mapped = mapSessionMessagesToChatMessages([rawMessage as never])[0]
+
+        expect(mapped.parts?.[0]).toMatchObject({
+            type: 'tool',
+            tool: {
+                name: 'apply_patch',
+                metadata: {
+                    files: [
+                        expect.objectContaining({
+                            relativePath: 'src/example.ts',
+                            additions: 2,
+                            deletions: 1,
+                        }),
+                    ],
+                },
+            },
+        })
+    })
+
+    it('maps synced message model metadata and file attachments for display-only UI', () => {
+        const rawMessage = {
+            id: 'msg-user-1',
+            role: 'user',
+            agent: 'build',
+            model: {
+                providerID: 'openai',
+                modelID: 'gpt-5.4',
+                variant: 'high',
+            },
+            info: {
+                id: 'msg-user-1',
+                role: 'user',
+                time: { created: 2000 },
+            },
+            parts: [
+                { id: 'text-1', type: 'text', text: 'Review this PDF' },
+                { id: 'file-1', type: 'file', filename: 'spec.long.filename.pdf', mime: 'application/pdf' },
+            ],
+        }
+
+        const mapped = mapSessionMessagesToChatMessages([rawMessage as never])[0]
+
+        expect(mapped).toMatchObject({
+            role: 'user',
+            metadata: {
+                agentName: 'build',
+                provider: 'openai',
+                modelId: 'gpt-5.4',
+                variant: 'high',
+            },
+            attachments: [
+                {
+                    type: 'file',
+                    filename: 'spec.long.filename.pdf',
+                    mime: 'application/pdf',
+                },
+            ],
+        })
+    })
+
+    it('reads legacy top-level provider and variant metadata shapes', () => {
+        const rawMessage = {
+            id: 'msg-user-legacy',
+            role: 'user',
+            providerID: 'anthropic',
+            modelID: 'claude-sonnet-4',
+            variant: 'reasoning-high',
+            info: {
+                id: 'msg-user-legacy',
+                role: 'user',
+                time: { created: 3000 },
+            },
+            text: 'Legacy metadata',
+        }
+
+        const mapped = mapSessionMessagesToChatMessages([rawMessage as never])[0]
+
+        expect(mapped.metadata).toMatchObject({
+            provider: 'anthropic',
+            modelId: 'claude-sonnet-4',
+            variant: 'reasoning-high',
         })
     })
 })
