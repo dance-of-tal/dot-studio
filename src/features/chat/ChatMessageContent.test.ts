@@ -76,8 +76,9 @@ describe('ChatMessageContent', () => {
             { streaming: true },
         )
 
-        expect(html).toContain('data-content="Investigating the request carefully."')
-        expect(html).toContain('data-streaming="true"')
+        expect(html).toContain('Thinking')
+        expect(html).toContain('Investigating the request carefully.')
+        expect(html).toContain('thinking-row__preview--expanded')
     })
 
     it('keeps thinking blocks enabled for completed markdown responses', () => {

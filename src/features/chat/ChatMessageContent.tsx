@@ -18,9 +18,14 @@ function stripMarkdownMarkers(text: string) {
         .trim()
 }
 
+function getThinkingText(text: string) {
+    return stripMarkdownMarkers(text)
+}
+
 function ReasoningBlock({ content, streaming = false }: { content: string; streaming?: boolean }) {
     const [expanded, setExpanded] = useState(streaming)
-    const preview = stripMarkdownMarkers(content).slice(0, 200)
+    const thinkingText = getThinkingText(content)
+    const preview = thinkingText.slice(0, 200)
 
     useEffect(() => {
         setExpanded(streaming)
@@ -40,17 +45,13 @@ function ReasoningBlock({ content, streaming = false }: { content: string; strea
                 <span className="thinking-row__label">
                     <TextShimmer text="Thinking" active={streaming} />
                 </span>
-                {!expanded && preview ? (
-                    <span className="thinking-row__preview">
-                        {preview}{content.length > 200 ? '…' : ''}
+                {(expanded ? thinkingText : preview) ? (
+                    <span className={`thinking-row__preview${expanded ? ' thinking-row__preview--expanded' : ''}`}>
+                        {expanded ? thinkingText : preview}
+                        {!expanded && thinkingText.length > 200 ? '…' : ''}
                     </span>
                 ) : null}
             </button>
-            {expanded ? (
-                <div className="thinking-row__content">
-                    <MarkdownRenderer content={content} streaming={streaming} />
-                </div>
-            ) : null}
         </div>
     )
 }

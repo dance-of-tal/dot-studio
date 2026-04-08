@@ -187,7 +187,7 @@ export function usePerformerChatComposerState({
         }
 
         const handled = onSlashKeyDown(e, (text) => {
-            if (!modelConfigured) return
+            if (!modelConfigured || isLoading) return
             sendMessage(performerId, text, formatChatAttachments(attachments), turnDanceSelections.map((selection) => selection.ref))
             setAttachments([])
             setTurnDanceSelections([])

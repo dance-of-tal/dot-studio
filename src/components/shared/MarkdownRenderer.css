@@ -167,9 +167,9 @@
 .thinking-row__header {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 5px;
     width: 100%;
-    min-height: 28px;
     padding: 4px 0;
     background: transparent;
     border: none;
@@ -210,20 +210,13 @@
     text-align: left;
 }
 
-.thinking-row__content {
-    margin: 2px 0 8px 18px;
-    padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--border-light) 78%, transparent);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--bg-panel) 84%, transparent);
-    font-size: var(--font-sm);
+.thinking-row__preview--expanded {
+    flex-basis: calc(100% - 72px);
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
     line-height: 1.5;
-    color: var(--text-muted);
-}
-
-.thinking-row__content .md-renderer {
-    font-size: var(--font-sm);
-    color: var(--text-muted);
+    color: color-mix(in srgb, var(--text-muted) 88%, var(--text-secondary));
 }
 
 .text-copy-wrapper {

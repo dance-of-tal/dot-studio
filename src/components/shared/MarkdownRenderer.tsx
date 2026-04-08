@@ -25,6 +25,17 @@ function toCodeText(value: unknown): string {
     return ''
 }
 
+function formatThinkingText(content: string): string {
+    return content
+        .replace(/\*\*/g, '')
+        .replace(/\*/g, '')
+        .replace(/__/g, '')
+        .replace(/#+\s*/g, '')
+        .replace(/`/g, '')
+        .replace(/\n+/g, ' ')
+        .trim()
+}
+
 /** Separate thinking/reasoning text from the actual response */
 export function splitThinking(
     content: string,
@@ -64,6 +75,8 @@ function CopyButton({ text }: { text: string }) {
 
 function ThinkingBlock({ content, streaming = false }: { content: string; streaming?: boolean }) {
     const [expanded, setExpanded] = useState(streaming)
+    const thinkingText = formatThinkingText(content)
+    const preview = thinkingText.slice(0, 200)
 
     useEffect(() => {
         setExpanded(streaming)
@@ -75,25 +88,23 @@ function ThinkingBlock({ content, streaming = false }: { content: string; stream
     }, [streaming])
 
     return (
-        <div className="thinking-block">
+        <div className="thinking-row">
             <button
-                className="thinking-toggle"
+                className="thinking-row__header"
                 onClick={handleToggle}
                 type="button"
             >
-                {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                <span className="thinking-label">Thinking</span>
-                {!expanded && (
-                    <span className="thinking-preview">
-                        {content.slice(0, 60)}…
+                <span className="thinking-row__chevron">
+                    {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                </span>
+                <span className="thinking-row__label">Thinking</span>
+                {(expanded ? thinkingText : preview) && (
+                    <span className={`thinking-row__preview${expanded ? ' thinking-row__preview--expanded' : ''}`}>
+                        {expanded ? thinkingText : preview}
+                        {!expanded && thinkingText.length > 200 ? '…' : ''}
                     </span>
                 )}
             </button>
-            {expanded && (
-                <div className="thinking-content">
-                    {content}
-                </div>
-            )}
         </div>
     )
 }

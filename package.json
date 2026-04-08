@@ -1,16 +1,16 @@
 {
   "name": "dot-studio",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "DOT Studio visual workspace for composing and running Dance of Tal performers and acts on top of OpenCode.",
   "license": "MIT",
   "author": "monarchjuno",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dance-of-tal/dance-of-tal.git"
+    "url": "git+https://github.com/dance-of-tal/dot-studio.git"
   },
-  "homepage": "https://github.com/dance-of-tal/dance-of-tal",
+  "homepage": "https://github.com/dance-of-tal/dot-studio",
   "bugs": {
-    "url": "https://github.com/dance-of-tal/dance-of-tal/issues"
+    "url": "https://github.com/dance-of-tal/dot-studio/issues"
   },
   "publishConfig": {
     "access": "public"

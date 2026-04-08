@@ -65,7 +65,6 @@ export default function PerformerChatComposer(props: Props) {
         performer,
         input,
         setInput,
-        isLoading,
         canAbort,
         modelConfigured,
         sessionId,
@@ -195,7 +194,6 @@ export default function PerformerChatComposer(props: Props) {
                         : isPlanAgent
                             ? 'Plan mode — ask for a plan...'
                             : 'Message... (# files, / to use dance for this turn)'}
-                    disabled={isLoading}
                     rows={1}
                     className="text-input"
                 />

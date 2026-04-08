@@ -35,7 +35,9 @@ describe('MarkdownRenderer thinking visibility', () => {
             }),
         )
 
-        expect(html).not.toContain('thinking-content')
+        expect(html).toContain('Thinking')
+        expect(html).toContain('Plan first')
+        expect(html).not.toContain('thinking-row__preview--expanded')
     })
 
     it('starts expanded when think content is streaming', () => {
@@ -46,6 +48,8 @@ describe('MarkdownRenderer thinking visibility', () => {
             }),
         )
 
-        expect(html).toContain('thinking-content')
+        expect(html).toContain('Thinking')
+        expect(html).toContain('Plan in progress')
+        expect(html).toContain('thinking-row__preview--expanded')
     })
 })
