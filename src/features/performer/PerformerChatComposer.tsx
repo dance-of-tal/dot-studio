@@ -4,6 +4,7 @@ import { Send, Square } from 'lucide-react'
 import type { PerformerNode } from '../../types'
 import type { FileMention } from '../../hooks/useFileMentions'
 import type { TurnDanceSelection, DanceSearchItem } from './agent-frame-utils'
+import { resizeTextarea } from '../../lib/textarea-autosize'
 import ComposerPillBar from './ComposerPillBar'
 import ComposerMentionMenus from './ComposerMentionMenus'
 import ComposerRuntimeRow from './ComposerRuntimeRow'
@@ -181,9 +182,7 @@ export default function PerformerChatComposer(props: Props) {
                     value={input}
                     onChange={(e) => {
                         handleInputChange(e.target.value)
-                        e.target.style.height = '0'
-                        e.target.style.height = `${e.target.scrollHeight}px`
-                        e.target.style.overflowY = e.target.scrollHeight > 102 ? 'auto' : 'hidden'
+                        resizeTextarea(e.target)
                     }}
                     onKeyUp={() => { checkFileMention() }}
                     onMouseUp={() => { checkFileMention() }}

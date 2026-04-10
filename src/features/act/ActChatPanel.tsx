@@ -29,6 +29,7 @@ import { usePermissionInteraction } from '../../hooks/usePermissionInteraction'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { TodoDock } from '../../components/chat/TodoDock'
 import { resolveDisplayedActThread } from '../../lib/act-threads'
+import { resizeTextarea } from '../../lib/textarea-autosize'
 import {
     buildActiveActParticipantChatKey,
     buildActParticipantLoadingStates,
@@ -198,11 +199,13 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         return `Message ${activeParticipantLabel ?? activeParticipantKey ?? 'participant'}…`
     }, [activeParticipantKey, activeParticipantLabel, currentThread, modelConfigured, noParticipants, readiness.runnable])
 
+    useEffect(() => {
+        resizeTextarea(inputRef.current)
+    }, [input])
+
     const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
         setInput(e.target.value)
-        e.target.style.height = '0'
-        e.target.style.height = `${e.target.scrollHeight}px`
-        e.target.style.overflowY = e.target.scrollHeight > 102 ? 'auto' : 'hidden'
+        resizeTextarea(e.target)
     }, [])
 
     const handleAbort = useCallback(() => {

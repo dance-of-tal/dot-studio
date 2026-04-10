@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
 import { useSlashCommands } from '../../hooks/useSlashCommands'
 import { useFileMentions, type FileMention } from '../../hooks/useFileMentions'
 import { assetRefKey } from '../../lib/performers'
+import { resizeTextarea } from '../../lib/textarea-autosize'
 import { showToast } from '../../lib/toast'
 import type { AssetCard, DraftAsset, PerformerNode } from '../../types'
 import { buildDanceSearchSections, formatChatAttachments } from './agent-frame-utils'
@@ -84,6 +85,10 @@ export function usePerformerChatComposerState({
         () => danceSearchSections.flatMap((section) => section.items),
         [danceSearchSections],
     )
+
+    useEffect(() => {
+        resizeTextarea(composerInputRef.current)
+    }, [input])
 
     const addTurnDanceSelection = useCallback((item: DanceSearchItem) => {
         setTurnDanceSelections((current) => (
