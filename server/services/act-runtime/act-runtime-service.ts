@@ -1,5 +1,11 @@
 import { nanoid } from 'nanoid'
-import type { ActDefinition, ConditionExpr, MailboxEvent, ActThreadSummary } from '../../../shared/act-types.js'
+import type {
+    ActDefinition,
+    ConditionExpr,
+    MailboxEvent,
+    ActThreadSummary,
+    WakeCondition,
+} from '../../../shared/act-types.js'
 import { SafetyGuard } from './safety-guard.js'
 import { ThreadManager } from './thread-manager.js'
 import {
@@ -8,13 +14,35 @@ import {
     drainParticipantQueueAfterSettlement,
     markParticipantQueueRunning,
     processWakeCascade,
+    processWakeTargets,
     tripParticipantCircuit,
 } from './wake-cascade.js'
 import { workspaceIdForDir } from '../../lib/config.js'
 import { serverDebug } from '../../lib/server-logger.js'
+import { evaluateWakeCondition } from './wake-evaluator.js'
+import { validateConditionExpr } from './wake-condition-validator.js'
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unknown error'
+}
+
+const MAX_WAKE_CONDITION_ALARM_DELAY_MS = 2_147_483_647
+
+function nextWakeConditionAlarmAt(condition: ConditionExpr, now: number): number | null {
+    switch (condition.type) {
+        case 'wake_at':
+            return condition.at > now ? condition.at : null
+        case 'all_of':
+        case 'any_of': {
+            const candidates = condition.conditions
+                .map((sub) => nextWakeConditionAlarmAt(sub, now))
+                .filter((value): value is number => typeof value === 'number')
+                .sort((left, right) => left - right)
+            return candidates[0] ?? null
+        }
+        default:
+            return null
+    }
 }
 
 type SendMessageInput = {
@@ -71,6 +99,7 @@ class ActRuntimeService {
     private readonly threadManager: ThreadManager
     private readonly workingDir: string
     private readonly safetyGuards = new Map<string, SafetyGuard>()
+    private readonly wakeConditionAlarms = new Map<string, ReturnType<typeof setTimeout>>()
     private _threadsLoaded = false
 
     constructor(workspaceId: string, workingDir: string) {
@@ -93,6 +122,89 @@ class ActRuntimeService {
             this.safetyGuards.set(threadId, SafetyGuard.fromActSafety(actDef?.safety))
         }
         return this.safetyGuards.get(threadId)!
+    }
+
+    private wakeConditionAlarmKey(threadId: string, conditionId: string) {
+        return `${threadId}:${conditionId}`
+    }
+
+    private clearWakeConditionAlarm(threadId: string, conditionId: string) {
+        const alarmKey = this.wakeConditionAlarmKey(threadId, conditionId)
+        const alarm = this.wakeConditionAlarms.get(alarmKey)
+        if (alarm) {
+            clearTimeout(alarm)
+            this.wakeConditionAlarms.delete(alarmKey)
+        }
+    }
+
+    private clearThreadWakeConditionAlarms(threadId: string) {
+        for (const alarmKey of Array.from(this.wakeConditionAlarms.keys())) {
+            if (!alarmKey.startsWith(`${threadId}:`)) {
+                continue
+            }
+            const alarm = this.wakeConditionAlarms.get(alarmKey)
+            if (alarm) {
+                clearTimeout(alarm)
+            }
+            this.wakeConditionAlarms.delete(alarmKey)
+        }
+    }
+
+    private scheduleWakeConditionAlarm(threadId: string, condition: WakeCondition) {
+        this.clearWakeConditionAlarm(threadId, condition.id)
+        if (condition.status !== 'waiting') {
+            return
+        }
+
+        const nextAt = nextWakeConditionAlarmAt(condition.condition, Date.now())
+        if (typeof nextAt !== 'number') {
+            return
+        }
+
+        const delay = Math.max(0, Math.min(nextAt - Date.now(), MAX_WAKE_CONDITION_ALARM_DELAY_MS))
+        const alarm = setTimeout(() => {
+            this.wakeConditionAlarms.delete(this.wakeConditionAlarmKey(threadId, condition.id))
+            void this.handleWakeConditionAlarm(threadId, condition).catch((error) => {
+                console.error('[act-runtime] Wake condition alarm error:', error)
+            })
+        }, delay)
+        this.wakeConditionAlarms.set(this.wakeConditionAlarmKey(threadId, condition.id), alarm)
+    }
+
+    private async handleWakeConditionAlarm(threadId: string, condition: WakeCondition) {
+        const runtime = this.threadManager.getThreadRuntime(threadId)
+        const actDefinition = this.threadManager.getActDefinition(threadId)
+        if (!runtime || !actDefinition || condition.status !== 'waiting') {
+            return
+        }
+
+        const recentEvents = await this.threadManager.getRecentEvents(threadId, 20)
+        if (!evaluateWakeCondition(condition, runtime.mailbox.getBoardMap(), recentEvents, actDefinition)) {
+            this.scheduleWakeConditionAlarm(threadId, condition)
+            return
+        }
+
+        condition.status = 'triggered'
+        await processWakeTargets(
+            [{
+                participantKey: condition.createdBy,
+                triggerEvent: {
+                    id: nanoid(),
+                    type: 'runtime.idle',
+                    sourceType: 'system',
+                    source: 'wait_until',
+                    timestamp: Date.now(),
+                    payload: { threadId, conditionId: condition.id },
+                },
+                wakeCondition: condition,
+                reason: 'wake-condition',
+            }],
+            actDefinition,
+            runtime.mailbox,
+            this.threadManager,
+            threadId,
+            this.workingDir,
+        )
     }
 
     private async prewarmActParticipantProjections(actDefinition?: ActDefinition): Promise<void> {
@@ -369,12 +481,50 @@ class ActRuntimeService {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
         }
 
+        const validatedCondition = validateConditionExpr(body.condition)
+        if (!validatedCondition.ok) {
+            return { ok: false as const, status: 400, error: validatedCondition.error }
+        }
+
+        const actDefinition = this.threadManager.getActDefinition(threadId)
+
         const wakeCondition = runtime.mailbox.addWakeCondition({
             target: body.target,
             createdBy: body.createdBy,
             onSatisfiedMessage: body.onSatisfiedMessage,
-            condition: body.condition,
+            condition: validatedCondition.value,
         })
+
+        if (actDefinition) {
+            const recentEvents = await this.threadManager.getRecentEvents(threadId, 20)
+            if (evaluateWakeCondition(wakeCondition, runtime.mailbox.getBoardMap(), recentEvents, actDefinition)) {
+                wakeCondition.status = 'triggered'
+                void processWakeTargets(
+                    [{
+                        participantKey: wakeCondition.createdBy,
+                        triggerEvent: {
+                            id: nanoid(),
+                            type: 'runtime.idle',
+                            sourceType: 'system',
+                            source: 'wait_until',
+                            timestamp: Date.now(),
+                            payload: { threadId, conditionId: wakeCondition.id },
+                        },
+                        wakeCondition,
+                        reason: 'wake-condition',
+                    }],
+                    actDefinition,
+                    runtime.mailbox,
+                    this.threadManager,
+                    threadId,
+                    this.workingDir,
+                ).catch((error) => {
+                    console.error('[act-runtime] Immediate wake condition cascade error:', error)
+                })
+            } else {
+                this.scheduleWakeConditionAlarm(threadId, wakeCondition)
+            }
+        }
 
         return { ok: true as const, conditionId: wakeCondition.id }
     }
@@ -399,6 +549,7 @@ class ActRuntimeService {
     }
 
     async deleteThread(_actId: string, threadId: string) {
+        this.clearThreadWakeConditionAlarms(threadId)
         const deleted = await this.threadManager.deleteThread(threadId)
         if (!deleted) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
@@ -493,9 +644,9 @@ class ActRuntimeService {
         actDefinition: ActDefinition,
         mailbox: import('./mailbox.js').Mailbox,
     ): Promise<void> {
-        // Only emit if cascade had targets but no errors, and queue is empty
+        // Only emit after at least one wake was actually injected.
         if (cascadeResult.errors.length > 0) return
-        if (cascadeResult.injected.length === 0 && cascadeResult.queued.length === 0) return
+        if (cascadeResult.injected.length === 0) return
 
         const idleEvent: MailboxEvent = {
             id: nanoid(),

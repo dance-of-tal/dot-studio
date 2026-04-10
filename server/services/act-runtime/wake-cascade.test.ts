@@ -271,7 +271,7 @@ describe('wake-cascade participant scheduling', () => {
         vi.useFakeTimers()
 
         const { Mailbox } = await import('./mailbox.js')
-        const { processWakeCascade } = await import('./wake-cascade.js')
+        const { BLOCKED_PROJECTION_RETRY_MESSAGE, processWakeCascade } = await import('./wake-cascade.js')
 
         const mailbox = new Mailbox()
         const threadId = 'thread-3'
@@ -351,6 +351,15 @@ describe('wake-cascade participant scheduling', () => {
         expect(cascade.queued).toEqual(['Researcher'])
         expect(promptAsync).not.toHaveBeenCalled()
         expect(mailbox.getMessagesFor('Researcher')).toHaveLength(1)
+        expect(threadManager.setParticipantStatus).toHaveBeenCalledWith(threadId, 'Researcher', { type: 'busy' })
+        expect(threadManager.setParticipantStatus).toHaveBeenCalledWith(
+            threadId,
+            'Researcher',
+            {
+                type: 'retry',
+                message: BLOCKED_PROJECTION_RETRY_MESSAGE,
+            },
+        )
 
         await vi.advanceTimersByTimeAsync(500)
         await Promise.resolve()

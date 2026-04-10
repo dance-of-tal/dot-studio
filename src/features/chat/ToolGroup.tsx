@@ -114,6 +114,42 @@ function extractApplyPatchFiles(tool: ChatMessageToolInfo): ApplyPatchMetadataFi
     return files.filter((file): file is ApplyPatchMetadataFile => !!file && typeof file === 'object')
 }
 
+function normalizePatchLookupPath(value: string | undefined): string {
+    return (value || '').replace(/\\/g, '/').replace(/^\.\//, '')
+}
+
+function mergeApplyPatchFiles(
+    metadataFiles: ApplyPatchMetadataFile[],
+    parsedFiles: Array<{ filename: string; diff: string; type: 'add' | 'update' | 'delete' }>,
+): ApplyPatchMetadataFile[] {
+    if (metadataFiles.length === 0) {
+        return parsedFiles.map((file) => ({
+            filePath: file.filename,
+            relativePath: file.filename,
+            type: file.type,
+            diff: file.diff,
+        }))
+    }
+
+    return metadataFiles.map((file) => {
+        const metadataPath = normalizePatchLookupPath(file.relativePath || file.filePath)
+        const parsedMatch = parsedFiles.find((parsed) => {
+            const parsedPath = normalizePatchLookupPath(parsed.filename)
+            return parsedPath === metadataPath
+                || parsedPath.endsWith(`/${metadataPath}`)
+                || metadataPath.endsWith(`/${parsedPath}`)
+        })
+
+        if (!parsedMatch) return file
+
+        return {
+            ...file,
+            type: file.type || parsedMatch.type,
+            diff: file.diff || parsedMatch.diff,
+        }
+    })
+}
+
 function parsePatchFiles(patchText: string): Array<{ filename: string; diff: string; type: 'add' | 'update' | 'delete' }> {
     if (!patchText) return []
 
@@ -316,6 +352,7 @@ function EditWriteTrigger({
     directory: string
     diffChanges?: { additions: number; deletions: number } | null
 }) {
+    const hasPath = !!filename && !!directory
     return (
         <div className="edit-trigger">
             <div className="edit-trigger__title-area">
@@ -323,12 +360,10 @@ function EditWriteTrigger({
                     <span className="edit-trigger__title-text">
                         <TextShimmer text={filename || label} active={pending} />
                     </span>
-                </div>
-                {!pending && directory && (
-                    <div className="edit-trigger__path">
+                    {!pending && hasPath && (
                         <span className="edit-trigger__directory">{directory}</span>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
             <div className="edit-trigger__actions">
                 {!pending && diffChanges && (diffChanges.additions > 0 || diffChanges.deletions > 0) && (
@@ -528,15 +563,11 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
     /* ── apply_patch (unified diff) ── */
     if (isPatch) {
         const patchText = extractPatchText(tool.input)
+        const metadata = extractToolMetadata(tool)
         const metadataFiles = extractApplyPatchFiles(tool)
-        const patchFiles: ApplyPatchMetadataFile[] = metadataFiles.length > 0
-            ? metadataFiles
-            : parsePatchFiles(patchText).map((file) => ({
-                filePath: file.filename,
-                relativePath: file.filename,
-                type: file.type,
-                diff: file.diff,
-            }))
+        const parsedPatchFiles = parsePatchFiles(patchText)
+        const patchFiles: ApplyPatchMetadataFile[] = mergeApplyPatchFiles(metadataFiles, parsedPatchFiles)
+        const metadataDiff = readToolString(metadata, 'diff')
 
         // Single file or unknown format — show whole diff
         if (patchFiles.length <= 1) {
@@ -568,17 +599,39 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
                     duration={durationLabel}
                     defaultOpen={editToolPartsExpanded}
                 >
-                    {singleFile?.before !== undefined || singleFile?.after !== undefined ? (
+                    {singleFile?.diff ? (
+                        <DiffBlock
+                            before=""
+                            after=""
+                            rawDiff={singleFile.diff}
+                            filename={singleFilename}
+                            maxHeight={500}
+                        />
+                    ) : patchText ? (
+                        <DiffBlock
+                            before=""
+                            after=""
+                            rawDiff={patchText}
+                            filename={singleFilename}
+                            maxHeight={500}
+                        />
+                    ) : metadataDiff ? (
+                        <DiffBlock
+                            before=""
+                            after=""
+                            rawDiff={metadataDiff}
+                            filename={singleFilename}
+                            maxHeight={500}
+                        />
+                    ) : singleFile?.before !== undefined || singleFile?.after !== undefined ? (
                         <DiffBlock
                             before={singleFile?.before || ''}
                             after={singleFile?.after || ''}
                             filename={singleFilename}
                         />
-                    ) : patchText ? (
-                        <SyntaxBlock code={patchText} language="diff" lineNumbers={false} maxHeight={500} />
-                    ) : singleFile?.diff ? (
-                        <SyntaxBlock code={singleFile.diff} language="diff" lineNumbers={false} maxHeight={500} />
-                    ) : null}
+                    ) : (
+                        <pre className="tool-pre tool-pre--panel">Diff preview unavailable.</pre>
+                    )}
                     {isError && tool.error && <ToolErrorCard error={tool.error} toolName={tool.name} />}
                 </BasicTool>
             )
@@ -614,15 +667,23 @@ export function ToolCallRow({ tool, compact = false }: { tool: ChatMessageToolIn
                                 : changes ? <DiffChanges changes={changes} /> : null
                             }
                         >
-                            {file.before !== undefined || file.after !== undefined ? (
+                            {file.diff ? (
+                                <DiffBlock
+                                    before=""
+                                    after=""
+                                    rawDiff={file.diff}
+                                    filename={getFilename(displayPath)}
+                                    maxHeight={400}
+                                />
+                            ) : file.before !== undefined || file.after !== undefined ? (
                                 <DiffBlock
                                     before={file.before || ''}
                                     after={file.after || ''}
                                     filename={getFilename(displayPath)}
                                 />
-                            ) : file.diff ? (
-                                <SyntaxBlock code={file.diff} language="diff" lineNumbers={false} maxHeight={400} />
-                            ) : null}
+                            ) : (
+                                <pre className="tool-pre tool-pre--panel">Diff preview unavailable.</pre>
+                            )}
                         </ToolFileAccordion>
                     )
                 })}

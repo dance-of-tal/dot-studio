@@ -177,6 +177,7 @@ export function reduceMessagePartDelta(
     sessionId: string,
     messageId: string,
     partId: string,
+    field: string,
     delta: string,
     get: GetFn,
     set: SetFn,
@@ -195,6 +196,49 @@ export function reduceMessagePartDelta(
         const updated = upsertMessagePart(messages, messageId, {
             ...existingPart,
             content: (existingPart.content || '') + delta,
+        })
+        set({ seMessages: { ...state.seMessages, [sessionId]: updated } })
+        return
+    }
+
+    if (existingPart?.type === 'tool' && existingPart.tool) {
+        const currentMetadata = existingPart.tool.metadata || {}
+        const appendMetadataValue = (key: string) => {
+            const existingValue = currentMetadata[key]
+            return typeof existingValue === 'string' ? existingValue + delta : delta
+        }
+
+        let nextOutput = existingPart.tool.output
+        let nextMetadata: Record<string, unknown> | undefined = currentMetadata
+
+        if (field === 'output' || field === 'state.output') {
+            nextOutput = (existingPart.tool.output || '') + delta
+        } else if (field === 'stdout' || field === 'state.stdout') {
+            nextMetadata = {
+                ...currentMetadata,
+                stdout: appendMetadataValue('stdout'),
+            }
+        } else if (field === 'stderr' || field === 'state.stderr') {
+            nextMetadata = {
+                ...currentMetadata,
+                stderr: appendMetadataValue('stderr'),
+            }
+        } else if (field === 'metadata.output' || field === 'state.metadata.output') {
+            nextMetadata = {
+                ...currentMetadata,
+                output: appendMetadataValue('output'),
+            }
+        } else {
+            return
+        }
+
+        const updated = upsertMessagePart(messages, messageId, {
+            ...existingPart,
+            tool: {
+                ...existingPart.tool,
+                output: nextOutput,
+                metadata: nextMetadata,
+            },
         })
         set({ seMessages: { ...state.seMessages, [sessionId]: updated } })
         return

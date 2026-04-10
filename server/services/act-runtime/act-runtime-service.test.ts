@@ -10,6 +10,7 @@ const clearParticipantQueueRunningMock = vi.fn()
 const drainParticipantQueueAfterSettlementMock = vi.fn()
 const markParticipantQueueRunningMock = vi.fn()
 const processWakeCascadeMock = vi.fn()
+const processWakeTargetsMock = vi.fn()
 const tripParticipantCircuitMock = vi.fn()
 
 vi.mock('../opencode-projection/stage-projection-service.js', () => ({
@@ -22,6 +23,7 @@ vi.mock('./wake-cascade.js', () => ({
     drainParticipantQueueAfterSettlement: drainParticipantQueueAfterSettlementMock,
     markParticipantQueueRunning: markParticipantQueueRunningMock,
     processWakeCascade: processWakeCascadeMock,
+    processWakeTargets: processWakeTargetsMock,
     tripParticipantCircuit: tripParticipantCircuitMock,
 }))
 
@@ -76,6 +78,12 @@ describe('ActRuntimeService projection prewarm', () => {
             queued: [],
             errors: [],
         })
+        processWakeTargetsMock.mockReset().mockResolvedValue({
+            targets: [],
+            injected: [],
+            queued: [],
+            errors: [],
+        })
         tripParticipantCircuitMock.mockReset()
 
         const { workspaceIdForDir, workspaceDir } = await import('../../lib/config.js')
@@ -104,6 +112,7 @@ describe('ActRuntimeService projection prewarm', () => {
     })
 
     afterEach(async () => {
+        vi.useRealTimers()
         delete process.env.STUDIO_DIR
         await fs.rm(studioDir, { recursive: true, force: true }).catch(() => {})
         await fs.rm(workingDir, { recursive: true, force: true }).catch(() => {})
@@ -180,5 +189,141 @@ describe('ActRuntimeService projection prewarm', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 0))
         expect(processWakeCascadeMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not emit runtime idle when the cascade only queued blocked work', async () => {
+        processWakeCascadeMock.mockResolvedValueOnce({
+            targets: [{ participantKey: 'Analyst', reason: 'subscription' }],
+            injected: [],
+            queued: ['Analyst'],
+            errors: [],
+        })
+
+        const { getActRuntimeService } = await import('./act-runtime-service.js')
+        const service = getActRuntimeService(workingDir)
+
+        const created = await service.createThread(actDefinition.id, actDefinition)
+        expect(created.ok).toBe(true)
+
+        const sent = await service.sendMessage(created.thread.id, {
+            from: 'Head',
+            to: 'Analyst',
+            content: 'Review the latest memo.',
+            tag: 'handoff',
+        })
+        expect(sent.ok).toBe(true)
+
+        await vi.waitFor(() => {
+            expect(processWakeCascadeMock).toHaveBeenCalledTimes(1)
+        })
+
+        const events = await service.getRecentEvents(created.thread.id)
+        expect(events.ok).toBe(true)
+        expect(events.events.filter((event) => event.type === 'runtime.idle')).toHaveLength(0)
+    })
+
+    it('immediately re-queues an already satisfied wait condition', async () => {
+        const { getActRuntimeService } = await import('./act-runtime-service.js')
+        const service = getActRuntimeService(workingDir)
+        const created = await service.createThread(actDefinition.id, actDefinition)
+        expect(created.ok).toBe(true)
+
+        const boardResult = await service.postToBoard(created.thread.id, {
+            author: 'Head',
+            key: 'review-summary',
+            kind: 'artifact',
+            content: 'Summary is ready.',
+        })
+        expect(boardResult.ok).toBe(true)
+        processWakeCascadeMock.mockClear()
+
+        const wakeResult = await service.setWakeCondition(created.thread.id, {
+            createdBy: 'Analyst',
+            target: 'self',
+            onSatisfiedMessage: 'Read review-summary and hand off your answer.',
+            condition: { type: 'board_key_exists', key: 'review-summary' },
+        })
+        expect(wakeResult.ok).toBe(true)
+
+        await vi.waitFor(() => {
+            expect(processWakeTargetsMock).toHaveBeenCalledTimes(1)
+        })
+        expect(processWakeTargetsMock).toHaveBeenCalledWith(
+            [
+                expect.objectContaining({
+                    participantKey: 'Analyst',
+                    reason: 'wake-condition',
+                    wakeCondition: expect.objectContaining({
+                        onSatisfiedMessage: 'Read review-summary and hand off your answer.',
+                        status: 'triggered',
+                    }),
+                }),
+            ],
+            actDefinition,
+            expect.anything(),
+            expect.anything(),
+            created.thread.id,
+            workingDir,
+        )
+    })
+
+    it('self-wakes wake_at waits without needing another runtime event', async () => {
+        vi.useFakeTimers()
+
+        const { getActRuntimeService } = await import('./act-runtime-service.js')
+        const service = getActRuntimeService(workingDir)
+        const created = await service.createThread(actDefinition.id, actDefinition)
+        expect(created.ok).toBe(true)
+
+        const wakeResult = await service.setWakeCondition(created.thread.id, {
+            createdBy: 'Analyst',
+            target: 'self',
+            onSatisfiedMessage: 'Resume after the scheduled wake and continue.',
+            condition: { type: 'wake_at', at: Date.now() + 1_000 },
+        })
+        expect(wakeResult.ok).toBe(true)
+        expect(processWakeTargetsMock).not.toHaveBeenCalled()
+
+        await vi.advanceTimersByTimeAsync(1_000)
+        await vi.waitFor(() => {
+            expect(processWakeTargetsMock).toHaveBeenCalledTimes(1)
+        })
+        expect(processWakeTargetsMock).toHaveBeenCalledWith(
+            [
+                expect.objectContaining({
+                    participantKey: 'Analyst',
+                    reason: 'wake-condition',
+                    wakeCondition: expect.objectContaining({
+                        onSatisfiedMessage: 'Resume after the scheduled wake and continue.',
+                        status: 'triggered',
+                    }),
+                }),
+            ],
+            actDefinition,
+            expect.anything(),
+            expect.anything(),
+            created.thread.id,
+            workingDir,
+        )
+    })
+
+    it('rejects unsupported wait condition types instead of storing silent fallbacks', async () => {
+        const { getActRuntimeService } = await import('./act-runtime-service.js')
+        const service = getActRuntimeService(workingDir)
+        const created = await service.createThread(actDefinition.id, actDefinition)
+        expect(created.ok).toBe(true)
+
+        const result = await service.setWakeCondition(created.thread.id, {
+            createdBy: 'Analyst',
+            target: 'self',
+            onSatisfiedMessage: 'Resume later.',
+            condition: { type: 'timeout', at: Date.now() + 1_000 } as never,
+        })
+
+        expect(result).toEqual({
+            ok: false,
+            status: 400,
+            error: 'condition.type "timeout" is not supported',
+        })
     })
 })

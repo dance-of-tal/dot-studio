@@ -44,10 +44,18 @@ function isOptionalStringArray(value: unknown) {
     )
 }
 
+function isOptionalNullableString(value: unknown) {
+    return value === undefined || value === null || isNonEmptyString(value)
+}
+
 function isOptionalEventTypeArray(value: unknown) {
     return value === undefined || (
         Array.isArray(value) && value.every((entry) => entry === 'runtime.idle')
     )
+}
+
+function isOptionalFiniteNumber(value: unknown) {
+    return value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= 0)
 }
 
 function isDraftBlueprint(value: unknown) {
@@ -89,17 +97,23 @@ function hasPerformerLocator(action: ActionRecord) {
 }
 
 function hasParticipantLocator(prefix: 'source' | 'target', action: ActionRecord) {
-    const aliasPrefix = prefix === 'source' ? 'from' : 'to'
-    const participantKey = action[`${prefix}ParticipantKey`] ?? action[`${aliasPrefix}ParticipantKey`]
-    const performerId = action[`${prefix}PerformerId`] ?? action[`${aliasPrefix}PerformerId`]
-    const performerRef = action[`${prefix}PerformerRef`] ?? action[`${aliasPrefix}PerformerRef`]
-    const performerName = action[`${prefix}PerformerName`] ?? action[`${aliasPrefix}PerformerName`]
-
     return (
-        isNonEmptyString(participantKey)
-        || isNonEmptyString(performerId)
-        || isNonEmptyString(performerRef)
-        || isNonEmptyString(performerName)
+        isNonEmptyString(action[`${prefix}ParticipantKey`])
+        || isNonEmptyString(action[`${prefix}PerformerId`])
+        || isNonEmptyString(action[`${prefix}PerformerRef`])
+        || isNonEmptyString(action[`${prefix}PerformerName`])
+    )
+}
+
+function isActSafetyInput(value: unknown) {
+    if (!isRecord(value)) return false
+    return (
+        isOptionalFiniteNumber(value.maxEvents)
+        && isOptionalFiniteNumber(value.maxMessagesPerPair)
+        && isOptionalFiniteNumber(value.maxBoardUpdatesPerKey)
+        && isOptionalFiniteNumber(value.quietWindowMs)
+        && isOptionalFiniteNumber(value.threadTimeoutMs)
+        && isOptionalFiniteNumber(value.loopDetectionThreshold)
     )
 }
 
@@ -107,6 +121,7 @@ function isPerformerFields(value: unknown): value is AssistantPerformerFields {
     if (!isRecord(value)) return false
     return (
         (value.model === undefined || value.model === null || isModelBlueprint(value.model))
+        && isOptionalNullableString(value.description)
         && (value.talUrn === undefined || value.talUrn === null || isNonEmptyString(value.talUrn))
         && (value.talDraftId === undefined || isNonEmptyString(value.talDraftId))
         && (value.talDraftRef === undefined || isNonEmptyString(value.talDraftRef))
@@ -190,6 +205,7 @@ function isValidAssistantAction(action: unknown): action is AssistantAction {
                 isNonEmptyString(action.name)
                 && (action.description === undefined || isNonEmptyString(action.description))
                 && isOptionalStringArray(action.actRules)
+                && (action.safety === undefined || isActSafetyInput(action.safety))
                 && isOptionalStringArray(action.participantPerformerIds)
                 && isOptionalStringArray(action.participantPerformerRefs)
                 && isOptionalStringArray(action.participantPerformerNames)
@@ -201,6 +217,7 @@ function isValidAssistantAction(action: unknown): action is AssistantAction {
                 && (action.name === undefined || isNonEmptyString(action.name))
                 && (action.description === undefined || isNonEmptyString(action.description))
                 && isOptionalStringArray(action.actRules)
+                && (action.safety === undefined || action.safety === null || isActSafetyInput(action.safety))
             )
         case 'deleteAct':
             return hasActLocator(action)
@@ -371,8 +388,8 @@ function lintRelationRefs(
     refState: RefState,
     issues: AssistantActionLintIssue[],
 ) {
-    requireNamedRef(issues, actionIndex, refState.performers, 'performer', relation.sourcePerformerRef ?? relation.fromPerformerRef)
-    requireNamedRef(issues, actionIndex, refState.performers, 'performer', relation.targetPerformerRef ?? relation.toPerformerRef)
+    requireNamedRef(issues, actionIndex, refState.performers, 'performer', relation.sourcePerformerRef)
+    requireNamedRef(issues, actionIndex, refState.performers, 'performer', relation.targetPerformerRef)
 }
 
 function registerInlineDraftRefs(

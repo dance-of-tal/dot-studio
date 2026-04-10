@@ -1,6 +1,6 @@
 ---
 name: studio-assistant-performer-guide
-description: Lists the current Studio Assistant mutation surface. Use when the assistant needs exact action-block fields for installs, drafts, performers, acts, participants, or relations.
+description: Lists the exact current Studio Assistant mutation surface for Tal, Dance, Performer, Act, participant, relation, and install/import actions. Use when the assistant must produce, inspect, or verify an assistant-actions block or reason about allowed fields.
 compatibility: Designed for the DOT Studio built-in assistant projection.
 ---
 
@@ -19,6 +19,12 @@ Use this skill when you need the exact current mutation surface.
 - Use same-block `ref` values for cascade flows where a later action depends on something created earlier in the same block.
 - Prefer one dependency-ordered block over multiple loosely related blocks.
 
+## Decision Ladder
+- If the user only wants explanation, do not emit an action block.
+- If the user wants mutation but multiple important choices remain open, ask one short clarifying question first.
+- If the request is specific enough, emit one complete block rather than leaving a half-configured Performer or Act behind.
+- Reuse existing Stage items when they already match the request. Do not create duplicates just because creation is easier than inspection.
+
 ## Supported Action Families
 - CRUD coverage is fixed to all four authoring asset families:
 - `Tal` = local draft CRUD
@@ -36,6 +42,7 @@ Use this skill when you need the exact current mutation surface.
 
 ## Performer Fields
 `createPerformer` and `updatePerformer` support:
+- `description`
 - `model`
 - `talUrn`
 - `talDraftId`
@@ -63,11 +70,18 @@ Rules:
 - `addMcpServerNames` and `removeMcpServerNames` only reference existing Studio MCP library server names.
 - Do not invent MCP server names and do not treat Performer actions as a way to create or edit Studio MCP library entries.
 
+## Performer Quality Bar
+- `name` should describe the actual role the user asked for, not a generic archetype unless the user asked for a generic archetype.
+- `description` should capture how that performer thinks, what they own, or what kind of handoff they produce.
+- When the user describes a company function or workflow seat, reflect that job in the Performer design instead of creating a thin placeholder.
+- If a model is required, choose only from the current snapshot's `availableModels`.
+
 ## Act Fields
 `createAct` supports:
 - `name`
 - `description`
 - `actRules`
+- `safety`
 - `participantPerformerIds`
 - `participantPerformerRefs`
 - `participantPerformerNames`
@@ -77,6 +91,7 @@ Rules:
 - `name`
 - `description`
 - `actRules`
+- `safety`
 
 For inline relations and `connectPerformers`, prefer:
 - explicit source and target performers
@@ -87,6 +102,8 @@ For inline relations and `connectPerformers`, prefer:
 Rules:
 - For explicit Act create, update, or delete requests, use the matching Act action directly.
 - `actRules` must be a string array, not a single string.
+- Performer `description` becomes participant focus in Act runtime.
+- `safety` is Act-level runtime guardrails, not participant `wait_until`.
 - The Act should reflect the user request in its participant set, role split, workflow shape, and actRules when requested.
 - If the Act needs missing participants, create those Performers first in cascade and make sure they also match the user intent.
 - When the Act participants are already known at creation time, prefer `participantPerformerRefs`, `participantPerformerIds`, or `participantPerformerNames` on `createAct`.
@@ -95,6 +112,28 @@ Rules:
 - Use `source...` and `target...` relation fields, not `from...` or `to...`.
 - Every new relation must include both a non-empty `name` and non-empty `description`.
 - Never invent ids such as `performer-1` or `act-1`. Use ids from the snapshot or same-block refs.
+
+## Dance Bundle Files
+`upsertDanceBundleFile` supports:
+- `draftId`
+- `draftRef`
+- `draftName`
+- `path`
+- `content`
+
+`deleteDanceBundleEntry` supports:
+- `draftId`
+- `draftRef`
+- `draftName`
+- `path`
+
+Rules:
+- Bundle file actions only work on saved Dance drafts.
+- Use them for sibling files such as `references/*.md`, `scripts/*`, `assets/*`, and `agents/openai.yaml`.
+- `path` must stay relative to the Dance bundle root.
+- Never target `SKILL.md` or `draft.json` with bundle file actions.
+- Keep `SKILL.md` concise and move heavy examples or schemas into `references/`.
+- Do not create extra bundle docs like `README.md` unless the user explicitly asked for them.
 
 ## Participant Subscriptions
 `updateParticipantSubscriptions` targets a participant by:
@@ -129,26 +168,6 @@ Rules:
 - For Performer or Act creation requests, it is valid to use a short question-and-answer flow before mutating when important design choices are missing.
 - Ask only the smallest high-value questions needed to determine the correct asset shape.
 - Good questions include role focus, model preference, Dance need, participant split, and handoff shape.
-
-## Dance Bundle Files
-`upsertDanceBundleFile` supports:
-- `draftId`
-- `draftRef`
-- `draftName`
-- `path`
-- `content`
-
-`deleteDanceBundleEntry` supports:
-- `draftId`
-- `draftRef`
-- `draftName`
-- `path`
-
-Rules:
-- Bundle file actions only work on saved Dance drafts.
-- Use them for sibling files such as `references/*.md`, `scripts/*`, `assets/*`, and `agents/openai.yaml`.
-- `path` must stay relative to the Dance bundle root.
-- Never target `SKILL.md` or `draft.json` with bundle file actions.
 
 ## Compact Examples
 

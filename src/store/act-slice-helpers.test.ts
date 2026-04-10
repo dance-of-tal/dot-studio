@@ -268,6 +268,34 @@ describe('participant binding helpers', () => {
         })
     })
 
+    it('preserves the participant when returning to an act with the same active thread', () => {
+        const state = {
+            selectedActId: null,
+            selectedPerformerId: 'performer-1',
+            selectedPerformerSessionId: 'session-1',
+            activeThreadId: 'thread-1',
+            activeThreadParticipantKey: 'alpha',
+            focusSnapshot: { nodeId: 'performer-1', type: 'performer' },
+            actEditorState: null,
+            actThreads: {
+                'act-1': [
+                    { id: 'thread-1', createdAt: 1 },
+                    { id: 'thread-2', createdAt: 2 },
+                ],
+            },
+            acts: [act],
+        } as unknown as StudioState
+
+        expect(buildSelectActState(state, 'act-1')).toEqual({
+            selectedActId: 'act-1',
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            actEditorState: null,
+            activeThreadId: 'thread-1',
+            activeThreadParticipantKey: 'alpha',
+        })
+    })
+
     it('resolves selected-thread state only for the selected act', () => {
         const state = {
             selectedActId: 'act-1',
@@ -317,6 +345,36 @@ describe('participant binding helpers', () => {
             },
             activeThreadId: 'thread-2',
             activeThreadParticipantKey: 'alpha',
+        })
+    })
+
+    it('preserves the current participant when selecting a thread without an explicit tab choice', () => {
+        const state = {
+            selectedActId: 'act-1',
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            activeThreadId: 'thread-1',
+            activeThreadParticipantKey: 'alpha',
+            actEditorState: null,
+            acts: [act],
+        } as unknown as StudioState
+
+        expect(buildActThreadSelectionState(state, 'act-1', 'thread-2')).toEqual({
+            selectedActId: 'act-1',
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            actEditorState: null,
+            activeThreadId: 'thread-2',
+            activeThreadParticipantKey: 'alpha',
+        })
+
+        expect(buildActThreadSelectionState(state, 'act-1', 'thread-2', null)).toEqual({
+            selectedActId: 'act-1',
+            selectedPerformerId: null,
+            selectedPerformerSessionId: null,
+            actEditorState: null,
+            activeThreadId: 'thread-2',
+            activeThreadParticipantKey: null,
         })
     })
 

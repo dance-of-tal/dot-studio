@@ -203,6 +203,23 @@ function resolveValidActParticipantSelection(
     return act?.participants[participantKey] ? participantKey : null
 }
 
+function resolveThreadParticipantSelection(
+    state: StudioState,
+    actId: string,
+    threadId: string | null,
+    participantKey?: string | null,
+) {
+    if (!threadId) {
+        return null
+    }
+
+    const requestedParticipantKey = participantKey === undefined
+        ? state.activeThreadParticipantKey
+        : participantKey
+
+    return resolveValidActParticipantSelection(state, actId, requestedParticipantKey)
+}
+
 export function buildSelectActState(state: StudioState, actId: string | null) {
     if (actId === null) {
         return {
@@ -215,10 +232,7 @@ export function buildSelectActState(state: StudioState, actId: string | null) {
 
     const nextThreads = state.actThreads[actId] || []
     const nextActiveThreadId = resolvePreferredActThreadId(nextThreads, state.activeThreadId)
-    const shouldPreserveParticipantSelection = (
-        state.selectedActId === actId
-        && nextActiveThreadId === state.activeThreadId
-    )
+    const shouldPreserveParticipantSelection = nextActiveThreadId === state.activeThreadId
 
     return {
         ...buildActSelectionState(state, actId),
@@ -245,9 +259,7 @@ export function resolveSelectedActThreadState(
     const nextActiveThreadId = resolvePreferredActThreadId(threads, preferredThreadId)
     return {
         activeThreadId: nextActiveThreadId,
-        activeThreadParticipantKey: nextActiveThreadId
-            ? resolveValidActParticipantSelection(state, actId, state.activeThreadParticipantKey)
-            : null,
+        activeThreadParticipantKey: resolveThreadParticipantSelection(state, actId, nextActiveThreadId),
     }
 }
 
@@ -255,12 +267,12 @@ export function buildActThreadSelectionState(
     state: StudioState,
     actId: string,
     threadId: string | null,
-    participantKey: string | null = null,
+    participantKey?: string | null,
 ) {
     return {
         ...buildActSelectionState(state, actId),
         activeThreadId: threadId,
-        activeThreadParticipantKey: resolveValidActParticipantSelection(state, actId, participantKey),
+        activeThreadParticipantKey: resolveThreadParticipantSelection(state, actId, threadId, participantKey),
     }
 }
 

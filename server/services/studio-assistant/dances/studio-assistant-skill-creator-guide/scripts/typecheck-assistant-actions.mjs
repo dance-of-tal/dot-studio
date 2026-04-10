@@ -17,8 +17,16 @@ function isOptionalStringArray(value) {
     return value === undefined || (Array.isArray(value) && value.every((entry) => isNonEmptyString(entry)))
 }
 
+function isOptionalNullableString(value) {
+    return value === undefined || value === null || isNonEmptyString(value)
+}
+
 function isOptionalEventTypeArray(value) {
     return value === undefined || (Array.isArray(value) && value.every((entry) => entry === 'runtime.idle'))
+}
+
+function isOptionalFiniteNumber(value) {
+    return value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= 0)
 }
 
 function normalizeBundlePath(value) {
@@ -75,18 +83,28 @@ function hasPerformerLocator(action) {
 }
 
 function hasParticipantLocator(prefix, action) {
-    const aliasPrefix = prefix === 'source' ? 'from' : 'to'
     return [
-        action[`${prefix}ParticipantKey`] ?? action[`${aliasPrefix}ParticipantKey`],
-        action[`${prefix}PerformerId`] ?? action[`${aliasPrefix}PerformerId`],
-        action[`${prefix}PerformerRef`] ?? action[`${aliasPrefix}PerformerRef`],
-        action[`${prefix}PerformerName`] ?? action[`${aliasPrefix}PerformerName`],
+        action[`${prefix}ParticipantKey`],
+        action[`${prefix}PerformerId`],
+        action[`${prefix}PerformerRef`],
+        action[`${prefix}PerformerName`],
     ].some((value) => isNonEmptyString(value))
+}
+
+function isActSafetyInput(value) {
+    return isRecord(value)
+        && isOptionalFiniteNumber(value.maxEvents)
+        && isOptionalFiniteNumber(value.maxMessagesPerPair)
+        && isOptionalFiniteNumber(value.maxBoardUpdatesPerKey)
+        && isOptionalFiniteNumber(value.quietWindowMs)
+        && isOptionalFiniteNumber(value.threadTimeoutMs)
+        && isOptionalFiniteNumber(value.loopDetectionThreshold)
 }
 
 function isPerformerFields(value) {
     return isRecord(value)
         && (value.model === undefined || value.model === null || isModelBlueprint(value.model))
+        && isOptionalNullableString(value.description)
         && (value.talUrn === undefined || value.talUrn === null || isNonEmptyString(value.talUrn))
         && (value.talDraftId === undefined || isNonEmptyString(value.talDraftId))
         && (value.talDraftRef === undefined || isNonEmptyString(value.talDraftRef))
@@ -148,6 +166,7 @@ function isValidAction(action) {
             return isNonEmptyString(action.name)
                 && (action.description === undefined || isNonEmptyString(action.description))
                 && isOptionalStringArray(action.actRules)
+                && (action.safety === undefined || isActSafetyInput(action.safety))
                 && isOptionalStringArray(action.participantPerformerIds)
                 && isOptionalStringArray(action.participantPerformerRefs)
                 && isOptionalStringArray(action.participantPerformerNames)
@@ -157,6 +176,7 @@ function isValidAction(action) {
                 && (action.name === undefined || isNonEmptyString(action.name))
                 && (action.description === undefined || isNonEmptyString(action.description))
                 && isOptionalStringArray(action.actRules)
+                && (action.safety === undefined || action.safety === null || isActSafetyInput(action.safety))
         case 'deleteAct':
             return hasActLocator(action)
         case 'attachPerformerToAct':
@@ -269,8 +289,8 @@ function registerInlineDrafts(issues, actionIndex, action, refState) {
 }
 
 function lintRelation(issues, actionIndex, relation, refState) {
-    requireRef(issues, actionIndex, refState.performers, 'performer', relation.sourcePerformerRef ?? relation.fromPerformerRef)
-    requireRef(issues, actionIndex, refState.performers, 'performer', relation.targetPerformerRef ?? relation.toPerformerRef)
+    requireRef(issues, actionIndex, refState.performers, 'performer', relation.sourcePerformerRef)
+    requireRef(issues, actionIndex, refState.performers, 'performer', relation.targetPerformerRef)
 }
 
 function lintEnvelope(envelope) {

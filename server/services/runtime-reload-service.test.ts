@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sessionListMock = vi.fn()
 const sessionStatusMock = vi.fn()
+const sessionMessagesMock = vi.fn()
 const instanceDisposeMock = vi.fn()
 const clearProjectionRuntimePendingMock = vi.fn()
 
@@ -9,6 +10,7 @@ vi.mock('../lib/opencode.js', () => ({
     getOpencode: async () => ({
         session: {
             list: sessionListMock,
+            messages: sessionMessagesMock,
             status: sessionStatusMock,
         },
         instance: {
@@ -35,6 +37,7 @@ describe('countRunningSessions', () => {
                 'session-act': { type: 'busy' },
             },
         })
+        sessionMessagesMock.mockReset().mockResolvedValue({ data: [] })
         instanceDisposeMock.mockReset().mockResolvedValue({})
         clearProjectionRuntimePendingMock.mockReset().mockResolvedValue(undefined)
     })
@@ -60,6 +63,44 @@ describe('countRunningSessions', () => {
 
         expect(result.runningSessions).toBe(1)
     })
+
+    it('ignores busy sessions whose latest assistant turn is already parked by wait_until', async () => {
+        sessionMessagesMock
+            .mockResolvedValueOnce({
+                data: [{
+                    info: { role: 'assistant' },
+                    parts: [{
+                        type: 'tool',
+                        tool: 'wait_until',
+                        state: { status: 'completed' },
+                    }],
+                }],
+            })
+            .mockResolvedValueOnce({ data: [] })
+        const { countRunningSessions } = await import('./runtime-reload-service.js')
+
+        const result = await countRunningSessions('/tmp/workspace')
+
+        expect(result.runningSessions).toBe(1)
+    })
+
+    it('ignores busy sessions whose latest assistant turn is already settled', async () => {
+        sessionMessagesMock
+            .mockResolvedValueOnce({
+                data: [{
+                    info: { role: 'assistant' },
+                    parts: [{
+                        type: 'step-finish',
+                    }],
+                }],
+            })
+            .mockResolvedValueOnce({ data: [] })
+        const { countRunningSessions } = await import('./runtime-reload-service.js')
+
+        const result = await countRunningSessions('/tmp/workspace')
+
+        expect(result.runningSessions).toBe(1)
+    })
 })
 
 describe('applyStudioRuntimeReload', () => {
@@ -72,6 +113,7 @@ describe('applyStudioRuntimeReload', () => {
                 'session-1': { type: 'idle' },
             },
         })
+        sessionMessagesMock.mockReset().mockResolvedValue({ data: [] })
         instanceDisposeMock.mockReset().mockResolvedValue({})
         clearProjectionRuntimePendingMock.mockReset().mockResolvedValue(undefined)
     })

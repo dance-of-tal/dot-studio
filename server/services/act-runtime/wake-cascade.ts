@@ -24,6 +24,8 @@ const participantCircuits = new Map<string, Map<string, { openUntil: number; rea
 const blockedWakeRetries = new Map<string, Set<string>>()
 const PARTICIPANT_CIRCUIT_BREAK_MS = 5 * 60_000
 const BLOCKED_WAKE_RETRY_POLL_MS = 500
+export const BLOCKED_PROJECTION_RETRY_MESSAGE =
+    'Waiting for the current workspace run to finish before applying projection changes.'
 
 function getSessionQueue(threadId: string): SessionQueue {
     if (!sessionQueues.has(threadId)) {
@@ -382,7 +384,10 @@ async function injectWakeTarget(
                 if (prepared.blocked) {
                     console.warn(`[wake-cascade] Projection update blocked for "${participantKey}" while another working-dir session is running`)
                     clearParticipantQueueRunning(threadId, participantKey)
-                    await threadManager.setParticipantStatus(threadId, participantKey, { type: 'idle' })
+                    await threadManager.setParticipantStatus(threadId, participantKey, {
+                        type: 'retry',
+                        message: BLOCKED_PROJECTION_RETRY_MESSAGE,
+                    })
                     getSessionQueue(threadId).enqueue(participantKey, target)
                     result.queued.push(participantKey)
                     scheduleBlockedWakeRetry(
@@ -566,6 +571,32 @@ export async function processWakeCascade(
     }
 
     if (targets.length === 0) return result
+
+    const wakeResult = await processWakeTargets(
+        targets,
+        actDefinition,
+        mailbox,
+        threadManager,
+        threadId,
+        workingDir,
+    )
+    result.injected.push(...wakeResult.injected)
+    result.queued.push(...wakeResult.queued)
+    result.errors.push(...wakeResult.errors)
+
+    return result
+}
+
+export async function processWakeTargets(
+    targets: WakeUpTarget[],
+    actDefinition: ActDefinition,
+    mailbox: Mailbox,
+    threadManager: ThreadManager,
+    threadId: string,
+    workingDir: string,
+): Promise<WakeCascadeResult> {
+    const result = emptyWakeCascadeResult()
+    result.targets = [...targets]
 
     // 2. Process each wake-up target
     const queue = getSessionQueue(threadId)

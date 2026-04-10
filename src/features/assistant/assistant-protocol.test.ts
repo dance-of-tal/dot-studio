@@ -159,7 +159,7 @@ describe('assistant-protocol', () => {
         expect(result.content).toBe('Updated the workflow contract.')
     })
 
-    it('accepts legacy from/to relation aliases in createAct payloads', () => {
+    it('rejects legacy from/to relation aliases in createAct payloads', () => {
         const content = [
             'Created the analyst workflow.',
             '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"macro","name":"Macro Analyst"},{"type":"createPerformer","ref":"equity","name":"Equity Researcher"},{"type":"createAct","name":"Investment Team","participantPerformerRefs":["macro","equity"],"relations":[{"fromPerformerRef":"macro","toPerformerRef":"equity","direction":"one-way","name":"macro handoff","description":"Macro Analyst hands regime context to Equity Researcher."}]}]}</assistant-actions>',
@@ -167,8 +167,20 @@ describe('assistant-protocol', () => {
 
         const result = extractAssistantActionEnvelope(content)
 
-        expect(result.envelope?.actions).toHaveLength(3)
+        expect(result.envelope).toBeNull()
         expect(result.content).toBe('Created the analyst workflow.')
+    })
+
+    it('accepts performer descriptions and act safety fields', () => {
+        const content = [
+            'Updated the runtime contract.',
+            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","name":"Research Lead","description":"Owns evidence gathering and concise handoffs."},{"type":"updateAct","actName":"Code Review","safety":{"threadTimeoutMs":600000,"loopDetectionThreshold":3}}]}</assistant-actions>',
+        ].join('\n')
+
+        const result = extractAssistantActionEnvelope(content)
+
+        expect(result.envelope?.actions).toHaveLength(2)
+        expect(result.content).toBe('Updated the runtime contract.')
     })
 
     it('rejects createAct relations without both name and description', () => {

@@ -359,12 +359,13 @@ describe('assistant-actions', () => {
         })
     })
 
-    it('creates an act when relations use legacy from/to performer refs', async () => {
+    it('applies performer descriptions and act safety settings', async () => {
         const result = await applyAssistantActions([
             {
                 type: 'createPerformer',
                 ref: 'macro_analyst',
                 name: 'Macro Analyst',
+                description: 'Tracks regime changes and hands off evidence-backed context.',
             },
             {
                 type: 'createPerformer',
@@ -374,11 +375,15 @@ describe('assistant-actions', () => {
             {
                 type: 'createAct',
                 name: 'Investment Analyst Team',
+                safety: {
+                    threadTimeoutMs: 600000,
+                    loopDetectionThreshold: 3,
+                },
                 participantPerformerRefs: ['macro_analyst', 'equity_researcher'],
                 relations: [
                     {
-                        fromPerformerRef: 'macro_analyst',
-                        toPerformerRef: 'equity_researcher',
+                        sourcePerformerRef: 'macro_analyst',
+                        targetPerformerRef: 'equity_researcher',
                         direction: 'one-way',
                         name: 'macro handoff',
                         description: 'Macro Analyst hands regime context to Equity Researcher.',
@@ -390,7 +395,13 @@ describe('assistant-actions', () => {
         expect(result).toEqual({ applied: 3, failed: 0 })
 
         const act = useStudioStore.getState().acts[0]
+        const performer = useStudioStore.getState().performers.find((entry) => entry.name === 'Macro Analyst')
+        expect(performer?.meta?.authoring?.description).toBe('Tracks regime changes and hands off evidence-backed context.')
         expect(act?.name).toBe('Investment Analyst Team')
+        expect(act?.safety).toEqual({
+            threadTimeoutMs: 600000,
+            loopDetectionThreshold: 3,
+        })
         expect(Object.keys(act?.participants || {})).toHaveLength(2)
         expect(act?.relations).toHaveLength(1)
         expect(act?.relations[0]).toMatchObject({

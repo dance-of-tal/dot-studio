@@ -22,9 +22,9 @@ vi.mock('../../components/chat/SyntaxBlock', () => ({
         'mock-syntax-block',
         { 'data-language': language ?? '', 'data-code': code },
     ),
-    DiffBlock: ({ before, after, filename }: { before: string; after: string; filename: string }) => React.createElement(
+    DiffBlock: ({ before, after, filename, rawDiff }: { before: string; after: string; filename: string; rawDiff?: string }) => React.createElement(
         'mock-diff-block',
-        { 'data-before': before, 'data-after': after, 'data-filename': filename },
+        { 'data-before': before, 'data-after': after, 'data-filename': filename, 'data-raw-diff': rawDiff ?? '' },
     ),
 }))
 
@@ -95,5 +95,28 @@ describe('ToolCallRow', () => {
         expect(html).toContain('src/example.ts')
         expect(html).toContain('mock-syntax-block')
         expect(html).not.toContain('tool-file-accordion')
+    })
+
+    it('renders multi-file patch metadata with raw diffs inside the expanded rows', () => {
+        const html = renderTool({
+            name: 'apply_patch',
+            callId: 'call-2',
+            status: 'completed',
+            metadata: {
+                files: [
+                    {
+                        filePath: '/tmp/example.ts',
+                        relativePath: 'src/example.ts',
+                        type: 'update',
+                        diff: '@@ -1 +1 @@\n-const a = 1\n+const a = 2',
+                        additions: 1,
+                        deletions: 1,
+                    },
+                ],
+            },
+        })
+
+        expect(html).toContain('mock-diff-block')
+        expect(html).toContain('data-raw-diff="@@ -1 +1 @@')
     })
 })

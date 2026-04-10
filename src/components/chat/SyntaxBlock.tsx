@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import hljs from 'highlight.js/lib/core'
+import { parsePatch } from 'diff'
 
 // Register commonly used languages
 import typescript from 'highlight.js/lib/languages/typescript'
@@ -141,19 +142,26 @@ function escapeHtml(str: string): string {
         .replace(/"/g, '&quot;')
 }
 
-type DiffViewLine = {
-    kind: 'context' | 'add' | 'delete' | 'meta'
-    marker: string
-    text: string
-    oldLine: number | null
-    newLine: number | null
+type DiffRow = {
+    left: string
+    right: string
+    type: 'added' | 'removed' | 'unchanged' | 'modified'
+}
+
+type UnifiedDiffRow = {
+    content: string
+    type: 'added' | 'removed' | 'unchanged'
 }
 
 function splitContentLines(content: string): string[] {
     return content === '' ? [] : content.split('\n')
 }
 
-function buildDiffLinesFromContent(before: string, after: string): DiffViewLine[] {
+function normalizeDiffLineContent(content: string) {
+    return content === '' ? ' ' : content
+}
+
+function buildDiffRowsFromContent(before: string, after: string): DiffRow[] {
     const beforeLines = splitContentLines(before)
     const afterLines = splitContentLines(after)
 
@@ -175,144 +183,261 @@ function buildDiffLinesFromContent(before: string, after: string): DiffViewLine[
         suffix += 1
     }
 
-    const rows: DiffViewLine[] = []
-    let oldLine = 1
-    let newLine = 1
+    const rows: DiffRow[] = []
 
     for (let index = 0; index < prefix; index += 1) {
         rows.push({
-            kind: 'context',
-            marker: ' ',
-            text: beforeLines[index] ?? '',
-            oldLine,
-            newLine,
+            left: normalizeDiffLineContent(beforeLines[index] ?? ''),
+            right: normalizeDiffLineContent(beforeLines[index] ?? ''),
+            type: 'unchanged',
         })
-        oldLine += 1
-        newLine += 1
     }
 
     const beforeMiddle = beforeLines.slice(prefix, beforeLines.length - suffix)
     const afterMiddle = afterLines.slice(prefix, afterLines.length - suffix)
 
-    for (const line of beforeMiddle) {
-        rows.push({
-            kind: 'delete',
-            marker: '-',
-            text: line,
-            oldLine,
-            newLine: null,
-        })
-        oldLine += 1
+    const middleLength = Math.max(beforeMiddle.length, afterMiddle.length)
+    for (let index = 0; index < middleLength; index += 1) {
+        const left = beforeMiddle[index]
+        const right = afterMiddle[index]
+
+        if (left !== undefined && right !== undefined) {
+            rows.push({
+                left: normalizeDiffLineContent(left),
+                right: normalizeDiffLineContent(right),
+                type: 'modified',
+            })
+            continue
+        }
+
+        if (left !== undefined) {
+            rows.push({
+                left: normalizeDiffLineContent(left),
+                right: '',
+                type: 'removed',
+            })
+            continue
+        }
+
+        if (right !== undefined) {
+            rows.push({
+                left: '',
+                right: normalizeDiffLineContent(right),
+                type: 'added',
+            })
+        }
     }
 
-    for (const line of afterMiddle) {
-        rows.push({
-            kind: 'add',
-            marker: '+',
-            text: line,
-            oldLine: null,
-            newLine,
-        })
-        newLine += 1
-    }
-
-    const suffixStartBefore = beforeLines.length - suffix
     for (let index = 0; index < suffix; index += 1) {
         rows.push({
-            kind: 'context',
-            marker: ' ',
-            text: beforeLines[suffixStartBefore + index] ?? '',
-            oldLine,
-            newLine,
+            left: normalizeDiffLineContent(beforeLines[beforeLines.length - suffix + index] ?? ''),
+            right: normalizeDiffLineContent(beforeLines[beforeLines.length - suffix + index] ?? ''),
+            type: 'unchanged',
         })
-        oldLine += 1
-        newLine += 1
     }
 
     return rows
 }
 
-function buildDiffLinesFromRawDiff(rawDiff: string): DiffViewLine[] {
-    const rows: DiffViewLine[] = []
+function pairDiffGroup(lines: string[], startIndex: number) {
+    const removals: string[] = [lines[startIndex].slice(1)]
+    let cursor = startIndex + 1
+
+    while (cursor < lines.length && lines[cursor]?.startsWith('-')) {
+        removals.push(lines[cursor].slice(1))
+        cursor += 1
+    }
+
+    const additions: string[] = []
+    while (cursor < lines.length && lines[cursor]?.startsWith('+')) {
+        additions.push(lines[cursor].slice(1))
+        cursor += 1
+    }
+
+    const rows: DiffRow[] = []
+    const size = Math.max(removals.length, additions.length)
+    for (let index = 0; index < size; index += 1) {
+        const left = removals[index]
+        const right = additions[index]
+
+        if (left !== undefined && right !== undefined) {
+            rows.push({
+                left: normalizeDiffLineContent(left),
+                right: normalizeDiffLineContent(right),
+                type: 'modified',
+            })
+            continue
+        }
+
+        if (left !== undefined) {
+            rows.push({
+                left: normalizeDiffLineContent(left),
+                right: '',
+                type: 'removed',
+            })
+            continue
+        }
+
+        if (right !== undefined) {
+            rows.push({
+                left: '',
+                right: normalizeDiffLineContent(right),
+                type: 'added',
+            })
+        }
+    }
+
+    return { rows, nextIndex: cursor }
+}
+
+function buildDiffRowsFromLoosePatch(rawDiff: string): DiffRow[] {
+    const rows: DiffRow[] = []
     const lines = rawDiff.split('\n')
-    let oldLine = 0
-    let newLine = 0
-    let hasHunk = false
+    let inHunk = false
 
-    for (const line of lines) {
-        const hunkMatch = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
-        if (hunkMatch) {
-            oldLine = Number(hunkMatch[1])
-            newLine = Number(hunkMatch[2])
-            hasHunk = true
-            rows.push({
-                kind: 'meta',
-                marker: '@',
-                text: line,
-                oldLine: null,
-                newLine: null,
-            })
+    for (let index = 0; index < lines.length; ) {
+        const line = lines[index] ?? ''
+        if (line.startsWith('@@')) {
+            inHunk = true
+            index += 1
             continue
         }
 
-        if (line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ') || line.startsWith('\\')) {
-            rows.push({
-                kind: 'meta',
-                marker: '·',
-                text: line,
-                oldLine: null,
-                newLine: null,
-            })
+        if (!inHunk || line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ') || line.startsWith('\\')) {
+            index += 1
             continue
         }
 
-        if (!hasHunk) {
-            rows.push({
-                kind: 'meta',
-                marker: '·',
-                text: line,
-                oldLine: null,
-                newLine: null,
-            })
+        if (line.startsWith('-')) {
+            const paired = pairDiffGroup(lines, index)
+            rows.push(...paired.rows)
+            index = paired.nextIndex
             continue
         }
 
         if (line.startsWith('+')) {
             rows.push({
-                kind: 'add',
-                marker: '+',
-                text: line.slice(1),
-                oldLine: null,
-                newLine,
+                left: '',
+                right: normalizeDiffLineContent(line.slice(1)),
+                type: 'added',
             })
-            newLine += 1
-            continue
-        }
-
-        if (line.startsWith('-')) {
-            rows.push({
-                kind: 'delete',
-                marker: '-',
-                text: line.slice(1),
-                oldLine,
-                newLine: null,
-            })
-            oldLine += 1
+            index += 1
             continue
         }
 
         rows.push({
-            kind: 'context',
-            marker: ' ',
-            text: line.startsWith(' ') ? line.slice(1) : line,
-            oldLine,
-            newLine,
+            left: normalizeDiffLineContent(line.startsWith(' ') ? line.slice(1) : line),
+            right: normalizeDiffLineContent(line.startsWith(' ') ? line.slice(1) : line),
+            type: 'unchanged',
         })
-        oldLine += 1
-        newLine += 1
+        index += 1
     }
 
     return rows
+}
+
+function ensurePatchHeaders(rawDiff: string, filename?: string) {
+    if (!rawDiff.includes('@@') || rawDiff.includes('--- ') || rawDiff.includes('+++ ')) {
+        return rawDiff
+    }
+
+    const safeFilename = (filename || 'file').replace(/^\/+/, '')
+    return [`--- a/${safeFilename}`, `+++ b/${safeFilename}`, rawDiff].join('\n')
+}
+
+function buildDiffRowsFromRawDiff(rawDiff: string, filename?: string): DiffRow[] {
+    const patchText = ensurePatchHeaders(rawDiff, filename)
+
+    try {
+        const patches = parsePatch(patchText)
+        const rows: DiffRow[] = []
+
+        for (const patch of patches) {
+            for (const hunk of patch.hunks ?? []) {
+                const lines = hunk.lines ?? []
+                for (let index = 0; index < lines.length; ) {
+                    const line = lines[index] ?? ''
+                    const prefix = line[0]
+                    const content = line.slice(1)
+
+                    if (prefix === '-') {
+                        const paired = pairDiffGroup(lines, index)
+                        rows.push(...paired.rows)
+                        index = paired.nextIndex
+                        continue
+                    }
+
+                    if (prefix === '+') {
+                        rows.push({
+                            left: '',
+                            right: normalizeDiffLineContent(content),
+                            type: 'added',
+                        })
+                        index += 1
+                        continue
+                    }
+
+                    if (prefix === ' ') {
+                        rows.push({
+                            left: normalizeDiffLineContent(content),
+                            right: normalizeDiffLineContent(content),
+                            type: 'unchanged',
+                        })
+                        index += 1
+                        continue
+                    }
+
+                    index += 1
+                }
+            }
+        }
+
+        if (rows.length > 0) {
+            return rows
+        }
+    } catch (error) {
+        console.error('Failed to parse patch:', error)
+    }
+
+    return buildDiffRowsFromLoosePatch(rawDiff)
+}
+
+function buildUnifiedDiffRows(rows: DiffRow[]): UnifiedDiffRow[] {
+    return rows.reduce<UnifiedDiffRow[]>((result, row) => {
+        if (row.type === 'modified') {
+            result.push(
+                { content: row.left, type: 'removed' as const },
+                { content: row.right, type: 'added' as const },
+            )
+            return result
+        }
+
+        if (row.type === 'removed') {
+            result.push({ content: row.left, type: 'removed' as const })
+            return result
+        }
+
+        if (row.type === 'added') {
+            result.push({ content: row.right, type: 'added' as const })
+            return result
+        }
+
+        result.push({ content: row.left, type: 'unchanged' as const })
+        return result
+    }, [])
+}
+
+function highlightDiffCell(content: string, lang?: string) {
+    if (!content) return '&nbsp;'
+    if (content === ' ') return ' '
+    try {
+        if (lang && hljs.getLanguage(lang)) {
+            return hljs.highlight(content, { language: lang }).value
+        }
+    } catch {
+        // Fall through to plain escaped text when line-level highlighting fails.
+    }
+    return escapeHtml(content)
 }
 
 /**
@@ -332,25 +457,33 @@ export function DiffBlock(props: {
         maxHeight = 400,
     } = props
 
+    const lang = langFromFilename(props.filename || '')
     const rows = useMemo(() => {
         if (rawDiff) {
-            return buildDiffLinesFromRawDiff(rawDiff)
+            return buildDiffRowsFromRawDiff(rawDiff, props.filename)
         }
-        return buildDiffLinesFromContent(before, after)
-    }, [after, before, rawDiff])
+        return buildDiffRowsFromContent(before, after)
+    }, [after, before, props.filename, rawDiff])
+    const unifiedRows = useMemo(() => buildUnifiedDiffRows(rows), [rows])
 
     return (
         <div className="diff-block" style={{ maxHeight: `${maxHeight}px` }} data-scrollable>
-            <div className="diff-block__rows">
-                {rows.map((row, index) => (
-                    <div key={`${row.kind}:${row.oldLine ?? 'x'}:${row.newLine ?? 'x'}:${index}`} className="diff-block__row" data-kind={row.kind}>
-                        <span className="diff-block__line-num">{row.oldLine ?? ''}</span>
-                        <span className="diff-block__line-num">{row.newLine ?? ''}</span>
-                        <span className="diff-block__marker">{row.marker}</span>
-                        <span className="diff-block__text">{row.text || ' '}</span>
-                    </div>
-                ))}
-            </div>
+            {unifiedRows.map((row, index) => (
+                <div
+                    key={`${row.type}:${index}:${row.content}`}
+                    className="diff-block__row"
+                    data-diff-type={row.type === 'unchanged' ? undefined : row.type}
+                    data-type={row.type}
+                >
+                    <span className="diff-block__marker" aria-hidden="true">
+                        {row.type === 'removed' ? '-' : row.type === 'added' ? '+' : ' '}
+                    </span>
+                    <code
+                        className={`diff-block__code hljs${lang ? ` language-${lang}` : ''}`}
+                        dangerouslySetInnerHTML={{ __html: highlightDiffCell(row.content, lang) }}
+                    />
+                </div>
+            ))}
         </div>
     )
 }

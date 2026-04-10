@@ -194,6 +194,7 @@ export default function PerformerThreadView({
                 messages={visibleMessages}
                 loading={shouldShowAssistantLoadingPlaceholder(visibleMessages, isLoading)}
                 scrollStateKey={performerId}
+                scrollRestoreMode="bottom"
                 renderEmpty={renderEmpty}
                 renderMessage={renderMessage}
                 renderLoading={renderLoading}

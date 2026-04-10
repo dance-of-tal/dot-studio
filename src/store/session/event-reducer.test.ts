@@ -282,7 +282,7 @@ describe('Event Reducer', () => {
                 { id: 'msg-1', role: 'assistant', content: 'Hello', timestamp: 1000 },
             ]
 
-            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', ' world', get, set)
+            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', 'text', ' world', get, set)
 
             expect(state.seMessages[SESSION_ID]![0].content).toBe('Hello world')
             expect(state.seMessages[SESSION_ID]![0].parts).toEqual([
@@ -298,7 +298,7 @@ describe('Event Reducer', () => {
                 },
             ]
 
-            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', 'ing...', get, set)
+            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', 'text', 'ing...', get, set)
 
             expect(state.seMessages[SESSION_ID]![0].parts![0].content).toBe('Thinking...')
         })
@@ -324,7 +324,7 @@ describe('Event Reducer', () => {
         it('keeps text part content when delta arrives before message.updated', () => {
             state.seMessages[SESSION_ID] = []
 
-            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', 'Hello', get, set)
+            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', 'text', 'Hello', get, set)
             reduceMessageUpdated(SESSION_ID, 'msg-1', 'assistant', 1000, get, set)
 
             expect(state.seMessages[SESSION_ID]).toEqual([
@@ -336,6 +336,38 @@ describe('Event Reducer', () => {
                     parts: [{ id: 'part-1', type: 'text', content: 'Hello' }],
                 },
             ])
+        })
+
+        it('appends shell stdout deltas onto an existing tool part', () => {
+            state.seMessages[SESSION_ID] = [
+                {
+                    id: 'msg-1',
+                    role: 'assistant',
+                    content: '',
+                    timestamp: 1000,
+                    parts: [{
+                        id: 'tool-1',
+                        type: 'tool',
+                        tool: {
+                            name: 'bash',
+                            callId: 'call-1',
+                            status: 'running',
+                            metadata: { stdout: '$ pwd\n' },
+                        },
+                    }],
+                },
+            ]
+
+            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'tool-1', 'stdout', '/tmp/studio\n', get, set)
+
+            expect(state.seMessages[SESSION_ID]?.[0]?.parts?.[0]).toMatchObject({
+                type: 'tool',
+                tool: {
+                    metadata: {
+                        stdout: '$ pwd\n/tmp/studio\n',
+                    },
+                },
+            })
         })
     })
 
@@ -523,7 +555,7 @@ describe('Event Reducer', () => {
         it('handles part.delta before message.updated', () => {
             // Delta arrives but message doesn't exist yet in seMessages
             state.seMessages[SESSION_ID] = []
-            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', 'Hello', get, set)
+            reduceMessagePartDelta(SESSION_ID, 'msg-1', 'part-1', 'text', 'Hello', get, set)
 
             // The delta creates the message with content
             expect(state.seMessages[SESSION_ID]).toHaveLength(1)

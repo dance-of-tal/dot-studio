@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { StudioState } from './types'
 import { createActSlice } from './actSlice'
 import { createEmptyProjectionDirtyState } from './runtime-change-policy'
+import type { WorkspaceAct } from '../types'
 
 function overlaps(
     left: { x: number; y: number; width: number; height: number },
@@ -181,5 +182,37 @@ describe('actSlice', () => {
             hiddenActIds: ['act-2'],
         })
         expect(harness.get().acts.find((entry) => entry.id === 'act-2')?.hidden).toBe(true)
+    })
+
+    it('preserves the active participant when selecting a different thread', () => {
+        const threadAct: WorkspaceAct = {
+            id: 'act-1',
+            name: 'Review Flow',
+            position: { x: 0, y: 0 },
+            width: 400,
+            height: 300,
+            participants: {
+                alpha: {
+                    performerRef: { kind: 'draft', draftId: 'performer-1' },
+                    position: { x: 0, y: 0 },
+                },
+            },
+            relations: [],
+            createdAt: Date.now(),
+        }
+
+        const harness = createHarness({
+            ...createBaseState(),
+            acts: [threadAct],
+            selectedActId: 'act-1',
+            activeThreadId: 'thread-1',
+            activeThreadParticipantKey: 'alpha',
+        } as StudioState)
+
+        harness.get().selectThread('act-1', 'thread-2')
+        expect(harness.get().activeThreadParticipantKey).toBe('alpha')
+
+        harness.get().selectThreadParticipant(null)
+        expect(harness.get().activeThreadParticipantKey).toBeNull()
     })
 })

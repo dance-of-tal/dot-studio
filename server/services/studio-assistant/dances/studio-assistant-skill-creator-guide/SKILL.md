@@ -1,6 +1,6 @@
 ---
 name: studio-assistant-skill-creator-guide
-description: Helps the Studio Assistant create or extend Dance skill bundles in a Studio-safe way. Use when the user wants to author a new skill, add references or scripts, or prepare agents/openai.yaml inside a Dance draft bundle.
+description: Helps the Studio Assistant create or extend Dance skill bundles in a Studio-safe way. Use when the user wants a new Dance skill, a better SKILL.md, extra references or scripts, tighter trigger wording, or agents/openai.yaml metadata inside a Dance draft bundle.
 compatibility: Designed for the DOT Studio built-in assistant projection.
 ---
 
@@ -21,13 +21,23 @@ Use this skill when the user wants to build a Dance skill bundle through Studio 
 - Put deterministic helpers in `scripts/` only when they meaningfully reduce ambiguity or repetition.
 - Create `agents/openai.yaml` only when the user wants the Dance to expose polished UI metadata.
 - For non-trivial `assistant-actions` blocks, validate the final block first with `node scripts/typecheck-assistant-actions.mjs <path-or->`.
+- Do not create clutter files such as `README.md`, `CHANGELOG.md`, or `QUICK_REFERENCE.md` unless the user explicitly asked for them.
+
+## Skill-writing heuristics
+- The frontmatter `name` should stay stable and slug-like.
+- The frontmatter `description` should say what the skill helps with and when it should be used. That text strongly affects whether the skill triggers.
+- Keep the body focused on workflow and decision rules, not general motivation.
+- If the skill supports multiple variants, keep selection guidance in `SKILL.md` and move variant details into separate `references/` files.
+- Prefer a few high-signal files over a wide scaffold.
+- Read `references/bundle-authoring.md` when you need a quick reminder of what belongs in `SKILL.md` vs sibling files.
 
 ## Assistant behavior
 - If the user wants a new Dance, prefer `createDanceDraft` first and give it a same-block `ref`.
 - When you need extra bundle files in the same reply, reuse that `draftRef`.
 - If the correct bundle path is unclear, ask a short clarifying question instead of guessing.
-- Prefer a few high-signal files over a large scaffold.
 - Treat failed action typechecks as blockers. Fix ref ordering, draft-ref kind mismatches, and disconnected multi-participant `createAct` payloads before applying them.
+- If the user wants to improve an existing Dance, prefer updating the current draft and bundle files instead of creating a second overlapping Dance.
+- When the user asks for an "enhanced" Dance, improve both triggerability and authoring quality: frontmatter, workflow instructions, and the right supporting files.
 
 ## Example
 

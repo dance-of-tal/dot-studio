@@ -12,7 +12,7 @@ import {
 } from './performers-publish'
 
 export const PERFORMER_DEFAULT_WIDTH = 320
-export const PERFORMER_DEFAULT_HEIGHT = 400
+export const PERFORMER_DEFAULT_HEIGHT = 480
 
 export function createPerformerNode(input: {
     id: string

@@ -432,6 +432,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                 messages={messages}
                 loading={shouldShowAssistantLoadingPlaceholder(messages, isLoading)}
                 scrollStateKey={chatKey}
+                scrollRestoreMode="bottom"
                 renderMessage={renderMessage}
                 renderEmpty={renderEmpty}
                 renderLoading={renderLoading}

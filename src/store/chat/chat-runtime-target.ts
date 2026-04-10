@@ -60,6 +60,7 @@ function resolveParticipantSummary(
 ): AssistantStageActParticipantSummary {
     const performers = get().performers
     const performer = resolvePerformerFromActBinding(performers, binding)
+    const description = performer?.meta?.authoring?.description?.trim()
 
     const subscriptions: AssistantParticipantSubscriptions | undefined = binding.subscriptions
         ? {
@@ -77,6 +78,7 @@ function resolveParticipantSummary(
             : binding?.performerRef?.draftId || participantKey),
         performerId: performer?.id || null,
         displayName: binding.displayName,
+        ...(description ? { description } : {}),
         ...(subscriptions ? { subscriptions } : {}),
     }
 }
@@ -98,6 +100,7 @@ function resolveActSummary(get: ChatGet, act: WorkspaceAct): AssistantStageActSu
         name: act.name,
         description: act.description,
         actRules: act.actRules,
+        safety: act.safety,
         participants,
         relations,
     }
@@ -115,24 +118,32 @@ export function buildAssistantStageContext(get: ChatGet): AssistantStageContext 
 
     return {
         workingDir: state.workingDir,
-        performers: state.performers.map((performer) => ({
-            id: performer.id,
-            name: performer.name,
-            model: performer.model
-                ? {
-                    provider: performer.model.provider,
-                    modelId: performer.model.modelId,
-                }
-                : null,
-            talUrn: performer.talRef?.kind === 'registry' ? performer.talRef.urn : null,
-            danceUrns: performer.danceRefs
-                .filter((ref) => ref.kind === 'registry')
-                .map((ref) => ref.urn),
-        })),
+        performers: state.performers.map((performer) => {
+            const description = performer.meta?.authoring?.description?.trim()
+            return {
+                id: performer.id,
+                name: performer.name,
+                ...(description ? { description } : {}),
+                model: performer.model
+                    ? {
+                        provider: performer.model.provider,
+                        modelId: performer.model.modelId,
+                    }
+                    : null,
+                talUrn: performer.talRef?.kind === 'registry' ? performer.talRef.urn : null,
+                talDraftId: performer.talRef?.kind === 'draft' ? performer.talRef.draftId : null,
+                danceUrns: performer.danceRefs
+                    .filter((ref) => ref.kind === 'registry')
+                    .map((ref) => ref.urn),
+                danceDraftIds: performer.danceRefs
+                    .filter((ref) => ref.kind === 'draft')
+                    .map((ref) => ref.draftId),
+            }
+        }),
         acts: state.acts.map((act) => resolveActSummary(get, act)),
         drafts: Object.values(state.drafts)
             .filter((draft): draft is typeof draft & { kind: 'tal' | 'dance' } =>
-                (draft.kind === 'tal' || draft.kind === 'dance') && draft.saveState === 'saved',
+                draft.kind === 'tal' || draft.kind === 'dance',
             )
             .map((draft) => ({
                 id: draft.id,
@@ -140,6 +151,7 @@ export function buildAssistantStageContext(get: ChatGet): AssistantStageContext 
                 name: draft.name,
                 description: draft.description,
                 tags: draft.tags,
+                saveState: draft.saveState,
             })),
         availableModels: state.assistantAvailableModels.map((model) => ({
             provider: model.provider,

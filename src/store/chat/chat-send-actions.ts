@@ -1,6 +1,7 @@
 import { buildActParticipantChatKey } from '../../../shared/chat-targets'
 import { api } from '../../api'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
+import { toAssistantAvailableModels } from '../../lib/assistant-models'
 import { logChatDebug } from '../../lib/chat-debug'
 import { hasModelConfig } from '../../lib/performers'
 import type { AssetRef, ChatMessage } from '../../types'
@@ -18,6 +19,17 @@ import {
     resolveChatKeySession,
 } from '../session'
 import { collectRuntimeDraftIds, preparePendingRuntimeExecution } from '../runtime-execution'
+
+function hasMatchingAssistantModel(
+    models: Array<{ provider: string; modelId: string }>,
+    model: { provider: string; modelId: string } | null,
+) {
+    if (!model) {
+        return false
+    }
+
+    return models.some((entry) => entry.provider === model.provider && entry.modelId === model.modelId)
+}
 
 function createOptimisticUserMessage(
     text: string,
@@ -73,9 +85,28 @@ export function createChatSendActions(
         extraDanceRefs: AssetRef[] = [],
     ) => {
         let sessionId: string | undefined = resolveChatKeySession(get, chatKey) || undefined
-        const target = resolveChatRuntimeTarget(get, chatKey)
+        let target = resolveChatRuntimeTarget(get, chatKey)
         if (!target) {
             return
+        }
+
+        if (target.kind === 'assistant' && target.assistantContext) {
+            const refreshedModels = await api.models.list().catch(() => null)
+            if (refreshedModels) {
+                const availableAssistantModels = toAssistantAvailableModels(refreshedModels)
+                get().setAssistantAvailableModels(availableAssistantModels)
+
+                const state = get()
+                if (!hasMatchingAssistantModel(availableAssistantModels, state.assistantModel)) {
+                    state.setAssistantModel(
+                        availableAssistantModels.length > 0
+                            ? { provider: availableAssistantModels[0].provider, modelId: availableAssistantModels[0].modelId }
+                            : null,
+                    )
+                }
+
+                target = resolveChatRuntimeTarget(get, chatKey) || target
+            }
         }
 
         if (target.notice) {

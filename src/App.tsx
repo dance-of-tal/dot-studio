@@ -10,6 +10,11 @@ import {
   createDragStartHandler,
   createDragEndHandler,
 } from './app-dnd-handlers';
+import {
+  clearStartupAssetTargetFromUrl,
+  openStartupAssetTarget,
+  readStartupAssetTarget,
+} from './lib/startup-asset-target';
 import { resolveStartupWorkspaceTarget } from './lib/startup-workspace';
 
 const LeftSidebar = lazy(() =>
@@ -74,6 +79,7 @@ export default function App() {
   useEffect(() => {
     const store = useStudioStore.getState();
     store.initRealtimeEvents();
+    const startupAssetTarget = readStartupAssetTarget(window.location.search);
 
     // Auto-restore: load studio config → apply theme → restore the requested workspace path
     api.studio.getConfig()
@@ -91,13 +97,18 @@ export default function App() {
 
         if (startupTarget.kind === 'workspace') {
           await useStudioStore.getState().loadWorkspace(startupTarget.workspaceId);
-          return;
-        }
-
-        if (startupTarget.kind === 'project-dir') {
+        } else if (startupTarget.kind === 'project-dir') {
           const currentWorkingDir = useStudioStore.getState().workingDir;
           if (currentWorkingDir !== startupTarget.projectDir) {
             useStudioStore.getState().setWorkingDir(startupTarget.projectDir);
+          }
+        }
+
+        if (startupAssetTarget) {
+          try {
+            await openStartupAssetTarget(startupAssetTarget);
+          } finally {
+            clearStartupAssetTargetFromUrl();
           }
         }
       })

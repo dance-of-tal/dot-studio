@@ -156,10 +156,10 @@ export default tool({
             content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Pause until a condition is met, then resume with the provided instruction. Use this to self-wake when you are blocked on a teammate message, board update, timeout, or a combined condition.",
+    description: "Pause until a condition is met, then resume with the provided instruction. Use this to set a self-wake alarm when you are blocked on a teammate message, board update, a scheduled wake, or a combined condition.",
     args: {
         resumeWith: tool.schema.string().describe("Instruction to receive when the wait is over, such as 'Resume once review-summary exists and send the next handoff'."),
-        conditionJson: tool.schema.string().describe('JSON condition expression. Supported types: all_of, any_of, board_key_exists, message_received, timeout. Example: {"type":"board_key_exists","key":"review-summary"}'),
+        conditionJson: tool.schema.string().describe('JSON condition expression. Use message_received, board_key_exists, wake_at, or compose them with all_of/any_of. Example scheduled self-wake: {"type":"wake_at","at":1735689600000}'),
     },
     async execute(args, context) {
         let condition

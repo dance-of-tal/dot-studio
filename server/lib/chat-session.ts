@@ -10,6 +10,7 @@ type ToolPartStateLike = {
 
 type ToolPartLike = {
     type?: string
+    tool?: string | { name?: string }
     state?: ToolPartStateLike
 } & Record<string, unknown>
 
@@ -35,6 +36,73 @@ function sleep(ms: number) {
 
 function readMessageRole(message: MessageWithParts) {
     return message.info?.role || message.role || null
+}
+
+function getLastNonSystemMessage(messages: MessageWithParts[]) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index]
+        if (readMessageRole(message) !== 'system') {
+            return message
+        }
+    }
+
+    return null
+}
+
+function readToolName(part: ToolPartLike) {
+    if (typeof part.tool === 'string' && part.tool.trim().length > 0) {
+        return part.tool
+    }
+    if (part.tool && typeof part.tool === 'object' && typeof part.tool.name === 'string' && part.tool.name.trim().length > 0) {
+        return part.tool.name
+    }
+    return null
+}
+
+export function hasSettledLatestAssistantTurn(messages: MessageWithParts[]) {
+    const lastMessage = getLastNonSystemMessage(messages)
+    if (!lastMessage || readMessageRole(lastMessage) !== 'assistant') {
+        return false
+    }
+
+    if (typeof lastMessage.info?.time?.completed === 'number' || !!lastMessage.info?.error) {
+        return true
+    }
+
+    const parts = Array.isArray(lastMessage.parts) ? lastMessage.parts : []
+    const toolParts = parts
+        .filter((part): part is ToolPartLike => isToolPartLike(part) && part.type === 'tool')
+
+    if (toolParts.some((part) => part.state?.status === 'pending' || part.state?.status === 'running')) {
+        return false
+    }
+
+    if (parts.some((part) => isToolPartLike(part) && part.type === 'step-finish')) {
+        return true
+    }
+
+    return toolParts.some((part) => part.state?.status === 'completed' || part.state?.status === 'error')
+}
+
+export function isSessionParkedByWaitUntil(messages: MessageWithParts[]) {
+    const lastMessage = getLastNonSystemMessage(messages)
+    if (!lastMessage || readMessageRole(lastMessage) !== 'assistant') {
+        return false
+    }
+
+    const toolParts = (Array.isArray(lastMessage.parts) ? lastMessage.parts : [])
+        .filter((part): part is ToolPartLike => isToolPartLike(part) && part.type === 'tool')
+
+    if (toolParts.length === 0) {
+        return false
+    }
+
+    if (toolParts.some((part) => part.state?.status === 'pending' || part.state?.status === 'running')) {
+        return false
+    }
+
+    const lastTool = toolParts[toolParts.length - 1]
+    return readToolName(lastTool) === 'wait_until' && lastTool.state?.status === 'completed'
 }
 
 function hasCompletedAssistantTurn(messages: MessageWithParts[]) {

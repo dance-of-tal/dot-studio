@@ -1,6 +1,6 @@
 ---
 name: studio-assistant-workflow-guide
-description: Helps design performer teams and workflow shapes in DOT Studio. Use when the user wants a team topology, role split, or Act structure recommendation.
+description: Helps design performer teams, role splits, handoff patterns, and connected Act structures in DOT Studio. Use when the user wants a team topology, workflow recommendation, role decomposition, or Act structure recommendation.
 compatibility: Designed for the DOT Studio built-in assistant projection.
 ---
 
@@ -21,6 +21,13 @@ Use this skill when the user wants help designing a performer team or workflow s
 - Do not assume an unseen existing participant for a from-scratch team request. Either use snapshot ids that actually exist or create the missing performer in the same block.
 - Prefer one complete mutation pass over many partial follow-up mutations.
 - When a capability is new and no known registry asset is present, prefer local Tal or Dance drafts over invented URNs.
+
+## Workflow Design Heuristics
+- Prefer small, legible role splits over a large generic team.
+- Give each performer a distinct responsibility and a clear handoff.
+- If the workflow naturally has stages, mirror those stages in relation order.
+- If the user asks for review, approval, or escalation, model those as explicit relations rather than vague shared responsibility.
+- If a workflow can plausibly be solved with one performer, say so instead of forcing an Act.
 
 ## Common Patterns
 
@@ -51,3 +58,9 @@ Use this skill when the user wants help designing a performer team or workflow s
 - When Tal, Dance, or Performer setup can be done in more than one reasonable way, present the shortest useful option set first.
 - If the request is specific enough, create the concrete performer and Act structure directly.
 - Before finalizing a non-trivial mutation block, run `node scripts/typecheck-assistant-actions.mjs <path-or->` so same-block refs, draft kinds, and missing workflow relations are checked first.
+
+## Anti-Patterns
+- Creating several generic performers with overlapping jobs.
+- Returning an unconnected multi-participant Act for a workflow request.
+- Ignoring a role the user explicitly asked for because a simpler topology exists.
+- Adding Tal, Dance, or model choices that the user explicitly asked to omit.

@@ -1,6 +1,6 @@
 ---
 name: studio-assistant-act-guide
-description: Explains the current DOT Studio Act contract and safe relation design. Use when the user asks about Act choreography, participant keys, relation direction, or publish-safe workflow structure.
+description: Explains the current DOT Studio Act contract, participant choreography, relation naming, subscriptions, actRules, and publish-safe workflow structure. Use when the user asks about Act design, multi-performer workflows, participant keys, relation direction, runtime guardrails, or subscription wiring.
 compatibility: Designed for the DOT Studio built-in assistant projection.
 ---
 
@@ -31,14 +31,32 @@ Use this skill when the user is asking about Act structure, relation design, or 
 - Use `attachPerformerToAct` mainly when extending an existing Act.
 - If the Act needs missing participants, create the missing Performers first in cascade and make sure those Performers also match the user intent.
 - Always give each new relation both a clear `name` and `description`.
+- Linked performer `description` becomes participant focus in Act runtime, so keep it aligned with the participant's job.
 - Use `sourceParticipantKey` / `sourcePerformerId` / `sourcePerformerRef` / `sourcePerformerName` and the matching `target...` fields for new relations.
 - Do not generate `from...` or `to...` relation field names.
 - Treat subscriptions as wake-up filters, not permissions.
 - Use `actRules` for whole-Act instructions that every participant should see.
 - Use `callboardKeys` as the field name even if the UI describes the same surface as shared board or shared notes.
+- `safety` is the whole-Act runtime guardrail layer. It is different from participant `wait_until`.
+- If you need to explain Act runtime waiting behavior, use `wait_until` conditions named `message_received`, `board_key_exists`, `wake_at`, `all_of`, and `any_of`.
+- `wake_at` is the scheduled self-wake condition name. Do not call it `timeout`.
 - Prefer focused Acts over one giant workflow graph.
 - Reuse existing performers when they already match the requested role.
 - Avoid promising legacy relation metadata or runtime-only fields unless the current assistant action surface can actually express them.
+
+## Design Heuristics
+- Put durable team-wide instructions in `actRules`, not in a relation description.
+- Put each participant's job focus in the linked Performer `description`.
+- Put runtime caps, loop limits, and timeout behavior in `safety`, not in relation metadata.
+- Put wake filters in participant `subscriptions`, not in `actRules`.
+- Keep relations concrete and legible. A good relation says who hands what to whom and why that handoff exists.
+- For review, approval, or escalation flows, it is often better to model separate one-way relations than one vague bidirectional relation.
+
+## Common Failure Patterns
+- Creating multiple participants with no relations for a workflow request.
+- Using generic relation labels like `handoff` without a meaningful description.
+- Stuffing participant-specific behavior into `actRules` when it belongs on the Performer or participant subscription layer.
+- Inventing legacy fields such as `permissions`, `timeout`, or participant `id`.
 
 ## Self-Check
 - End with exactly one raw `<assistant-actions>...</assistant-actions>` block.

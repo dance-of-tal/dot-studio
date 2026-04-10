@@ -43,15 +43,12 @@ describe('resolveParticipantRecipient', () => {
         expect(resolveParticipantRecipient(actDefinition, 'participant-lead', 'participant-bull')).toBe('participant-bull')
     })
 
-    it('maps a connected relation name back to the teammate endpoint', () => {
+    it('does not resolve relation names or unknown recipients', () => {
         expect(resolveParticipantRecipient(
             actDefinition,
             'participant-lead',
             'participant_1_to_participant_2',
-        )).toBe('participant-data')
-    })
-
-    it('does not resolve unrelated or unknown relation names', () => {
+        )).toBeNull()
         expect(resolveParticipantRecipient(
             actDefinition,
             'participant-data',

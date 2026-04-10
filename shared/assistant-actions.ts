@@ -1,3 +1,5 @@
+import type { ActSafetyConfig } from './act-types.js'
+
 export type AssistantActionDirection = 'both' | 'one-way'
 export type AssistantParticipantEventType = 'runtime.idle'
 
@@ -35,9 +37,12 @@ export interface AssistantModelBlueprint {
     modelId: string
 }
 
+export interface AssistantActSafetyInput extends ActSafetyConfig {}
+
 // Fields shared by createPerformer (inline) and updatePerformer (patch)
 export interface AssistantPerformerFields {
     model?: AssistantModelBlueprint | null
+    description?: string | null
     // Tal — specify at most one
     talUrn?: string | null          // registry URN  (null = clear Tal)
     talDraftId?: string             // existing draft id
@@ -61,20 +66,10 @@ export interface AssistantActRelationBlueprint {
     sourcePerformerId?: string
     sourcePerformerRef?: string
     sourcePerformerName?: string
-    // Compatibility aliases for model-generated payloads.
-    fromParticipantKey?: string
-    fromPerformerId?: string
-    fromPerformerRef?: string
-    fromPerformerName?: string
     targetParticipantKey?: string
     targetPerformerId?: string
     targetPerformerRef?: string
     targetPerformerName?: string
-    // Compatibility aliases for model-generated payloads.
-    toParticipantKey?: string
-    toPerformerId?: string
-    toPerformerRef?: string
-    toPerformerName?: string
     direction?: AssistantActionDirection
     name: string
     description: string
@@ -89,6 +84,7 @@ export interface AssistantDraftSummary {
     slug?: string
     description?: string
     tags?: string[]
+    saveState: 'unsaved' | 'saved'
 }
 
 export interface AssistantAvailableModelSummary {
@@ -101,9 +97,12 @@ export interface AssistantAvailableModelSummary {
 export interface AssistantStagePerformerSummary {
     id: string
     name: string
+    description?: string
     model: { provider: string; modelId: string } | null
     talUrn: string | null
+    talDraftId: string | null
     danceUrns: string[]
+    danceDraftIds: string[]
 }
 
 export interface AssistantStageActParticipantSummary {
@@ -111,6 +110,7 @@ export interface AssistantStageActParticipantSummary {
     performerName: string
     performerId: string | null
     displayName?: string
+    description?: string
     subscriptions?: AssistantParticipantSubscriptions
 }
 
@@ -127,6 +127,7 @@ export interface AssistantStageActSummary {
     name: string
     description?: string
     actRules?: string[]
+    safety?: AssistantActSafetyInput
     participants: AssistantStageActParticipantSummary[]
     relations: AssistantStageActRelationSummary[]
 }
@@ -257,6 +258,7 @@ export type AssistantAction =
         name: string
         description?: string
         actRules?: string[]
+        safety?: AssistantActSafetyInput
         // Inline participants + relations
         participantPerformerIds?: string[]
         participantPerformerRefs?: string[]
@@ -271,6 +273,7 @@ export type AssistantAction =
         name?: string
         description?: string
         actRules?: string[]
+        safety?: AssistantActSafetyInput | null
     }
     | {
         type: 'deleteAct'
@@ -319,18 +322,10 @@ export type AssistantAction =
         sourcePerformerId?: string
         sourcePerformerRef?: string
         sourcePerformerName?: string
-        fromParticipantKey?: string
-        fromPerformerId?: string
-        fromPerformerRef?: string
-        fromPerformerName?: string
         targetParticipantKey?: string
         targetPerformerId?: string
         targetPerformerRef?: string
         targetPerformerName?: string
-        toParticipantKey?: string
-        toPerformerId?: string
-        toPerformerRef?: string
-        toPerformerName?: string
         direction?: AssistantActionDirection
         name: string
         description: string

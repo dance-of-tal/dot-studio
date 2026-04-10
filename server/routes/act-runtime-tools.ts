@@ -49,20 +49,6 @@ export function resolveParticipantRecipient(
         }
     }
 
-    for (const relation of actDefinition.relations || []) {
-        if (!relation.between.includes(senderKey)) {
-            continue
-        }
-        const recipientKey = relation.between[0] === senderKey ? relation.between[1] : relation.between[0]
-        if (!canMessageParticipant(recipientKey)) {
-            continue
-        }
-        if (relation.name.trim().toLowerCase() !== normalizedRecipient) {
-            continue
-        }
-        return recipientKey
-    }
-
     return null
 }
 
@@ -229,7 +215,7 @@ actRuntimeTools.post('/api/act/:actId/thread/:threadId/set-wake-condition', asyn
 
     const result = await getActRuntimeService(requestWorkingDir(c)).setWakeCondition(threadId, body)
     if (!result.ok) {
-        return c.json(result, result.status as 404)
+        return c.json(result, result.status as 400 | 404)
     }
     return c.json(result)
 })
@@ -252,7 +238,7 @@ actRuntimeTools.post('/api/act/session/:sessionId/wait-until', async (c) => {
         condition: body.condition,
     })
     if (!result.ok) {
-        return c.json(result, result.status as 404)
+        return c.json(result, result.status as 400 | 404)
     }
     return c.json(result)
 })

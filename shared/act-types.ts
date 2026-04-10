@@ -85,7 +85,7 @@ export type ConditionExpr =
     | { type: 'any_of'; conditions: ConditionExpr[] }
     | { type: 'board_key_exists'; key: string }
     | { type: 'message_received'; from: string; tag?: string }
-    | { type: 'timeout'; at: number }
+    | { type: 'wake_at'; at: number }
 
 export interface WakeCondition {
     id: string

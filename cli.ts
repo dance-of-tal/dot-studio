@@ -8,6 +8,7 @@ import os from 'os'
 import { fileURLToPath } from 'url'
 import { spawn, spawnSync } from 'child_process'
 import readline from 'readline/promises'
+import { parseDotAssetUrn } from './server/lib/dot-source.js'
 import { resolvePackageBin } from './server/lib/package-bin.js'
 
 type StudioPackageMeta = {
@@ -24,6 +25,7 @@ type OpenCommand = {
     projectDir: string
     port: number | null
     opencodeUrl: string | null
+    startupAssetTarget: StartupAssetTarget | null
     verbose: boolean
 }
 
@@ -44,6 +46,11 @@ type VersionCommand = {
 }
 
 type CliCommand = OpenCommand | DoctorCommand | HelpCommand | VersionCommand
+
+type StartupAssetTarget = {
+    kind: 'performer' | 'act'
+    urn: string
+}
 
 type DoctorCheck = {
     label: string
@@ -84,6 +91,10 @@ Options:
   -p, --port <port>     Port for the Studio server. Defaults to 3001.
       --opencode-url <url>
                         Connect to an existing OpenCode instance instead of managed mode.
+      --performer <urn>
+                        Focus or import an installed performer after opening the workspace.
+      --act <urn>
+                        Focus or import an installed act after opening the workspace.
       --no-open         Do not open the browser window.
       --open            Explicitly open the browser window after startup.
       --verbose         Print extra startup details.
@@ -94,7 +105,9 @@ Examples:
   dot-studio
   dot-studio .
   dot-studio ~/projects/dance-of-tal
+  dot-studio ~/projects/dance-of-tal --performer performer/@acme/workflows/reviewer
   dot-studio open ~/projects/dance-of-tal --port 3010
+  dot-studio open ~/projects/dance-of-tal --act act/@acme/workflows/review-flow
   dot-studio doctor
   dot-studio doctor ~/projects/dance-of-tal --opencode-url http://localhost:4096`)
 }
@@ -116,6 +129,21 @@ function parsePort(value: string | undefined, arg: string): number {
     return parsed
 }
 
+function parseAssetTargetUrn(value: string | undefined, kind: StartupAssetTarget['kind'], arg: string): StartupAssetTarget {
+    const urn = (value || '').trim()
+    if (!urn) {
+        failUsage(`Missing value for ${arg}`)
+    }
+
+    try {
+        parseDotAssetUrn(urn, kind)
+    } catch {
+        failUsage(`Invalid ${arg} URN: ${urn}. Expected ${kind}/@<owner>/<stage>/<name>.`)
+    }
+
+    return { kind, urn }
+}
+
 function parseCliArgs(argv: string[]): CliCommand {
     let command: CliCommand['kind'] = 'open'
     let commandExplicit = false
@@ -123,6 +151,7 @@ function parseCliArgs(argv: string[]): CliCommand {
     let projectDir: string | null = null
     let port: number | null = null
     let opencodeUrl: string | null = null
+    let startupAssetTarget: StartupAssetTarget | null = null
     let verbose = false
 
     for (let index = 0; index < argv.length; index += 1) {
@@ -172,6 +201,24 @@ function parseCliArgs(argv: string[]): CliCommand {
             continue
         }
 
+        if (arg === '--performer') {
+            if (startupAssetTarget) {
+                failUsage('Use only one of --performer or --act')
+            }
+            startupAssetTarget = parseAssetTargetUrn(argv[index + 1], 'performer', arg)
+            index += 1
+            continue
+        }
+
+        if (arg === '--act') {
+            if (startupAssetTarget) {
+                failUsage('Use only one of --performer or --act')
+            }
+            startupAssetTarget = parseAssetTargetUrn(argv[index + 1], 'act', arg)
+            index += 1
+            continue
+        }
+
         if (arg.startsWith('-')) {
             failUsage(`Unknown option: ${arg}`)
         }
@@ -186,6 +233,9 @@ function parseCliArgs(argv: string[]): CliCommand {
     const resolvedProjectDir = resolve(projectDir || process.cwd())
 
     if (command === 'doctor') {
+        if (startupAssetTarget) {
+            failUsage('--performer and --act can only be used with the open command')
+        }
         return {
             kind: 'doctor',
             projectDir: resolvedProjectDir,
@@ -201,6 +251,7 @@ function parseCliArgs(argv: string[]): CliCommand {
         projectDir: resolvedProjectDir,
         port,
         opencodeUrl: opencodeUrl || process.env.OPENCODE_URL || null,
+        startupAssetTarget,
         verbose,
     }
 }
@@ -558,6 +609,16 @@ async function runDoctor(command: DoctorCommand, packageMeta: StudioPackageMeta)
     process.exit(hasFailure ? 1 : 0)
 }
 
+function buildStudioLaunchUrl(baseUrl: string, startupAssetTarget: StartupAssetTarget | null) {
+    if (!startupAssetTarget) {
+        return baseUrl
+    }
+
+    const url = new URL(baseUrl)
+    url.searchParams.set(startupAssetTarget.kind, startupAssetTarget.urn)
+    return url.toString()
+}
+
 async function runOpen(command: OpenCommand, packageMeta: StudioPackageMeta) {
     const updated = await promptForNpmUpdate(packageMeta)
     if (updated) {
@@ -580,6 +641,7 @@ async function runOpen(command: OpenCommand, packageMeta: StudioPackageMeta) {
     }
 
     const studioUrl = `http://localhost:${resolvedPort}`
+    const launchUrl = buildStudioLaunchUrl(studioUrl, command.startupAssetTarget)
 
     if (command.verbose) {
         console.log(`Opening DOT Studio for ${command.projectDir}`)
@@ -588,15 +650,21 @@ async function runOpen(command: OpenCommand, packageMeta: StudioPackageMeta) {
         } else {
             console.log('Using managed OpenCode mode')
         }
+        if (command.startupAssetTarget) {
+            console.log(`Startup target: ${command.startupAssetTarget.kind} ${command.startupAssetTarget.urn}`)
+        }
     }
 
     await import('./server/index.js')
 
     console.log(`DOT Studio running at ${studioUrl}`)
     console.log(`Workspace: ${command.projectDir}`)
+    if (command.startupAssetTarget) {
+        console.log(`Launch URL: ${launchUrl}`)
+    }
     if (command.openBrowser) {
         const open = await import('open')
-        await open.default(studioUrl)
+        await open.default(launchUrl)
     }
 }
 

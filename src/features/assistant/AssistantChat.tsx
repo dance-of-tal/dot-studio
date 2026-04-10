@@ -9,6 +9,7 @@ import { buildAssistantChatKey } from '../../store/assistantSlice'
 import { applyAssistantActions } from './assistant-actions'
 import { getAssistantMessageActions } from './assistant-protocol'
 import { showToast } from '../../lib/toast'
+import { toAssistantAvailableModels } from '../../lib/assistant-models'
 import { useChatSession } from '../../store/session/use-chat-session'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 
@@ -66,6 +67,14 @@ export function AssistantChat() {
         [models],
     )
     const hasModels = connectedModels.length > 0
+    const selectedConnectedModel = useMemo(() => (
+        assistantModel
+            ? connectedModels.find((model) => (
+                model.provider === assistantModel.provider
+                && model.id === assistantModel.modelId
+            )) || null
+            : null
+    ), [assistantModel, connectedModels])
 
     const [input, setInput] = useState('')
     const [panelWidth, setPanelWidth] = useState(320)
@@ -74,18 +83,20 @@ export function AssistantChat() {
 
     // Auto-select first connected model
     useEffect(() => {
-        if (!assistantModel && connectedModels.length > 0) {
+        if (connectedModels.length === 0) {
+            if (assistantModel) {
+                setAssistantModel(null)
+            }
+            return
+        }
+
+        if (!selectedConnectedModel) {
             setAssistantModel({ provider: connectedModels[0].provider, modelId: connectedModels[0].id })
         }
-    }, [assistantModel, connectedModels, setAssistantModel])
+    }, [assistantModel, connectedModels, selectedConnectedModel, setAssistantModel])
 
     const availableAssistantModels = useMemo(
-        () => connectedModels.map((model) => ({
-            provider: model.provider,
-            providerName: model.providerName,
-            modelId: model.id,
-            name: model.name || model.id,
-        })),
+        () => toAssistantAvailableModels(connectedModels),
         [connectedModels],
     )
 
@@ -194,12 +205,9 @@ export function AssistantChat() {
 
     const currentModelLabel = useMemo(() => (
         assistantModel
-            ? (connectedModels.find((model) => (
-                model.provider === assistantModel.provider
-                && model.id === assistantModel.modelId
-            ))?.name || assistantModel.modelId)
+            ? (selectedConnectedModel?.name || assistantModel.modelId)
             : null
-    ), [assistantModel, connectedModels])
+    ), [assistantModel, selectedConnectedModel])
 
     const groupedModels = useMemo(() => (
         connectedModels.reduce<Record<string, RuntimeModelCatalogEntry[]>>((acc, model) => {

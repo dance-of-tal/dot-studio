@@ -6,9 +6,11 @@ import { createEmptyProjectionDirtyState } from '../runtime-change-policy'
 
 const {
     sendMock,
+    listModelsMock,
     resolveChatRuntimeTargetMock,
 } = vi.hoisted(() => ({
     sendMock: vi.fn(),
+    listModelsMock: vi.fn(),
     resolveChatRuntimeTargetMock: vi.fn(),
 }))
 
@@ -16,6 +18,9 @@ vi.mock('../../api', () => ({
     api: {
         chat: {
             send: sendMock,
+        },
+        models: {
+            list: listModelsMock,
         },
     },
 }))
@@ -96,6 +101,39 @@ function createActTarget(chatKey: string, actId: string, threadId: string) {
     }
 }
 
+function createAssistantTarget(
+    chatKey: string,
+    availableModels: Array<{ provider: string; providerName: string; modelId: string; name: string }> = [],
+    model: { provider: string; modelId: string } | null = { provider: 'openai', modelId: 'gpt-5.4' },
+) {
+    return {
+        chatKey,
+        kind: 'assistant' as const,
+        name: 'Studio Assistant',
+        runtimeConfig: {
+            ...createRuntimeConfig(),
+            model,
+        },
+        assistantContext: {
+            workingDir: '/tmp/workspace',
+            performers: [],
+            acts: [],
+            drafts: [],
+            availableModels,
+        },
+        executionScope: {
+            performerId: null,
+            actId: null,
+            clearPerformerIds: [],
+            clearActIds: [],
+        },
+        requestTarget: {
+            performerId: chatKey,
+            performerName: 'Studio Assistant',
+        },
+    }
+}
+
 function createMinimalState(overrides: Partial<StudioState> = {}): StudioState {
     const state = {
         runtimeReloadPending: false,
@@ -117,6 +155,7 @@ function createMinimalState(overrides: Partial<StudioState> = {}): StudioState {
         activeChatPerformerId: null,
         sessions: [],
         actThreads: {},
+        assistantAvailableModels: [],
         watchSessionLifecycle: vi.fn(),
         stopWatchingSessionLifecycle: vi.fn(),
         ...overrides,
@@ -149,6 +188,12 @@ function createMinimalState(overrides: Partial<StudioState> = {}): StudioState {
         state.seStatuses[sessionId] = status as StudioState['seStatuses'][string]
     })
     state.saveWorkspace = vi.fn(async () => {})
+    state.setAssistantModel = vi.fn((model) => {
+        state.assistantModel = model
+    })
+    state.setAssistantAvailableModels = vi.fn((models) => {
+        state.assistantAvailableModels = models
+    })
 
     return state
 }
@@ -157,6 +202,7 @@ describe('chat send actions', () => {
     beforeEach(() => {
         vi.useFakeTimers()
         sendMock.mockReset()
+        listModelsMock.mockReset()
         resolveChatRuntimeTargetMock.mockReset()
     })
 
@@ -214,5 +260,138 @@ describe('chat send actions', () => {
         await actions.sendActMessage(actId, threadId, participantKey, 'hello')
 
         expect(state.watchSessionLifecycle).not.toHaveBeenCalled()
+    })
+
+    it('hydrates assistant available models before sending when the workspace cache is empty', async () => {
+        const chatKey = 'studio-assistant'
+        const sessionId = 'session-assistant-1'
+        const state = createMinimalState({
+            chatKeyToSession: { [chatKey]: sessionId },
+            sessionToChatKey: { [sessionId]: chatKey },
+            sessionLoading: { [sessionId]: true },
+            initRealtimeEvents: vi.fn(),
+        })
+        const get = () => state
+        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
+            Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
+        }
+
+        resolveChatRuntimeTargetMock.mockImplementation((getState: typeof get, nextChatKey: string) => (
+            createAssistantTarget(nextChatKey, getState().assistantAvailableModels, getState().assistantModel)
+        ))
+        listModelsMock.mockResolvedValue([
+            {
+                provider: 'openai',
+                providerName: 'OpenAI',
+                id: 'gpt-5.4',
+                name: 'GPT-5.4',
+                connected: true,
+            },
+            {
+                provider: 'anthropic',
+                providerName: 'Anthropic',
+                id: 'claude-disconnected',
+                name: 'Claude Disconnected',
+                connected: false,
+            },
+        ])
+        sendMock.mockResolvedValue(undefined)
+
+        const actions = createChatSendActions(set, get, async () => ({
+            sessionId,
+            runtimeConfig: createAssistantTarget(chatKey).runtimeConfig,
+        }))
+
+        await actions.sendMessage(chatKey, 'hello')
+
+        expect(listModelsMock).toHaveBeenCalledTimes(1)
+        expect(state.setAssistantAvailableModels).toHaveBeenCalledWith([
+            {
+                provider: 'openai',
+                providerName: 'OpenAI',
+                modelId: 'gpt-5.4',
+                name: 'GPT-5.4',
+            },
+        ])
+        expect(sendMock).toHaveBeenCalledWith(sessionId, expect.objectContaining({
+            assistantContext: expect.objectContaining({
+                availableModels: [
+                    {
+                        provider: 'openai',
+                        providerName: 'OpenAI',
+                        modelId: 'gpt-5.4',
+                        name: 'GPT-5.4',
+                    },
+                ],
+            }),
+        }))
+    })
+
+    it('replaces a stale assistant model with the first connected model before sending', async () => {
+        const chatKey = 'studio-assistant'
+        const sessionId = 'session-assistant-2'
+        const state = createMinimalState({
+            assistantModel: { provider: 'openai', modelId: 'gpt-stale' },
+            assistantAvailableModels: [
+                {
+                    provider: 'openai',
+                    providerName: 'OpenAI',
+                    modelId: 'gpt-stale',
+                    name: 'GPT Stale',
+                },
+            ],
+            chatKeyToSession: { [chatKey]: sessionId },
+            sessionToChatKey: { [sessionId]: chatKey },
+            sessionLoading: { [sessionId]: true },
+            initRealtimeEvents: vi.fn(),
+        })
+        const get = () => state
+        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
+            Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
+        }
+
+        resolveChatRuntimeTargetMock.mockImplementation((getState: typeof get, nextChatKey: string) => (
+            createAssistantTarget(nextChatKey, getState().assistantAvailableModels, getState().assistantModel)
+        ))
+        listModelsMock.mockResolvedValue([
+            {
+                provider: 'openai',
+                providerName: 'OpenAI',
+                id: 'gpt-5.4',
+                name: 'GPT-5.4',
+                connected: true,
+            },
+        ])
+        sendMock.mockResolvedValue(undefined)
+
+        const actions = createChatSendActions(set, get, async () => ({
+            sessionId,
+            runtimeConfig: createAssistantTarget(chatKey).runtimeConfig,
+        }))
+
+        await actions.sendMessage(chatKey, 'hello')
+
+        expect(state.setAssistantModel).toHaveBeenCalledWith({
+            provider: 'openai',
+            modelId: 'gpt-5.4',
+        })
+        expect(sendMock).toHaveBeenCalledWith(sessionId, expect.objectContaining({
+            performer: expect.objectContaining({
+                model: {
+                    provider: 'openai',
+                    modelId: 'gpt-5.4',
+                },
+            }),
+            assistantContext: expect.objectContaining({
+                availableModels: [
+                    {
+                        provider: 'openai',
+                        providerName: 'OpenAI',
+                        modelId: 'gpt-5.4',
+                        name: 'GPT-5.4',
+                    },
+                ],
+            }),
+        }))
     })
 })

@@ -7,7 +7,7 @@
     flex-direction: column;
     gap: 0;
     margin: 6px 0 10px;
-    padding-left: 12px;
+    padding-left: 0;
 }
 
 /* ── BasicTool rows ── */
@@ -144,7 +144,7 @@
 }
 
 .basic-tool__content {
-    margin: 2px 0 8px 26px;
+    margin: 2px 0 8px;
     padding: 8px 0 0 0;
     background: transparent;
 }
@@ -165,14 +165,14 @@
 
 .edit-trigger {
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: baseline;
 }
 
 .edit-trigger__title-area {
     display: flex;
-    flex-direction: column;
     min-width: 0;
     overflow: hidden;
+    flex: 1;
 }
 
 .edit-trigger__title {
@@ -180,6 +180,7 @@
     align-items: baseline;
     gap: 6px;
     min-width: 0;
+    overflow: hidden;
 }
 
 .edit-trigger__title-text,
@@ -190,16 +191,15 @@
     font-weight: 500;
     color: var(--text-primary);
     white-space: nowrap;
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .agent-trigger__title,
 .skill-trigger__title {
     text-transform: capitalize;
-}
-
-.edit-trigger__path {
-    margin-top: 1px;
 }
 
 .edit-trigger__directory,
@@ -212,6 +212,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+    flex: 1;
 }
 
 .edit-trigger__actions {
@@ -376,6 +378,7 @@
     font-size: 11px;
     color: var(--text-secondary);
     text-align: left;
+    min-width: 0;
 }
 
 .tool-file-accordion__header:hover {
@@ -395,6 +398,7 @@
     font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .tool-file-accordion__badge {
@@ -600,7 +604,7 @@
 }
 
 .context-group__list {
-    margin: 2px 0 8px 26px;
+    margin: 2px 0 8px;
     padding: 8px 0 0 0;
 }
 

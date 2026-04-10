@@ -60,12 +60,6 @@ const CHAT_EVENT_TYPES = new Set([
     'todo.updated',
 ])
 
-const ACT_STATUS_TRANSPORT_EVENT_TYPES = new Set([
-    'session.status',
-    'session.idle',
-    'session.error',
-])
-
 const FAILED_RESOLVE_RETRY_MS = 2_000
 const SESSION_SYNC_DEBOUNCE_MS = 1_000
 const MAX_PENDING_EVENTS_PER_SESSION = 200
@@ -265,7 +259,7 @@ export const createIntegrationSlice: StateCreator<
         sessionId: string,
         events: ChatEvent[],
     ) {
-        if (!target || target.kind === 'act-participant') {
+        if (!target) {
             return
         }
 
@@ -290,10 +284,6 @@ export const createIntegrationSlice: StateCreator<
         }
     }
 
-    function shouldIgnoreTransportEvent(target: SessionStreamTarget | null, event: ChatEvent) {
-        return target?.kind === 'act-participant' && !!event.type && ACT_STATUS_TRANSPORT_EVENT_TYPES.has(event.type)
-    }
-
     function processResolvedSessionEvents(
         target: SessionStreamTarget | null,
         sessionId: string,
@@ -305,7 +295,7 @@ export const createIntegrationSlice: StateCreator<
 
         reconcileSessionSupervision(target, sessionId, events)
         for (const event of events) {
-            if (!event.type || !CHAT_EVENT_TYPES.has(event.type) || shouldIgnoreTransportEvent(target, event)) {
+            if (!event.type || !CHAT_EVENT_TYPES.has(event.type)) {
                 continue
             }
             eventIngest.enqueue(event)

@@ -1,6 +1,6 @@
 ---
 name: studio-assistant-studio-guide
-description: Explains DOT Studio navigation, UI vocabulary, Asset Library behavior, Stage vs thread terminology, and where controls live. Use when the user asks how to use the Studio UI, where a feature lives, how Asset Library works, what Stage or thread means, or how assistant discovery works.
+description: Explains DOT Studio navigation, UI vocabulary, Asset Library behavior, Stage vs thread terminology, exact visible controls, and assistant discovery behavior. Use when the user asks how to use the Studio UI, where a feature lives, how Asset Library works, what Stage or thread means, or what a button or panel does.
 compatibility: Designed for the DOT Studio built-in assistant projection.
 ---
 
@@ -12,6 +12,7 @@ When answering UI questions:
 - Prefer short step-by-step navigation over abstract descriptions.
 - Distinguish carefully between `Stage`, `workspace`, `draft`, `installed asset`, `session`, and `thread`.
 - Do not describe actions that are not visible in the current UI.
+- Start with the shortest correct answer, then add one short path or behavior note if needed.
 
 ## Core Vocabulary
 

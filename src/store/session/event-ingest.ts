@@ -293,8 +293,8 @@ export function createEventIngest(options: EventIngestOptions) {
                 const partID = readPartId(props)
                 const field = props.field as string | undefined
                 const delta = props.delta as string | undefined
-                if (!sessionID || !messageID || !partID || field !== 'text' || typeof delta !== 'string') return
-                reduceMessagePartDelta(sessionID, messageID, partID, delta, get, set)
+                if (!sessionID || !messageID || !partID || typeof field !== 'string' || typeof delta !== 'string') return
+                reduceMessagePartDelta(sessionID, messageID, partID, field, delta, get, set)
                 return
             }
 

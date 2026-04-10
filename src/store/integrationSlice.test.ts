@@ -320,7 +320,7 @@ describe('integrationSlice act participant sync', () => {
         harness.get().cleanupRealtimeEvents()
     })
 
-    it('binds and streams camelCase act participant events without waiting for abort-time sync', async () => {
+    it('binds and streams camelCase act participant events with transport status for abort UI', async () => {
         const loadThreads = vi.fn(async () => {})
         const harness = createHarness(loadThreads)
         const chatKey = 'act:act-1:thread:thread-1:participant:participant-2'
@@ -341,6 +341,13 @@ describe('integrationSlice act participant sync', () => {
             },
         })
         emitEvent(currentSources.chat, {
+            type: 'session.status',
+            properties: {
+                sessionId: 'session-2',
+                status: { type: 'busy' },
+            },
+        })
+        emitEvent(currentSources.chat, {
             type: 'message.part.delta',
             properties: {
                 sessionId: 'session-2',
@@ -356,6 +363,7 @@ describe('integrationSlice act participant sync', () => {
         await Promise.resolve()
 
         expect(harness.get().chatKeyToSession[chatKey]).toBe('session-2')
+        expect(harness.get().seStatuses['session-2']).toEqual({ type: 'busy' })
         expect(harness.get().seMessages['session-2']?.[0]?.content).toBe('live output')
         expect(chatMessagesMock).not.toHaveBeenCalledWith('session-2')
         expect(loadThreads).not.toHaveBeenCalled()
@@ -414,7 +422,7 @@ describe('integrationSlice act participant sync', () => {
         expect(harness.get().chatKeyToSession[chatKey]).toBe('session-2')
         expect(harness.get().actThreads['act-1']?.[0]?.participantSessions?.['participant-2']).toBe('session-2')
         expect(harness.get().sessionLoading['session-2']).toBeUndefined()
-        expect(harness.get().seStatuses['session-2']).toBeUndefined()
+        expect(harness.get().seStatuses['session-2']).toEqual({ type: 'busy' })
         expect(harness.get().seMessages['session-2']?.[0]?.id).toBe('msg-1')
         expect(loadThreads).not.toHaveBeenCalled()
 

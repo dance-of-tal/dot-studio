@@ -207,6 +207,53 @@ describe('Event Ingest', () => {
             ingest.dispose()
         })
 
+        it('applies tool stdout deltas instead of discarding them', () => {
+            const ingest = createEventIngest({ get, set })
+
+            state.seMessages[SESSION_ID] = [
+                {
+                    id: 'msg-1',
+                    role: 'assistant',
+                    content: '',
+                    timestamp: 1000,
+                    parts: [{
+                        id: 'tool-1',
+                        type: 'tool',
+                        tool: {
+                            name: 'bash',
+                            callId: 'call-1',
+                            status: 'running',
+                            metadata: { stdout: '$ pwd\n' },
+                        },
+                    }],
+                },
+            ]
+
+            ingest.enqueue({
+                type: 'message.part.delta',
+                properties: {
+                    sessionID: SESSION_ID,
+                    messageID: 'msg-1',
+                    partID: 'tool-1',
+                    field: 'stdout',
+                    delta: '/tmp/studio\n',
+                },
+            })
+
+            ingest.flushSync()
+
+            expect(state.seMessages[SESSION_ID]?.[0]?.parts?.[0]).toMatchObject({
+                type: 'tool',
+                tool: {
+                    metadata: {
+                        stdout: '$ pwd\n/tmp/studio\n',
+                    },
+                },
+            })
+
+            ingest.dispose()
+        })
+
         it('accepts camelCase message event fields for streaming output', () => {
             const ingest = createEventIngest({ get, set })
 

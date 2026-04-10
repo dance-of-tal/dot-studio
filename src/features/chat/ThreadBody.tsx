@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, type ReactNode } from 'react'
-import { useAutoScroll } from '../../hooks/useAutoScroll'
+import { useAutoScroll, type AutoScrollRestoreMode } from '../../hooks/useAutoScroll'
 
 type ThreadMessage = {
     id: string
@@ -11,6 +11,7 @@ type ThreadBodyProps<TMessage extends ThreadMessage> = {
     messages: TMessage[]
     loading: boolean
     scrollStateKey?: string | null
+    scrollRestoreMode?: AutoScrollRestoreMode
     renderMessage: (message: TMessage, index: number) => ReactNode
     renderEmpty?: () => ReactNode
     renderLoading?: () => ReactNode
@@ -26,6 +27,7 @@ function ThreadHistoryInner<TMessage extends ThreadMessage>({
     messages,
     loading,
     scrollStateKey,
+    scrollRestoreMode = 'saved-or-bottom',
     renderMessage,
     renderEmpty,
     renderLoading,
@@ -39,6 +41,7 @@ function ThreadHistoryInner<TMessage extends ThreadMessage>({
         handleScroll,
     } = useAutoScroll({
         stateKey: scrollStateKey,
+        restoreMode: scrollRestoreMode,
         contentVersion: messages,
     })
     const [visibleCount, setVisibleCount] = useState(recentMessageWindow)
@@ -94,6 +97,7 @@ const ThreadHistory = memo(
         prev.messages === next.messages
         && prev.loading === next.loading
         && prev.scrollStateKey === next.scrollStateKey
+        && prev.scrollRestoreMode === next.scrollRestoreMode
         && prev.renderMessage === next.renderMessage
         && prev.renderEmpty === next.renderEmpty
         && prev.renderLoading === next.renderLoading

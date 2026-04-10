@@ -1,4 +1,5 @@
 import { getOpencode } from '../lib/opencode.js'
+import { hasSettledLatestAssistantTurn, isSessionParkedByWaitUntil } from '../lib/chat-session.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { clearProjectionRuntimePending } from './opencode-projection/projection-manifest.js'
 
@@ -9,6 +10,43 @@ type OpenCodeSessionSummary = {
 type OpenCodeSessionStatus = {
     type?: 'idle' | 'busy' | 'retry' | 'error'
 } & Record<string, unknown>
+
+type OpenCodeSessionMessage = {
+    info?: {
+        role?: string
+        error?: unknown
+        time?: {
+            completed?: number
+        }
+    }
+    role?: string
+    parts?: unknown[]
+} & Record<string, unknown>
+
+async function isSessionEffectivelyRunning(
+    oc: Awaited<ReturnType<typeof getOpencode>>,
+    directory: string,
+    sessionId: string,
+    status: OpenCodeSessionStatus | undefined,
+) {
+    if (status?.type !== 'busy' && status?.type !== 'retry') {
+        return false
+    }
+
+    try {
+        const rawMessages = unwrapOpencodeResult<OpenCodeSessionMessage[]>(await oc.session.messages({
+            directory,
+            sessionID: sessionId,
+        })) || []
+        if (isSessionParkedByWaitUntil(rawMessages) || hasSettledLatestAssistantTurn(rawMessages)) {
+            return false
+        }
+    } catch {
+        // If message inspection fails, fall back to the authoritative busy/retry status.
+    }
+
+    return true
+}
 
 export async function countRunningSessions(workingDir: string) {
     const oc = await getOpencode()
@@ -36,8 +74,8 @@ export async function countRunningSessions(workingDir: string) {
             if (!session?.id) {
                 continue
             }
-            const status = statuses?.[session.id]?.type
-            if (status === 'busy' || status === 'retry') {
+            const status = statuses?.[session.id]
+            if (await isSessionEffectivelyRunning(oc, directory, session.id, status)) {
                 runningSessions += 1
             }
         }

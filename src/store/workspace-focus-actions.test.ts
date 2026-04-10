@@ -3,7 +3,7 @@ import {
     ACT_DEFAULT_EXPANDED_HEIGHT,
     ACT_DEFAULT_WIDTH,
 } from '../lib/act-layout'
-import { createPerformerNode } from '../lib/performers'
+import { createPerformerNode, PERFORMER_DEFAULT_HEIGHT } from '../lib/performers'
 import {
     buildSyncFocusViewportState,
     buildExitFocusModeState,
@@ -118,7 +118,7 @@ describe('workspace focus actions', () => {
         expect(state.performers.find((entry) => entry.id === 'performer-1')).toMatchObject({
             hidden: false,
             width: 320,
-            height: 400,
+            height: PERFORMER_DEFAULT_HEIGHT,
         })
         expect(state.isAssetLibraryOpen).toBe(true)
         expect(state.isAssistantOpen).toBe(true)
@@ -138,7 +138,7 @@ describe('workspace focus actions', () => {
             hidden: true,
             position: { x: 0, y: 0 },
             width: 320,
-            height: 400,
+            height: PERFORMER_DEFAULT_HEIGHT,
         })
         expect(state.performers.find((entry) => entry.id === 'performer-2')).toMatchObject({
             hidden: false,
@@ -245,7 +245,7 @@ describe('workspace focus actions', () => {
         expect(state.performers.find((entry) => entry.id === 'performer-1')).toMatchObject({
             hidden: false,
             width: 320,
-            height: 400,
+            height: PERFORMER_DEFAULT_HEIGHT,
         })
         expect(state.markdownEditors).toHaveLength(1)
         expect(state.markdownEditors[0]).toMatchObject({

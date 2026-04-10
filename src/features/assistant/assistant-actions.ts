@@ -429,6 +429,11 @@ async function applyPerformerFields(
     refs: AssistantRefState,
 ) {
     const s = store()
+    if (fields.description !== undefined) {
+        s.updatePerformerAuthoringMeta(performerId, {
+            description: fields.description || '',
+        })
+    }
     const talRef = await resolveTalRef(fields, refs)
     if (talRef !== undefined) {
         s.setPerformerTalRef(performerId, talRef)
@@ -474,16 +479,16 @@ async function applyRelationBlueprint(
     const s = store()
     if (!relation.name?.trim() || !relation.description?.trim()) return false
     const sourceOptions = {
-        participantKey: relation.sourceParticipantKey || relation.fromParticipantKey,
-        performerId: relation.sourcePerformerId || relation.fromPerformerId,
-        performerRef: relation.sourcePerformerRef || relation.fromPerformerRef,
-        performerName: relation.sourcePerformerName || relation.fromPerformerName,
+        participantKey: relation.sourceParticipantKey,
+        performerId: relation.sourcePerformerId,
+        performerRef: relation.sourcePerformerRef,
+        performerName: relation.sourcePerformerName,
     }
     const targetOptions = {
-        participantKey: relation.targetParticipantKey || relation.toParticipantKey,
-        performerId: relation.targetPerformerId || relation.toPerformerId,
-        performerRef: relation.targetPerformerRef || relation.toPerformerRef,
-        performerName: relation.targetPerformerName || relation.toPerformerName,
+        participantKey: relation.targetParticipantKey,
+        performerId: relation.targetPerformerId,
+        performerRef: relation.targetPerformerRef,
+        performerName: relation.targetPerformerName,
     }
     const sourceKey = resolveParticipantKey(refs, actId, {
         participantKey: sourceOptions.participantKey,
@@ -670,6 +675,7 @@ export async function applyAssistantAction(
                 if (action.ref) refs.acts.set(action.ref, actId)
                 if (action.description) store().updateActDescription(actId, action.description)
                 if (action.actRules !== undefined) store().updateActRules(actId, action.actRules)
+                if (action.safety !== undefined) store().updateActSafety(actId, action.safety)
                 const participantPerformerIds = resolveActParticipantPerformerIds(refs, action)
                 for (const id of participantPerformerIds) {
                     store().attachPerformerToAct(actId, id)
@@ -686,6 +692,7 @@ export async function applyAssistantAction(
                 if (action.name) store().renameAct(actId, action.name)
                 if (action.description !== undefined) store().updateActDescription(actId, action.description)
                 if (action.actRules !== undefined) store().updateActRules(actId, action.actRules)
+                if (action.safety !== undefined) store().updateActSafety(actId, action.safety ?? undefined)
                 return { success: true }
             }
             case 'deleteAct': {

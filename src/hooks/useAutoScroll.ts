@@ -3,6 +3,8 @@ import { useRef, useCallback, useEffect, useState } from 'react'
 export interface UseAutoScrollOptions {
     /** Stable chat/thread key for preserving scroll state across switches */
     stateKey?: string | null
+    /** How to restore scroll position when the state key changes or remounts */
+    restoreMode?: AutoScrollRestoreMode
     /** Changes when visible content changes and may require follow-scroll */
     contentVersion?: unknown
     /** Called when user manually scrolls up */
@@ -20,6 +22,8 @@ export interface UseAutoScrollReturn {
     handleScroll: () => void
 }
 
+export type AutoScrollRestoreMode = 'saved-or-bottom' | 'bottom'
+
 type SavedScrollState = {
     scrollTop: number
     userScrolled: boolean
@@ -30,6 +34,7 @@ const savedScrollStates = new Map<string, SavedScrollState>()
 export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollReturn {
     const {
         stateKey = null,
+        restoreMode = 'saved-or-bottom',
         contentVersion,
         onUserInteracted,
         bottomThreshold = 10,
@@ -252,7 +257,9 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         }
 
         activeStateKeyRef.current = stateKey
-        const savedState = stateKey ? savedScrollStates.get(stateKey) ?? null : null
+        const savedState = stateKey && restoreMode === 'saved-or-bottom'
+            ? savedScrollStates.get(stateKey) ?? null
+            : null
 
         userScrolledRef.current = savedState?.userScrolled ?? false
         setUserScrolled(savedState?.userScrolled ?? false)
@@ -261,7 +268,7 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
         queueMicrotask(() => {
             applyPendingRestore()
         })
-    }, [applyPendingRestore, persistState, stateKey])
+    }, [applyPendingRestore, persistState, restoreMode, stateKey])
 
     useEffect(() => {
         const el = scrollElRef.current

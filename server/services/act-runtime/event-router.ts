@@ -101,8 +101,7 @@ export function routeEvent(
     mailbox: Mailbox,
     recentEvents: MailboxEvent[],
 ): WakeUpTarget[] {
-    const targets: WakeUpTarget[] = []
-    const seen = new Set<string>()
+    const targetsByParticipant = new Map<string, WakeUpTarget>()
 
     // 1. Subscription + relation based wake-up
     for (const [key, binding] of Object.entries(actDefinition.participants)) {
@@ -118,12 +117,11 @@ export function routeEvent(
             payloadString(event.payload, 'to') === key
 
         if ((subMatch && relMatch) || (isDirectMessageTarget && relMatch)) {
-            targets.push({
+            targetsByParticipant.set(key, {
                 participantKey: key,
                 triggerEvent: event,
                 reason: 'subscription',
             })
-            seen.add(key)
         }
     }
 
@@ -131,21 +129,18 @@ export function routeEvent(
     const triggeredConditions = mailbox.evaluateConditions(
         event,
         (cond: WakeCondition, board: Map<string, BoardEntry>, events: MailboxEvent[]) =>
-            evaluateWakeCondition(cond, board, events),
+            evaluateWakeCondition(cond, board, events, actDefinition),
         recentEvents,
     )
 
     for (const cond of triggeredConditions) {
-        if (!seen.has(cond.createdBy)) {
-            targets.push({
-                participantKey: cond.createdBy,
-                triggerEvent: event,
-                wakeCondition: cond,
-                reason: 'wake-condition',
-            })
-            seen.add(cond.createdBy)
-        }
+        targetsByParticipant.set(cond.createdBy, {
+            participantKey: cond.createdBy,
+            triggerEvent: event,
+            wakeCondition: cond,
+            reason: 'wake-condition',
+        })
     }
 
-    return targets
+    return Array.from(targetsByParticipant.values())
 }

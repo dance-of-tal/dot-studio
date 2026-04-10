@@ -107,7 +107,10 @@ export function buildActContext(
     lines.push('- Use `read_shared_board` for the relevant key you need. Avoid reading the full board unless you need a full resync.')
     lines.push('- Before acting, check only the sender or shared note key relevant to the current event.')
     lines.push('- Prefer replacing stale shared notes with a fresh summary instead of appending long incremental logs.')
-    lines.push('- Use `wait_until` when you are blocked on future input instead of polling the full shared board. Good self-wake conditions include `board_key_exists`, `message_received`, `timeout`, `all_of`, and `any_of`.')
+    lines.push('- Use `wait_until` instead of polling the full shared board when you are blocked on future input.')
+    lines.push('- Common wait conditions: `message_received`, `board_key_exists`, and `wake_at`.')
+    lines.push('- Use `all_of` or `any_of` only when you need to combine conditions.')
+    lines.push('- `wake_at` schedules your own self-wake at an absolute timestamp.')
     lines.push('')
 
     const teammateNames = messageablePartners.map((key) => participantDisplayName(actDefinition, key))
@@ -130,7 +133,7 @@ export function buildActContext(
                 : '↔'
             lines.push(`- ${selfName} ${dirLabel} ${partnerName}: ${rel.name}${rel.description ? ` — ${rel.description}` : ''}`)
             if (partnerDescription) {
-                lines.push(`  - ${partnerName} focus: ${partnerDescription}`)
+                lines.push(`  Partner focus: ${partnerName} — ${partnerDescription}`)
             }
         }
         lines.push('')
