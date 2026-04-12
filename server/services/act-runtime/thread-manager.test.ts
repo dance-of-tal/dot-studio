@@ -170,4 +170,36 @@ describe('ThreadManager full-rewrite persistence', () => {
             await cleanupStudioDir(studioDir)
         }
     })
+
+    it('persists server-authoritative thread names in thread snapshots', async () => {
+        const studioDir = await makeTempStudioDir()
+        try {
+            const workspaceId = 'workspace-4'
+            const { ThreadManager } = await importThreadManagerWithStudioDir(studioDir)
+            const manager = new ThreadManager(workspaceId, '/tmp/workspace')
+            const thread = await manager.createThread(baseActDefinition.id, baseActDefinition)
+
+            const updated = await manager.setThreadName(thread.id, 'API regression investigation')
+
+            expect(updated?.name).toBe('API regression investigation')
+            expect(manager.getThreadSummary(thread.id)?.name).toBe('API regression investigation')
+
+            const snapshotPath = path.join(
+                studioDir,
+                'workspaces',
+                workspaceId,
+                'act-runtime',
+                baseActDefinition.id,
+                thread.id,
+                'thread.json',
+            )
+            const raw = JSON.parse(await fs.readFile(snapshotPath, 'utf-8')) as {
+                thread: { name?: string }
+            }
+
+            expect(raw.thread.name).toBe('API regression investigation')
+        } finally {
+            await cleanupStudioDir(studioDir)
+        }
+    })
 })

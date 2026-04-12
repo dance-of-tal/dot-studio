@@ -18,6 +18,11 @@ import { projectActTools } from './act-runtime/act-tool-projection.js'
 import { getActDefinitionForThread, getActRuntimeService } from './act-runtime/act-runtime-service.js'
 import { prepareRuntimeForExecution, throwIfRuntimePreparationBlocked } from './runtime-preparation-service.js'
 import { createSessionOwnership } from './session-ownership-service.js'
+import {
+    maybeGenerateActThreadName,
+    maybeGenerateStandaloneSessionTitle,
+    sessionHasUserMessages,
+} from './thread-title-service.js'
 
 function isAssistantOwnerId(ownerId: string) {
     return ownerId === 'studio-assistant' || ownerId.startsWith('studio-assistant--')
@@ -188,6 +193,9 @@ export async function sendStudioChatMessage(
     const actRuntime = request.actId && request.actThreadId
         ? getActRuntimeService(workingDir)
         : null
+    const shouldGenerateThreadTitle = !isAssistant
+        && request.message.trim().length > 0
+        && !(await sessionHasUserMessages(workingDir, sessionId).catch(() => true))
 
     if (actRuntime && rawPerformerId) {
         await actRuntime.beginUserTurn(request.actThreadId!)
@@ -220,6 +228,35 @@ export async function sendStudioChatMessage(
             await actRuntime.drainParticipantQueue(request.actThreadId!, rawPerformerId).catch(() => {})
         }
         throw error
+    }
+
+    if (shouldGenerateThreadTitle) {
+        if (request.actId && request.actThreadId) {
+            void maybeGenerateActThreadName({
+                workingDir,
+                actId: request.actId,
+                threadId: request.actThreadId,
+                message: request.message,
+                model: {
+                    providerID: performer.model.provider,
+                    modelID: performer.model.modelId,
+                },
+            }).catch((error) => {
+                console.warn(`[chat-service] Failed to generate Act thread name for ${request.actThreadId}:`, error)
+            })
+        } else {
+            void maybeGenerateStandaloneSessionTitle({
+                workingDir,
+                sessionId,
+                message: request.message,
+                model: {
+                    providerID: performer.model.provider,
+                    modelID: performer.model.modelId,
+                },
+            }).catch((error) => {
+                console.warn(`[chat-service] Failed to generate standalone thread title for ${sessionId}:`, error)
+            })
+        }
     }
 
     if (actRuntime && rawPerformerId) {

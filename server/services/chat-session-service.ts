@@ -8,11 +8,17 @@ import {
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { syncActParticipantStatusForSession } from './act-runtime/act-session-runtime.js'
 import { responseData } from './opencode-service.js'
-import { deleteSessionOwnership } from './session-ownership-service.js'
+import {
+    deleteSessionOwnership,
+    listSessionOwnershipsForWorkingDir,
+    resolveSessionOwnership,
+    setSessionSidebarTitle,
+} from './session-ownership-service.js'
 
 type OpenCodeSessionSummary = {
     id: string
     title?: string
+    sidebarTitle?: string
     createdAt?: number
     updatedAt?: number
     parentId?: string | null
@@ -86,6 +92,16 @@ export async function deleteStudioChatSession(workingDir: string, sessionId: str
 }
 
 export async function renameStudioChatSession(workingDir: string, sessionId: string, title: string) {
+    const ownership = await resolveSessionOwnership(sessionId)
+    if (ownership?.ownerKind === 'performer') {
+        await setSessionSidebarTitle(sessionId, title)
+        return {
+            ok: true as const,
+            title,
+            sidebarTitle: title,
+        }
+    }
+
     const oc = await getOpencode()
     const directoryQuery = await directoryQueryForSession(workingDir, sessionId)
     return unwrapOpencodeResult(await oc.session.update({
@@ -258,6 +274,10 @@ export async function unrevertStudioChatSession(workingDir: string, sessionId: s
 
 export async function listStudioChatSessions(workingDir: string) {
     const oc = await getOpencode()
+    const ownerships = await listSessionOwnershipsForWorkingDir(workingDir)
+    const sidebarTitleBySessionId = new Map(
+        ownerships.map((ownership) => [ownership.sessionId, ownership.sidebarTitle || null]),
+    )
     const directories = [workingDir]
     const directoryData = await Promise.all(
         directories.map(async (directory) => {
@@ -281,6 +301,9 @@ export async function listStudioChatSessions(workingDir: string) {
                 updatedAt: typeof session.updatedAt === 'number' ? session.updatedAt : session.time?.updated,
                 parentId: typeof session.parentID === 'string' ? session.parentID : null,
                 status: entry.statuses[session.id]?.type,
+                ...(sidebarTitleBySessionId.get(session.id)
+                    ? { sidebarTitle: sidebarTitleBySessionId.get(session.id) || undefined }
+                    : {}),
             }
             const existing = sessions.get(session.id)
             const existingUpdatedAt = existing?.updatedAt || 0

@@ -19,6 +19,7 @@ import { resolveNodeBaselineHidden } from '../../lib/focus-utils'
 export type PerformerSessionRecord = {
     id: string
     title?: string
+    sidebarTitle?: string
     createdAt?: number
     updatedAt?: number
     parentId?: string | null
@@ -39,7 +40,6 @@ export type ExplorerRenamingSession = null | {
     key: string
     kind: 'performer'
     sessionId: string
-    currentTitle?: string
     value: string
 }
 

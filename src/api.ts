@@ -117,6 +117,7 @@ export const api = {
                 thread: {
                     id: string
                     actId: string
+                    name?: string
                     status: ActThreadStatus
                     createdAt: number
                     participantSessions: Record<string, string>
@@ -132,6 +133,7 @@ export const api = {
                 threads: Array<{
                     id: string
                     actId: string
+                    name?: string
                     status: ActThreadStatus
                     createdAt: number
                     participantSessions: Record<string, string>
@@ -147,6 +149,7 @@ export const api = {
                 threads: Array<{
                     id: string
                     actId: string
+                    name?: string
                     status: ActThreadStatus
                     createdAt: number
                     participantSessions: Record<string, string>
@@ -154,6 +157,22 @@ export const api = {
                 }>
             }>(
                 `/api/act/${actId}/threads`,
+            ),
+        renameThread: (actId: string, threadId: string, name: string) =>
+            patchJSON<{
+                ok: boolean
+                thread: {
+                    id: string
+                    actId: string
+                    name?: string
+                    status: ActThreadStatus
+                    createdAt: number
+                    participantSessions: Record<string, string>
+                    participantStatuses: Record<string, ActParticipantSessionStatus>
+                }
+            }>(
+                `/api/act/${actId}/thread/${threadId}`,
+                { name },
             ),
         getThread: (actId: string, threadId: string) =>
             fetchJSON<{ ok: boolean; thread: Record<string, unknown> }>(`/api/act/${actId}/thread/${threadId}`),

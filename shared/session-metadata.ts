@@ -25,14 +25,3 @@ export function parseStudioSessionTitle(title: string | undefined | null): {
         configHash: match[3],
     }
 }
-
-export function renameStudioSessionTitle(
-    title: string | undefined | null,
-    nextLabel: string,
-): string | null {
-    const parsed = parseStudioSessionTitle(title)
-    if (!parsed) {
-        return null
-    }
-    return buildStudioSessionTitle(parsed.performerId, nextLabel.trim(), parsed.configHash)
-}

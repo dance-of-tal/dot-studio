@@ -29,13 +29,13 @@ type Props = {
     editingTarget: WorkspaceExplorerEditingTarget
     onToggleExpanded: () => void
     onSetPendingDelete: (key: string | null) => void
-    onBeginRenamePerformerSession: (session: { id: string; title?: string }) => void
+    onBeginRenamePerformerSession: (session: { id: string; title?: string; sidebarTitle?: string }) => void
     onCommitRenameSession: () => void | Promise<void>
     onCancelRenameSession: () => void
     onSetRenamingValue: (value: string) => void
-    performerSessionLabel: (session: { id: string; title?: string }) => string
+    performerSessionLabel: (session: { id: string; title?: string; sidebarTitle?: string }) => string
     onOpenPerformer: (performerId: string) => void
-    onOpenPerformerSession: (performerId: string, session: { id: string; title?: string }) => void | Promise<void>
+    onOpenPerformerSession: (performerId: string, session: { id: string; title?: string; sidebarTitle?: string }) => void | Promise<void>
     onDeleteSession: (id: string) => void
     onTogglePerformerVisibility: (id: string) => void
     onOpenPerformerEditor: (id: string, focus: PerformerEditorFocus) => void

@@ -16,7 +16,7 @@ export const chatApi = {
         deleteJSON<{ ok: boolean }>(`/api/chat/sessions/${id}`),
 
     updateSession: (id: string, title: string) =>
-        putJSON<{ ok: boolean; title: string }>(`/api/chat/sessions/${id}`, { title }),
+        putJSON<{ ok: boolean; title: string; sidebarTitle?: string }>(`/api/chat/sessions/${id}`, { title }),
 
     send: (
         id: string,
@@ -70,6 +70,7 @@ export const chatApi = {
         fetchJSON<Array<{
             id: string
             title?: string
+            sidebarTitle?: string
             createdAt?: number
             updatedAt?: number
             parentId?: string | null

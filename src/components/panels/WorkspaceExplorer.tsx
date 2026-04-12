@@ -5,7 +5,7 @@ import { showToast } from '../../lib/toast';
 import { useStudioStore } from '../../store';
 import { bindExistingSession } from '../../store/session';
 import { DropdownMenu } from '../shared/DropdownMenu';
-import { parseStudioSessionTitle, renameStudioSessionTitle } from '../../../shared/session-metadata';
+import { parseStudioSessionTitle } from '../../../shared/session-metadata';
 import {
     Folder,
     MoreHorizontal,
@@ -272,17 +272,19 @@ export default function WorkspaceExplorer() {
         }));
     };
 
-    const performerSessionLabel = useCallback((session: { id: string; title?: string }) => {
+    const performerSessionLabel = useCallback((session: { id: string; title?: string; sidebarTitle?: string }) => {
+        if (session.sidebarTitle?.trim()) {
+            return session.sidebarTitle.trim();
+        }
         const metadata = parseStudioSessionTitle(session.title);
         return metadata?.label || ('slug' in session && typeof session.slug === 'string' ? session.slug : null) || session.id.slice(0, 8);
     }, []);
 
-    const beginRenamePerformerSession = useCallback((session: { id: string; title?: string }) => {
+    const beginRenamePerformerSession = useCallback((session: { id: string; title?: string; sidebarTitle?: string }) => {
         setRenamingSession({
             key: `performer:${session.id}`,
             kind: 'performer',
             sessionId: session.id,
-            currentTitle: session.title,
             value: performerSessionLabel(session),
         });
     }, [performerSessionLabel]);
@@ -303,11 +305,7 @@ export default function WorkspaceExplorer() {
         }
 
         try {
-            const nextTitle = renameStudioSessionTitle(renamingSession.currentTitle, nextLabel);
-            if (!nextTitle) {
-                throw new Error('Studio could not preserve thread metadata while renaming this session.');
-            }
-            await api.chat.updateSession(renamingSession.sessionId, nextTitle);
+            await api.chat.updateSession(renamingSession.sessionId, nextLabel);
             await listSessions();
             setRenamingSession(null);
         } catch (error) {
@@ -390,7 +388,7 @@ export default function WorkspaceExplorer() {
         revealCanvasNode(performerId, 'performer');
     };
 
-    const openPerformerSession = async (performerId: string, session: { id: string; title?: string }) => {
+    const openPerformerSession = async (performerId: string, session: { id: string; title?: string; sidebarTitle?: string }) => {
         try {
             await bindExistingSession(useStudioStore.setState, useStudioStore.getState, performerId, session.id, {
                 title: session.title,

@@ -147,6 +147,22 @@ actRuntimeThreads.get('/api/act/:actId/thread/:threadId', async (c) => {
     return c.json(result)
 })
 
+actRuntimeThreads.patch('/api/act/:actId/thread/:threadId', async (c) => {
+    const actId = c.req.param('actId')
+    const threadId = c.req.param('threadId')
+    const body = await c.req.json<{ name?: string }>().catch(() => ({} as { name?: string }))
+    const name = body.name?.trim()
+    if (!name) {
+        return c.json({ ok: false, error: 'Thread name is required' }, 400)
+    }
+
+    const result = await getActRuntimeService(requestWorkingDir(c)).renameThread(actId, threadId, name)
+    if (!result.ok) {
+        return c.json(result, result.status as 404)
+    }
+    return c.json(result)
+})
+
 actRuntimeThreads.get('/api/act/:actId/thread/:threadId/events', async (c) => {
     const threadId = c.req.param('threadId')
     const parsedCount = parseInt(c.req.query('count') || '50', 10)

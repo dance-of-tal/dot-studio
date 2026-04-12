@@ -35,6 +35,7 @@ const actRuntimeSyncTimers = new Map<string, ReturnType<typeof setTimeout>>()
 type ActThreadRuntimeSnapshot = {
     id: string
     actId: string
+    name?: string
     status: 'active' | 'idle' | 'completed' | 'interrupted'
     participantSessions: Record<string, string>
     participantStatuses?: Record<string, ActParticipantSessionStatus>
@@ -327,6 +328,7 @@ function buildActThreadState(thread: ActThreadRuntimeSnapshot) {
     return {
         id: thread.id,
         actId: thread.actId,
+        ...(thread.name ? { name: thread.name } : {}),
         status: thread.status,
         participantSessions: thread.participantSessions || {},
         participantStatuses: thread.participantStatuses || {},

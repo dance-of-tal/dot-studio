@@ -162,6 +162,7 @@ export interface ActParticipantSessionStatus {
 export interface ActThread {
     id: string
     actId: string
+    name?: string
     mailbox: MailboxState
     participantSessions: Record<string, string>
     participantStatuses: Record<string, ActParticipantSessionStatus>
@@ -171,5 +172,5 @@ export interface ActThread {
 
 export type ActThreadSummary = Pick<
     ActThread,
-    'id' | 'actId' | 'participantSessions' | 'participantStatuses' | 'createdAt' | 'status'
+    'id' | 'actId' | 'name' | 'participantSessions' | 'participantStatuses' | 'createdAt' | 'status'
 >

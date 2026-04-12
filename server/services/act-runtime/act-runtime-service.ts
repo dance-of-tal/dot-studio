@@ -538,6 +538,18 @@ class ActRuntimeService {
         }
     }
 
+    async renameThread(_actId: string, threadId: string, name: string, options?: { ifUnset?: boolean }) {
+        await this.ensureThreadsLoaded()
+        const thread = await this.threadManager.setThreadName(threadId, name, options)
+        if (!thread) {
+            return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
+        }
+        return {
+            ok: true as const,
+            thread,
+        }
+    }
+
     async getActDefinition(threadId: string) {
         await this.ensureThreadsLoaded()
         return this.threadManager.getActDefinition(threadId)

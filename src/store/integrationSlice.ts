@@ -45,6 +45,7 @@ type ChatEvent = {
 type ActThreadRuntimeSnapshot = {
     id: string
     actId: string
+    name?: string
     status: 'active' | 'idle' | 'completed' | 'interrupted'
     participantSessions: Record<string, string>
     participantStatuses: Record<string, { type: 'idle' | 'busy' | 'retry' | 'error'; updatedAt: number; message?: string }>

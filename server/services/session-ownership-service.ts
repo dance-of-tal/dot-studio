@@ -5,6 +5,7 @@ import {
     registerSessionExecutionContext,
     resolveSessionExecutionContext,
     unregisterSessionExecutionContext,
+    updateSessionExecutionContext,
     type SessionExecutionContext,
     type SessionOwnerKind,
 } from '../lib/session-execution.js'
@@ -39,4 +40,25 @@ export async function listSessionOwnershipsForWorkingDir(
 
 export function parseActSessionOwnershipOwnerId(ownerId: string) {
     return parseActSessionOwnerId(ownerId)
+}
+
+export async function setSessionSidebarTitle(
+    sessionId: string,
+    sidebarTitle: string,
+    options?: { ifUnset?: boolean },
+) {
+    const trimmed = sidebarTitle.trim()
+    if (!trimmed) {
+        return null
+    }
+
+    return updateSessionExecutionContext(sessionId, (current) => {
+        if (options?.ifUnset && current.sidebarTitle?.trim()) {
+            return current
+        }
+        return {
+            ...current,
+            sidebarTitle: trimmed,
+        }
+    })
 }

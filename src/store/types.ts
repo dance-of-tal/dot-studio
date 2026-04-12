@@ -182,7 +182,7 @@ export interface WorkspaceSlice {
 
 export interface ChatSlice {
     activeChatPerformerId: string | null
-    sessions: Array<{ id: string; title?: string; createdAt?: number; updatedAt?: number }>
+    sessions: Array<{ id: string; title?: string; sidebarTitle?: string; createdAt?: number; updatedAt?: number }>
 
     setActiveChatPerformer: (performerId: string | null) => void
     addChatMessage: (chatKey: string, msg: ChatMessage) => void
@@ -310,7 +310,7 @@ export interface ActSlice {
     selectThreadParticipant: (participantKey: string | null) => void
     loadThreads: (actId: string) => Promise<void>
     deleteThread: (actId: string, threadId: string) => Promise<void>
-    renameThread: (actId: string, threadId: string, name: string) => void
+    renameThread: (actId: string, threadId: string, name: string) => Promise<void>
 }
 
 

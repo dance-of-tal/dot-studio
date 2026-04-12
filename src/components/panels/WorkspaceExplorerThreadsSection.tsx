@@ -19,18 +19,18 @@ type Props = {
     selectedActId: string | null
     activeThreadId: string | null
     actThreads: Record<string, WorkspaceExplorerActThread[]>
-    sessions: Array<{ id: string; title?: string; createdAt?: number; updatedAt?: number }>
+    sessions: Array<{ id: string; title?: string; sidebarTitle?: string; createdAt?: number; updatedAt?: number }>
     seEntities: Record<string, SessionEntity>
     seMessages: Record<string, ChatMessage[]>
     onToggleExpanded: (key: string) => void
     onSetPendingDelete: (key: string | null) => void
-    onBeginRenamePerformerSession: (session: { id: string; title?: string }) => void
+    onBeginRenamePerformerSession: (session: { id: string; title?: string; sidebarTitle?: string }) => void
     onCommitRenameSession: () => void | Promise<void>
     onCancelRenameSession: () => void
     onSetRenamingValue: (value: string) => void
-    performerSessionLabel: (session: { id: string; title?: string }) => string
+    performerSessionLabel: (session: { id: string; title?: string; sidebarTitle?: string }) => string
     onOpenPerformer: (performerId: string) => void
-    onOpenPerformerSession: (performerId: string, session: { id: string; title?: string }) => void | Promise<void>
+    onOpenPerformerSession: (performerId: string, session: { id: string; title?: string; sidebarTitle?: string }) => void | Promise<void>
     onDeleteSession: (id: string) => void
     onAddPerformer: () => void
     onAddAct: () => void

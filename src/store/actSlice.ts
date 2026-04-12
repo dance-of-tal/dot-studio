@@ -38,6 +38,7 @@ import {
     resolveNodeBaselineHidden,
     setFocusSnapshotNodeHidden,
 } from '../lib/focus-utils'
+import { showToast } from '../lib/toast'
 import { clearChatSessionView } from './session'
 
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
@@ -464,14 +465,37 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         }
     },
 
-    renameThread: (actId, threadId, name) => {
+    renameThread: async (actId, threadId, name) => {
+        const trimmed = name.trim()
+        if (!trimmed) {
+            return
+        }
+
+        const previousThreads = get().actThreads[actId] || []
         set((state: StudioState) => ({
             actThreads: {
                 ...state.actThreads,
                 [actId]: (state.actThreads[actId] || []).map((t) =>
-                    t.id === threadId ? { ...t, name } : t,
+                    t.id === threadId ? { ...t, name: trimmed } : t,
                 ),
             },
         }))
+
+        try {
+            await api.actRuntime.renameThread(actId, threadId, trimmed)
+            await loadActThreadsImpl(get, set, actId)
+        } catch (error) {
+            console.error('[act-thread] Failed to rename thread', error)
+            set((state: StudioState) => ({
+                actThreads: {
+                    ...state.actThreads,
+                    [actId]: previousThreads,
+                },
+            }))
+            showToast('Studio could not rename that Act thread.', 'error', {
+                title: 'Thread rename failed',
+                dedupeKey: `act-thread:rename:${actId}:${threadId}`,
+            })
+        }
     },
 })

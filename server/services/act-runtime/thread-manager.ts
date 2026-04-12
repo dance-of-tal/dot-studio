@@ -43,6 +43,7 @@ const THREAD_SNAPSHOT_SCHEMA_VERSION = 2
 interface PersistedThreadState {
     id: string
     actId: string
+    name?: string
     participantSessions: Record<string, string>
     participantStatuses: Record<string, ActParticipantSessionStatus>
     retiredParticipantSessions: Record<string, string[]>
@@ -105,6 +106,7 @@ export class ThreadManager {
             thread: {
                 id: runtime.thread.id,
                 actId: runtime.thread.actId,
+                ...(runtime.thread.name ? { name: runtime.thread.name } : {}),
                 participantSessions: { ...runtime.thread.participantSessions },
                 participantStatuses: cloneParticipantStatuses(runtime.thread.participantStatuses),
                 retiredParticipantSessions: Object.fromEntries(
@@ -166,6 +168,7 @@ export class ThreadManager {
                         thread: {
                             id: persistedThread.id,
                             actId: persistedThread.actId,
+                            ...(persistedThread.name ? { name: persistedThread.name } : {}),
                             mailbox: mailbox.getState(),
                             participantSessions: { ...(persistedThread.participantSessions || {}) },
                             participantStatuses: cloneParticipantStatuses(persistedThread.participantStatuses || {}),
@@ -273,6 +276,31 @@ export class ThreadManager {
             // Ignore if already removed
         }
         return true
+    }
+
+    async setThreadName(threadId: string, name: string, options?: { ifUnset?: boolean }): Promise<ActThreadSummary | null> {
+        const runtime = this.threads.get(threadId)
+        if (!runtime) {
+            return null
+        }
+
+        const trimmed = name.trim()
+        if (!trimmed) {
+            return null
+        }
+
+        if (options?.ifUnset && runtime.thread.name?.trim()) {
+            return this.buildThreadSummary(runtime)
+        }
+
+        if (runtime.thread.name === trimmed) {
+            return this.buildThreadSummary(runtime)
+        }
+
+        runtime.thread.name = trimmed
+        await this.persistThread(runtime)
+        this.publishThreadSummary(runtime)
+        return this.buildThreadSummary(runtime)
     }
 
     /** Get the Act definition for a thread (stored from client on creation) */
@@ -506,6 +534,7 @@ export class ThreadManager {
         return {
             id: runtime.thread.id,
             actId: runtime.thread.actId,
+            ...(runtime.thread.name ? { name: runtime.thread.name } : {}),
             participantSessions: { ...runtime.thread.participantSessions },
             participantStatuses: cloneParticipantStatuses(runtime.thread.participantStatuses),
             createdAt: runtime.thread.createdAt,

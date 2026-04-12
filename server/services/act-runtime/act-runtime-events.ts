@@ -23,6 +23,7 @@ function cloneThreadSummary(thread: ActThreadSummary): ActThreadSummary {
     return {
         id: thread.id,
         actId: thread.actId,
+        ...(thread.name ? { name: thread.name } : {}),
         participantSessions: { ...thread.participantSessions },
         participantStatuses: Object.fromEntries(
             Object.entries(thread.participantStatuses || {}).map(([participantKey, status]) => [participantKey, { ...status }]),

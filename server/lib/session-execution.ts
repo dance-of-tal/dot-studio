@@ -9,6 +9,7 @@ export type SessionExecutionContext = {
     ownerKind: SessionOwnerKind
     ownerId: string
     workingDir: string
+    sidebarTitle?: string
     updatedAt: number
 }
 
@@ -86,6 +87,24 @@ export async function cloneSessionExecutionContext(
     }
     await writeRegistry(registry)
     return registry.sessions[targetSessionId]
+}
+
+export async function updateSessionExecutionContext(
+    sessionId: string,
+    updater: (current: SessionExecutionContext) => SessionExecutionContext,
+) {
+    const registry = await readRegistry()
+    const current = registry.sessions[sessionId]
+    if (!current) {
+        return null
+    }
+    registry.sessions[sessionId] = {
+        ...updater(current),
+        sessionId,
+        updatedAt: Date.now(),
+    }
+    await writeRegistry(registry)
+    return registry.sessions[sessionId]
 }
 
 export async function resolveSessionExecutionContext(sessionId: string) {
