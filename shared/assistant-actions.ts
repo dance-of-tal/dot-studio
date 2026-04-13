@@ -2,6 +2,7 @@ import type { ActSafetyConfig } from './act-types.js'
 
 export type AssistantActionDirection = 'both' | 'one-way'
 export type AssistantParticipantEventType = 'runtime.idle'
+export const ASSISTANT_MUTATION_TOOL_NAME = 'apply_studio_actions'
 
 export interface AssistantParticipantSubscriptions {
     messagesFrom?: string[]

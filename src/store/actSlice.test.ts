@@ -65,7 +65,6 @@ function createBaseState(): StudioState {
         actThreads: {},
         activeThreadId: null,
         activeThreadParticipantKey: null,
-        adapterViewsByPerformer: {},
         isAssistantOpen: false,
         assistantModel: null,
         assistantAvailableModels: [],
@@ -214,5 +213,55 @@ describe('actSlice', () => {
 
         harness.get().selectThreadParticipant(null)
         expect(harness.get().activeThreadParticipantKey).toBeNull()
+    })
+
+    it('collapses opposite one-way duplicates when a relation is changed to both', () => {
+        const harness = createHarness({
+            ...createBaseState(),
+            acts: [{
+                id: 'act-1',
+                name: 'Review Flow',
+                position: { x: 0, y: 0 },
+                width: 400,
+                height: 300,
+                participants: {
+                    coder: {
+                        performerRef: { kind: 'draft', draftId: 'performer-1' },
+                        position: { x: 0, y: 0 },
+                    },
+                    reviewer: {
+                        performerRef: { kind: 'registry', urn: 'performer/@studio/reviewer' },
+                        position: { x: 100, y: 0 },
+                    },
+                },
+                relations: [
+                    {
+                        id: 'rel-1',
+                        between: ['coder', 'reviewer'],
+                        direction: 'one-way',
+                        name: 'request_review',
+                        description: 'Coder asks for review',
+                    },
+                    {
+                        id: 'rel-2',
+                        between: ['reviewer', 'coder'],
+                        direction: 'one-way',
+                        name: 'return_feedback',
+                        description: 'Reviewer returns feedback',
+                    },
+                ],
+                createdAt: Date.now(),
+            }],
+        } as StudioState)
+
+        harness.get().updateRelation('act-1', 'rel-1', { direction: 'both' })
+
+        const act = harness.get().acts.find((entry) => entry.id === 'act-1')
+        expect(act?.relations).toHaveLength(1)
+        expect(act?.relations[0]).toMatchObject({
+            id: 'rel-1',
+            between: ['coder', 'reviewer'],
+            direction: 'both',
+        })
     })
 })

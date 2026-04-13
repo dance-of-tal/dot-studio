@@ -1,7 +1,11 @@
 import { buildActParticipantChatKey } from '../../../shared/chat-targets'
+import { deriveProvisionalThreadTitle } from '../../../shared/session-metadata'
 import { api } from '../../api'
 import { formatStudioApiErrorMessage } from '../../lib/api-errors'
-import { toAssistantAvailableModels } from '../../lib/assistant-models'
+import {
+    pickPreferredAssistantModel,
+    toAssistantAvailableModels,
+} from '../../lib/assistant-models'
 import { logChatDebug } from '../../lib/chat-debug'
 import { hasModelConfig } from '../../lib/performers'
 import type { AssetRef, ChatMessage } from '../../types'
@@ -17,8 +21,12 @@ import {
     moveDraftMessageToSession,
     registerSessionBinding,
     resolveChatKeySession,
+    selectMessagesForChatKey,
 } from '../session'
-import { collectRuntimeDraftIds, preparePendingRuntimeExecution } from '../runtime-execution'
+import { preparePendingRuntimeExecution } from '../runtime-execution'
+import { projectionDirtyPatchHasAny } from '../../../shared/projection-dirty'
+
+const THREAD_TITLE_REFRESH_DELAYS_MS = [1_500, 5_000, 12_000]
 
 function hasMatchingAssistantModel(
     models: Array<{ provider: string; modelId: string }>,
@@ -78,6 +86,57 @@ export function createChatSendActions(
         }
     }
 
+    const applyOptimisticStandaloneSidebarTitle = (sessionId: string, sidebarTitle: string) => {
+        const trimmed = sidebarTitle.trim()
+        if (!trimmed) {
+            return
+        }
+
+        set((state) => ({
+            sessions: state.sessions.map((session) => (
+                session.id === sessionId
+                    ? { ...session, sidebarTitle: trimmed }
+                    : session
+            )),
+        }))
+    }
+
+    const applyOptimisticActThreadName = (actId: string, threadId: string, name: string) => {
+        const trimmed = name.trim()
+        if (!trimmed) {
+            return
+        }
+
+        set((state) => ({
+            actThreads: {
+                ...state.actThreads,
+                [actId]: (state.actThreads[actId] || []).map((thread) => (
+                    thread.id === threadId && !thread.name?.trim()
+                        ? { ...thread, name: trimmed }
+                        : thread
+                )),
+            },
+        }))
+    }
+
+    const scheduleThreadTitleRefresh = (target: ReturnType<typeof resolveChatRuntimeTarget>) => {
+        if (!target || target.kind === 'assistant') {
+            return
+        }
+
+        const actId = target.requestTarget.actId
+        const threadId = target.requestTarget.actThreadId
+        for (const delay of THREAD_TITLE_REFRESH_DELAYS_MS) {
+            setTimeout(() => {
+                if (actId && threadId) {
+                    void get().loadThreads(actId).catch(() => {})
+                    return
+                }
+                void get().listSessions().catch(() => {})
+            }, delay)
+        }
+    }
+
     const sendMessage = async (
         chatKey: string,
         text: string,
@@ -98,9 +157,10 @@ export function createChatSendActions(
 
                 const state = get()
                 if (!hasMatchingAssistantModel(availableAssistantModels, state.assistantModel)) {
+                    const preferredModel = pickPreferredAssistantModel(availableAssistantModels)
                     state.setAssistantModel(
-                        availableAssistantModels.length > 0
-                            ? { provider: availableAssistantModels[0].provider, modelId: availableAssistantModels[0].modelId }
+                        preferredModel
+                            ? { provider: preferredModel.provider, modelId: preferredModel.modelId }
                             : null,
                     )
                 }
@@ -118,6 +178,15 @@ export function createChatSendActions(
         if (!hasModelConfig(runtimeConfig.model)) {
             return
         }
+
+        const hasExistingUserMessages = selectMessagesForChatKey(get(), chatKey)
+            .some((message) => message.role === 'user')
+        const shouldSeedThreadTitle = target.kind !== 'assistant'
+            && text.trim().length > 0
+            && !hasExistingUserMessages
+        const provisionalThreadTitle = shouldSeedThreadTitle
+            ? deriveProvisionalThreadTitle(text)
+            : null
 
         logChatDebug('send', 'sendMessage start', {
             chatKey,
@@ -137,9 +206,7 @@ export function createChatSendActions(
                 set,
                 get,
                 chatKey,
-                prepared.reason === 'projection_update_pending'
-                    ? 'New chats are blocked until the current run finishes and Studio reapplies the latest projection changes.'
-                    : 'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
+                'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
             )
             return
         }
@@ -182,10 +249,26 @@ export function createChatSendActions(
             return
         }
 
+        if (shouldSeedThreadTitle && provisionalThreadTitle) {
+            if (target.requestTarget.actId && target.requestTarget.actThreadId) {
+                applyOptimisticActThreadName(
+                    target.requestTarget.actId,
+                    target.requestTarget.actThreadId,
+                    provisionalThreadTitle,
+                )
+            } else {
+                applyOptimisticStandaloneSidebarTitle(sessionId, provisionalThreadTitle)
+            }
+        }
+
         try {
             logChatDebug('send', 'dispatch chat prompt', { chatKey, sessionId, target: target.kind })
+            const projectionScope = projectionDirtyPatchHasAny(get().projectionDirty)
+                ? get().projectionDirty
+                : null
             await api.chat.send(sessionId, {
                 message: text,
+                projectionScope,
                 performer: {
                     performerId: target.requestTarget.performerId,
                     performerName: target.requestTarget.performerName,
@@ -204,17 +287,11 @@ export function createChatSendActions(
                 assistantContext: target.assistantContext || null,
             })
 
-            if (prepared.requiresDispose) {
-                get().clearProjectionDirty({
-                    performerIds: target.executionScope.clearPerformerIds,
-                    actIds: target.executionScope.clearActIds,
-                    draftIds: collectRuntimeDraftIds(runtimeConfig),
-                    workspaceWide: true,
-                })
-            }
-
             if (target.kind !== 'act-participant') {
                 get().watchSessionLifecycle(chatKey, sessionId)
+            }
+            if (shouldSeedThreadTitle) {
+                scheduleThreadTitleRefresh(target)
             }
         } catch (error) {
             logChatDebug('send', 'chat prompt failed', {

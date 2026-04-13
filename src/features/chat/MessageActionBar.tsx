@@ -10,15 +10,14 @@ type MessageActionBarProps = {
     onRevert: (performerId: string, messageId: string) => void
 }
 
+function shortenModelId(modelId: string): string {
+    return modelId.replace(/-\d{8}$/, '')
+}
+
 function MetadataBadge({ metadata }: { metadata: NonNullable<ChatMessage['metadata']> }) {
     const parts: string[] = []
-    if (metadata.agentName) {
-        parts.push(metadata.agentName.charAt(0).toUpperCase() + metadata.agentName.slice(1))
-    }
     if (metadata.modelId) {
-        // Shorten model name: "claude-sonnet-4-20250514" → "claude-sonnet-4"
-        const short = metadata.modelId.replace(/-\d{8}$/, '')
-        parts.push(short)
+        parts.push(shortenModelId(metadata.modelId))
     }
     if (metadata.variant) {
         parts.push(metadata.variant)
@@ -26,7 +25,6 @@ function MetadataBadge({ metadata }: { metadata: NonNullable<ChatMessage['metada
     if (parts.length === 0) return null
 
     const title = [
-        metadata.agentName ? `Agent: ${metadata.agentName}` : null,
         metadata.provider && metadata.modelId ? `Model: ${metadata.provider}/${metadata.modelId}` : null,
         metadata.variant ? `Variant: ${metadata.variant}` : null,
     ].filter(Boolean).join('\n')

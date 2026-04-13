@@ -12,13 +12,6 @@ export const ACT_OWNER_KIND = 'act' as const
 export const ACT_SCOPE = 'act' as const
 
 /**
- * Act scope always uses the build agent, even when the underlying
- * performer has planMode enabled. Plan agent is meaningless in
- * the multi-participant Act context.
- */
-export const ACT_AGENT_POSTURE = 'build' as const
-
-/**
  * Resolve the canonical execution policy for an Act session.
  * Both manual Act chat and wake cascade must use this function
  * so the rules are defined in exactly one place.
@@ -28,6 +21,6 @@ export function resolveActSessionPolicy(actId?: string) {
     return {
         ownerKind: ACT_OWNER_KIND,
         scope: ACT_SCOPE,
-        agentPosture: ACT_AGENT_POSTURE,
+        agentPosture: 'build',
     } as const
 }

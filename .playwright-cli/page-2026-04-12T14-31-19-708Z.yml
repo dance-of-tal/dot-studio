@@ -1,0 +1,118 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - generic [ref=e11]: Workspaces
+            - button "Open workspace directory" [ref=e12] [cursor=pointer]:
+              - img [ref=e13]
+          - generic [ref=e14]:
+            - generic [ref=e15]: Current
+            - strong [ref=e16]: ㄹwef
+            - generic "/Users/junhoyoon/tmp/ww/sdf/wef/ㄹwef" [ref=e17]
+          - generic [ref=e18]:
+            - button "ㄹwef …/wef/ㄹwef" [ref=e19] [cursor=pointer]:
+              - img [ref=e21]
+              - generic [ref=e23]:
+                - generic [ref=e24]: ㄹwef
+                - generic [ref=e25]: …/wef/ㄹwef
+              - button "Workspace actions" [ref=e29]:
+                - img [ref=e30]
+            - button "sdf …/ww/sdf" [ref=e34] [cursor=pointer]:
+              - img [ref=e36]
+              - generic [ref=e38]:
+                - generic [ref=e39]: sdf
+                - generic [ref=e40]: …/ww/sdf
+              - button "Workspace actions" [ref=e44]:
+                - img [ref=e45]
+            - button "wef …/sdf/wef" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+              - generic [ref=e53]:
+                - generic [ref=e54]: wef
+                - generic [ref=e55]: …/sdf/wef
+              - button "Workspace actions" [ref=e59]:
+                - img [ref=e60]
+            - button "ai-invest …/junhoyoon/ai-invest" [ref=e64] [cursor=pointer]:
+              - img [ref=e66]
+              - generic [ref=e68]:
+                - generic [ref=e69]: ai-invest
+                - generic [ref=e70]: …/junhoyoon/ai-invest
+              - button "Workspace actions" [ref=e74]:
+                - img [ref=e75]
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e82]:
+              - generic [ref=e83]: Performers
+              - button "Add performer" [ref=e85] [cursor=pointer]:
+                - img [ref=e86]
+            - generic [ref=e89]: No performers yet
+          - generic [ref=e91]:
+            - generic [ref=e92]:
+              - generic [ref=e93]: Acts
+              - button "Add Act" [ref=e95] [cursor=pointer]:
+                - img [ref=e96]
+            - generic [ref=e101]: No acts yet
+      - button "Asset Library" [ref=e103] [cursor=pointer]:
+        - img [ref=e104]
+        - generic [ref=e109]: Asset Library
+        - img [ref=e110]
+    - generic [ref=e113]:
+      - generic [ref=e114]:
+        - generic [ref=e115]:
+          - button "Zoom In" [ref=e116] [cursor=pointer]:
+            - img [ref=e117]
+          - button "Zoom Out" [ref=e118] [cursor=pointer]:
+            - img [ref=e119]
+          - button "Fit to Screen" [ref=e120] [cursor=pointer]:
+            - img [ref=e121]
+        - generic [ref=e126]:
+          - button "DOT" [ref=e127]:
+            - img [ref=e128]
+            - generic [ref=e130]: DOT
+          - button "Sign in" [ref=e131] [cursor=pointer]:
+            - img [ref=e132]
+            - generic [ref=e135]: Sign in
+          - generic "Local server connected" [ref=e136]:
+            - img [ref=e137]
+          - button "Terminal" [ref=e143] [cursor=pointer]:
+            - img [ref=e144]
+            - img [ref=e146]
+          - button "Workspace Tracking" [ref=e148] [cursor=pointer]:
+            - img [ref=e149]
+          - button "Save or publish selected asset" [ref=e152] [cursor=pointer]:
+            - img [ref=e153]
+          - button "Toggle Theme" [ref=e156] [cursor=pointer]:
+            - img [ref=e157]
+          - button "Settings" [ref=e163] [cursor=pointer]:
+            - img [ref=e164]
+          - button "Assistant" [active] [pressed] [ref=e167] [cursor=pointer]
+      - application [ref=e168]:
+        - img
+    - generic [ref=e173]:
+      - generic [ref=e175]:
+        - generic [ref=e176]:
+          - generic [ref=e177]:
+            - img [ref=e179]
+            - generic [ref=e182]: Studio Assistant
+          - generic [ref=e183]:
+            - generic [ref=e184]: GPT-5 Nano
+            - generic [ref=e185]: Ready
+        - generic [ref=e186]:
+          - button "Refresh session" [ref=e187] [cursor=pointer]:
+            - img [ref=e188]
+          - button "Hide Studio Assistant" [ref=e193] [cursor=pointer]:
+            - img [ref=e194]
+      - generic [ref=e199]:
+        - img [ref=e200]
+        - heading "How can I help you design?" [level=3] [ref=e203]
+        - paragraph [ref=e204]: Ask me to add performers, acts, or explain how DOT Studio works.
+      - generic [ref=e205]:
+        - generic [ref=e206]:
+          - textbox "Ask the assistant..." [ref=e207]
+          - button "Send message" [disabled] [ref=e208]:
+            - img [ref=e209]
+        - button "GPT-5 Nano" [ref=e215] [cursor=pointer]:
+          - generic [ref=e216]: GPT-5 Nano
+          - img [ref=e217]
+  - status [ref=e172]

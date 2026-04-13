@@ -9,7 +9,8 @@ export type { Posture } from './projection-manifest.js'
 import type { CompiledSkill } from './dance-compiler.js'
 import type { ModelSelection } from '../../../shared/model-types.js'
 import { readDraftTextContent } from '../draft-service.js'
-import { COLLABORATION_TOOL_NAMES, LEGACY_COLLABORATION_TOOL_NAMES } from '../act-runtime/act-tools.js'
+import { COLLABORATION_TOOL_NAMES, STALE_COLLABORATION_TOOL_NAMES } from '../act-runtime/act-tools.js'
+import { ASSISTANT_TOOL_NAMES } from '../studio-assistant/assistant-tools.js'
 
 type AssetRef =
     | { kind: 'registry'; urn: string }
@@ -30,7 +31,6 @@ export interface PerformerCompileInput {
     skillNames: string[]
     toolMap: Record<string, boolean>
     taskAllowlist?: string[]
-    collaborationPromptSection?: string | null
     relationPromptSection?: string | null
 }
 
@@ -71,12 +71,10 @@ async function resolveTalContent(
 
 function buildBody(input: {
     talContent: string | null
-    collaborationPromptSection?: string | null
     relationPromptSection?: string | null
 }) {
     return [
         input.talContent,
-        input.collaborationPromptSection || null,
         input.relationPromptSection || null,
     ].filter(Boolean).join('\n\n')
 }
@@ -107,8 +105,11 @@ function buildToolsLines(
     scope: 'workspace' | 'act',
 ) {
     const effectiveToolMap = { ...toolMap }
+    for (const toolName of ASSISTANT_TOOL_NAMES) {
+        effectiveToolMap[toolName] = false
+    }
     if (scope !== 'act') {
-        for (const toolName of [...COLLABORATION_TOOL_NAMES, ...LEGACY_COLLABORATION_TOOL_NAMES]) {
+        for (const toolName of [...COLLABORATION_TOOL_NAMES, ...STALE_COLLABORATION_TOOL_NAMES]) {
             effectiveToolMap[toolName] = false
         }
     }
@@ -224,7 +225,6 @@ export async function compilePerformer(
 
     const body = buildBody({
         talContent,
-        collaborationPromptSection: input.collaborationPromptSection || null,
         relationPromptSection: input.relationPromptSection || null,
     })
     const projectionScope = input.scope === 'stage' ? 'workspace' : (input.scope || 'workspace')

@@ -33,6 +33,31 @@ type PromptPart = {
     text?: string
 }
 
+function normalizeThreadTitle(value: string | null | undefined): string {
+    return value?.trim() || ''
+}
+
+function shouldReplaceGeneratedTitle(
+    currentTitle: string | null | undefined,
+    provisionalTitle: string | null | undefined,
+    generatedTitle: string | null | undefined,
+) {
+    const current = normalizeThreadTitle(currentTitle)
+    const provisional = normalizeThreadTitle(provisionalTitle)
+    const generated = normalizeThreadTitle(generatedTitle)
+
+    if (!generated) {
+        return false
+    }
+    if (!current) {
+        return true
+    }
+    if (current !== provisional) {
+        return false
+    }
+    return current !== generated
+}
+
 function parseConfiguredModel(value: unknown): ModelSelection | null {
     if (typeof value !== 'string') {
         return null
@@ -199,11 +224,30 @@ export async function sessionHasUserMessages(workingDir: string, sessionId: stri
     return messages.some((entry) => entry?.info?.role === 'user')
 }
 
+export async function setInitialStandaloneSessionTitle(input: {
+    sessionId: string
+    provisionalTitle: string
+}) {
+    const trimmed = normalizeThreadTitle(input.provisionalTitle)
+    if (!trimmed) {
+        return false
+    }
+
+    const ownership = await resolveSessionOwnership(input.sessionId)
+    if (ownership?.ownerKind !== 'performer' || ownership.sidebarTitle?.trim()) {
+        return false
+    }
+
+    const updated = await setSessionSidebarTitle(input.sessionId, trimmed, { ifUnset: true })
+    return !!updated
+}
+
 export async function maybeGenerateStandaloneSessionTitle(input: {
     workingDir: string
     sessionId: string
     message: string
     model: ModelSelection
+    provisionalTitle?: string | null
 }) {
     const generated = await generateTitleFromMessage(input.workingDir, input.message, input.model)
     if (!generated) {
@@ -215,8 +259,33 @@ export async function maybeGenerateStandaloneSessionTitle(input: {
         return false
     }
 
-    const updated = await setSessionSidebarTitle(input.sessionId, generated, { ifUnset: true })
+    if (!shouldReplaceGeneratedTitle(ownership.sidebarTitle, input.provisionalTitle, generated)) {
+        return false
+    }
+
+    const updated = await setSessionSidebarTitle(input.sessionId, generated)
     return !!updated
+}
+
+export async function setInitialActThreadName(input: {
+    workingDir: string
+    actId: string
+    threadId: string
+    provisionalTitle: string
+}) {
+    const trimmed = normalizeThreadTitle(input.provisionalTitle)
+    if (!trimmed) {
+        return false
+    }
+
+    const runtime = getActRuntimeService(input.workingDir)
+    const existing = await runtime.getThread(input.threadId)
+    if (!existing.ok || existing.thread?.name?.trim()) {
+        return false
+    }
+
+    const result = await runtime.renameThread(input.actId, input.threadId, trimmed, { ifUnset: true })
+    return result.ok
 }
 
 export async function maybeGenerateActThreadName(input: {
@@ -225,18 +294,21 @@ export async function maybeGenerateActThreadName(input: {
     threadId: string
     message: string
     model: ModelSelection
+    provisionalTitle?: string | null
 }) {
     const runtime = getActRuntimeService(input.workingDir)
     const existing = await runtime.getThread(input.threadId)
-    if (!existing.ok || existing.thread?.name?.trim()) {
+    if (!existing.ok) {
         return false
     }
 
-    const generated = await generateTitleFromMessage(input.workingDir, input.message, input.model)
-    if (!generated) {
+    const generated = normalizeThreadTitle(
+        await generateTitleFromMessage(input.workingDir, input.message, input.model),
+    )
+    if (!shouldReplaceGeneratedTitle(existing.thread?.name, input.provisionalTitle, generated)) {
         return false
     }
 
-    const result = await runtime.renameThread(input.actId, input.threadId, generated, { ifUnset: true })
+    const result = await runtime.renameThread(input.actId, input.threadId, generated)
     return result.ok
 }

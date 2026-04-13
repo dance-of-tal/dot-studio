@@ -4,7 +4,7 @@ export function resizeTextarea(
 ) {
     if (!textarea) return
 
-    textarea.style.height = '0px'
+    textarea.style.height = 'auto'
     textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
 }

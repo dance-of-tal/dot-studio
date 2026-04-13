@@ -84,6 +84,33 @@ describe('countRunningSessions', () => {
         expect(result.runningSessions).toBe(1)
     })
 
+    it('still treats sessions as parked when wait_until is followed by another completed tool in the same turn', async () => {
+        sessionMessagesMock
+            .mockResolvedValueOnce({
+                data: [{
+                    info: { role: 'assistant' },
+                    parts: [
+                        {
+                            type: 'tool',
+                            tool: 'wait_until',
+                            state: { status: 'completed' },
+                        },
+                        {
+                            type: 'tool',
+                            tool: 'list_shared_board',
+                            state: { status: 'completed' },
+                        },
+                    ],
+                }],
+            })
+            .mockResolvedValueOnce({ data: [] })
+        const { countRunningSessions } = await import('./runtime-reload-service.js')
+
+        const result = await countRunningSessions('/tmp/workspace')
+
+        expect(result.runningSessions).toBe(1)
+    })
+
     it('ignores busy sessions whose latest assistant turn is already settled', async () => {
         sessionMessagesMock
             .mockResolvedValueOnce({

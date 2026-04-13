@@ -1,10 +1,13 @@
 import { getOpencode } from '../lib/opencode.js'
-import { buildStudioSessionTitle } from '../../shared/session-metadata.js'
+import { buildStudioSessionTitle, deriveProvisionalThreadTitle } from '../../shared/session-metadata.js'
 import type { ChatSendRequest, ChatSessionCreateRequest } from '../../shared/chat-contracts.js'
 import { describeUnavailableRuntimeTools } from '../lib/runtime-tools.js'
 import { StudioValidationError, unwrapOpencodeResult } from '../lib/opencode-errors.js'
-import { resolveActSessionPolicy, ACT_AGENT_POSTURE } from '../lib/act-session-policy.js'
+import { retryOnAgentRegistryMiss } from '../lib/opencode-prompt.js'
+import { resolveActSessionPolicy } from '../lib/act-session-policy.js'
 import { ensurePerformerProjection } from './opencode-projection/stage-projection-service.js'
+import { buildProjectionExecutionPlan } from './opencode-projection/projection-execution-plan.js'
+import { buildProjectionDirtyPatch } from './opencode-projection/projection-dirty-patch.js'
 import {
     parseActParticipantSessionOwner,
     registerActParticipantSession,
@@ -14,15 +17,23 @@ import {
     formatActSessionError,
     resolveActSessionSettlementOutcome,
 } from './act-runtime/act-session-settlement.js'
+import { buildActToolMap, ensureActToolFiles } from './act-runtime/act-tool-files.js'
 import { projectActTools } from './act-runtime/act-tool-projection.js'
 import { getActDefinitionForThread, getActRuntimeService } from './act-runtime/act-runtime-service.js'
 import { prepareRuntimeForExecution, throwIfRuntimePreparationBlocked } from './runtime-preparation-service.js'
+import { publishProjectionConsumed } from './runtime-execution-events.js'
+import { countRunningSessions } from './runtime-reload-service.js'
 import { createSessionOwnership } from './session-ownership-service.js'
 import {
     maybeGenerateActThreadName,
     maybeGenerateStandaloneSessionTitle,
     sessionHasUserMessages,
+    setInitialActThreadName,
+    setInitialStandaloneSessionTitle,
 } from './thread-title-service.js'
+import { prepareAssistantChatRequest } from './studio-assistant/assistant-chat-service.js'
+import { buildTextPromptParts, joinPromptSections } from './turn-prompt-service.js'
+import { normalizeProjectionDirtyPatch } from '../../shared/projection-dirty.js'
 
 function isAssistantOwnerId(ownerId: string) {
     return ownerId === 'studio-assistant' || ownerId.startsWith('studio-assistant--')
@@ -92,8 +103,9 @@ export async function sendStudioChatMessage(
     // ── Collaboration tool projection ───────────────────
     // When running in an Act thread, project stable collaboration context and
     // collaboration tools into the participant session.
-    let actExtraTools: Array<{ name: string; content: string }> = []
-    let collaborationPromptSection = ''
+    let actSystemPrompt = ''
+    let projectionPerformerId = rawPerformerId
+    let projectionPerformerName = performer.performerName
 
     if (request.actId && request.actThreadId) {
         try {
@@ -105,18 +117,33 @@ export async function sendStudioChatMessage(
                     request.actThreadId,
                     workingDir,
                 )
-                actExtraTools = projection.tools
-                collaborationPromptSection = projection.contextPrompt
+                actSystemPrompt = projection.systemPrompt
+
+                const { resolvePerformerForWake } = await import('./act-runtime/wake-performer-resolver.js')
+                const resolvedPerformer = await resolvePerformerForWake(workingDir, actDef, rawPerformerId).catch(() => null)
+                if (resolvedPerformer?.performerId) {
+                    projectionPerformerId = resolvedPerformer.performerId
+                    projectionPerformerName = resolvedPerformer.performerName
+                }
             }
         } catch (err) {
             console.warn('[chat-service] Act tool projection failed:', err)
         }
     }
 
+    const projectionDirtyPatch = buildProjectionDirtyPatch({
+        performerId: projectionPerformerId || null,
+        actId: request.actId || null,
+        talRef: request.performer.talRef,
+        danceRefs: [...(request.performer.danceRefs || []), ...(request.performer.extraDanceRefs || [])],
+    })
+    const requestedProjectionScope = normalizeProjectionDirtyPatch(request.projectionScope)
+
     const isAssistant = isAssistantOwnerId(rawPerformerId)
     let ensured: Awaited<ReturnType<typeof ensurePerformerProjection>> | null = null
-    let assistantContextPrefix = ''
+    let assistantSystemPrompt = ''
     let assistantAgentName: string | null = null
+    let promptTools: Record<string, boolean> | undefined
     let capabilitySnapshot: Awaited<ReturnType<typeof ensurePerformerProjection>>['capabilitySnapshot'] = null
     let toolResolution: Awaited<ReturnType<typeof ensurePerformerProjection>>['toolResolution'] = {
         selectedMcpServers: [],
@@ -128,33 +155,60 @@ export async function sendStudioChatMessage(
     }
 
     if (isAssistant) {
-        const {
-            buildAssistantActionPrompt,
-            buildAssistantDiscoveryPrompt,
-            ensureAssistantAgent,
-        } = await import('./studio-assistant/assistant-service.js')
-        assistantAgentName = await ensureAssistantAgent(workingDir)
-        const discoveryPrompt = await buildAssistantDiscoveryPrompt(workingDir, request.message)
-        assistantContextPrefix = [
-            buildAssistantActionPrompt(request.assistantContext || null),
-            discoveryPrompt,
-        ].filter(Boolean).join('\n\n')
-    } else {
-        const prepared = await prepareRuntimeForExecution(workingDir, () => ensurePerformerProjection({
-            performerId: rawPerformerId,
-            performerName: performer.performerName,
-            talRef: performer.talRef,
-            danceRefs: [...(performer.danceRefs || []), ...(performer.extraDanceRefs || [])],
+        const prepared = await prepareAssistantChatRequest(workingDir, {
+            message: request.message,
             model: performer.model!,
-            modelVariant: performer.modelVariant || null,
-            mcpServerNames: performer.mcpServerNames || [],
+            assistantContext: request.assistantContext || null,
+        })
+        assistantAgentName = prepared.assistantAgentName
+        capabilitySnapshot = prepared.capabilitySnapshot
+        promptTools = prepared.promptTools
+        assistantSystemPrompt = prepared.systemPrompt
+    } else {
+        const projectionPlan = await buildProjectionExecutionPlan({
             workingDir,
-            ...(request.actId ? { scope: 'act' as const, actId: request.actId } : {}),
-            ...(collaborationPromptSection ? { collaborationPromptSection } : {}),
-            ...(actExtraTools.length > 0 ? { extraTools: actExtraTools } : {}),
-        }))
+            target: {
+                performerId: projectionPerformerId,
+                performerName: projectionPerformerName,
+                talRef: performer.talRef,
+                danceRefs: [...(performer.danceRefs || []), ...(performer.extraDanceRefs || [])],
+                model: performer.model!,
+                modelVariant: performer.modelVariant || null,
+                mcpServerNames: performer.mcpServerNames || [],
+                workingDir,
+            },
+            targetPatch: projectionDirtyPatch,
+            requestedPatch: requestedProjectionScope,
+        })
+        const prepared = await prepareRuntimeForExecution(workingDir, async () => {
+            let primaryProjection: Awaited<ReturnType<typeof ensurePerformerProjection>> | null = null
+            let changed = false
+
+            for (const input of projectionPlan.inputs) {
+                const nextProjection = await ensurePerformerProjection(input)
+                if (input.performerId === projectionPerformerId) {
+                    primaryProjection = nextProjection
+                }
+                changed = changed || nextProjection.changed
+            }
+
+            if (!primaryProjection) {
+                throw new Error(`Missing projection for performer ${projectionPerformerId}`)
+            }
+
+            return {
+                ...primaryProjection,
+                changed,
+            }
+        })
         throwIfRuntimePreparationBlocked(prepared)
         ensured = prepared.payload
+        if (prepared.requiresDispose) {
+            publishProjectionConsumed(workingDir, projectionPlan.consumedPatch)
+        }
+        promptTools = request.actId
+            ? { ...ensured.toolMap, ...buildActToolMap() }
+            : ensured.toolMap
         capabilitySnapshot = ensured.capabilitySnapshot
         toolResolution = ensured.toolResolution
     }
@@ -167,11 +221,10 @@ export async function sendStudioChatMessage(
         )
     }
 
-    const promptSections = [isAssistant ? '' : assistantContextPrefix, request.message].filter(Boolean)
     const parts: Array<
         | { type: 'text'; text: string }
         | { type: 'file'; mime: string; url: string; filename?: string }
-    > = [{ type: 'text', text: promptSections.join('\n\n---\n\n') }]
+    > = buildTextPromptParts(request.message)
     if (request.attachments && request.attachments.length > 0) {
         if (capabilitySnapshot && !capabilitySnapshot.attachment) {
             throw new StudioValidationError(
@@ -196,32 +249,69 @@ export async function sendStudioChatMessage(
     const shouldGenerateThreadTitle = !isAssistant
         && request.message.trim().length > 0
         && !(await sessionHasUserMessages(workingDir, sessionId).catch(() => true))
+    const provisionalTitle = shouldGenerateThreadTitle
+        ? deriveProvisionalThreadTitle(request.message)
+        : null
 
     if (actRuntime && rawPerformerId) {
         await actRuntime.beginUserTurn(request.actThreadId!)
         await actRuntime.markParticipantSessionBusy(request.actThreadId!, rawPerformerId)
     }
 
+    if (shouldGenerateThreadTitle && provisionalTitle) {
+        if (request.actId && request.actThreadId) {
+            await setInitialActThreadName({
+                workingDir,
+                actId: request.actId,
+                threadId: request.actThreadId,
+                provisionalTitle,
+            }).catch((error) => {
+                console.warn(`[chat-service] Failed to seed Act thread name for ${request.actThreadId}:`, error)
+            })
+        } else {
+            await setInitialStandaloneSessionTitle({
+                sessionId,
+                provisionalTitle,
+            }).catch((error) => {
+                console.warn(`[chat-service] Failed to seed standalone thread title for ${sessionId}:`, error)
+            })
+        }
+    }
+
     try {
-        unwrapOpencodeResult(await oc.session.promptAsync({
-            sessionID: sessionId,
+        if (request.actId) {
+            await ensureActToolFiles(workingDir, workingDir)
+        }
+        const agentName = isAssistant
+            ? (assistantAgentName || undefined)
+            : (ensured?.compiled.agentNames[
+                request.actId ? 'build' : (performer.planMode ? 'plan' : 'build')
+            ])
+
+        await retryOnAgentRegistryMiss({
+            oc,
             directory: workingDir,
-            agent: isAssistant
-                ? (assistantAgentName || undefined)
-                // Act scope always uses build agent, ignoring performer planMode
-                : (ensured?.compiled.agentNames[
-                    request.actId ? ACT_AGENT_POSTURE : (performer.planMode ? 'plan' : 'build')
-                  ]),
-            // Pass model directly so OpenCode uses the user's selected model,
-            // not the (potentially stale) model cached from the agent file.
-            model: performer.model ? {
-                providerID: performer.model.provider,
-                modelID: performer.model.modelId,
-            } : undefined,
-            system: isAssistant ? (assistantContextPrefix || undefined) : undefined,
-            tools: isAssistant ? undefined : ensured?.toolMap,
-            parts,
-        }))
+            agentName,
+            getRunningSessions: async (directory) => (await countRunningSessions(directory)).runningSessions,
+            logLabel: 'chat-service',
+            run: async () => unwrapOpencodeResult(await oc.session.promptAsync({
+                sessionID: sessionId,
+                directory: workingDir,
+                agent: agentName,
+                // Pass model directly so OpenCode uses the user's selected model,
+                // not the (potentially stale) model cached from the agent file.
+                model: performer.model ? {
+                    providerID: performer.model.provider,
+                    modelID: performer.model.modelId,
+                } : undefined,
+                system: joinPromptSections([
+                    request.actId ? actSystemPrompt : '',
+                    isAssistant ? assistantSystemPrompt : '',
+                ]),
+                tools: promptTools,
+                parts,
+            })),
+        })
     } catch (error) {
         await syncActParticipantSessionFailure(sessionId, error)
         if (actRuntime && rawPerformerId) {
@@ -241,6 +331,7 @@ export async function sendStudioChatMessage(
                     providerID: performer.model.provider,
                     modelID: performer.model.modelId,
                 },
+                provisionalTitle,
             }).catch((error) => {
                 console.warn(`[chat-service] Failed to generate Act thread name for ${request.actThreadId}:`, error)
             })
@@ -253,6 +344,7 @@ export async function sendStudioChatMessage(
                     providerID: performer.model.provider,
                     modelID: performer.model.modelId,
                 },
+                provisionalTitle,
             }).catch((error) => {
                 console.warn(`[chat-service] Failed to generate standalone thread title for ${sessionId}:`, error)
             })

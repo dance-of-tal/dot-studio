@@ -15,7 +15,7 @@ import type {
     BoardEntry,
 } from '../../../shared/act-types.js'
 import { Mailbox } from './mailbox.js'
-import { evaluateWakeCondition } from './wake-evaluator.js'
+import { evaluateWakeCondition, eventMatchesConditionExpr } from './wake-evaluator.js'
 import { payloadString } from './act-runtime-utils.js'
 
 // ── Types ───────────────────────────────────────────────
@@ -93,6 +93,18 @@ function hasRelationPermission(
     })
 }
 
+function hasRelevantWaitingCondition(
+    participantKey: string,
+    event: MailboxEvent,
+    mailbox: Mailbox,
+    actDefinition: ActDefinition,
+) {
+    const waitingConditions = mailbox.getWakeConditionsForParticipant(participantKey, {
+        statuses: ['waiting'],
+    })
+    return waitingConditions.some((condition) => eventMatchesConditionExpr(condition.condition, event, actDefinition))
+}
+
 // ── Main routing function ───────────────────────────────
 
 export function routeEvent(
@@ -109,6 +121,7 @@ export function routeEvent(
 
         const subMatch = matchSubscription(key, binding.subscriptions, event)
         const relMatch = hasRelationPermission(key, event, actDefinition.relations)
+        const waitingConditionMatch = hasRelevantWaitingCondition(key, event, mailbox, actDefinition)
 
         // Direct message: always wake the recipient if relation allows it.
         // 1:1 messages don't need explicit subscription — the `to` field is the routing key.
@@ -116,7 +129,7 @@ export function routeEvent(
             (event.type === 'message.sent' || event.type === 'message.delivered') &&
             payloadString(event.payload, 'to') === key
 
-        if ((subMatch && relMatch) || (isDirectMessageTarget && relMatch)) {
+        if (!waitingConditionMatch && ((subMatch && relMatch) || (isDirectMessageTarget && relMatch))) {
             targetsByParticipant.set(key, {
                 participantKey: key,
                 triggerEvent: event,

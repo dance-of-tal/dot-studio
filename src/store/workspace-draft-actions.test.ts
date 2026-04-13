@@ -47,7 +47,6 @@ function createDraftState(): StudioState {
         sessionReverts: {},
         lspServers: [],
         lspDiagnostics: {},
-        adapterViewsByPerformer: {},
         selectedActId: null,
         actEditorState: null,
         actThreads: {},

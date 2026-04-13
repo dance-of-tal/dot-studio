@@ -6,8 +6,6 @@ import type {
 } from './assistant-actions.js'
 import { normalizeAssistantBundlePath } from './assistant-bundle-path.js'
 
-const ACTION_BLOCK_PATTERN = /<assistant-actions>\s*([\s\S]*?)\s*<\/assistant-actions>/i
-
 type ActionRecord = Record<string, unknown>
 type DraftRefKind = 'tal' | 'dance'
 
@@ -15,13 +13,6 @@ export interface AssistantActionLintIssue {
     level: 'error' | 'warning'
     actionIndex: number
     message: string
-}
-
-type AssistantActionMessage = {
-    content: string
-    metadata?: {
-        assistantActions?: AssistantAction[] | null
-    } | null
 }
 
 type RefState = {
@@ -56,6 +47,152 @@ function isOptionalEventTypeArray(value: unknown) {
 
 function isOptionalFiniteNumber(value: unknown) {
     return value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= 0)
+}
+
+function normalizeOptionalString(value: unknown, options?: { allowNull?: boolean }) {
+    if (typeof value === 'string') {
+        const trimmed = value.trim()
+        return trimmed ? trimmed : undefined
+    }
+    if (options?.allowNull && value === null) {
+        return null
+    }
+    return value === undefined ? undefined : value
+}
+
+function normalizeOptionalStringArray(value: unknown) {
+    if (!Array.isArray(value)) {
+        return value === undefined ? undefined : value
+    }
+
+    return value
+        .map((entry) => (typeof entry === 'string' ? entry.trim() : entry))
+        .filter((entry) => entry !== '')
+}
+
+function normalizeDraftBlueprintCandidate(value: unknown) {
+    if (!isRecord(value)) {
+        return value === undefined ? undefined : value
+    }
+
+    const normalizedTags = normalizeOptionalStringArray(value.tags)
+    const normalized: Record<string, unknown> = {
+        ...(normalizeOptionalString(value.ref) !== undefined ? { ref: normalizeOptionalString(value.ref) } : {}),
+        ...(normalizeOptionalString(value.name) !== undefined ? { name: normalizeOptionalString(value.name) } : {}),
+        ...(normalizeOptionalString(value.content) !== undefined ? { content: normalizeOptionalString(value.content) } : {}),
+        ...(normalizeOptionalString(value.slug) !== undefined ? { slug: normalizeOptionalString(value.slug) } : {}),
+        ...(normalizeOptionalString(value.description) !== undefined ? { description: normalizeOptionalString(value.description) } : {}),
+        ...(Array.isArray(normalizedTags) && normalizedTags.length > 0 ? { tags: normalizedTags } : {}),
+        ...(value.openEditor === true ? { openEditor: true } : {}),
+    }
+
+    return Object.keys(normalized).length === 0 ? undefined : normalized
+}
+
+function hasMeaningfulDraftBlueprint(value: unknown) {
+    return isRecord(normalizeDraftBlueprintCandidate(value))
+}
+
+function normalizeModelBlueprintCandidate(value: unknown) {
+    if (!isRecord(value)) {
+        return value === undefined || value === null ? value : value
+    }
+
+    const provider = normalizeOptionalString(value.provider)
+    const modelId = normalizeOptionalString(value.modelId)
+    if (!provider && !modelId) {
+        return undefined
+    }
+
+    return {
+        ...(provider !== undefined ? { provider } : {}),
+        ...(modelId !== undefined ? { modelId } : {}),
+    }
+}
+
+function normalizeRelationBlueprintCandidate(value: unknown) {
+    if (!isRecord(value)) {
+        return value === undefined ? undefined : value
+    }
+
+    return {
+        ...value,
+        sourceParticipantKey: normalizeOptionalString(value.sourceParticipantKey),
+        sourcePerformerId: normalizeOptionalString(value.sourcePerformerId),
+        sourcePerformerRef: normalizeOptionalString(value.sourcePerformerRef),
+        sourcePerformerName: normalizeOptionalString(value.sourcePerformerName),
+        targetParticipantKey: normalizeOptionalString(value.targetParticipantKey),
+        targetPerformerId: normalizeOptionalString(value.targetPerformerId),
+        targetPerformerRef: normalizeOptionalString(value.targetPerformerRef),
+        targetPerformerName: normalizeOptionalString(value.targetPerformerName),
+        name: normalizeOptionalString(value.name),
+        description: normalizeOptionalString(value.description),
+    }
+}
+
+function normalizePerformerActionCandidate(action: ActionRecord) {
+    const normalizedTalDraftId = normalizeOptionalString(action.talDraftId)
+    const normalizedTalDraftRef = normalizeOptionalString(action.talDraftRef)
+    const normalizedTalDraft = normalizeDraftBlueprintCandidate(action.talDraft)
+    const normalizedTalUrn = normalizeOptionalString(action.talUrn, { allowNull: true })
+
+    return {
+        ...action,
+        model: normalizeModelBlueprintCandidate(action.model),
+        description: normalizeOptionalString(action.description, { allowNull: true }),
+        talUrn: normalizedTalUrn === null && (
+            isNonEmptyString(normalizedTalDraftId)
+            || isNonEmptyString(normalizedTalDraftRef)
+            || hasMeaningfulDraftBlueprint(normalizedTalDraft)
+        )
+            ? undefined
+            : normalizedTalUrn,
+        talDraftId: normalizedTalDraftId,
+        talDraftRef: normalizedTalDraftRef,
+        talDraft: normalizedTalDraft,
+        addDanceUrns: normalizeOptionalStringArray(action.addDanceUrns),
+        addDanceDraftIds: normalizeOptionalStringArray(action.addDanceDraftIds),
+        addDanceDraftRefs: normalizeOptionalStringArray(action.addDanceDraftRefs),
+        addDanceDrafts: Array.isArray(action.addDanceDrafts)
+            ? action.addDanceDrafts
+                .map((draft) => normalizeDraftBlueprintCandidate(draft))
+                .filter((draft) => draft !== undefined)
+            : action.addDanceDrafts,
+        removeDanceUrns: normalizeOptionalStringArray(action.removeDanceUrns),
+        removeDanceDraftIds: normalizeOptionalStringArray(action.removeDanceDraftIds),
+        addMcpServerNames: normalizeOptionalStringArray(action.addMcpServerNames),
+        removeMcpServerNames: normalizeOptionalStringArray(action.removeMcpServerNames),
+    }
+}
+
+function normalizeAssistantActionCandidate(action: unknown): unknown {
+    if (!isRecord(action) || !isNonEmptyString(action.type)) {
+        return action
+    }
+
+    switch (action.type) {
+        case 'createPerformer':
+        case 'updatePerformer':
+            return normalizePerformerActionCandidate(action)
+        case 'createAct':
+            return {
+                ...action,
+                description: normalizeOptionalString(action.description),
+                actRules: normalizeOptionalStringArray(action.actRules),
+                participantPerformerIds: normalizeOptionalStringArray(action.participantPerformerIds),
+                participantPerformerRefs: normalizeOptionalStringArray(action.participantPerformerRefs),
+                participantPerformerNames: normalizeOptionalStringArray(action.participantPerformerNames),
+                relations: Array.isArray(action.relations)
+                    ? action.relations
+                        .map((relation) => normalizeRelationBlueprintCandidate(relation))
+                        .filter((relation) => relation !== undefined)
+                    : action.relations,
+            }
+        case 'connectPerformers':
+            return normalizeRelationBlueprintCandidate(action)
+        default:
+            return action
+    }
 }
 
 function isDraftBlueprint(value: unknown) {
@@ -248,28 +385,48 @@ function isValidAssistantAction(action: unknown): action is AssistantAction {
     }
 }
 
-function normalizeEnvelope(input: unknown): AssistantActionEnvelope | null {
+function normalizeAssistantActionEnvelopeCandidate(input: unknown): { version?: unknown; actions?: unknown } | null {
+    if (typeof input === 'string') {
+        const trimmed = input.trim()
+        if (!trimmed) {
+            return null
+        }
+
+        try {
+            const parsed = JSON.parse(trimmed)
+            return parsed && typeof parsed === 'object'
+                ? parsed as { version?: unknown; actions?: unknown }
+                : null
+        } catch {
+            return null
+        }
+    }
+
     if (!input || typeof input !== 'object') {
         return null
     }
-    const candidate = input as { version?: unknown; actions?: unknown }
+
+    return input as { version?: unknown; actions?: unknown }
+}
+
+export function parseAssistantActionEnvelope(input: unknown): AssistantActionEnvelope | null {
+    const candidate = normalizeAssistantActionEnvelopeCandidate(input)
+    if (!candidate) {
+        return null
+    }
+
     if (candidate.version !== 1 || !Array.isArray(candidate.actions)) {
         return null
     }
-    if (!candidate.actions.every((action) => isValidAssistantAction(action))) {
+
+    const normalizedActions = candidate.actions.map((action) => normalizeAssistantActionCandidate(action))
+
+    if (!normalizedActions.every((action) => isValidAssistantAction(action))) {
         return null
     }
     return {
         version: 1,
-        actions: candidate.actions as AssistantAction[],
-    }
-}
-
-function parseAssistantActionEnvelopeJson(raw: string): AssistantActionEnvelope | null {
-    try {
-        return normalizeEnvelope(JSON.parse(raw))
-    } catch {
-        return null
+        actions: normalizedActions as AssistantAction[],
     }
 }
 
@@ -299,7 +456,7 @@ function registerNamedRef(
 ) {
     if (!isNonEmptyString(value)) return
     if (refs.has(value)) {
-        pushIssue(issues, 'error', actionIndex, `${namespace} ref "${value}" is declared more than once in the same action block.`)
+        pushIssue(issues, 'error', actionIndex, `${namespace} ref "${value}" is declared more than once in the same tool call.`)
         return
     }
     refs.add(value)
@@ -319,7 +476,7 @@ function registerDraftRef(
             issues,
             'error',
             actionIndex,
-            `draft ref "${value}" is already declared for a ${existingKind} draft earlier in the same action block.`,
+            `draft ref "${value}" is already declared for a ${existingKind} draft earlier in the same tool call.`,
         )
         return
     }
@@ -335,7 +492,7 @@ function requireNamedRef(
 ) {
     if (!isNonEmptyString(value)) return
     if (!refs.has(value)) {
-        pushIssue(issues, 'error', actionIndex, `${namespace} ref "${value}" is used before it is created in the same action block.`)
+        pushIssue(issues, 'error', actionIndex, `${namespace} ref "${value}" is used before it is created in the same tool call.`)
     }
 }
 
@@ -349,11 +506,11 @@ function requireDraftRef(
     if (!isNonEmptyString(value)) return
     const existingKind = refs.get(value)
     if (!existingKind) {
-        pushIssue(issues, 'error', actionIndex, `${kind} draft ref "${value}" is used before it is created in the same action block.`)
+        pushIssue(issues, 'error', actionIndex, `${kind} draft ref "${value}" is used before it is created in the same tool call.`)
         return
     }
     if (existingKind !== kind) {
-        pushIssue(issues, 'error', actionIndex, `${kind} draft ref "${value}" resolves to a ${existingKind} draft in the same action block.`)
+        pushIssue(issues, 'error', actionIndex, `${kind} draft ref "${value}" resolves to a ${existingKind} draft in the same tool call.`)
     }
 }
 
@@ -364,10 +521,10 @@ function lintPerformerFields(
     issues: AssistantActionLintIssue[],
 ) {
     const talSelectorCount = [
-        fields.talUrn !== undefined,
+        isNonEmptyString(fields.talUrn) || fields.talUrn === null,
         isNonEmptyString(fields.talDraftId),
         isNonEmptyString(fields.talDraftRef),
-        isRecord(fields.talDraft),
+        hasMeaningfulDraftBlueprint(fields.talDraft),
     ].filter(Boolean).length
     if (talSelectorCount > 1) {
         pushIssue(issues, 'error', actionIndex, 'Performer actions must choose only one Tal source among talUrn, talDraftId, talDraftRef, or talDraft.')
@@ -398,8 +555,9 @@ function registerInlineDraftRefs(
     refState: RefState,
     issues: AssistantActionLintIssue[],
 ) {
-    if (isRecord(fields.talDraft)) {
-        registerDraftRef(issues, actionIndex, refState.drafts, 'tal', fields.talDraft.ref)
+    const talDraft = normalizeDraftBlueprintCandidate(fields.talDraft)
+    if (isRecord(talDraft)) {
+        registerDraftRef(issues, actionIndex, refState.drafts, 'tal', talDraft.ref)
     }
     if (Array.isArray(fields.addDanceDrafts)) {
         for (const draft of fields.addDanceDrafts) {
@@ -493,40 +651,4 @@ export function lintAssistantActionEnvelope(envelope: AssistantActionEnvelope): 
     })
 
     return issues
-}
-
-export function extractAssistantActionEnvelope(content: string): {
-    content: string
-    envelope: AssistantActionEnvelope | null
-} {
-    const match = content.match(ACTION_BLOCK_PATTERN)
-    if (!match) {
-        const trimmed = content.trim()
-        const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
-        const candidate = fenced?.[1]?.trim() || trimmed
-        const envelope = parseAssistantActionEnvelopeJson(candidate)
-        return {
-            content: envelope ? '' : trimmed,
-            envelope,
-        }
-    }
-
-    const envelope = parseAssistantActionEnvelopeJson(match[1])
-
-    const cleaned = content.replace(ACTION_BLOCK_PATTERN, '').trim()
-    return {
-        content: cleaned,
-        envelope,
-    }
-}
-
-export function getAssistantMessageActions(message: AssistantActionMessage): AssistantAction[] {
-    if (message.metadata?.assistantActions?.length) {
-        return message.metadata.assistantActions
-    }
-    return extractAssistantActionEnvelope(message.content).envelope?.actions || []
-}
-
-export function stripAssistantActionBlock(content: string): string {
-    return extractAssistantActionEnvelope(content).content
 }

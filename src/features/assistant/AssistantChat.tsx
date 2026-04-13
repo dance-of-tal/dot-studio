@@ -6,12 +6,12 @@ import { useModels } from '../../hooks/queries'
 import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
 import { DropdownMenu } from '../../components/shared/DropdownMenu'
 import { buildAssistantChatKey } from '../../store/assistantSlice'
-import { applyAssistantActions } from './assistant-actions'
-import { getAssistantMessageActions } from './assistant-protocol'
 import { showToast } from '../../lib/toast'
-import { toAssistantAvailableModels } from '../../lib/assistant-models'
+import { resizeTextarea } from '../../lib/textarea-autosize'
 import { useChatSession } from '../../store/session/use-chat-session'
 import { TextShimmer } from '../../components/chat/TextShimmer'
+import { useAssistantModels } from './useAssistantModels'
+import { useAssistantToolApplication } from './useAssistantToolApplication'
 
 // Reuse performer chat rendering components
 import ThreadBody from '../chat/ThreadBody'
@@ -62,89 +62,28 @@ export function AssistantChat() {
     const { messages, isLoading, canAbort, activityKind, sessionId, status: sessionStatus } = chatSession
 
     const { data: models } = useModels()
-    const connectedModels = useMemo(
-        () => (models ?? []).filter((model) => model.connected),
-        [models],
-    )
-    const hasModels = connectedModels.length > 0
-    const selectedConnectedModel = useMemo(() => (
-        assistantModel
-            ? connectedModels.find((model) => (
-                model.provider === assistantModel.provider
-                && model.id === assistantModel.modelId
-            )) || null
-            : null
-    ), [assistantModel, connectedModels])
+    const {
+        connectedModels,
+        hasModels,
+        selectedConnectedModel,
+    } = useAssistantModels({
+        models,
+        assistantModel,
+        setAssistantModel,
+        setAssistantAvailableModels,
+    })
 
     const [input, setInput] = useState('')
     const [panelWidth, setPanelWidth] = useState(320)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const dragging = useRef(false)
 
-    // Auto-select first connected model
-    useEffect(() => {
-        if (connectedModels.length === 0) {
-            if (assistantModel) {
-                setAssistantModel(null)
-            }
-            return
-        }
-
-        if (!selectedConnectedModel) {
-            setAssistantModel({ provider: connectedModels[0].provider, modelId: connectedModels[0].id })
-        }
-    }, [assistantModel, connectedModels, selectedConnectedModel, setAssistantModel])
-
-    const availableAssistantModels = useMemo(
-        () => toAssistantAvailableModels(connectedModels),
-        [connectedModels],
-    )
-
-    useEffect(() => {
-        setAssistantAvailableModels(availableAssistantModels)
-    }, [availableAssistantModels, setAssistantAvailableModels])
-
-    useEffect(() => {
-        if (isLoading) {
-            return
-        }
-        let cancelled = false
-
-        void (async () => {
-            for (const message of messages) {
-                if (cancelled || message.role !== 'assistant' || appliedAssistantActionMessageIds[message.id]) {
-                    continue
-                }
-                const actions = getAssistantMessageActions(message)
-                if (actions.length === 0) {
-                    continue
-                }
-
-                // Mark first to avoid duplicate application during rerenders caused by mutations.
-                markAssistantActionsApplied(message.id)
-                const summary = await applyAssistantActions(actions)
-                if (cancelled) return
-
-                recordAssistantActionResult(message.id, summary)
-                if (summary.failed > 0) {
-                    showToast(
-                        summary.applied > 0
-                            ? `Studio Assistant applied ${summary.applied} change(s), but ${summary.failed} action(s) could not be applied.`
-                            : 'Studio Assistant suggested changes, but they could not be applied to the current stage.',
-                        summary.applied > 0 ? 'warning' : 'error',
-                        {
-                            title: 'Assistant action issue',
-                            dedupeKey: `assistant-actions:${message.id}`,
-                        },
-                    )
-                }
-            }
-        })()
-
-        return () => {
-            cancelled = true
-        }
-    }, [messages, isLoading, appliedAssistantActionMessageIds, markAssistantActionsApplied, recordAssistantActionResult, workingDir])
+    useAssistantToolApplication({
+        messages,
+        appliedAssistantActionMessageIds,
+        markAssistantActionsApplied,
+        recordAssistantActionResult,
+    })
 
     // Resize handle
     const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
@@ -170,10 +109,7 @@ export function AssistantChat() {
     }, [panelWidth])
 
     useEffect(() => {
-        const textarea = textareaRef.current
-        if (!textarea) return
-        textarea.style.height = '0px'
-        textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`
+        resizeTextarea(textareaRef.current, 150)
     }, [input])
 
     const handleSend = useCallback(() => {
@@ -308,7 +244,10 @@ export function AssistantChat() {
                 <textarea
                     ref={textareaRef}
                     value={input}
-                    onChange={(e) => setInput(e.target.value)}
+                    onChange={(e) => {
+                        setInput(e.target.value)
+                        resizeTextarea(e.target, 150)
+                    }}
                     onKeyDown={handleInputKeyDown}
                     placeholder={isLoading ? 'Assistant is working...' : 'Ask the assistant...'}
                     className="assistant-input"

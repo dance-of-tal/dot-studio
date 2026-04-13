@@ -44,4 +44,23 @@ describe('saveWorkspaceSnapshot', () => {
         expect(result.ok).toBe(true)
         expect(pruneStalePerformerProjectionsMock).toHaveBeenCalledWith(workingDir, ['performer-1', 'performer-2'])
     })
+
+    it('lists workspace performers from the saved workspace snapshot', async () => {
+        const { saveWorkspaceSnapshot, listWorkspacePerformersForDir } = await import('./workspace-service.js')
+        const workingDir = path.join(studioDir, 'project')
+
+        await saveWorkspaceSnapshot({
+            workingDir,
+            performers: [
+                { id: 'performer-1', name: 'Performer 1', model: { provider: 'openai', modelId: 'gpt-5' } },
+                { id: 'performer-2', name: 'Performer 2', model: null },
+            ],
+            acts: [],
+        })
+
+        await expect(listWorkspacePerformersForDir(workingDir)).resolves.toEqual([
+            { id: 'performer-1', name: 'Performer 1', model: { provider: 'openai', modelId: 'gpt-5' } },
+            { id: 'performer-2', name: 'Performer 2', model: null },
+        ])
+    })
 })

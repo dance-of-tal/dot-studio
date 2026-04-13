@@ -61,8 +61,7 @@ export function isSessionParkedByWaitUntil(messages: ChatMessage[]) {
         return false
     }
 
-    const lastTool = tools[tools.length - 1]
-    return lastTool?.name === 'wait_until' && lastTool.status === 'completed'
+    return tools.some((tool) => tool.name === 'wait_until' && tool.status === 'completed')
 }
 
 function isOptimisticSessionBridge(params: {

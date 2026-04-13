@@ -114,6 +114,30 @@ export class SessionQueue {
         return entry.target
     }
 
+    prune(participantKey: string, predicate: (target: WakeUpTarget) => boolean): WakeUpTarget[] {
+        const queue = this.queues.get(participantKey)
+        if (!queue || queue.length === 0) {
+            return []
+        }
+
+        const removed: WakeUpTarget[] = []
+        const kept = queue.filter((entry) => {
+            if (predicate(entry.target)) {
+                removed.push(entry.target)
+                return false
+            }
+            return true
+        })
+
+        if (kept.length === 0) {
+            this.queues.delete(participantKey)
+        } else {
+            this.queues.set(participantKey, kept)
+        }
+
+        return removed
+    }
+
     /**
      * Dequeue the next wake-up for any participant that is not currently running.
      * Map iteration order preserves insertion order across participant queues.

@@ -91,6 +91,7 @@ export interface WakeCondition {
     id: string
     target: 'self'               // v1: self only
     createdBy: string            // performer who requested
+    createdAt?: number
     onSatisfiedMessage: string   // wake-up message on satisfy
     condition: ConditionExpr
     status: 'waiting' | 'triggered' | 'expired'

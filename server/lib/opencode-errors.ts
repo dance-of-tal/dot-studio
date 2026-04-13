@@ -147,6 +147,17 @@ function extractMessage(err: unknown): string {
     }
 }
 
+export function isOpencodeAgentNotFoundError(err: unknown, agentName?: string | null): boolean {
+    const message = extractMessage(err)
+    if (!/Agent not found:/i.test(message)) {
+        return false
+    }
+    if (!agentName?.trim()) {
+        return true
+    }
+    return message.includes(`"${agentName}"`) || message.includes(`'${agentName}'`) || message.includes(agentName)
+}
+
 function extractProviderId(err: unknown, context: NormalizeErrorContext): string | undefined {
     return context.providerId?.trim()
         || readString(err, 'data', 'providerID')

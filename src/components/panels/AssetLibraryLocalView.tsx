@@ -1,7 +1,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import type { McpServer } from '../../types'
 import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
-import type { McpEntryDraft } from './mcp-catalog-utils'
 import { Cpu, FolderOpen, HardDrive, Hexagon, Plus, Search, Server, Users, Zap } from 'lucide-react'
 import type {
     AssetScope,
@@ -57,21 +56,17 @@ type Props = {
     showInstalledAssets: boolean
     showModels: boolean
     showMcps: boolean
-    mcpDraftEntries: McpEntryDraft[]
-    mcpCatalogDirty: boolean
+    mcpEntries: McpCatalogState['mcpEntries']
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
     runtimeReloadPending: boolean
     pendingMcpAuthName: string | null
-    updateMcpEntry: McpCatalogState['updateMcpEntry']
-    addMcpEntry: () => string
-    removeMcpEntry: (key: string) => void
-    saveMcpCatalog: () => Promise<boolean>
+    createMcpEntryDraft: McpCatalogState['createMcpEntryDraft']
+    saveMcpEntry: McpCatalogState['saveMcpEntry']
+    deleteMcpEntry: McpCatalogState['deleteMcpEntry']
     connectMcpServer: (name: string) => Promise<void>
     startMcpAuthFlow: (name: string) => Promise<void>
     clearMcpAuth: (name: string) => Promise<void>
-    expandedMcpEntries: Record<string, boolean>
-    setExpandedMcpEntries: Dispatch<SetStateAction<Record<string, boolean>>>
     expandedModelProviders: Record<string, boolean>
     setExpandedModelProviders: Dispatch<SetStateAction<Record<string, boolean>>>
     modelProviderTabs: Array<{ key: ModelProviderFilter; label: string }>
@@ -116,21 +111,17 @@ export default function AssetLibraryLocalView({
     showInstalledAssets,
     showModels,
     showMcps,
-    mcpDraftEntries,
-    mcpCatalogDirty,
+    mcpEntries,
     mcpCatalogStatus,
     mcpCatalogSaving,
     runtimeReloadPending,
     pendingMcpAuthName,
-    updateMcpEntry,
-    addMcpEntry,
-    removeMcpEntry,
-    saveMcpCatalog,
+    createMcpEntryDraft,
+    saveMcpEntry,
+    deleteMcpEntry,
     connectMcpServer,
     startMcpAuthFlow,
     clearMcpAuth,
-    expandedMcpEntries,
-    setExpandedMcpEntries,
     expandedModelProviders,
     setExpandedModelProviders,
     modelProviderTabs,
@@ -240,21 +231,17 @@ export default function AssetLibraryLocalView({
                 <div className="asset-library-body asset-library-body--mcp">
                     <AssetLibraryMcpManager
                         liveMcps={liveMcpServers}
-                        mcpDraftEntries={mcpDraftEntries}
-                        mcpCatalogDirty={mcpCatalogDirty}
+                        mcpEntries={mcpEntries}
                         mcpCatalogStatus={mcpCatalogStatus}
                         mcpCatalogSaving={mcpCatalogSaving}
                         runtimeReloadPending={runtimeReloadPending}
                         pendingMcpAuthName={pendingMcpAuthName}
-                        updateMcpEntry={updateMcpEntry}
-                        addMcpEntry={addMcpEntry}
-                        removeMcpEntry={removeMcpEntry}
-                        saveMcpCatalog={saveMcpCatalog}
+                        createMcpEntryDraft={createMcpEntryDraft}
+                        saveMcpEntry={saveMcpEntry}
+                        deleteMcpEntry={deleteMcpEntry}
                         connectMcpServer={connectMcpServer}
                         startMcpAuthFlow={startMcpAuthFlow}
                         clearMcpAuth={clearMcpAuth}
-                        expandedMcpEntries={expandedMcpEntries}
-                        setExpandedMcpEntries={setExpandedMcpEntries}
                     />
                 </div>
             ) : null}

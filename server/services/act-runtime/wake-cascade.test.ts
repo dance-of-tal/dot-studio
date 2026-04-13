@@ -5,15 +5,20 @@ import { promises as fs } from 'node:fs'
 import type { ActDefinition, MailboxEvent } from '../../../shared/act-types.js'
 
 const promptAsync = vi.fn()
+const disposeInstance = vi.fn()
 const sessionMessages = vi.fn()
 const waitForSessionToSettle = vi.fn()
 const resolveSessionExecutionContext = vi.fn()
 const resolvePerformerForWake = vi.fn()
 const prepareRuntimeForExecution = vi.fn()
 const countRunningSessions = vi.fn()
+const ensurePerformerProjection = vi.fn()
 
 vi.mock('../../lib/opencode.js', () => ({
     getOpencode: async () => ({
+        instance: {
+            dispose: disposeInstance,
+        },
         session: {
             promptAsync,
             messages: sessionMessages,
@@ -43,7 +48,7 @@ vi.mock('../runtime-reload-service.js', () => ({
 }))
 
 vi.mock('../opencode-projection/stage-projection-service.js', () => ({
-    ensurePerformerProjection: vi.fn(),
+    ensurePerformerProjection,
 }))
 
 const actDefinition: ActDefinition = {
@@ -77,9 +82,21 @@ describe('wake-cascade participant scheduling', () => {
         vi.resetModules()
         vi.useRealTimers()
         promptAsync.mockReset().mockResolvedValue({ data: { ok: true } })
+        disposeInstance.mockReset().mockResolvedValue(undefined)
         sessionMessages.mockReset().mockResolvedValue({ data: [] })
         waitForSessionToSettle.mockReset().mockResolvedValue(true)
         resolvePerformerForWake.mockReset().mockResolvedValue(null)
+        ensurePerformerProjection.mockReset().mockResolvedValue({
+            changed: false,
+            compiled: {
+                agentNames: {
+                    build: 'dot-studio/act/hash/Researcher--build',
+                },
+            },
+            toolMap: {
+                message_teammate: true,
+            },
+        })
         prepareRuntimeForExecution.mockReset().mockImplementation(async (_workingDir: string, buildPayload: () => Promise<unknown>) => ({
             appliedReload: false,
             requiresDispose: false,
@@ -296,6 +313,7 @@ describe('wake-cascade participant scheduling', () => {
         }
 
         resolvePerformerForWake.mockResolvedValue({
+            performerId: 'researcher-v1',
             performerName: 'Researcher',
             talRef: null,
             danceRefs: [],
@@ -362,12 +380,160 @@ describe('wake-cascade participant scheduling', () => {
         )
 
         await vi.advanceTimersByTimeAsync(500)
-        await Promise.resolve()
-        expect(promptAsync).toHaveBeenCalledTimes(1)
+        await vi.waitFor(() => {
+            expect(promptAsync).toHaveBeenCalledTimes(1)
+        })
         expect(promptAsync).toHaveBeenCalledWith(expect.objectContaining({
             sessionID: 'session-researcher',
             directory: tempDir,
         }))
         expect(mailbox.getMessagesFor('Researcher')).toHaveLength(0)
+    })
+
+    it('injects Act collaboration context into successful performer wake system prompts', async () => {
+        const { Mailbox } = await import('./mailbox.js')
+        const { processWakeCascade } = await import('./wake-cascade.js')
+
+        const mailbox = new Mailbox()
+        const threadId = 'thread-4'
+        mailbox.addMessage({
+            from: 'Lead',
+            to: 'Researcher',
+            content: 'Please review this handoff.',
+            tag: 'handoff',
+            threadId,
+        })
+
+        const event: MailboxEvent = {
+            id: 'evt-4',
+            type: 'message.sent',
+            sourceType: 'performer',
+            source: 'Lead',
+            timestamp: Date.now(),
+            payload: {
+                from: 'Lead',
+                to: 'Researcher',
+                tag: 'handoff',
+                threadId,
+            },
+        }
+
+        resolvePerformerForWake.mockResolvedValue({
+            performerId: 'researcher-v1',
+            performerName: 'Researcher',
+            talRef: null,
+            danceRefs: [],
+            model: { provider: 'openai', modelId: 'gpt-5.4' },
+            modelVariant: null,
+            mcpServerNames: [],
+        })
+
+        const threadManager = {
+            workingDir: tempDir,
+            getRecentEvents: vi.fn().mockResolvedValue([]),
+            getPerformerSession: vi.fn().mockReturnValue('session-researcher'),
+            getOrCreateSession: vi.fn(),
+            setParticipantStatus: vi.fn().mockResolvedValue(undefined),
+        } as const
+
+        const cascade = await processWakeCascade(
+            event,
+            actDefinition,
+            mailbox,
+            threadManager as never,
+            threadId,
+            tempDir,
+        )
+
+        expect(cascade.injected).toEqual(['Researcher'])
+        expect(promptAsync).toHaveBeenCalledWith(expect.objectContaining({
+            sessionID: 'session-researcher',
+            system: expect.stringContaining('# Collaboration Context'),
+        }))
+        expect(promptAsync).toHaveBeenCalledWith(expect.objectContaining({
+            parts: [{
+                type: 'text',
+                text: expect.stringContaining('Please review this handoff.'),
+            }],
+        }))
+    })
+
+    it('disposes and retries once when a wake hits an act agent registry miss', async () => {
+        const { Mailbox } = await import('./mailbox.js')
+        const { processWakeCascade } = await import('./wake-cascade.js')
+
+        const mailbox = new Mailbox()
+        const threadId = 'thread-5'
+        mailbox.addMessage({
+            from: 'Lead',
+            to: 'Researcher',
+            content: 'Please resume your analysis.',
+            threadId,
+        })
+
+        const event: MailboxEvent = {
+            id: 'evt-5',
+            type: 'message.sent',
+            sourceType: 'performer',
+            source: 'Lead',
+            timestamp: Date.now(),
+            payload: {
+                from: 'Lead',
+                to: 'Researcher',
+                threadId,
+            },
+        }
+
+        resolvePerformerForWake.mockResolvedValue({
+            performerId: 'researcher-v1',
+            performerName: 'Researcher',
+            talRef: null,
+            danceRefs: [],
+            model: { provider: 'openai', modelId: 'gpt-5.4' },
+            modelVariant: null,
+            mcpServerNames: [],
+        })
+        ensurePerformerProjection.mockResolvedValue({
+            changed: true,
+            compiled: {
+                agentNames: {
+                    build: 'dot-studio/act/hash/participant-researcher--build',
+                },
+            },
+            toolMap: {
+                message_teammate: true,
+            },
+        })
+        promptAsync
+            .mockRejectedValueOnce(new Error('Agent not found: "dot-studio/act/hash/participant-researcher--build". Available agents: build'))
+            .mockResolvedValueOnce({ data: { ok: true } })
+
+        const threadManager = {
+            workingDir: tempDir,
+            getRecentEvents: vi.fn().mockResolvedValue([]),
+            getPerformerSession: vi.fn().mockReturnValue('session-researcher'),
+            getOrCreateSession: vi.fn(),
+            setParticipantStatus: vi.fn().mockResolvedValue(undefined),
+        } as const
+
+        const cascade = await processWakeCascade(
+            event,
+            actDefinition,
+            mailbox,
+            threadManager as never,
+            threadId,
+            tempDir,
+        )
+
+        expect(cascade.injected).toEqual(['Researcher'])
+        expect(disposeInstance).toHaveBeenCalledTimes(1)
+        expect(disposeInstance).toHaveBeenCalledWith({ directory: tempDir })
+        expect(promptAsync).toHaveBeenCalledTimes(2)
+        expect(promptAsync).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            agent: 'dot-studio/act/hash/participant-researcher--build',
+        }))
+        expect(promptAsync).toHaveBeenNthCalledWith(2, expect.objectContaining({
+            agent: 'dot-studio/act/hash/participant-researcher--build',
+        }))
     })
 })

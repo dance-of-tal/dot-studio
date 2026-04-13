@@ -28,6 +28,7 @@ Use this skill when the user is asking about Act structure, relation design, or 
 - For workflow or team requests, a participant-only Act is usually incomplete and should be treated as wrong unless the user explicitly asked for an unconnected group.
 - If the user asks for something like a `d2c company`, `investment team`, or `review workflow`, create the Act with participants and relations in the same `createAct` action.
 - For a brand-new Act whose participants are already known, prefer one `createAct` with `participantPerformerRefs`, `participantPerformerIds`, or `participantPerformerNames` instead of follow-up attach actions.
+- For a direct team/workflow creation request, do not stop after creating performers if the intended Act is already clear.
 - Use `attachPerformerToAct` mainly when extending an existing Act.
 - If the Act needs missing participants, create the missing Performers first in cascade and make sure those Performers also match the user intent.
 - Always give each new relation both a clear `name` and `description`.
@@ -59,9 +60,8 @@ Use this skill when the user is asking about Act structure, relation design, or 
 - Inventing legacy fields such as `permissions`, `timeout`, or participant `id`.
 
 ## Self-Check
-- End with exactly one raw `<assistant-actions>...</assistant-actions>` block.
-- Do not emit bare JSON or fenced JSON for mutations.
-- For non-trivial mutation blocks, run `node scripts/typecheck-assistant-actions.mjs <path-or->` before applying or presenting the final block.
+- Use `apply_studio_actions` for mutations.
+- Do not emit bare JSON or fenced JSON for mutations in the reply text.
 - If the new Act has multiple participants and represents a workflow/team, include at least one relation.
 - Every new relation must include source, target, direction, name, and description.
 - The cascaded Performers and the final Act structure both reflect the user's requested intent.
@@ -72,8 +72,8 @@ Use this skill when the user is asking about Act structure, relation design, or 
 
 Example:
 
-```html
-<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"brand","name":"Brand Strategist"},{"type":"createPerformer","ref":"growth","name":"Growth Marketer"},{"type":"createPerformer","ref":"ops","name":"Ecommerce Operator"},{"type":"createAct","name":"D2C Company","participantPerformerRefs":["brand","growth","ops"],"relations":[{"sourcePerformerRef":"brand","targetPerformerRef":"growth","direction":"one-way","name":"campaign brief","description":"Brand Strategist hands positioning and campaign priorities to Growth Marketer."},{"sourcePerformerRef":"growth","targetPerformerRef":"ops","direction":"one-way","name":"launch handoff","description":"Growth Marketer hands launch requirements and expected volume to Ecommerce Operator."}]}]}</assistant-actions>
+```json
+{"version":1,"actions":[{"type":"createPerformer","ref":"brand","name":"Brand Strategist"},{"type":"createPerformer","ref":"growth","name":"Growth Marketer"},{"type":"createPerformer","ref":"ops","name":"Ecommerce Operator"},{"type":"createAct","name":"D2C Company","participantPerformerRefs":["brand","growth","ops"],"relations":[{"sourcePerformerRef":"brand","targetPerformerRef":"growth","direction":"one-way","name":"campaign brief","description":"Brand Strategist hands positioning and campaign priorities to Growth Marketer."},{"sourcePerformerRef":"growth","targetPerformerRef":"ops","direction":"one-way","name":"launch handoff","description":"Growth Marketer hands launch requirements and expected volume to Ecommerce Operator."}]}]}
 ```
 
 ## Legacy Fields To Avoid

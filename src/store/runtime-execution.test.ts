@@ -36,7 +36,7 @@ describe('preparePendingRuntimeExecution', () => {
         expect(result.reason).toBe('runtime_reload')
     })
 
-    it('blocks projection changes while a session is running', async () => {
+    it('saves workspace for affected projection changes without client-side blocking', async () => {
         const saveWorkspace = vi.fn(async () => {})
         const state = createState({
             workspaceDirty: true,
@@ -70,12 +70,35 @@ describe('preparePendingRuntimeExecution', () => {
         })
 
         expect(saveWorkspace).toHaveBeenCalledTimes(1)
-        expect(result.blocked).toBe(true)
+        expect(result.blocked).toBe(false)
         expect(result.requiresDispose).toBe(true)
-        expect(result.reason).toBe('projection_update_pending')
+        expect(result.reason).toBeNull()
     })
 
-    it('blocks projection changes when any session is running because dispose is workspace-scoped', async () => {
+    it('saves workspace when unrelated projection dirtiness still needs server-side adoption', async () => {
+        const saveWorkspace = vi.fn(async () => {})
+        const state = createState({
+            workspaceDirty: true,
+            projectionDirty: {
+                performerIds: ['performer-2'],
+                actIds: [],
+                draftIds: [],
+                workspaceWide: false,
+            },
+            saveWorkspace,
+        })
+
+        const result = await preparePendingRuntimeExecution(() => state, {
+            performerId: 'performer-1',
+            runtimeConfig: { talRef: null, danceRefs: [] },
+        })
+
+        expect(saveWorkspace).toHaveBeenCalledTimes(1)
+        expect(result.blocked).toBe(false)
+        expect(result.requiresDispose).toBe(false)
+    })
+
+    it('does not client-block projection changes when another session is running', async () => {
         const state = createState({
             projectionDirty: {
                 performerIds: ['performer-2'],
@@ -105,12 +128,12 @@ describe('preparePendingRuntimeExecution', () => {
             runtimeConfig: { talRef: null, danceRefs: [] },
         })
 
-        expect(result.blocked).toBe(true)
+        expect(result.blocked).toBe(false)
         expect(result.requiresDispose).toBe(true)
-        expect(result.reason).toBe('projection_update_pending')
+        expect(result.reason).toBeNull()
     })
 
-    it('ignores stale loading once the session status is idle', async () => {
+    it('does not care about idle session state when preparing projection changes', async () => {
         const state = createState({
             projectionDirty: {
                 performerIds: ['performer-2'],
@@ -145,7 +168,7 @@ describe('preparePendingRuntimeExecution', () => {
         expect(result.requiresDispose).toBe(true)
     })
 
-    it('ignores stale optimistic loading once a settled assistant snapshot exists even without explicit idle status', async () => {
+    it('does not care about settled optimistic loading when preparing projection changes', async () => {
         const state = createState({
             projectionDirty: {
                 performerIds: ['performer-2'],
@@ -191,7 +214,7 @@ describe('preparePendingRuntimeExecution', () => {
         expect(result.requiresDispose).toBe(true)
     })
 
-    it('blocks when a running session shares the same runtime draft', async () => {
+    it('keeps draft-scoped projection changes unblocked on the client', async () => {
         const state = createState({
             projectionDirty: {
                 performerIds: [],
@@ -222,11 +245,12 @@ describe('preparePendingRuntimeExecution', () => {
             runtimeConfig: { talRef: { kind: 'draft', draftId: 'draft-shared' }, danceRefs: [] },
         })
 
-        expect(result.blocked).toBe(true)
-        expect(result.reason).toBe('projection_update_pending')
+        expect(result.blocked).toBe(false)
+        expect(result.requiresDispose).toBe(true)
+        expect(result.reason).toBeNull()
     })
 
-    it('ignores wait_until parked sessions even when stale loading remains', async () => {
+    it('does not special-case parked sessions because projection blocking is server-authoritative', async () => {
         const state = createState({
             projectionDirty: {
                 performerIds: ['performer-2'],

@@ -1,6 +1,5 @@
 import type { StateCreator } from 'zustand'
 import type { StudioState, IntegrationSlice } from './types'
-import type { AdapterViewEvent } from '../../shared/adapter-view'
 import { api } from '../api'
 import { logChatDebug } from '../lib/chat-debug'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers'
@@ -36,6 +35,7 @@ import {
     shouldStartSessionSupervision,
     shouldStopSessionSupervision,
 } from './chat/session-recovery'
+import type { ProjectionDirtyPatch } from '../../shared/projection-dirty'
 
 type ChatEvent = {
     type?: string
@@ -116,8 +116,6 @@ export const createIntegrationSlice: StateCreator<
 
     let eventSourceInstance: EventSource | null = null
     let eventSourceWorkingDir: string | null = null
-    let adapterEventSourceInstance: EventSource | null = null
-    let adapterEventSourceWorkingDir: string | null = null
 
     const chatSlot: EventSourceSlot = {
         getInstance: () => eventSourceInstance,
@@ -127,17 +125,6 @@ export const createIntegrationSlice: StateCreator<
         getWorkingDir: () => eventSourceWorkingDir,
         setWorkingDir: (next) => {
             eventSourceWorkingDir = next
-        },
-    }
-
-    const adapterSlot: EventSourceSlot = {
-        getInstance: () => adapterEventSourceInstance,
-        setInstance: (next) => {
-            adapterEventSourceInstance = next
-        },
-        getWorkingDir: () => adapterEventSourceWorkingDir,
-        setWorkingDir: (next) => {
-            adapterEventSourceWorkingDir = next
         },
     }
 
@@ -401,10 +388,23 @@ export const createIntegrationSlice: StateCreator<
                     return
                 }
 
-                 if (event.type === 'act.thread.updated') {
+                if (event.type === 'act.thread.updated') {
                     const thread = (event.properties as { thread?: ActThreadRuntimeSnapshot } | undefined)?.thread
                     if (thread) {
                         void handleActThreadUpdated(thread)
+                    }
+                    return
+                }
+
+                if (event.type === 'runtime.projection.consumed') {
+                    const patch = (event.properties as { patch?: ProjectionDirtyPatch } | undefined)?.patch
+                    if (patch) {
+                        get().clearProjectionDirty({
+                            performerIds: patch.performerIds || [],
+                            actIds: patch.actIds || [],
+                            draftIds: patch.draftIds || [],
+                            workspaceWide: patch.workspaceWide === true,
+                        })
                     }
                     return
                 }
@@ -512,32 +512,6 @@ export const createIntegrationSlice: StateCreator<
         },
     })
 
-    const reconnectAdapterEventSource = () => {
-        reconnectManagedEventSource({
-            slot: adapterSlot,
-            resolveWorkingDir: () => get().workingDir || null,
-            createEventSource: () => api.adapter.events(),
-            onMessage: (data: unknown) => {
-                const event = data as AdapterViewEvent
-                if (event.type === 'adapter.updated') {
-                    get().upsertAdapterViewProjection(event.projection)
-                    return
-                }
-                if (event.type === 'adapter.cleared') {
-                    const current = get().adapterViewsByPerformer[event.performerId] || {}
-                    const next = { ...current }
-                    delete next[event.adapterId]
-                    set((state) => ({
-                        adapterViewsByPerformer: {
-                            ...state.adapterViewsByPerformer,
-                            [event.performerId]: next,
-                        },
-                    }))
-                }
-            },
-        })
-    }
-
     return ({
         lspServers: [],
         lspDiagnostics: {},
@@ -553,7 +527,6 @@ export const createIntegrationSlice: StateCreator<
 
         initRealtimeEvents: () => {
             reconnectEventSource()
-            reconnectAdapterEventSource()
             api.chat.listPendingPermissions().then((permissions) => {
                 if (permissions.length === 0) {
                     return
@@ -574,15 +547,11 @@ export const createIntegrationSlice: StateCreator<
         forceReconnectRealtimeEvents: () => {
             resetManagedEventSource(chatSlot)
             reconnectEventSource()
-            resetManagedEventSource(adapterSlot)
-            reconnectAdapterEventSource()
         },
 
         cleanupRealtimeEvents: () => {
             closeManagedEventSource(chatSlot)
-            closeManagedEventSource(adapterSlot)
             chatSlot.setWorkingDir(null)
-            adapterSlot.setWorkingDir(null)
             eventIngest.dispose()
             sessionSupervisor.dispose()
             syncingSessions.clear()

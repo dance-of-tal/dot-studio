@@ -6,26 +6,44 @@
     gap: var(--space-3);
 }
 
+.asset-authoring-row__note--compact {
+    flex: 1;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .asset-mcp-editor-list {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    padding: 0 var(--space-5);
-    padding-bottom: var(--space-3);
+    padding: 0 var(--space-5) var(--space-3);
 }
 
-/* ── MCP Entry Card ─────────────────────────── */
 .asset-mcp-editor {
     display: flex;
     flex-direction: column;
     padding: 12px;
     cursor: default;
     overflow: hidden;
-    transition: border-color 0.15s;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .asset-mcp-editor.asset-card:active {
     cursor: default;
+}
+
+.asset-mcp-editor--card-draggable {
+    cursor: grab;
+}
+
+.asset-mcp-editor--card-draggable.asset-card:active {
+    cursor: grabbing;
 }
 
 .asset-mcp-editor--dragging {
@@ -36,9 +54,31 @@
 .asset-mcp-editor__header-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     margin-left: auto;
     flex-shrink: 0;
+}
+
+.asset-mcp-editor__collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-sm);
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--font-xs);
+    font-weight: 600;
+    line-height: 1;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.asset-mcp-editor__collapse-btn:hover {
+    background: var(--bg-selected);
+    border-color: var(--border-strong);
+    color: var(--text-primary);
 }
 
 .asset-mcp-editor__drag-handle {
@@ -70,31 +110,6 @@
     cursor: not-allowed;
 }
 
-.asset-mcp-editor__title {
-    font-size: var(--font-md);
-    font-weight: 700;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.asset-mcp-editor__meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-top: 2px;
-    font-size: var(--font-sm);
-    color: var(--text-secondary);
-}
-
-.asset-mcp-editor__meta span {
-    text-transform: none;
-    font-weight: 500;
-    letter-spacing: 0;
-}
-
-/* ── Status Dot ─────────────────────────── */
 .asset-mcp-editor__status-dot {
     width: 8px;
     height: 8px;
@@ -117,7 +132,7 @@
 
 .asset-mcp-editor__status-dot--disabled {
     background: var(--status-neutral-dim);
-    opacity: 0.5;
+    opacity: 0.6;
 }
 
 .asset-mcp-editor__status-dot--needs_auth,
@@ -131,13 +146,18 @@
     box-shadow: 0 0 6px var(--status-danger-bg);
 }
 
-/* ── Collapsible Body ─────────────────────────── */
+.asset-mcp-editor__desc-row {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
 .asset-mcp-editor__body {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-3);
     margin: 10px -12px 0;
-    padding: 12px;
+    padding: 14px 12px 0;
     border-top: 1px solid var(--border-main);
 }
 
@@ -145,7 +165,6 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
-    margin-top: var(--space-4);
 }
 
 .asset-mcp-editor__field {
@@ -158,7 +177,8 @@
     grid-column: 1 / -1;
 }
 
-.asset-mcp-editor__field>span {
+.asset-mcp-editor__field > span,
+.asset-mcp-list-field__label {
     font-size: var(--font-sm);
     font-weight: 600;
     color: var(--text-secondary);
@@ -166,62 +186,11 @@
     letter-spacing: 0.04em;
 }
 
-.asset-mcp-editor__textarea {
-    min-height: 60px;
-    resize: vertical;
-}
-
-/* ── Actions ─────────────────────────────────── */
-.asset-mcp-editor__actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin: 0 -12px -12px;
-    padding: 0 12px 12px;
-}
-
-.asset-mcp-editor__actions .btn {
-    font-size: var(--font-base);
-    padding: var(--space-1) var(--space-4);
-}
-
-.asset-mcp-editor__actions .btn--danger {
-    color: var(--status-danger);
-    border-color: var(--status-danger-bg);
-}
-
-.asset-mcp-editor__actions .btn--danger:hover {
-    background: var(--status-danger-bg);
-}
-
-.asset-mcp-editor__actions .btn--primary {
-    background: color-mix(in srgb, var(--mcp-color) 10%, var(--bg-primary));
-    color: var(--text-primary);
-    border-color: color-mix(in srgb, var(--mcp-color) 28%, var(--border-main));
-}
-
-.asset-mcp-editor__actions .btn--primary:hover {
-    background: color-mix(in srgb, var(--mcp-color) 14%, var(--bg-primary));
-}
-
-.asset-mcp-editor__actions .btn--primary:disabled {
-    opacity: 1;
-    background: color-mix(in srgb, var(--mcp-bg) 90%, var(--bg-card));
-    color: var(--text-primary);
-    border-color: color-mix(in srgb, var(--mcp-color) 24%, var(--border-main));
-}
-
-.asset-mcp-editor--expanded .asset-card__edit-btn {
-    opacity: 0.85;
-}
-
-/* ── Transport Tabs ───────────────────────────── */
 .asset-mcp-tabs {
     display: flex;
     border: 1px solid var(--border-main);
     border-radius: var(--radius);
     overflow: hidden;
-    margin-top: var(--space-4);
 }
 
 .asset-mcp-tab {
@@ -233,7 +202,7 @@
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
 .asset-mcp-tab + .asset-mcp-tab {
@@ -250,20 +219,18 @@
     color: var(--text-primary);
 }
 
-/* ── Dynamic list field ───────────────────────── */
 .asset-mcp-list-field {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    padding-top: var(--space-4);
 }
 
-.asset-mcp-list-field__label {
-    font-size: var(--font-sm);
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+.asset-mcp-list-field__add {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding-left: 0;
 }
 
 .asset-mcp-list-row {
@@ -285,13 +252,104 @@
     flex: 2;
 }
 
+.asset-mcp-editor__footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0 -12px -12px;
+    padding: 12px;
+    border-top: 1px solid color-mix(in srgb, var(--border-main) 80%, transparent);
+    background: color-mix(in srgb, var(--bg-hover) 68%, transparent);
+}
+
+.asset-mcp-editor__footer-note {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--font-xs);
+    color: var(--text-muted);
+}
+
+.asset-mcp-editor__action-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.asset-mcp-editor__action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.asset-mcp-editor__action-row .btn {
+    justify-content: center;
+}
+
+.asset-card__edit-btn:disabled {
+    opacity: 0.2;
+    cursor: default;
+}
+
+.act-panel__tip-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    cursor: help;
+    opacity: 0.6;
+    transition: opacity 0.15s ease, color 0.15s ease;
+    margin-left: 2px;
+}
+
+.act-panel__tip-icon:hover {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.act-panel__tip-popup {
+    position: fixed;
+    z-index: 9999;
+    width: 200px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.45;
+    color: #fff;
+    background: rgba(30, 30, 30, 0.95);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+    white-space: normal;
+    word-wrap: break-word;
+    animation: tipFadeIn 0.15s ease forwards;
+}
+
+@keyframes tipFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 @media (max-width: 900px) {
+    .asset-authoring-row__note--compact {
+        white-space: normal;
+    }
+
     .asset-mcp-editor__grid {
         grid-template-columns: 1fr;
     }
 
-    .asset-mcp-editor__actions {
+    .asset-mcp-editor__action-row {
         flex-direction: column;
-        align-items: stretch;
+    }
+
+    .asset-mcp-editor__action-row .btn {
+        width: 100%;
     }
 }

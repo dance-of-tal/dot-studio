@@ -194,7 +194,6 @@ export const api = {
     agents: opencodeApi.agents,
     tools: opencodeApi.tools,
     runtime: opencodeApi.runtime,
-    adapter: opencodeApi.adapter,
     config: opencodeApi.config,
     providers: opencodeApi.providers,
     provider: opencodeApi.provider,

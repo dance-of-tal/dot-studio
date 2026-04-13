@@ -14,9 +14,16 @@ import { buildWakePrompt, markMessagesDelivered } from './wake-prompt-builder.js
 import { SessionQueue } from './session-queue.js'
 import type { Mailbox } from './mailbox.js'
 import type { ThreadManager } from './thread-manager.js'
-import { ACT_AGENT_POSTURE } from '../../lib/act-session-policy.js'
 import { serverDebug } from '../../lib/server-logger.js'
 import { formatActSessionError, resolveActSessionSettlementOutcome } from './act-session-settlement.js'
+import { eventMatchesConditionExpr } from './wake-evaluator.js'
+import { clearActSessionWaitUntilParked } from './wait-until-session-park.js'
+import { buildTextPromptParts } from '../turn-prompt-service.js'
+import { buildProjectionDirtyPatch } from '../opencode-projection/projection-dirty-patch.js'
+import { publishProjectionConsumed } from '../runtime-execution-events.js'
+import { unwrapOpencodeResult } from '../../lib/opencode-errors.js'
+import { retryOnAgentRegistryMiss } from '../../lib/opencode-prompt.js'
+import { buildActToolMap, ensureActToolFiles } from './act-tool-files.js'
 
 // Module-level session queue (one per thread)
 const sessionQueues: Map<string, SessionQueue> = new Map()
@@ -187,43 +194,6 @@ export interface WakeCascadeResult {
  * Fallback: write generic Act tools to execution dir when performer projection
  * is unavailable (no model config or projection failure).
  */
-async function writeGenericActTools(
-    executionDir: string,
-    workingDir: string,
-): Promise<void> {
-    const { getStaticActTools, COLLABORATION_TOOL_NAMES, LEGACY_COLLABORATION_TOOL_NAMES } = await import('./act-tools.js')
-    const actTools = getStaticActTools(workingDir)
-    const { promises: fsPromises } = await import('node:fs')
-    const { join } = await import('node:path')
-    const toolsDir = join(executionDir, '.opencode', 'tools')
-    await fsPromises.mkdir(toolsDir, { recursive: true })
-
-    // Clean stale suffixed act tools
-    const genericToolNames = new Set<string>(actTools.map(t => t.name))
-    const collaborationToolNames = new Set<string>([
-        ...COLLABORATION_TOOL_NAMES,
-        ...LEGACY_COLLABORATION_TOOL_NAMES,
-    ])
-    try {
-        const existing = await fsPromises.readdir(toolsDir)
-        for (const file of existing) {
-            if (file.endsWith('.ts')) {
-                const toolName = file.replace(/\.ts$/, '')
-                if (collaborationToolNames.has(toolName) && !genericToolNames.has(toolName)) {
-                    await fsPromises.rm(join(toolsDir, file), { force: true }).catch(() => {})
-                }
-            }
-        }
-    } catch {
-        // tools dir may not exist yet
-    }
-
-    for (const tool of actTools) {
-        const toolPath = join(toolsDir, `${tool.name}.ts`)
-        await fsPromises.writeFile(toolPath, tool.content, 'utf-8')
-    }
-}
-
 async function drainNextQueuedWake(
     actDefinition: ActDefinition,
     mailbox: Mailbox,
@@ -294,6 +264,7 @@ async function injectWakeTarget(
         const { getOpencode } = await import('../../lib/opencode.js')
         const oc = await getOpencode()
         const { resolveSessionOwnership } = await import('../session-ownership-service.js')
+        const { countRunningSessions } = await import('../runtime-reload-service.js')
 
         // Resolve performer config from workspace (model, TAL, Dance, MCP)
         const { resolvePerformerForWake } = await import('./wake-performer-resolver.js')
@@ -352,9 +323,7 @@ async function injectWakeTarget(
             threadId,
             threadManager.workingDir,
         )
-        const actExtraTools = actProjection.tools
-        const collaborationPromptSection = actProjection.contextPrompt
-        let promptText = prompt
+        const actSystemPrompt = actProjection.systemPrompt
 
         let agentName: string | undefined
         let modelOverride: { providerID: string; modelID: string } | undefined
@@ -368,7 +337,7 @@ async function injectWakeTarget(
                 )
                 const { prepareRuntimeForExecution } = await import('../runtime-preparation-service.js')
                 const prepared = await prepareRuntimeForExecution(threadManager.workingDir, () => ensurePerformerProjection({
-                    performerId: participantKey,
+                    performerId: performerConfig.performerId,
                     performerName: performerConfig.performerName,
                     talRef: performerConfig.talRef,
                     danceRefs: performerConfig.danceRefs,
@@ -376,10 +345,6 @@ async function injectWakeTarget(
                     modelVariant: performerConfig.modelVariant,
                     mcpServerNames: performerConfig.mcpServerNames,
                     workingDir: threadManager.workingDir,
-                    scope: 'act',
-                    actId: actDefinition.id,
-                    collaborationPromptSection,
-                    extraTools: actExtraTools,
                 }))
                 if (prepared.blocked) {
                     console.warn(`[wake-cascade] Projection update blocked for "${participantKey}" while another working-dir session is running`)
@@ -401,10 +366,20 @@ async function injectWakeTarget(
                     return result
                 }
                 const ensured = prepared.payload
-                // Act scope always uses build agent, ignoring performer planMode
-                const buildAgent = ensured.compiled.agentNames[ACT_AGENT_POSTURE]
+                if (prepared.requiresDispose) {
+                    publishProjectionConsumed(threadManager.workingDir, buildProjectionDirtyPatch({
+                        performerId: performerConfig.performerId,
+                        actId: actDefinition.id,
+                        talRef: performerConfig.talRef,
+                        danceRefs: performerConfig.danceRefs,
+                    }))
+                }
+                const buildAgent = ensured.compiled.agentNames.build
                 if (buildAgent) agentName = buildAgent
-                projectedTools = ensured.toolMap
+                projectedTools = {
+                    ...ensured.toolMap,
+                    ...buildActToolMap(),
+                }
                 modelOverride = {
                     providerID: performerConfig.model.provider,
                     modelID: performerConfig.model.modelId,
@@ -412,31 +387,41 @@ async function injectWakeTarget(
                 serverDebug('wake-cascade', `Performer projection done for "${participantKey}" model=${performerConfig.model.modelId}`)
             } catch (projErr) {
                 console.warn(`[wake-cascade] Performer projection failed for "${participantKey}", falling back to generic tools:`, projErr)
-                // Fallback: write generic Act tools only
-                promptText = [collaborationPromptSection, prompt].filter(Boolean).join('\n\n---\n\n')
-                await writeGenericActTools(
+                // Fallback: write generic Act tools only.
+                await ensureActToolFiles(
                     executionDir,
                     threadManager.workingDir,
                 )
+                projectedTools = buildActToolMap()
             }
         } else {
             // No performer model — write generic Act tools only
             serverDebug('wake-cascade', `No model config for "${participantKey}", using generic Act tools only`)
-            promptText = [collaborationPromptSection, prompt].filter(Boolean).join('\n\n---\n\n')
-            await writeGenericActTools(
+            await ensureActToolFiles(
                 executionDir,
                 threadManager.workingDir,
             )
+            projectedTools = buildActToolMap()
         }
 
-        await oc.session.promptAsync({
-            sessionID: sessionId,
+        await ensureActToolFiles(executionDir, threadManager.workingDir)
+        await retryOnAgentRegistryMiss({
+            oc,
             directory: executionDir,
-            agent: agentName,
-            model: modelOverride,
-            tools: projectedTools,
-            parts: [{ type: 'text', text: promptText }],
+            agentName,
+            getRunningSessions: async (directory) => (await countRunningSessions(directory)).runningSessions,
+            logLabel: 'wake-cascade',
+            run: async () => unwrapOpencodeResult(await oc.session.promptAsync({
+                sessionID: sessionId,
+                directory: executionDir,
+                agent: agentName,
+                model: modelOverride,
+                system: actSystemPrompt || undefined,
+                tools: projectedTools,
+                parts: buildTextPromptParts(prompt),
+            })),
         })
+        clearActSessionWaitUntilParked(sessionId)
         markMessagesDelivered(mailbox, participantKey)
 
         result.injected.push(participantKey)
@@ -603,6 +588,19 @@ export async function processWakeTargets(
 
     for (const target of targets) {
         const participantKey = target.participantKey
+
+        if (target.reason === 'wake-condition' && target.wakeCondition) {
+            queue.prune(participantKey, (queuedTarget) => {
+                if (queuedTarget.reason !== 'subscription') {
+                    return false
+                }
+                return eventMatchesConditionExpr(
+                    target.wakeCondition!.condition,
+                    queuedTarget.triggerEvent,
+                    actDefinition,
+                )
+            })
+        }
 
         // Serialize only same-participant wake-ups.
         // Different participants may run concurrently within the same thread.

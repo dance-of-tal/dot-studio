@@ -1,252 +1,263 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-    extractAssistantActionEnvelope,
+    ASSISTANT_MUTATION_TOOL_NAME,
+    getAssistantMessageActionCalls,
+    getPendingAssistantToolMessages,
+    parseAssistantActionEnvelope,
     lintAssistantActionEnvelope,
-    stripAssistantActionBlock,
 } from './assistant-protocol'
 
 describe('assistant-protocol', () => {
-    it('extracts assistant action envelope and strips it from visible content', () => {
-        const content = [
-            'I created a review flow for you.',
-            '',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createAct","name":"Review Flow"}]}</assistant-actions>',
-        ].join('\n')
+    it('parses a valid tool input envelope', () => {
+        const envelope = parseAssistantActionEnvelope({
+            version: 1,
+            actions: [{ type: 'createAct', name: 'Review Flow' }],
+        })
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.content).toBe('I created a review flow for you.')
-        expect(result.envelope?.version).toBe(1)
-        expect(result.envelope?.actions).toHaveLength(1)
+        expect(envelope?.actions).toHaveLength(1)
     })
 
-    it('returns original content when the action block is invalid', () => {
-        const content = 'hello\n<assistant-actions>{bad json}</assistant-actions>'
+    it('rejects invalid action payloads from tool input', () => {
+        const envelope = parseAssistantActionEnvelope({
+            version: 1,
+            actions: [{ type: 'updatePerformer', model: { provider: 'openai', modelId: 'gpt-4.1' } }],
+        })
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope).toBeNull()
-        expect(stripAssistantActionBlock(content)).toBe('hello')
+        expect(envelope).toBeNull()
     })
 
-    it('rejects envelopes with invalid action payloads', () => {
-        const content = [
-            'hello',
-            '<assistant-actions>{"version":1,"actions":[{"type":"updatePerformer","model":{"provider":"openai","modelId":"gpt-4.1"}}]}</assistant-actions>',
-        ].join('\n')
+    it('parses a valid tool input envelope from JSON text', () => {
+        const envelope = parseAssistantActionEnvelope(JSON.stringify({
+            version: 1,
+            actions: [{ type: 'createPerformer', ref: 'writer', name: 'Writer' }],
+        }))
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope).toBeNull()
-        expect(result.content).toBe('hello')
+        expect(envelope?.actions).toHaveLength(1)
+        expect(envelope?.actions[0]).toMatchObject({ type: 'createPerformer', name: 'Writer' })
     })
 
-    it('accepts draft creation and performer update actions', () => {
-        const content = [
-            'Created a reviewer setup.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createTalDraft","ref":"reviewer-tal","name":"Reviewer Tal","content":"# Role\\nReview carefully."},{"type":"createDanceDraft","ref":"review-dance","name":"Review Dance","content":"# Goal\\nReview PRs."},{"type":"createPerformer","ref":"reviewer","name":"Reviewer"},{"type":"updatePerformer","performerRef":"reviewer","talDraftRef":"reviewer-tal","addDanceDraftRefs":["review-dance"]}]}</assistant-actions>',
-        ].join('\n')
+    it('normalizes empty performer Tal placeholders before linting', () => {
+        const envelope = parseAssistantActionEnvelope({
+            version: 1,
+            actions: [{
+                type: 'createPerformer',
+                ref: 'brand',
+                name: 'Brand Strategist',
+                model: { provider: 'openai', modelId: 'gpt-5.3-codex' },
+                talUrn: null,
+                talDraftId: '',
+                talDraftRef: '',
+                talDraft: {
+                    ref: '',
+                    name: '',
+                    content: '',
+                    slug: '',
+                    description: '',
+                    tags: [],
+                    openEditor: false,
+                },
+            }],
+        })
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(4)
-        expect(result.content).toBe('Created a reviewer setup.')
+        expect(envelope).not.toBeNull()
+        expect(envelope?.actions[0]).toMatchObject({
+            type: 'createPerformer',
+            ref: 'brand',
+            name: 'Brand Strategist',
+            model: { provider: 'openai', modelId: 'gpt-5.3-codex' },
+        })
+        expect((envelope?.actions[0] as { talDraft?: unknown }).talDraft).toBeUndefined()
+        expect((envelope?.actions[0] as { talDraftId?: unknown }).talDraftId).toBeUndefined()
+        expect((envelope?.actions[0] as { talDraftRef?: unknown }).talDraftRef).toBeUndefined()
+        expect(lintAssistantActionEnvelope(envelope!)).toEqual([])
     })
 
-    it('accepts Tal draft CRUD envelopes', () => {
-        const content = [
-            'Updated the Tal draft.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createTalDraft","ref":"tal","name":"Writer Tal","content":"# Role"},{"type":"updateTalDraft","draftRef":"tal","content":"# Updated Role"},{"type":"deleteTalDraft","draftRef":"tal"}]}</assistant-actions>',
-        ].join('\n')
+    it('extracts completed assistant mutation tool calls in order', () => {
+        const calls = getAssistantMessageActionCalls({
+            parts: [
+                {
+                    id: 'tool-1',
+                    type: 'tool',
+                    tool: {
+                        name: ASSISTANT_MUTATION_TOOL_NAME,
+                        callId: 'call-1',
+                        status: 'completed',
+                        input: {
+                            version: 1,
+                            actions: [{ type: 'createPerformer', ref: 'writer', name: 'Writer' }],
+                        },
+                    },
+                },
+                {
+                    id: 'tool-2',
+                    type: 'tool',
+                    tool: {
+                        name: ASSISTANT_MUTATION_TOOL_NAME,
+                        callId: 'call-2',
+                        status: 'completed',
+                        input: {
+                            version: 1,
+                            actions: [{ type: 'createAct', name: 'Review Flow', participantPerformerNames: ['Writer'] }],
+                        },
+                    },
+                },
+            ],
+        })
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(3)
-        expect(result.content).toBe('Updated the Tal draft.')
+        expect(calls).toHaveLength(2)
+        expect(calls[0].callId).toBe('call-1')
+        expect(calls[0].actions[0]).toMatchObject({ type: 'createPerformer', name: 'Writer' })
+        expect(calls[1].callId).toBe('call-2')
+        expect(calls[1].actions[0]).toMatchObject({ type: 'createAct', name: 'Review Flow' })
     })
 
-    it('accepts Dance draft CRUD envelopes', () => {
-        const content = [
-            'Updated the Dance draft.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createDanceDraft","ref":"dance","name":"Review Skill","content":"# Skill"},{"type":"updateDanceDraft","draftRef":"dance","content":"# Updated Skill"},{"type":"deleteDanceDraft","draftRef":"dance"}]}</assistant-actions>',
-        ].join('\n')
+    it('ignores non-completed or non-assistant tool parts', () => {
+        const calls = getAssistantMessageActionCalls({
+            parts: [
+                {
+                    id: 'tool-1',
+                    type: 'tool',
+                    tool: {
+                        name: ASSISTANT_MUTATION_TOOL_NAME,
+                        callId: 'call-1',
+                        status: 'running',
+                        input: {
+                            version: 1,
+                            actions: [{ type: 'createPerformer', name: 'Writer' }],
+                        },
+                    },
+                },
+                {
+                    id: 'tool-2',
+                    type: 'tool',
+                    tool: {
+                        name: 'read_file',
+                        callId: 'call-2',
+                        status: 'completed',
+                    },
+                },
+            ],
+        })
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(3)
-        expect(result.content).toBe('Updated the Dance draft.')
+        expect(calls).toEqual([])
     })
 
-    it('accepts Performer Stage CRUD envelopes', () => {
-        const content = [
-            'Updated the performer.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"writer","name":"Writer"},{"type":"updatePerformer","performerRef":"writer","name":"Senior Writer"},{"type":"deletePerformer","performerRef":"writer"}]}</assistant-actions>',
-        ].join('\n')
+    it('accepts assistant mutation tool calls identified by metadata and string input', () => {
+        const calls = getAssistantMessageActionCalls({
+            parts: [
+                {
+                    id: 'tool-1',
+                    type: 'tool',
+                    tool: {
+                        name: 'unknown',
+                        callId: 'call-1',
+                        status: 'completed',
+                        metadata: {
+                            studioAssistantMutation: true,
+                        },
+                        input: JSON.stringify({
+                            version: 1,
+                            actions: [{ type: 'createAct', name: 'Review Flow' }],
+                        }) as unknown as Record<string, unknown>,
+                    },
+                },
+            ],
+        })
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(3)
-        expect(result.content).toBe('Updated the performer.')
+        expect(calls).toHaveLength(1)
+        expect(calls[0].actions[0]).toMatchObject({ type: 'createAct', name: 'Review Flow' })
     })
 
-    it('accepts Act Stage CRUD envelopes', () => {
-        const content = [
-            'Updated the act.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createAct","ref":"review","name":"Code Review"},{"type":"updateAct","actRef":"review","actRules":["Escalate blockers quickly."]},{"type":"deleteAct","actRef":"review"}]}</assistant-actions>',
-        ].join('\n')
+    it('collects unapplied assistant tool messages without waiting for session idle', () => {
+        const pending = getPendingAssistantToolMessages([
+            {
+                id: 'msg-1',
+                role: 'assistant',
+                parts: [
+                    {
+                        id: 'tool-1',
+                        type: 'tool',
+                        tool: {
+                            name: ASSISTANT_MUTATION_TOOL_NAME,
+                            callId: 'call-1',
+                            status: 'completed',
+                            input: {
+                                version: 1,
+                                actions: [{ type: 'createPerformer', name: 'Writer' }],
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                id: 'msg-2',
+                role: 'assistant',
+                parts: [],
+            },
+            {
+                id: 'msg-3',
+                role: 'user',
+                parts: [
+                    {
+                        id: 'tool-2',
+                        type: 'tool',
+                        tool: {
+                            name: ASSISTANT_MUTATION_TOOL_NAME,
+                            callId: 'call-2',
+                            status: 'completed',
+                            input: {
+                                version: 1,
+                                actions: [{ type: 'createAct', name: 'Review Flow' }],
+                            },
+                        },
+                    },
+                ],
+            },
+        ], {})
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(3)
-        expect(result.content).toBe('Updated the act.')
+        expect(pending).toHaveLength(1)
+        expect(pending[0]).toMatchObject({
+            messageId: 'msg-1',
+        })
+        expect(pending[0].actionCalls[0].actions[0]).toMatchObject({ type: 'createPerformer', name: 'Writer' })
     })
 
-    it('accepts raw JSON envelopes without the assistant-actions wrapper', () => {
-        const content = '{"version":1,"actions":[{"type":"createAct","name":"Investment Team"}]}'
+    it('skips assistant messages that were already applied', () => {
+        const pending = getPendingAssistantToolMessages([
+            {
+                id: 'msg-1',
+                role: 'assistant',
+                parts: [
+                    {
+                        id: 'tool-1',
+                        type: 'tool',
+                        tool: {
+                            name: ASSISTANT_MUTATION_TOOL_NAME,
+                            callId: 'call-1',
+                            status: 'completed',
+                            input: {
+                                version: 1,
+                                actions: [{ type: 'createPerformer', name: 'Writer' }],
+                            },
+                        },
+                    },
+                ],
+            },
+        ], { 'msg-1': true })
 
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(1)
-        expect(result.content).toBe('')
+        expect(pending).toEqual([])
     })
 
-    it('accepts dependency-complete createPerformer payloads', () => {
-        const content = [
-            'Created the researcher.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"researcher","name":"Researcher","talDraft":{"name":"Researcher Tal","content":"You research carefully."},"addDanceDrafts":[{"name":"Source Validation","content":"# Source Validation"}]}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(1)
-        expect(result.content).toBe('Created the researcher.')
-    })
-
-    it('accepts install and import actions', () => {
-        const content = [
-            'Imported the setup.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"installRegistryAsset","urn":"performer/@acme/reviewer","scope":"stage"},{"type":"importInstalledPerformer","urn":"performer/@acme/reviewer"},{"type":"addDanceFromGitHub","source":"owner/repo@review-skill","scope":"stage"}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(3)
-        expect(result.content).toBe('Imported the setup.')
-    })
-
-    it('rejects unsupported lifecycle actions outside the current surface', () => {
-        const content = [
-            'hello',
-            '<assistant-actions>{"version":1,"actions":[{"type":"publishPerformer","performerName":"Reviewer"}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope).toBeNull()
-        expect(result.content).toBe('hello')
-    })
-
-    it('accepts act rules and participant subscription actions', () => {
-        const content = [
-            'Updated the workflow contract.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"updateAct","actName":"Code Review","actRules":["Escalate blockers quickly.","Keep review comments actionable."]},{"type":"updateParticipantSubscriptions","actName":"Code Review","performerName":"Reviewer","subscriptions":{"messagesFromPerformerNames":["Developer"],"messageTags":["review-request"],"callboardKeys":["review-summary"],"eventTypes":["runtime.idle"]}}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(2)
-        expect(result.content).toBe('Updated the workflow contract.')
-    })
-
-    it('rejects legacy from/to relation aliases in createAct payloads', () => {
-        const content = [
-            'Created the analyst workflow.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"macro","name":"Macro Analyst"},{"type":"createPerformer","ref":"equity","name":"Equity Researcher"},{"type":"createAct","name":"Investment Team","participantPerformerRefs":["macro","equity"],"relations":[{"fromPerformerRef":"macro","toPerformerRef":"equity","direction":"one-way","name":"macro handoff","description":"Macro Analyst hands regime context to Equity Researcher."}]}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope).toBeNull()
-        expect(result.content).toBe('Created the analyst workflow.')
-    })
-
-    it('accepts performer descriptions and act safety fields', () => {
-        const content = [
-            'Updated the runtime contract.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","name":"Research Lead","description":"Owns evidence gathering and concise handoffs."},{"type":"updateAct","actName":"Code Review","safety":{"threadTimeoutMs":600000,"loopDetectionThreshold":3}}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(2)
-        expect(result.content).toBe('Updated the runtime contract.')
-    })
-
-    it('rejects createAct relations without both name and description', () => {
-        const content = [
-            'hello',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"macro","name":"Macro Analyst"},{"type":"createPerformer","ref":"equity","name":"Equity Researcher"},{"type":"createAct","name":"Investment Team","participantPerformerRefs":["macro","equity"],"relations":[{"sourcePerformerRef":"macro","targetPerformerRef":"equity","direction":"one-way","name":"macro handoff"}]}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope).toBeNull()
-        expect(result.content).toBe('hello')
-    })
-
-    it('rejects connectPerformers actions without both name and description', () => {
-        const content = [
-            'hello',
-            '<assistant-actions>{"version":1,"actions":[{"type":"connectPerformers","actName":"Investment Team","sourcePerformerName":"Macro Analyst","targetPerformerName":"Equity Researcher","direction":"one-way","name":"macro handoff"}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope).toBeNull()
-        expect(result.content).toBe('hello')
-    })
-
-    it('rejects act creation payloads that use a string instead of actRules array', () => {
-        const content = [
-            'hello',
-            '<assistant-actions>{"version":1,"actions":[{"type":"createAct","name":"Investment Team","actRules":"Always cite evidence."}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope).toBeNull()
-        expect(result.content).toBe('hello')
-    })
-
-    it('accepts dance bundle file actions for saved draft paths', () => {
-        const content = [
-            'Expanded the skill bundle.',
-            '<assistant-actions>{"version":1,"actions":[{"type":"upsertDanceBundleFile","draftRef":"skill","path":"references/checklist.md","content":"# Checklist"},{"type":"deleteDanceBundleEntry","draftName":"Review Skill","path":"scripts/old-helper.sh"}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope?.actions).toHaveLength(2)
-        expect(result.content).toBe('Expanded the skill bundle.')
-    })
-
-    it('rejects dance bundle file actions with reserved or unsafe paths', () => {
-        const content = [
-            'hello',
-            '<assistant-actions>{"version":1,"actions":[{"type":"upsertDanceBundleFile","draftId":"dance-1","path":"SKILL.md","content":"bad"},{"type":"deleteDanceBundleEntry","draftId":"dance-1","path":"../scripts/helper.sh"}]}</assistant-actions>',
-        ].join('\n')
-
-        const result = extractAssistantActionEnvelope(content)
-
-        expect(result.envelope).toBeNull()
-        expect(result.content).toBe('hello')
-    })
-
-    it('flags same-block refs that are used before they are created', () => {
-        const content = '<assistant-actions>{"version":1,"actions":[{"type":"createAct","name":"Review Flow","participantPerformerRefs":["reviewer","writer"]},{"type":"createPerformer","ref":"reviewer","name":"Reviewer"},{"type":"createPerformer","ref":"writer","name":"Writer"}]}</assistant-actions>'
-
-        const envelope = extractAssistantActionEnvelope(content).envelope
+    it('flags invalid same-call refs as lint errors', () => {
+        const envelope = parseAssistantActionEnvelope({
+            version: 1,
+            actions: [
+                { type: 'createAct', name: 'Review Flow', participantPerformerRefs: ['writer', 'reviewer'] },
+                { type: 'createPerformer', ref: 'writer', name: 'Writer' },
+                { type: 'createPerformer', ref: 'reviewer', name: 'Reviewer' },
+            ],
+        })
 
         expect(envelope).not.toBeNull()
         expect(lintAssistantActionEnvelope(envelope!)).toEqual([
@@ -258,37 +269,12 @@ describe('assistant-protocol', () => {
             {
                 level: 'error',
                 actionIndex: 0,
-                message: 'performer ref "reviewer" is used before it is created in the same action block.',
+                message: 'performer ref "writer" is used before it is created in the same tool call.',
             },
             {
                 level: 'error',
                 actionIndex: 0,
-                message: 'performer ref "writer" is used before it is created in the same action block.',
-            },
-        ])
-    })
-
-    it('flags duplicate and wrong-kind draft refs', () => {
-        const content = '<assistant-actions>{"version":1,"actions":[{"type":"createTalDraft","ref":"shared-draft","name":"Reviewer Tal","content":"# Role"},{"type":"createDanceDraft","ref":"shared-draft","name":"Review Skill","content":"# Skill"},{"type":"updatePerformer","performerRef":"reviewer","talDraftRef":"shared-draft","addDanceDraftRefs":["shared-draft"]}]}</assistant-actions>'
-
-        const envelope = extractAssistantActionEnvelope(content).envelope
-
-        expect(envelope).not.toBeNull()
-        expect(lintAssistantActionEnvelope(envelope!)).toEqual([
-            {
-                level: 'error',
-                actionIndex: 1,
-                message: 'draft ref "shared-draft" is already declared for a tal draft earlier in the same action block.',
-            },
-            {
-                level: 'error',
-                actionIndex: 2,
-                message: 'performer ref "reviewer" is used before it is created in the same action block.',
-            },
-            {
-                level: 'error',
-                actionIndex: 2,
-                message: 'dance draft ref "shared-draft" resolves to a tal draft in the same action block.',
+                message: 'performer ref "reviewer" is used before it is created in the same tool call.',
             },
         ])
     })

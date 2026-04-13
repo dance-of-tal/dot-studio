@@ -108,6 +108,7 @@ export class Mailbox {
         const wc: WakeCondition = {
             ...condition,
             id: nanoid(),
+            createdAt: typeof condition.createdAt === 'number' ? condition.createdAt : Date.now(),
             status: 'waiting',
         }
         this.wakeConditions.push(wc)
@@ -116,6 +117,40 @@ export class Mailbox {
 
     getWakeConditions(): WakeCondition[] {
         return this.wakeConditions.filter((c) => c.status === 'waiting')
+    }
+
+    getWakeConditionsForParticipant(
+        participantKey: string,
+        options?: { statuses?: WakeCondition['status'][] },
+    ): WakeCondition[] {
+        const allowedStatuses = options?.statuses ? new Set(options.statuses) : null
+        return this.wakeConditions.filter((condition) => {
+            if (condition.createdBy !== participantKey) {
+                return false
+            }
+            if (!allowedStatuses) {
+                return true
+            }
+            return allowedStatuses.has(condition.status)
+        })
+    }
+
+    removeWakeConditionsForParticipant(
+        participantKey: string,
+        options?: { statuses?: WakeCondition['status'][] },
+    ): WakeCondition[] {
+        const allowedStatuses = options?.statuses ? new Set(options.statuses) : null
+        const removed: WakeCondition[] = []
+        this.wakeConditions = this.wakeConditions.filter((condition) => {
+            const shouldRemove = condition.createdBy === participantKey
+                && (!allowedStatuses || allowedStatuses.has(condition.status))
+            if (shouldRemove) {
+                removed.push(condition)
+                return false
+            }
+            return true
+        })
+        return removed
     }
 
     /**

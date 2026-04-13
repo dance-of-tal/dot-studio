@@ -52,6 +52,7 @@ export default function ComposerRuntimeRow({
                 className="chat-input__variant"
                 compact
                 titlePrefix="Performer variant"
+                popoverPlacement="top"
             />
         </div>
     )

@@ -33,11 +33,11 @@ Use this skill when the user likely wants an existing external skill, not a bran
 
 ## Apply In Studio
 - Use `addDanceFromGitHub` for GitHub or `skills.sh` Dance installs with `owner/repo` or `owner/repo@skill`.
-- If the target Performer is already known and the installed Dance URN is known from discovery hints, you may install first and then attach it in the same block with `addDanceUrns`.
+- If the target Performer is already known and the installed Dance URN is known from discovery hints, you may install first and then attach it in the same tool call with `addDanceUrns`.
 - If the source is still ambiguous, ask the user to pick the exact skill before installing.
 
 ## Example
 
-```html
-<assistant-actions>{"version":1,"actions":[{"type":"addDanceFromGitHub","source":"vercel-labs/skills@find-skills","scope":"stage"},{"type":"updatePerformer","performerName":"Researcher","addDanceUrns":["dance/@vercel-labs/skills/find-skills"]}]}</assistant-actions>
+```json
+{"version":1,"actions":[{"type":"addDanceFromGitHub","source":"vercel-labs/skills@find-skills","scope":"stage"},{"type":"updatePerformer","performerName":"Researcher","addDanceUrns":["dance/@vercel-labs/skills/find-skills"]}]}
 ```

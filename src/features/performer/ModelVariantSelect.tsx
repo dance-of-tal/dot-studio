@@ -1,5 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { useModels } from '../../hooks/queries'
 import type { ModelConfig } from '../../types'
 import { findRuntimeModel, findRuntimeModelVariant } from '../../../shared/model-variants'
@@ -12,6 +12,7 @@ type ModelVariantSelectProps = {
     compact?: boolean
     titlePrefix?: string
     disabled?: boolean
+    popoverPlacement?: 'top' | 'bottom'
 }
 
 export default function ModelVariantSelect({
@@ -22,12 +23,11 @@ export default function ModelVariantSelect({
     compact = false,
     titlePrefix = 'Variant',
     disabled = false,
+    popoverPlacement = 'bottom',
 }: ModelVariantSelectProps) {
     const { data: models = [] } = useModels(!!model)
     const wrapperRef = useRef<HTMLDivElement | null>(null)
     const [open, setOpen] = useState(false)
-    const [query, setQuery] = useState('')
-    const deferredQuery = useDeferredValue(query.trim().toLowerCase())
     const selectedModel = useMemo(
         () => findRuntimeModel(models, model?.provider, model?.modelId),
         [models, model?.modelId, model?.provider],
@@ -45,10 +45,7 @@ export default function ModelVariantSelect({
     }, [onChange, selectedVariant, value])
 
     useEffect(() => {
-        if (!open) {
-            setQuery('')
-            return
-        }
+        if (!open) return
 
         const handlePointerDown = (event: MouseEvent) => {
             if (!wrapperRef.current?.contains(event.target as Node)) {
@@ -66,19 +63,15 @@ export default function ModelVariantSelect({
         return null
     }
 
-    const filteredVariants = deferredQuery
-        ? variants.filter((variant) => {
-            const haystack = `${variant.id} ${variant.summary}`.toLowerCase()
-            return haystack.includes(deferredQuery)
-        })
-        : variants
-
     const buttonTitle = value
         ? `${titlePrefix}: ${value}${selectedVariant?.summary ? ` · ${selectedVariant.summary}` : ''}`
         : `${titlePrefix}: default`
+    const rootClassName = className
+        ? `model-variant-select model-variant-select--${popoverPlacement} ${className}`
+        : `model-variant-select model-variant-select--${popoverPlacement}`
 
     return (
-        <div className={className || 'model-variant-select'} ref={wrapperRef}>
+        <div className={rootClassName} ref={wrapperRef}>
             {!compact ? <span>Variant</span> : null}
             <button
                 type="button"
@@ -93,14 +86,6 @@ export default function ModelVariantSelect({
             </button>
             {open ? (
                 <div className="model-variant-select__popover">
-                    <label className="model-variant-select__search">
-                        <Search size={12} />
-                        <input
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                            placeholder="Search variants"
-                        />
-                    </label>
                     <div className="model-variant-select__options">
                         <button
                             type="button"
@@ -112,9 +97,8 @@ export default function ModelVariantSelect({
                             title={`${titlePrefix}: default`}
                         >
                             <span>Default</span>
-                            <small>Use the model default runtime preset</small>
                         </button>
-                        {filteredVariants.map((variant) => (
+                        {variants.map((variant) => (
                             <button
                                 key={variant.id}
                                 type="button"
@@ -126,12 +110,8 @@ export default function ModelVariantSelect({
                                 title={`${variant.id} · ${variant.summary}`}
                             >
                                 <span>{variant.id}</span>
-                                <small>{variant.summary}</small>
                             </button>
                         ))}
-                        {filteredVariants.length === 0 ? (
-                            <div className="model-variant-select__empty">No variants match this model.</div>
-                        ) : null}
                     </div>
                 </div>
             ) : null}

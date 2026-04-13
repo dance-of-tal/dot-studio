@@ -74,6 +74,12 @@ type ReadBoardInput = {
     summaryOnly?: boolean
 }
 
+type ListBoardInput = {
+    kind?: 'artifact' | 'finding' | 'task'
+    limit?: number
+    summaryOnly?: boolean
+}
+
 const BOARD_ENTRY_MAX_CHARS = 4000
 const BOARD_APPEND_MAX_CHARS = 600
 const BOARD_SUMMARY_MAX_CHARS = 280
@@ -214,7 +220,7 @@ class ActRuntimeService {
 
         const { ensurePerformerProjection } = await import('../opencode-projection/stage-projection-service.js')
         const { resolvePerformerForWake } = await import('./wake-performer-resolver.js')
-        const { projectActTools } = await import('./act-tool-projection.js')
+        const { ensureActToolFiles } = await import('./act-tool-files.js')
 
         for (const participantKey of Object.keys(actDefinition.participants || {})) {
             try {
@@ -227,15 +233,8 @@ class ActRuntimeService {
                     continue
                 }
 
-                const actProjection = projectActTools(
-                    participantKey,
-                    actDefinition,
-                    'prewarm',
-                    this.workingDir,
-                )
-
                 await ensurePerformerProjection({
-                    performerId: participantKey,
+                    performerId: performerConfig.performerId,
                     performerName: performerConfig.performerName,
                     talRef: performerConfig.talRef,
                     danceRefs: performerConfig.danceRefs,
@@ -243,11 +242,8 @@ class ActRuntimeService {
                     modelVariant: performerConfig.modelVariant,
                     mcpServerNames: performerConfig.mcpServerNames,
                     workingDir: this.workingDir,
-                    scope: 'act',
-                    actId: actDefinition.id,
-                    collaborationPromptSection: actProjection.contextPrompt,
-                    extraTools: actProjection.tools,
                 })
+                await ensureActToolFiles(this.workingDir, this.workingDir)
             } catch (error) {
                 console.warn(
                     `[act-runtime] Failed to prewarm projection for "${participantKey}" in act "${actDefinition.id}": ${errorMessage(error)}`,
@@ -417,6 +413,44 @@ class ActRuntimeService {
         }
     }
 
+    async listBoard(threadId: string, input: ListBoardInput = {}) {
+        await this.ensureThreadsLoaded()
+        const runtime = this.threadManager.getThreadRuntime(threadId)
+        if (!runtime) {
+            return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
+        }
+
+        const entries = runtime.mailbox.getBoardSnapshot()
+            .filter((entry) => (input.kind ? entry.kind === input.kind : true))
+            .sort((left, right) => right.timestamp - left.timestamp)
+            .slice(0, normalizeBoardReadLimit(input.limit))
+
+        return {
+            ok: true as const,
+            entries: input.summaryOnly === false ? entries : entries.map((entry) => summarizeBoardEntry(entry)),
+        }
+    }
+
+    async getBoardEntry(threadId: string, key: string) {
+        await this.ensureThreadsLoaded()
+        const runtime = this.threadManager.getThreadRuntime(threadId)
+        if (!runtime) {
+            return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
+        }
+
+        const normalizedKey = key.trim()
+        if (!normalizedKey) {
+            return { ok: false as const, status: 400, error: 'Shared note key is required' }
+        }
+
+        const entry = runtime.mailbox.readBoard(normalizedKey)
+        if (!entry) {
+            return { ok: false as const, status: 404, error: `Shared note "${normalizedKey}" not found` }
+        }
+
+        return { ok: true as const, entry }
+    }
+
     async readBoard(threadId: string, input: ReadBoardInput = {}) {
         await this.ensureThreadsLoaded()
         const runtime = this.threadManager.getThreadRuntime(threadId)
@@ -430,13 +464,7 @@ class ActRuntimeService {
             return { ok: true as const, entries: entry ? [entry] : [] }
         }
 
-        const entries = runtime.mailbox.getBoardSnapshot()
-            .sort((left, right) => right.timestamp - left.timestamp)
-            .slice(0, normalizeBoardReadLimit(input.limit))
-        return {
-            ok: true as const,
-            entries: input.summaryOnly === false ? entries : entries.map((entry) => summarizeBoardEntry(entry)),
-        }
+        return this.listBoard(threadId, { limit: input.limit, summaryOnly: input.summaryOnly })
     }
 
     async syncActDefinition(actId: string, actDefinition: ActDefinition) {
@@ -487,6 +515,11 @@ class ActRuntimeService {
         }
 
         const actDefinition = this.threadManager.getActDefinition(threadId)
+
+        const replacedConditions = runtime.mailbox.removeWakeConditionsForParticipant(body.createdBy)
+        for (const condition of replacedConditions) {
+            this.clearWakeConditionAlarm(threadId, condition.id)
+        }
 
         const wakeCondition = runtime.mailbox.addWakeCondition({
             target: body.target,

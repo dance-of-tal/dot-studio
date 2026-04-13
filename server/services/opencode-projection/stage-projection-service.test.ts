@@ -153,6 +153,54 @@ describe('ensurePerformerProjection source boundaries', () => {
         )
     })
 
+    it('keeps act collaboration context out of projected agent files', async () => {
+        const { ensurePerformerProjection } = await import('./stage-projection-service.js')
+
+        const first = await ensurePerformerProjection({
+            performerId: 'Lead',
+            performerName: 'Lead',
+            talRef: null,
+            danceRefs: [],
+            model: { provider: 'openai', modelId: 'gpt-5.4' },
+            modelVariant: null,
+            mcpServerNames: [],
+            workingDir,
+            scope: 'act',
+            actId: 'act-1',
+        })
+        const second = await ensurePerformerProjection({
+            performerId: 'Lead',
+            performerName: 'Lead',
+            talRef: null,
+            danceRefs: [],
+            model: { provider: 'openai', modelId: 'gpt-5.4' },
+            modelVariant: null,
+            mcpServerNames: [],
+            workingDir,
+            scope: 'act',
+            actId: 'act-1',
+        })
+
+        expect(first.changed).toBe(true)
+        expect(second.changed).toBe(false)
+        expect(compilePerformerMock).toHaveBeenNthCalledWith(
+            1,
+            workingDir,
+            expect.objectContaining({
+                scope: 'act',
+            }),
+            expect.any(Array),
+        )
+        expect(compilePerformerMock).toHaveBeenNthCalledWith(
+            2,
+            workingDir,
+            expect.objectContaining({
+                scope: 'act',
+            }),
+            expect.any(Array),
+        )
+    })
+
     it('prunes stale performer agent files from the manifest', async () => {
         const workspaceHash = 'hash'
         const activeBuild = path.join(workingDir, '.opencode', 'agents', 'dot-studio', 'workspace', workspaceHash, 'performer-1--build.md')

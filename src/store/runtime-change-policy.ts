@@ -53,11 +53,11 @@ export function createEmptyProjectionDirtyState(): ProjectionDirtyState {
 export function classifyStudioChange(change: StudioChangeDescriptor): RuntimeChangeClass {
     switch (change.kind) {
         case 'ui':
+        case 'act':
             return 'hot'
         case 'runtime_config':
             return 'runtime_reload'
         case 'performer':
-        case 'act':
         case 'draft':
             return 'lazy_projection'
     }

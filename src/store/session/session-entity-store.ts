@@ -1,12 +1,8 @@
 /**
- * Session Entity Store — Zustand slice (Phase 1)
- *
  * Normalized entity tables with CRUD operations for session data.
  * All state is keyed by sessionId. A bidirectional chatKey ↔ sessionId
  * index allows the 3 UI surfaces (Performer / Act / Assistant) to
  * derive their data without maintaining separate stores.
- *
- * Fields use `se` prefix to avoid collision with ChatSlice during migration.
  */
 import type { StateCreator } from 'zustand'
 import type { StudioState } from '../types'

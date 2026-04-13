@@ -1,26 +1,30 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { CompilePromptRequest } from '../../shared/chat-contracts.js'
 import { compilePerformer } from '../../server/services/opencode-projection/performer-compiler.js'
 import { getCompileRequestTargets } from '../../server/services/opencode-projection/preview-service.js'
 
+vi.mock('../../server/lib/model-catalog.js', () => ({
+    resolveRuntimeModel: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('../../server/services/draft-service.js', () => ({
+    readDraftTextContent: vi.fn().mockResolvedValue(null),
+}))
+
+vi.mock('../../server/lib/dot-source.js', () => ({
+    getAssetPayload: vi.fn().mockResolvedValue(null),
+}))
+
 describe('performer prompt projection', () => {
-    it('prefers canonical requestTargets and falls back to the legacy alias', () => {
+    it('uses canonical requestTargets only', () => {
         const canonical: CompilePromptRequest = {
             talRef: null,
             danceRefs: [],
             model: { provider: 'openai', modelId: 'gpt-5' },
             requestTargets: [{ performerId: 'peer-1', performerName: 'Peer One', description: 'Reviewer' }],
-            relatedPerformers: [{ performerId: 'legacy-1', performerName: 'Legacy One', description: 'Legacy' }],
-        }
-        const legacyOnly: CompilePromptRequest = {
-            talRef: null,
-            danceRefs: [],
-            model: { provider: 'openai', modelId: 'gpt-5' },
-            relatedPerformers: [{ performerId: 'legacy-1', performerName: 'Legacy One', description: 'Legacy' }],
         }
 
         expect(getCompileRequestTargets(canonical)).toEqual(canonical.requestTargets)
-        expect(getCompileRequestTargets(legacyOnly)).toEqual(legacyOnly.relatedPerformers)
         expect(getCompileRequestTargets({ talRef: null, danceRefs: [], model: { provider: 'openai', modelId: 'gpt-5' } })).toEqual([])
     })
 
@@ -39,14 +43,12 @@ describe('performer prompt projection', () => {
                 skillNames: [],
                 toolMap: { task: true },
                 taskAllowlist: ['agent_peer'],
-                collaborationPromptSection: '# Collaboration Context\n\n- Stay aligned with the workspace goal.',
                 relationPromptSection: '# Available Agents\n\n- **Peer**: use `task` with agent="agent_peer"',
             },
             [],
         )
 
         const system = compiled.agentContents.build
-        expect(system).toContain('# Collaboration Context')
         expect(system).toContain('# Available Agents')
         expect(system).toContain('agent="agent_peer"')
     })

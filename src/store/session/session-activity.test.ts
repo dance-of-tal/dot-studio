@@ -70,6 +70,46 @@ describe('session activity', () => {
         })).toBe(false)
     })
 
+    it('keeps wait_until turns parked even if a later tool part appears in the same assistant turn', () => {
+        expect(resolveSessionActivity({
+            loading: true,
+            status: { type: 'busy' },
+            messages: [{
+                id: 'msg-1',
+                role: 'assistant',
+                content: '',
+                timestamp: 1,
+                parts: [
+                    {
+                        id: 'tool-1',
+                        type: 'tool',
+                        tool: {
+                            name: 'wait_until',
+                            callId: 'call-1',
+                            status: 'completed',
+                        },
+                    },
+                    {
+                        id: 'tool-2',
+                        type: 'tool',
+                        tool: {
+                            name: 'list_shared_board',
+                            callId: 'call-2',
+                            status: 'completed',
+                        },
+                    },
+                ],
+            }],
+            permission: null,
+            question: null,
+        })).toMatchObject({
+            kind: 'parked',
+            isActive: false,
+            canAbort: false,
+            isTransportActive: false,
+        })
+    })
+
     it('does not revive settled sessions from stale loading once idle status is known', () => {
         expect(resolveSessionActivity({
             loading: true,

@@ -9,6 +9,7 @@ import {
     getProviderAuthSuccessAction,
     getConnectedProviderCards,
     getPopularProviderCards,
+    shouldAutoCloseProviderConnectModal,
     getVisibleProviderAuthPrompts,
     shouldShowProviderConnectModal,
 } from './settings-utils'
@@ -292,5 +293,27 @@ describe('shouldShowProviderConnectModal', () => {
 
     it('stays closed when there is no provider and no active flow', () => {
         expect(shouldShowProviderConnectModal(null, undefined, null)).toBe(false)
+    })
+})
+
+describe('shouldAutoCloseProviderConnectModal', () => {
+    const connectedProvider: ProviderCard = {
+        id: 'openai',
+        name: 'OpenAI',
+        source: 'builtin',
+        env: ['OPENAI_API_KEY'],
+        connected: true,
+        modelCount: 10,
+        defaultModel: 'gpt-5',
+        hasPaidModels: true,
+        authMethods: [{ type: 'oauth', label: 'Browser OAuth' }],
+    }
+
+    it('closes the connect modal after auth succeeds in settings-only flows', () => {
+        expect(shouldAutoCloseProviderConnectModal(connectedProvider, undefined, null, false)).toBe(true)
+    })
+
+    it('keeps the modal open when a follow-up model assignment is expected', () => {
+        expect(shouldAutoCloseProviderConnectModal(connectedProvider, undefined, null, true)).toBe(false)
     })
 })

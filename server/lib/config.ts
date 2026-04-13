@@ -32,9 +32,13 @@ export const STUDIO_CONFIG_PATH = path.join(STUDIO_DIR, 'studio-config.json')
 export const IS_PRODUCTION = process.env.DOT_STUDIO_PRODUCTION === '1'
 
 // ── Mutable Active Project Dir ──────────────────────────
-let _activeProjectDir = DEFAULT_PROJECT_DIR
+let _activeProjectDir: string | null = null
 
 export function getActiveProjectDir(): string {
+    return _activeProjectDir || DEFAULT_PROJECT_DIR
+}
+
+export function getExplicitActiveProjectDir(): string | null {
     return _activeProjectDir
 }
 

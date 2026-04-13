@@ -229,8 +229,6 @@ describe('chat-runtime-target', () => {
             executionScope: {
                 performerId: 'performer-researcher',
                 actId: 'act-1',
-                clearPerformerIds: ['performer-researcher'],
-                clearActIds: ['act-1'],
             },
             requestTarget: {
                 performerId: chatKey,

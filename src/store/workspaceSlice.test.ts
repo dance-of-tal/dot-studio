@@ -74,7 +74,6 @@ function createBaseState(): StudioState {
         actThreads: {},
         activeThreadId: null,
         activeThreadParticipantKey: null,
-        adapterViewsByPerformer: {},
         isAssistantOpen: false,
         assistantModel: null,
         assistantAvailableModels: [],
@@ -169,6 +168,23 @@ describe('workspace runtime reload', () => {
             draftIds: ['tal-draft-1'],
             workspaceWide: false,
         })
+    })
+
+    it('treats act-only changes as hot and leaves projection dirtiness untouched', () => {
+        const harness = createHarness({
+            ...createBaseState(),
+            runtimeReloadPending: false,
+        } as StudioState)
+
+        const result = harness.get().recordStudioChange({
+            kind: 'act',
+            actIds: ['act-1'],
+            workspaceWide: true,
+        })
+
+        expect(result).toBe('hot')
+        expect(harness.get().runtimeReloadPending).toBe(false)
+        expect(harness.get().projectionDirty).toEqual(createEmptyProjectionDirtyState())
     })
 
     it('spawns a new performer without overlapping an existing act window', () => {

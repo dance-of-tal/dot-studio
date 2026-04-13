@@ -57,19 +57,12 @@ export default function ProviderConnectModal({
 
     // Determine current step
     const [selectedStep, setSelectedStep] = useState<Step | null>(null)
-    const baseStep = useMemo<Step>(() => {
-        if (defaultMethod) {
-            return defaultMethod.method.type === 'api' ? 'api' : 'oauth'
-        }
-        return 'choose'
-    }, [defaultMethod])
-
     const step: Step = useMemo(() => {
         if (modelPicker) return 'pick-model'
         if (flow?.authType === 'api') return 'api'
         if (flow?.authType === 'oauth') return 'oauth'
-        return selectedStep ?? baseStep
-    }, [baseStep, flow?.authType, modelPicker, selectedStep])
+        return 'choose'
+    }, [flow?.authType, modelPicker])
 
     useEffect(() => {
         if (!defaultMethod || flow || modelPicker || selectedStep !== null) {

@@ -2,7 +2,6 @@ import { memo, useState, useMemo, useCallback, useDeferredValue, useEffect } fro
 import { ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
 import MarkdownRenderer from '../../components/shared/MarkdownRenderer'
 import type { ChatMessage, ChatMessagePart, ChatMessageToolInfo } from '../../types'
-import { stripAssistantActionBlock } from '../assistant/assistant-protocol'
 import { TextShimmer } from '../../components/chat/TextShimmer'
 import { ToolGroup } from './ToolGroup'
 import { useUISettings } from '../../store/settingsSlice'
@@ -149,7 +148,7 @@ function ChatMessageContent({
     streaming = false,
 }: ChatMessageContentProps) {
     const showReasoningSummaries = useUISettings((state) => state.showReasoningSummaries)
-    const rawContent = useMemo(() => stripAssistantActionBlock(message.content || ''), [message.content])
+    const rawContent = useMemo(() => message.content || '', [message.content])
     const deferredContent = useDeferredValue(rawContent)
     const displayContent = streaming ? rawContent : deferredContent
     const showThinking = showReasoningSummaries

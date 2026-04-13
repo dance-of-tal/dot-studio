@@ -63,7 +63,6 @@ function createTestState(): StudioState {
         sessionReverts: {},
         lspServers: [],
         lspDiagnostics: {},
-        adapterViewsByPerformer: {},
         isAssistantOpen: true,
         assistantModel: null,
         assistantAvailableModels: [],

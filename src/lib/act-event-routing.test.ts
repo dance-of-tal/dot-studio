@@ -120,4 +120,62 @@ describe('act event routing', () => {
             }),
         }))
     })
+
+    it('suppresses intermediate fan-in message wakes until the combined wait condition is satisfied', () => {
+        const mailbox = new Mailbox()
+        mailbox.addWakeCondition({
+            target: 'self',
+            createdBy: 'GrowthMarketer',
+            onSatisfiedMessage: 'Merge both updates and respond once.',
+            condition: {
+                type: 'all_of',
+                conditions: [
+                    { type: 'message_received', from: 'Chief Exec', tag: 'brief' },
+                    { type: 'message_received', from: 'Chief Exec', tag: 'final' },
+                ],
+            },
+        })
+
+        const firstEvent: MailboxEvent = {
+            id: 'evt-4',
+            type: 'message.sent',
+            sourceType: 'performer',
+            source: 'CEO',
+            timestamp: Date.now(),
+            payload: {
+                from: 'CEO',
+                to: 'GrowthMarketer',
+                tag: 'brief',
+                threadId: 'thread-1',
+            },
+        }
+
+        expect(routeEvent(firstEvent, actDefinition, mailbox, [firstEvent])).toEqual([])
+
+        const secondEvent: MailboxEvent = {
+            id: 'evt-5',
+            type: 'message.sent',
+            sourceType: 'performer',
+            source: 'CEO',
+            timestamp: firstEvent.timestamp + 1,
+            payload: {
+                from: 'CEO',
+                to: 'GrowthMarketer',
+                tag: 'final',
+                threadId: 'thread-1',
+            },
+        }
+
+        const targets = routeEvent(secondEvent, actDefinition, mailbox, [firstEvent, secondEvent])
+
+        expect(targets).toHaveLength(1)
+        expect(targets[0]).toEqual(expect.objectContaining({
+            participantKey: 'GrowthMarketer',
+            reason: 'wake-condition',
+            wakeCondition: expect.objectContaining({
+                onSatisfiedMessage: 'Merge both updates and respond once.',
+                status: 'triggered',
+            }),
+        }))
+    })
 })

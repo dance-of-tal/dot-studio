@@ -168,6 +168,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                         applyPickedModel={auth.applyPickedModel}
                         retryBrowserOauth={auth.retryBrowserOauth}
                         statusMessage={statusMessage}
+                        awaitModelAssignmentOnConnect={!!selectedPerformer}
                     />
                 )
 

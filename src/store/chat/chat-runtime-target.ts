@@ -31,8 +31,6 @@ export type ResolvedChatRuntimeTarget = {
     executionScope: {
         performerId: string | null
         actId: string | null
-        clearPerformerIds: string[]
-        clearActIds: string[]
     }
     requestTarget: {
         performerId: string
@@ -184,8 +182,6 @@ export function resolveChatRuntimeTarget(get: ChatGet, chatKey: string): Resolve
             executionScope: {
                 performerId: null,
                 actId: null,
-                clearPerformerIds: [],
-                clearActIds: [],
             },
             requestTarget: {
                 performerId: chatKey,
@@ -210,8 +206,6 @@ export function resolveChatRuntimeTarget(get: ChatGet, chatKey: string): Resolve
                 executionScope: {
                     performerId: null,
                     actId: descriptor.actId,
-                    clearPerformerIds: [],
-                    clearActIds: [],
                 },
                 requestTarget: {
                     performerId: chatKey,
@@ -233,8 +227,6 @@ export function resolveChatRuntimeTarget(get: ChatGet, chatKey: string): Resolve
                 executionScope: {
                     performerId: null,
                     actId: descriptor.actId,
-                    clearPerformerIds: [],
-                    clearActIds: [],
                 },
                 requestTarget: {
                     performerId: chatKey,
@@ -258,8 +250,6 @@ export function resolveChatRuntimeTarget(get: ChatGet, chatKey: string): Resolve
             executionScope: {
                 performerId: performer.id,
                 actId: descriptor.actId,
-                clearPerformerIds: [performer.id],
-                clearActIds: [descriptor.actId],
             },
             requestTarget: {
                 performerId: chatKey,
@@ -284,8 +274,6 @@ export function resolveChatRuntimeTarget(get: ChatGet, chatKey: string): Resolve
         executionScope: {
             performerId: performer.id,
             actId: null,
-            clearPerformerIds: [performer.id],
-            clearActIds: [],
         },
         requestTarget: {
             performerId: performer.id,

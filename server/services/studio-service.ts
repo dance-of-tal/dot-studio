@@ -6,6 +6,7 @@ import { promisify } from 'util'
 import { ensureDotDir } from '../lib/dot-source.js'
 import {
     getActiveProjectDir,
+    getExplicitActiveProjectDir,
     setActiveProjectDir,
     readStudioConfig,
     writeStudioConfig,
@@ -27,9 +28,12 @@ export async function pickWorkingDirectory() {
     return pickDirectory('Select Working Directory for Workspace')
 }
 
-export async function getStudioConfig(projectDir: string) {
+export async function getStudioConfig() {
     const config = await readStudioConfig()
-    return { ...config, projectDir }
+    const activeProjectDir = getExplicitActiveProjectDir()
+    return activeProjectDir
+        ? { ...config, projectDir: activeProjectDir }
+        : config
 }
 
 export async function updateStudioConfig(patch: Partial<StudioConfig>) {

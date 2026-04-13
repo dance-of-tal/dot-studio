@@ -1,6 +1,7 @@
 export type McpLocalConfig = {
     type: 'local'
     command: string[]
+    enabled?: boolean
     environment?: Record<string, string>
     timeout?: number
 }
@@ -14,6 +15,7 @@ export type McpRemoteOAuthConfig = {
 export type McpRemoteConfig = {
     type: 'remote'
     url: string
+    enabled?: boolean
     headers?: Record<string, string>
     oauth?: McpRemoteOAuthConfig | false
     timeout?: number

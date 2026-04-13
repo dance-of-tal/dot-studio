@@ -2,7 +2,7 @@ import type { CompilePromptRequest } from '../../../shared/chat-contracts.js'
 import { ensurePerformerProjection } from './stage-projection-service.js'
 
 export function getCompileRequestTargets(request: CompilePromptRequest) {
-    return request.requestTargets || request.relatedPerformers || []
+    return request.requestTargets || []
 }
 
 export async function compileProjectionPreview(

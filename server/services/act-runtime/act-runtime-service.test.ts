@@ -127,16 +127,12 @@ describe('ActRuntimeService projection prewarm', () => {
         expect(result.ok).toBe(true)
         expect(ensurePerformerProjectionMock).toHaveBeenCalledTimes(2)
         expect(ensurePerformerProjectionMock).toHaveBeenCalledWith(expect.objectContaining({
-            performerId: 'Head',
+            performerId: 'performer-head',
             performerName: 'Head Performer',
-            scope: 'act',
-            actId: actDefinition.id,
         }))
         expect(ensurePerformerProjectionMock).toHaveBeenCalledWith(expect.objectContaining({
-            performerId: 'Analyst',
+            performerId: 'performer-analyst',
             performerName: 'Analyst Performer',
-            scope: 'act',
-            actId: actDefinition.id,
         }))
     })
 
@@ -265,6 +261,80 @@ describe('ActRuntimeService projection prewarm', () => {
             created.thread.id,
             workingDir,
         )
+    })
+
+    it('replaces older wait conditions for the same participant with the latest one', async () => {
+        const { getActRuntimeService } = await import('./act-runtime-service.js')
+        const service = getActRuntimeService(workingDir)
+        const created = await service.createThread(actDefinition.id, actDefinition)
+        expect(created.ok).toBe(true)
+
+        const first = await service.setWakeCondition(created.thread.id, {
+            createdBy: 'Analyst',
+            target: 'self',
+            onSatisfiedMessage: 'Resume when Head replies.',
+            condition: { type: 'message_received', from: 'Head' },
+        })
+        expect(first.ok).toBe(true)
+
+        const second = await service.setWakeCondition(created.thread.id, {
+            createdBy: 'Analyst',
+            target: 'self',
+            onSatisfiedMessage: 'Resume when review-summary exists.',
+            condition: { type: 'board_key_exists', key: 'review-summary' },
+        })
+        expect(second.ok).toBe(true)
+
+        const runtime = (service as any).threadManager.getThreadRuntime(created.thread.id)
+        expect(runtime).toBeTruthy()
+        expect(runtime.mailbox.getState().wakeConditions).toHaveLength(1)
+        expect(runtime.mailbox.getState().wakeConditions[0]).toEqual(expect.objectContaining({
+            createdBy: 'Analyst',
+            onSatisfiedMessage: 'Resume when review-summary exists.',
+            condition: { type: 'board_key_exists', key: 'review-summary' },
+            status: 'waiting',
+        }))
+    })
+
+    it('lists board entries by kind and fetches exact keys separately', async () => {
+        const { getActRuntimeService } = await import('./act-runtime-service.js')
+        const service = getActRuntimeService(workingDir)
+        const created = await service.createThread(actDefinition.id, actDefinition)
+        expect(created.ok).toBe(true)
+
+        const artifactContent = 'A'.repeat(320)
+        await service.postToBoard(created.thread.id, {
+            author: 'Head',
+            key: 'review-summary',
+            kind: 'artifact',
+            content: artifactContent,
+        })
+        await service.postToBoard(created.thread.id, {
+            author: 'Analyst',
+            key: 'risk-list',
+            kind: 'finding',
+            content: 'One open question remains.',
+        })
+
+        const listed = await service.listBoard(created.thread.id, { kind: 'artifact', summaryOnly: true })
+        expect(listed.ok).toBe(true)
+        if (!listed.ok) return
+        expect(listed.entries).toHaveLength(1)
+        expect(listed.entries[0]?.key).toBe('review-summary')
+        expect(listed.entries[0]?.content.endsWith('…')).toBe(true)
+
+        const exact = await service.getBoardEntry(created.thread.id, 'review-summary')
+        expect(exact.ok).toBe(true)
+        if (!exact.ok) return
+        expect(exact.entry.key).toBe('review-summary')
+        expect(exact.entry.content).toBe(artifactContent)
+
+        const missing = await service.getBoardEntry(created.thread.id, 'missing-key')
+        expect(missing).toEqual({
+            ok: false,
+            status: 404,
+            error: 'Shared note "missing-key" not found',
+        })
     })
 
     it('self-wakes wake_at waits without needing another runtime event', async () => {

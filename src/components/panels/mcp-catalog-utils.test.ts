@@ -3,7 +3,9 @@ import { createPerformerNode } from '../../lib/performers-node'
 import {
     applyMcpCatalogImpactToPerformers,
     buildMcpCatalogImpact,
+    buildMcpDrafts,
     getMcpEntryValidationError,
+    serializeMcpEntries,
     type McpEntryDraft,
 } from './mcp-catalog-utils'
 
@@ -12,6 +14,7 @@ function createDraft(overrides: Partial<McpEntryDraft>): McpEntryDraft {
         key: 'draft',
         name: '',
         transport: 'stdio',
+        enabled: true,
         timeoutText: '',
         command: '',
         args: [],
@@ -165,5 +168,32 @@ describe('mcp-catalog-utils', () => {
             }),
         }))
         expect(nextPerformers[1]).toBe(performers[1])
+    })
+
+    it('round-trips startup state for disabled MCP servers', () => {
+        const drafts = buildMcpDrafts({
+            tradingview: {
+                type: 'remote',
+                url: 'https://mcp.example.com',
+                enabled: false,
+                oauth: false,
+            },
+        })
+
+        expect(drafts).toEqual([
+            expect.objectContaining({
+                name: 'tradingview',
+                enabled: false,
+            }),
+        ])
+
+        expect(serializeMcpEntries(drafts)).toEqual({
+            tradingview: {
+                type: 'remote',
+                url: 'https://mcp.example.com',
+                enabled: false,
+                oauth: false,
+            },
+        })
     })
 })

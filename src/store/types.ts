@@ -18,7 +18,6 @@ import type {
     ActRelation,
     ActParticipantSessionStatus,
 } from '../types'
-import type { AdapterViewProjection } from '../../shared/adapter-view'
 import type { QuestionAnswer } from '@opencode-ai/sdk/v2'
 import type { SessionSlice } from './session/types'
 import type { ProjectionDirtyState, RuntimeChangeClass, StudioChangeDescriptor } from './runtime-change-policy'
@@ -231,12 +230,6 @@ export interface IntegrationSlice {
     compilePrompt: (performerId: string) => Promise<string>
 }
 
-export interface AdapterViewSlice {
-    adapterViewsByPerformer: Record<string, Record<string, AdapterViewProjection>>
-    upsertAdapterViewProjection: (projection: AdapterViewProjection) => void
-    clearAdapterViewsForPerformer: (performerId: string) => void
-}
-
 export interface ActThreadState {
     id: string
     actId: string
@@ -329,4 +322,4 @@ export interface AssistantSlice {
     resetAssistantRuntimeState: () => void
 }
 
-export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & AdapterViewSlice & ActSlice & AssistantSlice & SessionSlice
+export type StudioState = PerformerRelationSlice & WorkspaceSlice & ChatSlice & IntegrationSlice & ActSlice & AssistantSlice & SessionSlice

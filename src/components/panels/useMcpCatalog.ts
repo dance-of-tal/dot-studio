@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { queryKeys, useMcpServers } from '../../hooks/queries'
@@ -10,7 +10,7 @@ import {
     buildMcpCatalogImpact,
     buildMcpDrafts,
     cloneMcpDraftEntries,
-    createMcpEntryDraft,
+    createMcpEntryDraft as createLocalMcpEntryDraft,
     getMcpEntryValidationError,
     hasMcpCatalogImpact,
     serializeMcpEntries,
@@ -20,7 +20,7 @@ import { useStudioStore } from '../../store'
 /**
  * useMcpCatalog – Studio-wide MCP library state for Asset Library.
  *
- * Manages global MCP drafts, persistence, connection tests,
+ * Manages saved Studio MCP entries, persistence, connection tests,
  * authentication lifecycle, and cache invalidation.
  */
 
@@ -29,9 +29,8 @@ function makeId(prefix: string) {
 }
 
 export interface McpCatalogState {
-    mcpDraftEntries: McpEntryDraft[]
+    mcpEntries: McpEntryDraft[]
     mcpCatalogLoaded: boolean
-    mcpCatalogDirty: boolean
     mcpCatalogStatus: string | null
     mcpCatalogSaving: boolean
     runtimeReloadPending: boolean
@@ -39,10 +38,9 @@ export interface McpCatalogState {
     mcpImpactDialog: McpCatalogImpact | null
     mcpImpactSaving: boolean
     mcpServers: ReturnType<typeof useMcpServers>['data']
-    updateMcpEntry: (key: string, updater: (entry: McpEntryDraft) => McpEntryDraft) => void
-    addMcpEntry: () => string
-    removeMcpEntry: (key: string) => void
-    saveMcpCatalog: () => Promise<boolean>
+    createMcpEntryDraft: () => McpEntryDraft
+    saveMcpEntry: (entry: McpEntryDraft) => Promise<boolean>
+    deleteMcpEntry: (key: string) => Promise<boolean>
     connectMcpServer: (name: string) => Promise<void>
     startMcpAuthFlow: (name: string) => Promise<void>
     clearMcpAuth: (name: string) => Promise<void>
@@ -51,8 +49,7 @@ export interface McpCatalogState {
 }
 
 export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalogState {
-    const [mcpDraftEntries, setMcpDraftEntries] = useState<McpEntryDraft[]>([])
-    const [mcpDraftSnapshot, setMcpDraftSnapshot] = useState<McpEntryDraft[]>([])
+    const [mcpEntries, setMcpEntries] = useState<McpEntryDraft[]>([])
     const [mcpCatalogLoaded, setMcpCatalogLoaded] = useState(false)
     const [mcpCatalogStatus, setMcpCatalogStatus] = useState<string | null>(null)
     const [mcpCatalogSaving, setMcpCatalogSaving] = useState(false)
@@ -88,8 +85,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         api.mcp.getCatalog()
             .then((result) => {
                 const drafts = buildMcpDrafts(result)
-                setMcpDraftEntries(drafts)
-                setMcpDraftSnapshot(drafts)
+                setMcpEntries(drafts)
                 setMcpCatalogStatus(null)
                 setMcpCatalogLoaded(true)
             })
@@ -149,30 +145,6 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         return () => window.clearInterval(timer)
     }, [invalidateMcpQueries, mcpServers, pendingMcpAuthName, queryClient, recordStudioChange, workingDir])
 
-    const mcpCatalogDirty = useMemo(
-        () => JSON.stringify(mcpDraftEntries) !== JSON.stringify(mcpDraftSnapshot),
-        [mcpDraftEntries, mcpDraftSnapshot],
-    )
-
-    // ── Entry CRUD ──────────────────────────────────────
-
-    const updateMcpEntry = (key: string, updater: (entry: McpEntryDraft) => McpEntryDraft) => {
-        setMcpDraftEntries((current) => current.map((entry) => entry.key === key ? updater(entry) : entry))
-    }
-
-    const addMcpEntry = () => {
-        const key = makeId('asset-mcp')
-        setMcpDraftEntries((current) => [
-            ...current,
-            createMcpEntryDraft(key),
-        ])
-        return key
-    }
-
-    const removeMcpEntry = (key: string) => {
-        setMcpDraftEntries((current) => current.filter((entry) => entry.key !== key))
-    }
-
     // ── Catalog persistence ─────────────────────────────
 
     const applyCatalogImpactToStudio = (impact: McpCatalogImpact) => {
@@ -209,9 +181,7 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         try {
             const nextMcpCatalog: McpCatalog = serializeMcpEntries(entries)
             await api.mcp.updateCatalog(nextMcpCatalog)
-            const nextSnapshot = cloneMcpDraftEntries(entries)
-            setMcpDraftSnapshot(nextSnapshot)
-            setMcpDraftEntries(cloneMcpDraftEntries(nextSnapshot))
+            setMcpEntries(cloneMcpDraftEntries(entries))
             if (impact && hasMcpCatalogImpact(impact)) {
                 applyCatalogImpactToStudio(impact)
                 setMcpCatalogStatus(`Saved Studio MCP library and updated ${impact.affectedPerformerIds.length} performer reference${impact.affectedPerformerIds.length === 1 ? '' : 's'}.`)
@@ -249,19 +219,24 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         }
     }
 
-    const saveMcpCatalog = async () => {
-        const entries = cloneMcpDraftEntries(mcpDraftEntries)
-        const validationError = getMcpEntryValidationError(entries)
+    const saveMcpEntry = async (entry: McpEntryDraft) => {
+        const existingIndex = mcpEntries.findIndex((current) => current.key === entry.key)
+        const nextEntries = cloneMcpDraftEntries(
+            existingIndex >= 0
+                ? mcpEntries.map((current, index) => index === existingIndex ? entry : current)
+                : [...mcpEntries, entry],
+        )
+        const validationError = getMcpEntryValidationError(nextEntries)
         if (validationError) {
             setMcpCatalogStatus(validationError)
             return false
         }
 
-        const impact = buildMcpCatalogImpact(mcpDraftSnapshot, entries, performers)
+        const impact = buildMcpCatalogImpact(mcpEntries, nextEntries, performers)
         if (hasMcpCatalogImpact(impact)) {
             return new Promise<boolean>((resolve) => {
                 pendingSaveRef.current = {
-                    entries,
+                    entries: nextEntries,
                     impact,
                     resolve,
                 }
@@ -269,7 +244,39 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
             })
         }
 
-        return persistMcpCatalog(entries, impact)
+        return persistMcpCatalog(nextEntries, impact)
+    }
+
+    const deleteMcpEntry = async (key: string) => {
+        const nextEntries = cloneMcpDraftEntries(mcpEntries.filter((entry) => entry.key !== key))
+        if (nextEntries.length === mcpEntries.length) {
+            return false
+        }
+
+        const validationError = getMcpEntryValidationError(nextEntries)
+        if (validationError) {
+            setMcpCatalogStatus(validationError)
+            return false
+        }
+
+        const impact = buildMcpCatalogImpact(mcpEntries, nextEntries, performers)
+        if (hasMcpCatalogImpact(impact)) {
+            return new Promise<boolean>((resolve) => {
+                pendingSaveRef.current = {
+                    entries: nextEntries,
+                    impact,
+                    resolve,
+                }
+                setMcpImpactDialog(impact)
+            })
+        }
+
+        return persistMcpCatalog(nextEntries, impact)
+    }
+
+    const createMcpEntryDraft = () => {
+        const key = makeId('asset-mcp')
+        return createLocalMcpEntryDraft(key)
     }
 
     const confirmMcpImpactSave = async () => {
@@ -372,9 +379,8 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
     }
 
     return {
-        mcpDraftEntries,
+        mcpEntries,
         mcpCatalogLoaded,
-        mcpCatalogDirty,
         mcpCatalogStatus,
         mcpCatalogSaving,
         runtimeReloadPending,
@@ -382,10 +388,9 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
         mcpImpactDialog,
         mcpImpactSaving,
         mcpServers,
-        updateMcpEntry,
-        addMcpEntry,
-        removeMcpEntry,
-        saveMcpCatalog,
+        createMcpEntryDraft,
+        saveMcpEntry,
+        deleteMcpEntry,
         connectMcpServer: async (name: string) => {
             const ready = await prepareMcpRuntimeAction()
             if (!ready) {

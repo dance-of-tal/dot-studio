@@ -4,12 +4,13 @@
  * Connect opens ProviderConnectModal for configuration.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ProviderAuthMethod, ProviderCard, OauthFlow } from './settings-utils'
 import type { ConnectedModel, ModelPickerState } from './settings-utils'
 import {
     getConnectedProviderCards,
     getPopularProviderCards,
+    shouldAutoCloseProviderConnectModal,
     shouldShowProviderConnectModal,
 } from './settings-utils'
 import ProviderConnectModal from './ProviderConnectModal'
@@ -30,6 +31,7 @@ interface SettingsProvidersProps {
     applyPickedModel: (model: ConnectedModel) => void
     retryBrowserOauth: (providerId: string) => void
     statusMessage: string | null
+    awaitModelAssignmentOnConnect: boolean
 }
 
 export default function SettingsProviders(props: SettingsProvidersProps) {
@@ -38,7 +40,7 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
         visibleModelPickerModels, handleAuthMethod, handleOauthPromptSubmit,
         handleOauthCallback, handleApiAuthSave, dismissOauthFlow,
         disconnectProvider, applyPickedModel,
-        retryBrowserOauth, statusMessage,
+        retryBrowserOauth, statusMessage, awaitModelAssignmentOnConnect,
     } = props
 
     const [connectTargetId, setConnectTargetId] = useState<string | null>(null)
@@ -57,6 +59,27 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
         connectFlow,
         connectModelPicker,
     )
+
+    useEffect(() => {
+        if (!connectTargetId) {
+            return
+        }
+
+        if (shouldAutoCloseProviderConnectModal(
+            connectTarget,
+            connectFlow,
+            connectModelPicker,
+            awaitModelAssignmentOnConnect,
+        )) {
+            setConnectTargetId(null)
+        }
+    }, [
+        awaitModelAssignmentOnConnect,
+        connectFlow,
+        connectModelPicker,
+        connectTarget,
+        connectTargetId,
+    ])
 
     return (
         <div className="stg-panel">

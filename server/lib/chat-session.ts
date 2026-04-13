@@ -101,8 +101,7 @@ export function isSessionParkedByWaitUntil(messages: MessageWithParts[]) {
         return false
     }
 
-    const lastTool = toolParts[toolParts.length - 1]
-    return readToolName(lastTool) === 'wait_until' && lastTool.state?.status === 'completed'
+    return toolParts.some((part) => readToolName(part) === 'wait_until' && part.state?.status === 'completed')
 }
 
 function hasCompletedAssistantTurn(messages: MessageWithParts[]) {

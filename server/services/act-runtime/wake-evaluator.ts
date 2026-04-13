@@ -12,6 +12,7 @@ import type {
     MailboxEvent,
     ActDefinition,
 } from '../../../shared/act-types.js'
+import { payloadString } from './act-runtime-utils.js'
 
 function participantDisplayName(
     actDefinition: ActDefinition | undefined,
@@ -38,6 +39,51 @@ function matchesParticipantReference(
     }
     const displayName = participantDisplayName(actDefinition, participantKey)
     return displayName?.toLowerCase() === normalizedReference
+}
+
+function eventMatchesMessageCondition(
+    expr: Extract<ConditionExpr, { type: 'message_received' }>,
+    event: MailboxEvent,
+    actDefinition?: ActDefinition,
+) {
+    if (event.type !== 'message.sent' && event.type !== 'message.delivered') {
+        return false
+    }
+    const from = payloadString(event.payload, 'from')
+    const tag = payloadString(event.payload, 'tag')
+    const fromMatch = matchesParticipantReference(actDefinition, from, expr.from)
+    const tagMatch = !expr.tag || tag === expr.tag
+    return fromMatch && tagMatch
+}
+
+function eventMatchesBoardCondition(
+    expr: Extract<ConditionExpr, { type: 'board_key_exists' }>,
+    event: MailboxEvent,
+) {
+    if (event.type !== 'board.posted' && event.type !== 'board.updated') {
+        return false
+    }
+    return payloadString(event.payload, 'key') === expr.key
+}
+
+export function eventMatchesConditionExpr(
+    expr: ConditionExpr,
+    event: MailboxEvent,
+    actDefinition?: ActDefinition,
+): boolean {
+    switch (expr.type) {
+        case 'all_of':
+        case 'any_of':
+            return expr.conditions.some((sub) => eventMatchesConditionExpr(sub, event, actDefinition))
+        case 'board_key_exists':
+            return eventMatchesBoardCondition(expr, event)
+        case 'message_received':
+            return eventMatchesMessageCondition(expr, event, actDefinition)
+        case 'wake_at':
+            return false
+        default:
+            return false
+    }
 }
 
 /**
@@ -96,5 +142,8 @@ export function evaluateWakeCondition(
     actDefinition?: ActDefinition,
 ): boolean {
     if (condition.status !== 'waiting') return false
-    return evaluateConditionExpr(condition.condition, { board, recentEvents, actDefinition })
+    const filteredEvents = typeof condition.createdAt === 'number'
+        ? recentEvents.filter((event) => event.timestamp >= condition.createdAt!)
+        : recentEvents
+    return evaluateConditionExpr(condition.condition, { board, recentEvents: filteredEvents, actDefinition })
 }

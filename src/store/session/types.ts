@@ -1,12 +1,5 @@
 /**
- * Session Entity Types — Phase 1
- *
  * Normalized session data structures keyed by sessionId.
- * Replaces the flat `chats: Record<string, ChatMessage[]>` pattern
- * with entity tables for sessions, messages, and derived docks.
- *
- * Field names are prefixed with `se` (session entity) to avoid
- * collisions with the legacy ChatSlice fields during migration.
  */
 import type { ChatMessage } from '../../types'
 import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/v2'

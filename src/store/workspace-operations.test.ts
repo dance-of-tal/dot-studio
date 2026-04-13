@@ -48,7 +48,6 @@ function createWorkspaceState(): StudioState {
         actThreads: {},
         activeThreadId: null,
         activeThreadParticipantKey: null,
-        adapterViewsByPerformer: {},
         isAssistantOpen: false,
         assistantModel: null,
         assistantAvailableModels: [],

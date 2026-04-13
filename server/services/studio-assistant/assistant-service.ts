@@ -2,15 +2,14 @@
  * assistant-service.ts — Agent + skill projection for Studio Assistant.
  *
  * Produces:
- *   .opencode/agents/dot-studio/studio-assistant.md               (agent file)
- *   .opencode/skills/dot-studio/<skill-name>/SKILL.md            (one per builtin dance)
- *   .opencode/skills/dot-studio/<skill-name>/<bundle-files>      (projected sibling files)
+ *   managed sidecar: ~/.dot-studio/opencode/{agents,skills,tools}/dot-studio/...
+ *   external OpenCode: <workspace>/.opencode/{agents,skills,tools}/dot-studio/...
  *
  * Builtin assistant dances are authored as Agent Skills under:
  *   server/services/studio-assistant/dances/<skill-name>/SKILL.md
  *
- * Tool files are NOT written here — they are injected at send-time via
- * chat-service.ts extraTools to avoid polluting the shared .opencode/tools/ dir.
+ * Assistant tool files are projected alongside the agent so the runtime has a
+ * stable mutation tool without relying on text-block parsing.
  *
  * Called eagerly at stage save / project activate — NOT per-send.
  */
@@ -19,10 +18,13 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { parseDanceFromSkillMd } from 'dance-of-tal/contracts'
 import type { AssistantStageContext } from '../../../shared/assistant-actions.js'
+import { STUDIO_DIR } from '../../lib/config.js'
 import { getOpencode } from '../../lib/opencode.js'
+import { isManagedOpencode } from '../../lib/opencode-sidecar.js'
 import { listStudioAssets } from '../asset-service.js'
 import { searchDotRegistry, searchSkillsCatalog } from '../dot-service.js'
 import { syncSkillBundleSiblings } from '../opencode-projection/skill-bundle-sync.js'
+import { ASSISTANT_TOOL_NAMES, getStaticAssistantTools } from './assistant-tools.js'
 
 export const ASSISTANT_PERFORMER_ID = 'studio-assistant'
 const AGENT_FILENAME = 'studio-assistant.md'
@@ -33,16 +35,42 @@ const TAL_PATH = path.join(__dirname, 'tal', 'studio-assistant.md')
 const DANCES_DIR = path.join(__dirname, 'dances')
 
 // ── Target paths ──────────────────────────────────────
+function assistantProjectionRoot(executionDir: string) {
+    return isManagedOpencode()
+        ? path.join(STUDIO_DIR, 'opencode')
+        : path.join(executionDir, '.opencode')
+}
+
+function workspaceAssistantProjectionRoot(executionDir: string) {
+    return path.join(executionDir, '.opencode')
+}
+
 function agentFilePath(executionDir: string) {
-    return path.join(executionDir, '.opencode', 'agents', 'dot-studio', AGENT_FILENAME)
+    return path.join(assistantProjectionRoot(executionDir), 'agents', 'dot-studio', AGENT_FILENAME)
 }
 
 function skillDir(executionDir: string, skillName: string) {
-    return path.join(executionDir, '.opencode', 'skills', 'dot-studio', skillName)
+    return path.join(assistantProjectionRoot(executionDir), 'skills', 'dot-studio', skillName)
 }
 
 function skillFilePath(executionDir: string, skillName: string) {
     return path.join(skillDir(executionDir, skillName), 'SKILL.md')
+}
+
+function toolFilePath(executionDir: string, toolName: string) {
+    return path.join(assistantProjectionRoot(executionDir), 'tools', `${toolName}.ts`)
+}
+
+function dotStudioAgentPath(opencodeRoot: string) {
+    return path.join(opencodeRoot, 'agents', 'dot-studio', AGENT_FILENAME)
+}
+
+function dotStudioSkillDir(opencodeRoot: string, skillName: string) {
+    return path.join(opencodeRoot, 'skills', 'dot-studio', skillName)
+}
+
+function dotStudioToolPath(opencodeRoot: string, toolName: string) {
+    return path.join(opencodeRoot, 'tools', `${toolName}.ts`)
 }
 
 // ── Read source assets ────────────────────────────────
@@ -89,7 +117,7 @@ async function removeStaleBuiltinSkills(
     executionDir: string,
     expectedSkillNames: string[],
 ): Promise<boolean> {
-    const skillsRoot = path.join(executionDir, '.opencode', 'skills', 'dot-studio')
+    const skillsRoot = path.join(assistantProjectionRoot(executionDir), 'skills', 'dot-studio')
     const expected = new Set(expectedSkillNames)
     let changed = false
 
@@ -105,8 +133,138 @@ async function removeStaleBuiltinSkills(
     return changed
 }
 
+async function removeStaleAssistantTools(
+    executionDir: string,
+    expectedToolNames: string[],
+): Promise<boolean> {
+    const toolsDir = path.join(assistantProjectionRoot(executionDir), 'tools')
+    const expected = new Set(expectedToolNames)
+    let changed = false
+
+    const entries = await fs.readdir(toolsDir, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.ts')) continue
+        const toolName = entry.name.replace(/\.ts$/, '')
+        if (!ASSISTANT_TOOL_NAMES.includes(toolName as typeof ASSISTANT_TOOL_NAMES[number])) continue
+        if (expected.has(toolName)) continue
+
+        await fs.rm(path.join(toolsDir, entry.name), { force: true })
+        changed = true
+    }
+
+    return changed
+}
+
+async function removeAssistantProjectionAtRoot(
+    opencodeRoot: string,
+    skillNames: string[],
+    toolNames: string[],
+): Promise<boolean> {
+    let changed = false
+
+    const targets = [
+        dotStudioAgentPath(opencodeRoot),
+        ...toolNames.map((toolName) => dotStudioToolPath(opencodeRoot, toolName)),
+        ...skillNames.map((skillName) => dotStudioSkillDir(opencodeRoot, skillName)),
+    ]
+
+    for (const target of targets) {
+        const existed = await fs.stat(target).then(() => true).catch(() => false)
+        if (!existed) {
+            continue
+        }
+        await fs.rm(target, { recursive: true, force: true })
+        changed = true
+    }
+
+    const skillsRoot = path.join(opencodeRoot, 'skills', 'dot-studio')
+    const remainingSkillEntries = await fs.readdir(skillsRoot, { withFileTypes: true }).catch(() => [])
+    if (remainingSkillEntries.length === 0) {
+        await fs.rm(skillsRoot, { recursive: true, force: true }).catch(() => {})
+    }
+
+    const agentDir = path.join(opencodeRoot, 'agents', 'dot-studio')
+    const remainingAgentEntries = await fs.readdir(agentDir, { withFileTypes: true }).catch(() => [])
+    if (remainingAgentEntries.length === 0) {
+        await fs.rm(agentDir, { recursive: true, force: true }).catch(() => {})
+    }
+
+    return changed
+}
+
+async function removeDuplicateAssistantProjectionAncestors(
+    executionDir: string,
+    skillNames: string[],
+    toolNames: string[],
+): Promise<boolean> {
+    const currentDir = path.resolve(executionDir)
+    let changed = false
+
+    let cursor = path.dirname(currentDir)
+    while (cursor !== currentDir) {
+        changed = (await removeAssistantProjectionAtRoot(
+            workspaceAssistantProjectionRoot(cursor),
+            skillNames,
+            toolNames,
+        )) || changed
+
+        const parent = path.dirname(cursor)
+        if (parent === cursor) {
+            break
+        }
+        cursor = parent
+    }
+
+    return changed
+}
+
+async function removeDuplicateAssistantProjectionDescendants(
+    executionDir: string,
+    skillNames: string[],
+    toolNames: string[],
+): Promise<boolean> {
+    const root = path.resolve(executionDir)
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
+    let changed = false
+
+    async function pruneDirectory(dir: string): Promise<void> {
+        const opencodeDir = workspaceAssistantProjectionRoot(dir)
+        const hasProjection = await fs.stat(opencodeDir).then(() => true).catch(() => false)
+        if (hasProjection) {
+            changed = (await removeAssistantProjectionAtRoot(opencodeDir, skillNames, toolNames)) || changed
+        }
+
+        const children = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
+        for (const entry of children) {
+            if (!entry.isDirectory()) continue
+            if (entry.name === '.opencode' || entry.name === 'node_modules') continue
+            await pruneDirectory(path.join(dir, entry.name))
+        }
+    }
+
+    for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        if (entry.name === '.opencode' || entry.name === 'node_modules') continue
+        await pruneDirectory(path.join(root, entry.name))
+    }
+
+    return changed
+}
+
+async function removeManagedWorkspaceAssistantProjection(
+    executionDir: string,
+    skillNames: string[],
+    toolNames: string[],
+): Promise<boolean> {
+    return removeAssistantProjectionAtRoot(
+        workspaceAssistantProjectionRoot(executionDir),
+        skillNames,
+        toolNames,
+    )
+}
+
 // ── Frontmatter ───────────────────────────────────────
-function buildFrontmatter(skillNames: string[]): string {
+function buildFrontmatter(skillNames: string[], toolNames: string[]): string {
     const lines = ['---']
     lines.push('description: "Studio Assistant"')
     lines.push('mode: primary')
@@ -119,6 +277,9 @@ function buildFrontmatter(skillNames: string[]): string {
         lines.push(`    ${JSON.stringify(name)}: "allow"`)
     }
     lines.push('tools:')
+    for (const toolName of toolNames) {
+        lines.push(`  ${JSON.stringify(toolName)}: true`)
+    }
     lines.push('  "bash": false')
     lines.push('  "edit": false')
     lines.push('  "write": false')
@@ -153,98 +314,57 @@ export function buildAssistantActionPrompt(context: AssistantStageContext | null
         'Choose the lightest valid response mode for each turn:',
         '- explain directly when the user only wants guidance or critique',
         '- ask one short clarifying question when an important choice is unresolved',
-        '- emit one concrete mutation block when the request is specific enough',
-        'If you want to mutate the stage, append exactly one action block at the end of your reply.',
-        'Use this exact format with raw JSON only:',
-        '<assistant-actions>{"version":1,"actions":[...]}</assistant-actions>',
-        'Rules:',
-        '- Keep your user-facing explanation outside the action block.',
-        '- Omit the action block when no canvas mutation is needed.',
-        '- If there are multiple reasonable creation paths, ask a short clarifying question before mutating.',
-        '- You can CRUD all four authoring asset families through this action surface: Tal, Dance, Performer, and Act.',
-        '- CRUD boundary: Tal and Dance are local draft create/update/delete only.',
-        '- CRUD boundary: Performer and Act are current Stage create/update/delete only.',
-        '- Valid action types:',
-        '  Install/import:   installRegistryAsset, addDanceFromGitHub, importInstalledPerformer, importInstalledAct',
-        '  Tal/Dance draft:  createTalDraft, updateTalDraft, deleteTalDraft, createDanceDraft, updateDanceDraft, deleteDanceDraft',
-        '  Dance bundle:     upsertDanceBundleFile, deleteDanceBundleEntry',
-        '  Performer:        createPerformer (description/Tal/Dance/model/MCP bindings), updatePerformer, deletePerformer',
-        '  Act:              createAct (description/actRules/safety/participants/relations), updateAct, deleteAct',
-        '  Participants:     attachPerformerToAct, detachParticipantFromAct, updateParticipantSubscriptions',
-        '  Relations:        connectPerformers, updateRelation, removeRelation',
-        '- Use exactly one assistant-actions block and place it at the end of the reply.',
-        '- The JSON inside the block must be valid and must not contain comments or trailing commas.',
-        '- Do not emit a bare JSON envelope. Always wrap stage mutations in <assistant-actions>...</assistant-actions>.',
+        '- call the mutation tool when the request is specific enough',
+        '- when a direct create request already specifies the intended roles or workflow, do not ask a redundant confirmation question',
+        'If you want to mutate the stage, call the apply_studio_actions tool with one valid action envelope.',
+        'Load the smallest relevant guide before calling the tool:',
+        '- performer or payload details: `studio-assistant-performer-guide`',
+        '- Act or workflow structure: `studio-assistant-act-guide` and `studio-assistant-workflow-guide`',
+        '- Studio UI/help questions: `studio-assistant-studio-guide`',
+        '- local Dance authoring: `studio-assistant-skill-creator-guide`',
+        '- external skill search or apply: `find-skills`',
+        'Core mutation rules:',
+        '- Keep your user-facing explanation in normal assistant text and send mutations through the tool call only.',
+        '- Tool arguments must be a valid action envelope with version=1 and an actions array.',
+        '- Validate the whole action envelope before calling the tool. One invalid action causes the tool call to fail.',
+        '- Do not paste raw mutation JSON into the reply.',
         '- Do not emit fenced JSON or Markdown code blocks for stage mutations.',
-        '- Validate the whole action envelope before sending it. One invalid action can cause the whole block to be ignored.',
-        '- Actions are applied sequentially in array order. If a later action depends on an earlier result, place them in dependency order in the same block.',
+        '- Omit unspecified optional fields entirely. Do not send empty strings, null placeholders, or empty draft objects just to satisfy a schema shape.',
+        '- If there are multiple reasonable creation paths, ask a short clarifying question before mutating.',
         '- Make the smallest correct set of mutations for the user request.',
         '- Reuse performers, acts, drafts, and relations already present in the Workspace snapshot whenever possible.',
         '- Prefer reuse first, install/import second, and brand-new draft or Stage creation third unless the user clearly asked for something new.',
-        '- If you create something and refer to it later in the same block, assign a ref on the create action and use performerRef, actRef, or draftRef in later actions.',
-        '- Treat same-block refs as the main cascade mechanism for create -> attach, create -> update, create draft -> write bundle files, and similar dependency chains.',
         '- Prefer explicit ids from the snapshot when available. If you do not know an id, you may use exact names.',
-        '- Never invent ids such as performer-1, act-1, relation-1, or draft-1. Use snapshot ids or same-block refs only.',
+        '- Never invent ids such as performer-1, act-1, relation-1, or draft-1. Use snapshot ids or same-call refs only.',
+        '- If you create something and refer to it later in the same tool call, assign a ref on the create action and use performerRef, actRef, or draftRef in later actions.',
+        '- Actions are applied sequentially in array order. Treat same-call refs as the main cascade mechanism.',
         '- For models, use values from availableModels in the snapshot. Do not invent provider ids or model ids.',
-        '- MCP library management is not part of the assistant action surface. Do not try to create or edit Studio MCP library entries via actions.',
-        '- addMcpServerNames and removeMcpServerNames only bind existing Studio MCP library server names to a performer.',
-        '- If the user needs a new MCP server definition, direct them to Asset Library → Local → Runtime → MCPs.',
-        '- Save Local and Publish are outside this assistant CRUD surface. Do not claim you completed them through assistant actions.',
-        '- Use installRegistryAsset when a known registry URN should be installed first.',
-        '- Use addDanceFromGitHub for GitHub or skills.sh dance installs using owner/repo or owner/repo@skill syntax.',
-        '- importInstalledPerformer and importInstalledAct add already-installed assets onto the canvas.',
+        '- For a direct create request that names both performers and an Act, prefer one dependency-ordered tool call: create performers first, then createAct.',
+        '- You can CRUD all four authoring asset families through this action surface.',
+        '- Tal and Dance are local draft create/update/delete only.',
+        '- Performer and Act are current Stage create/update/delete only.',
         '- Treat install/import helpers as support paths, not as CRUD for Tal, Dance, Performer, or Act.',
-        '- Distinguish clearly between local Dance authoring and external skill discovery/install.',
-        '- If the user wants to create or improve a Dance bundle, load studio-assistant-skill-creator-guide and stay in local draft authoring.',
-        '- If the user wants to find, compare, recommend, or apply an existing skill, load find-skills instead of defaulting to new Dance creation.',
+        '- Save Local and Publish are outside this assistant CRUD surface.',
+        '- If the user wants to create or improve a Dance bundle, load `studio-assistant-skill-creator-guide`.',
+        '- If the user wants to find, compare, recommend, or apply an existing skill, load `find-skills` instead of defaulting to new Dance creation.',
         '- Before recommending or installing a skills.sh or GitHub skill, warn briefly that third-party skills should be reviewed for source trust, install count, maintainer reputation, and actual SKILL.md contents.',
-        '- If the external skill choice is still ambiguous, present the best candidates and ask which one to use.',
-        '- For explicit create, update, or delete requests on Tal, Dance, Performer, or Act, use the matching existing action types directly.',
-        '- When creating a Performer, reflect the user request in the Performer itself, including the intended role, Tal, Dance, and model when those are stated or clearly implied.',
-        '- Performer description becomes participant focus in Act runtime. When the user describes a participant job or responsibility, capture it in the Performer description.',
-        '- Do not create a generic placeholder Performer when the user described a concrete role or working style.',
-        '- If the user explicitly says to skip Tal, skip Dance, or skip model selection, honor that and do not add the omitted part.',
-        '- If the user did not specify enough detail to choose between multiple reasonable Tal/Dance/model setups, ask a short clarifying question before creating the Performer.',
-        '- When creating a new Performer that needs a Tal or Dance, prefer cascading the dependencies in the same block with inline talDraft/addDanceDrafts or same-block draft refs.',
-        '- If the Tal or Dance is already known at Performer creation time, prefer one createPerformer action with inline dependency fields over createPerformer followed by updatePerformer.',
-        '- When the user asks for a workflow, pipeline, team, or multi-role setup, create or update the Act too. Do not stop after creating loose performers unless the user explicitly asked for performers only.',
-        '- When creating or updating an Act, reflect the user request in the Act composition itself: requested participants, requested role split, requested actRules, requested safety guardrails, and requested workflow shape.',
-        '- If an Act requires new participants, create the missing Performers in cascade first and make sure those Performers also reflect the user intent instead of using generic defaults.',
-        '- Do not create a generic team shape when the user described a specific team, department, company function, or workflow.',
-        '- actRules are workspace-level instructions injected into every participant.',
-        '- actRules must always be an array of strings. For one rule, still use ["..."].',
-        '- Act safety is the runtime guardrail layer for the whole Act. Use it for event caps, quiet windows, loop thresholds, or thread time limits.',
-        '- Act safety threadTimeoutMs is a runtime deadline, not a participant wait_until wake. Scheduled participant self-wakes use wait_until with wake_at.',
-        '- When createAct already knows the participants, prefer participantPerformerRefs, participantPerformerIds, or participantPerformerNames on createAct instead of separate attachPerformerToAct actions.',
-        '- If the user asks you to make a new team or workflow from scratch, prefer creating all missing performers first, then createAct with participantPerformerRefs in the same block.',
-        '- For a new multi-participant workflow Act, prefer adding at least one relation in createAct so the workflow is connected instead of leaving an unconnected group.',
-        '- A new Act with 2 or more participants but no relations is usually wrong for workflow or team requests. Do not stop at participant-only createAct unless the user explicitly asked for an unconnected group.',
-        '- If the user asks for something like a d2c company team, investment team, review flow, or pipeline, create the Act with participants and at least one relation in the same createAct action.',
-        '- For inline createAct relations and connectPerformers, use sourceParticipantKey/sourcePerformerId/sourcePerformerRef/sourcePerformerName and targetParticipantKey/targetPerformerId/targetPerformerRef/targetPerformerName.',
-        '- Use only source... and target... relation fields. Legacy from... and to... relation aliases are invalid.',
+        '- When creating a Performer, reflect the user request in the Performer itself instead of using a generic placeholder.',
+        '- Performer description becomes participant focus in Act runtime.',
+        '- When the user explicitly names the requested performers, use those role names directly instead of collapsing them into generic substitutes.',
+        '- When the user asks for a workflow, pipeline, team, or multi-role setup, create or update the Act too. Do not stop after creating loose performers.',
+        '- When creating or updating an Act, reflect the user request in the Act composition itself.',
+        '- actRules must always be an array of strings.',
+        '- Act safety threadTimeoutMs is a runtime deadline, not a participant wait_until wake.',
+        '- For new multi-participant workflow Acts, prefer adding at least one relation in createAct.',
+        '- For a brand-new workflow whose participants are already known, prefer participantPerformerRefs on createAct over follow-up attachPerformerToAct actions.',
+        '- For relation payloads, use only source... and target... fields. Legacy from... and to... relation aliases are invalid.',
         '- Every new relation must include a non-empty name and non-empty description.',
-        '- Use attachPerformerToAct mainly when modifying an existing Act or when the target participant becomes known only after creation. Do not use it as the default path for a newly created Act with known participants.',
         '- Participant subscriptions are wake filters, not permissions. Use callboardKeys as the canonical field name, and eventTypes currently only supports runtime.idle.',
-        '- For updateParticipantSubscriptions, use participantKey when known. Otherwise identify the participant or message-source participants by performerId, performerRef, or performerName already attached to that Act.',
-        '- If you need to explain participant runtime waiting, use wait_until conditions named message_received, board_key_exists, wake_at, all_of, and any_of. Do not call scheduled self-wakes timeout.',
-        '- Tal and Dance can only be created or updated as local drafts (not registry assets).',
-        '- Tal and Dance delete requests also operate on local drafts only.',
-        '- For asset creation requests involving Tal, Dance, Performer, or Act, it is good to use a short question-and-answer flow when important design choices are still missing.',
-        '- In that question flow, ask only the smallest high-value questions needed to determine the asset shape, such as role, responsibility split, model preference, Dance need, or workflow handoff.',
-        '- Once the user has answered enough, produce the concrete mutation block that reflects those answers.',
-        '- Bundle file actions operate only on saved Dance drafts. Use createDanceDraft first, then use its draftRef in later bundle actions from the same block.',
-        '- Use createDanceDraft or updateDanceDraft only for SKILL.md content. Use upsertDanceBundleFile for references/, scripts/, assets/, or agents/openai.yaml.',
-        '- When authoring a Dance bundle, keep SKILL.md concise and procedural. Put long examples, schemas, and decision tables in references/ instead of bloating SKILL.md.',
-        '- Add scripts/ only when deterministic execution or repeated boilerplate materially improves reliability. Add assets/ only for reusable output resources.',
-        '- The Dance frontmatter name and description should make the skill easy to trigger from the user request.',
+        '- Use createDanceDraft or updateDanceDraft only for SKILL.md content. Keep SKILL.md concise and procedural.',
+        '- Use upsertDanceBundleFile for references/, scripts/, assets/, or agents/openai.yaml.',
         '- Do not create extra bundle docs like README.md, QUICK_REFERENCE.md, or CHANGELOG.md unless the user explicitly asked for them.',
-        '- If the user wants to apply an external Dance to a known Performer and the installed Dance URN is known from discovery hints, you may install it with addDanceFromGitHub and then attach it via addDanceUrns in the same action block.',
-        '- Bundle file paths must stay relative to the Dance bundle root. Never target SKILL.md or draft.json through bundle file actions.',
-        '- Before emitting createAct, run this self-check: wrapped in assistant-actions, participants attached, relations included for multi-participant workflows, relation endpoints use source/target fields, and every relation has both name and description.',
-        '- Do not wrap the assistant-actions block in Markdown fences.',
-        '- If the request is ambiguous and you cannot produce a valid mutation safely, ask a short clarifying question instead of guessing.',
-        'Canonical createAct pattern:',
-        '<assistant-actions>{"version":1,"actions":[{"type":"createPerformer","ref":"strategy","name":"Strategy Lead"},{"type":"createPerformer","ref":"growth","name":"Growth Lead"},{"type":"createAct","name":"D2C Company","participantPerformerRefs":["strategy","growth"],"relations":[{"sourcePerformerRef":"strategy","targetPerformerRef":"growth","direction":"one-way","name":"strategy handoff","description":"Strategy Lead hands channel priorities and targets to Growth Lead."}]}]}</assistant-actions>',
+        'Canonical createAct tool args:',
+        '{"version":1,"actions":[{"type":"createPerformer","ref":"strategy","name":"Strategy Lead"},{"type":"createPerformer","ref":"growth","name":"Growth Lead"},{"type":"createAct","name":"D2C Company","participantPerformerRefs":["strategy","growth"],"relations":[{"sourcePerformerRef":"strategy","targetPerformerRef":"growth","direction":"one-way","name":"strategy handoff","description":"Strategy Lead hands channel priorities and targets to Growth Lead."}]}]}',
     ].join('\n')
 }
 
@@ -455,13 +575,36 @@ export async function ensureAssistantAgent(
 ): Promise<string> {
     const talContent = await readTal()
     const skills = await readBuiltinSkills()
+    const tools = getStaticAssistantTools()
+    const skillNames = skills.map((skill) => skill.name)
+    const toolNames = tools.map((tool) => tool.name)
     let changed = false
 
+    if (isManagedOpencode()) {
+        changed = (await removeManagedWorkspaceAssistantProjection(executionDir, skillNames, toolNames)) || changed
+    }
+
+    changed = (await removeDuplicateAssistantProjectionAncestors(
+        executionDir,
+        skillNames,
+        toolNames,
+    )) || changed
+    changed = (await removeDuplicateAssistantProjectionDescendants(
+        executionDir,
+        skillNames,
+        toolNames,
+    )) || changed
+
     // 1. Agent file
-    const frontmatter = buildFrontmatter(skills.map((s) => s.name))
+    const frontmatter = buildFrontmatter(skills.map((s) => s.name), [...ASSISTANT_TOOL_NAMES])
     const body = buildAgentBody(talContent)
     const agentContent = `${frontmatter}\n\n${body}`
     changed = (await writeIfChanged(agentFilePath(executionDir), agentContent)) || changed
+
+    for (const tool of tools) {
+        changed = (await writeIfChanged(toolFilePath(executionDir, tool.name), tool.content)) || changed
+    }
+    changed = (await removeStaleAssistantTools(executionDir, toolNames)) || changed
 
     // 2. Skill files (one SKILL.md per builtin dance)
     for (const skill of skills) {
@@ -469,7 +612,7 @@ export async function ensureAssistantAgent(
         const bundleSync = await syncSkillBundleSiblings(skill.sourceDir, skillDir(executionDir, skill.name))
         changed = bundleSync.changed || changed
     }
-    changed = (await removeStaleBuiltinSkills(executionDir, skills.map((skill) => skill.name))) || changed
+    changed = (await removeStaleBuiltinSkills(executionDir, skillNames)) || changed
 
     if (changed) {
         const oc = await getOpencode()

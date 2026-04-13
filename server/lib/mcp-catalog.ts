@@ -34,7 +34,14 @@ export function summarizeMcpCatalog(
             const config = catalog[name] as McpEntryConfig | undefined
             const live = liveStatus[name]
             const isShadowed = shadowed.has(name)
-            const status = isShadowed ? 'failed' : (live?.status || 'disconnected')
+            const startupDisabled = config?.enabled === false
+            const status = isShadowed
+                ? 'failed'
+                : live?.status === 'connected'
+                    ? 'connected'
+                    : startupDisabled
+                        ? 'disabled'
+                        : (live?.status || 'disconnected')
             const oauthConfig = config && config.type === 'remote'
                 ? config.oauth
                 : undefined

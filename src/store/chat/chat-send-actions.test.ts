@@ -69,8 +69,6 @@ function createPerformerTarget(chatKey = 'performer-1') {
         executionScope: {
             performerId: chatKey,
             actId: null,
-            clearPerformerIds: [chatKey],
-            clearActIds: [],
         },
         requestTarget: {
             performerId: chatKey,
@@ -89,8 +87,6 @@ function createActTarget(chatKey: string, actId: string, threadId: string) {
         executionScope: {
             performerId: 'local-performer',
             actId,
-            clearPerformerIds: ['local-performer'],
-            clearActIds: [actId],
         },
         requestTarget: {
             performerId: chatKey,
@@ -124,8 +120,6 @@ function createAssistantTarget(
         executionScope: {
             performerId: null,
             actId: null,
-            clearPerformerIds: [],
-            clearActIds: [],
         },
         requestTarget: {
             performerId: chatKey,
@@ -232,6 +226,45 @@ describe('chat send actions', () => {
         expect(state.watchSessionLifecycle).toHaveBeenCalledWith('performer-1', sessionId)
     })
 
+    it('sends the current projection dirty scope as an execution hint', async () => {
+        const sessionId = 'session-1'
+        const state = createMinimalState({
+            projectionDirty: {
+                performerIds: ['performer-2'],
+                actIds: [],
+                draftIds: ['draft-1'],
+                workspaceWide: false,
+            },
+            chatKeyToSession: { 'performer-1': sessionId },
+            sessionToChatKey: { [sessionId]: 'performer-1' },
+            sessionLoading: { [sessionId]: true },
+            initRealtimeEvents: vi.fn(),
+        })
+        const get = () => state
+        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
+            Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
+        }
+
+        resolveChatRuntimeTargetMock.mockReturnValue(createPerformerTarget())
+        sendMock.mockResolvedValue(undefined)
+
+        const actions = createChatSendActions(set, get, async () => ({
+            sessionId,
+            runtimeConfig: createPerformerTarget().runtimeConfig,
+        }))
+
+        await actions.sendMessage('performer-1', 'hello')
+
+        expect(sendMock).toHaveBeenCalledWith(sessionId, expect.objectContaining({
+            projectionScope: {
+                performerIds: ['performer-2'],
+                actIds: [],
+                draftIds: ['draft-1'],
+                workspaceWide: false,
+            },
+        }))
+    })
+
     it('does not start client lifecycle supervision for act sends', async () => {
         const actId = 'act-1'
         const threadId = 'thread-1'
@@ -262,6 +295,82 @@ describe('chat send actions', () => {
         expect(state.watchSessionLifecycle).not.toHaveBeenCalled()
     })
 
+    it('shows the first standalone user input as the sidebar title immediately and refreshes later', async () => {
+        const sessionId = 'session-standalone-1'
+        const state = createMinimalState({
+            chatKeyToSession: { 'performer-1': sessionId },
+            sessionToChatKey: { [sessionId]: 'performer-1' },
+            sessionLoading: { [sessionId]: true },
+            sessions: [{ id: sessionId, title: 'DOT Studio: Performer 1 [studio:performer-1:hash]' }],
+            initRealtimeEvents: vi.fn(),
+            listSessions: vi.fn(async () => {}),
+        })
+        const get = () => state
+        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
+            Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
+        }
+
+        resolveChatRuntimeTargetMock.mockReturnValue(createPerformerTarget())
+        sendMock.mockResolvedValue(undefined)
+
+        const actions = createChatSendActions(set, get, async () => ({
+            sessionId,
+            runtimeConfig: createPerformerTarget().runtimeConfig,
+        }))
+
+        await actions.sendMessage('performer-1', 'Draft launch notes for the beta release')
+
+        expect(state.sessions[0]?.sidebarTitle).toBe('Draft launch notes for the beta release')
+
+        await vi.advanceTimersByTimeAsync(12_100)
+        expect(state.listSessions).toHaveBeenCalledTimes(3)
+    })
+
+    it('shows the first Act user input as the thread name immediately and refreshes thread snapshots later', async () => {
+        const actId = 'act-1'
+        const threadId = 'thread-1'
+        const participantKey = 'participant-1'
+        const chatKey = `act:${actId}:thread:${threadId}:participant:${participantKey}`
+        const sessionId = 'session-act-1'
+        const state = createMinimalState({
+            chatKeyToSession: { [chatKey]: sessionId },
+            sessionToChatKey: { [sessionId]: chatKey },
+            sessionLoading: { [sessionId]: true },
+            actThreads: {
+                [actId]: [{
+                    id: threadId,
+                    actId,
+                    status: 'idle',
+                    participantSessions: {},
+                    participantStatuses: {},
+                    createdAt: Date.now(),
+                }],
+            },
+            initRealtimeEvents: vi.fn(),
+            loadThreads: vi.fn(async () => {}),
+        })
+        const get = () => state
+        const set = (partial: Partial<StudioState> | ((current: StudioState) => Partial<StudioState>)) => {
+            Object.assign(state, typeof partial === 'function' ? partial(state) : partial)
+        }
+
+        resolveChatRuntimeTargetMock.mockReturnValue(createActTarget(chatKey, actId, threadId))
+        sendMock.mockResolvedValue(undefined)
+
+        const actions = createChatSendActions(set, get, async () => ({
+            sessionId,
+            runtimeConfig: createActTarget(chatKey, actId, threadId).runtimeConfig,
+        }))
+
+        await actions.sendActMessage(actId, threadId, participantKey, 'Investigate why the mobile build failed')
+
+        expect(state.actThreads[actId]?.[0]?.name).toBe('Investigate why the mobile build failed')
+
+        await vi.advanceTimersByTimeAsync(12_100)
+        expect(state.loadThreads).toHaveBeenCalledTimes(3)
+        expect(state.loadThreads).toHaveBeenCalledWith(actId)
+    })
+
     it('hydrates assistant available models before sending when the workspace cache is empty', async () => {
         const chatKey = 'studio-assistant'
         const sessionId = 'session-assistant-1'
@@ -286,6 +395,7 @@ describe('chat send actions', () => {
                 id: 'gpt-5.4',
                 name: 'GPT-5.4',
                 connected: true,
+                toolCall: true,
             },
             {
                 provider: 'anthropic',
@@ -293,6 +403,7 @@ describe('chat send actions', () => {
                 id: 'claude-disconnected',
                 name: 'Claude Disconnected',
                 connected: false,
+                toolCall: true,
             },
         ])
         sendMock.mockResolvedValue(undefined)
@@ -327,7 +438,7 @@ describe('chat send actions', () => {
         }))
     })
 
-    it('replaces a stale assistant model with the first connected model before sending', async () => {
+    it('replaces a stale assistant model with the preferred connected tool-capable model before sending', async () => {
         const chatKey = 'studio-assistant'
         const sessionId = 'session-assistant-2'
         const state = createMinimalState({
@@ -355,11 +466,28 @@ describe('chat send actions', () => {
         ))
         listModelsMock.mockResolvedValue([
             {
+                provider: 'anthropic',
+                providerName: 'Anthropic',
+                id: 'claude-sonnet-4',
+                name: 'Claude Sonnet 4',
+                connected: true,
+                toolCall: false,
+            },
+            {
+                provider: 'opencode',
+                providerName: 'OpenCode Zen',
+                id: 'gpt-5-nano',
+                name: 'GPT-5 Nano',
+                connected: true,
+                toolCall: true,
+            },
+            {
                 provider: 'openai',
                 providerName: 'OpenAI',
                 id: 'gpt-5.4',
                 name: 'GPT-5.4',
                 connected: true,
+                toolCall: true,
             },
         ])
         sendMock.mockResolvedValue(undefined)
@@ -389,6 +517,12 @@ describe('chat send actions', () => {
                         providerName: 'OpenAI',
                         modelId: 'gpt-5.4',
                         name: 'GPT-5.4',
+                    },
+                    {
+                        provider: 'opencode',
+                        providerName: 'OpenCode Zen',
+                        modelId: 'gpt-5-nano',
+                        name: 'GPT-5 Nano',
                     },
                 ],
             }),

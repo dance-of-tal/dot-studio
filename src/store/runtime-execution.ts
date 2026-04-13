@@ -1,6 +1,6 @@
 import type { AssetRef } from '../types'
+import { projectionDirtyPatchHasAny } from '../../shared/projection-dirty'
 import type { StudioState } from './types'
-import { hasRunningStudioSessions } from './runtime-reload-utils'
 
 type GetState = () => StudioState
 
@@ -8,7 +8,7 @@ export type PreparedRuntimeResult = {
     appliedReload: boolean
     requiresDispose: boolean
     blocked: boolean
-    reason: 'runtime_reload' | 'projection_update_pending' | 'running_session' | null
+    reason: 'runtime_reload' | null
 }
 
 function collectDraftIds(talRef: AssetRef | null | undefined, danceRefs: AssetRef[] | null | undefined) {
@@ -84,20 +84,10 @@ export async function preparePendingRuntimeExecution(
 
     const state = get()
     const requiresDispose = projectionDirtyAffectsTarget(state, options)
+    const hasAnyProjectionDirty = projectionDirtyPatchHasAny(state.projectionDirty)
 
-    if (requiresDispose && state.workspaceDirty) {
+    if (hasAnyProjectionDirty && state.workspaceDirty) {
         await state.saveWorkspace()
-    }
-
-    const hasRunningConflict = hasRunningStudioSessions(state)
-
-    if (requiresDispose && hasRunningConflict) {
-        return {
-            appliedReload,
-            requiresDispose,
-            blocked: true,
-            reason: 'projection_update_pending',
-        }
     }
 
     return {

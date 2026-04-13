@@ -3,6 +3,7 @@
 import { serve } from '@hono/node-server'
 import { setupTerminalWs } from './terminal.js'
 import { createServerApp } from './app.js'
+import { refreshAssistantProjectionOnServerStartup } from './services/studio-assistant/assistant-startup-service.js'
 
 // Config
 import { PORT, OPENCODE_URL, STUDIO_DIR, IS_PRODUCTION, getActiveProjectDir } from './lib/config.js'
@@ -13,6 +14,9 @@ const app = createServerApp()
 // ── Start Server ────────────────────────────────────────
 await ensureOpencodeSidecar().catch((err) => {
     console.warn(`OpenCode sidecar is not ready yet: ${err instanceof Error ? err.message : String(err)}`)
+})
+await refreshAssistantProjectionOnServerStartup().catch((err) => {
+    console.warn(`Studio Assistant projection refresh failed on startup: ${err instanceof Error ? err.message : String(err)}`)
 })
 
 console.log(`\n🎪 DOT Studio Server${IS_PRODUCTION ? ' (production)' : ' (dev)'}`)

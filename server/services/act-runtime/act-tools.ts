@@ -4,10 +4,11 @@
  * PRD §13: Collaboration tools exposed to participants.
  * - message_teammate
  * - update_shared_board
- * - read_shared_board
+ * - list_shared_board
+ * - get_shared_board_entry
  * - wait_until
  *
- * These are 4 generic static tool files placed in .opencode/tools/.
+ * These are generic static tool files placed in .opencode/tools/.
  * The model only provides high-level collaboration inputs.
  * Act/thread/participant identity is resolved from the current session.
  */
@@ -30,9 +31,13 @@ export interface PostToBoardParams {
     metadata?: Record<string, unknown>
 }
 
-export interface ReadBoardParams {
-    entryKey?: string
+export interface ListBoardParams {
+    kind?: 'artifact' | 'finding' | 'task'
     mode?: 'summary' | 'full'
+}
+
+export interface GetBoardEntryParams {
+    entryKey: string
 }
 
 export interface SetWakeConditionParams {
@@ -43,21 +48,25 @@ export interface SetWakeConditionParams {
 export const COLLABORATION_TOOL_NAMES = [
     'message_teammate',
     'update_shared_board',
-    'read_shared_board',
+    'list_shared_board',
+    'get_shared_board_entry',
     'wait_until',
 ] as const
 
-export const LEGACY_COLLABORATION_TOOL_NAMES = [
+// Old tool filenames kept only so projection cleanup and permission deny-lists
+// can remove stale artifacts from existing workspaces.
+export const STALE_COLLABORATION_TOOL_NAMES = [
     'act_send_message',
     'act_post_to_board',
     'act_read_board',
     'act_set_wake_condition',
+    'read_shared_board',
 ] as const
 
 // ── Static tool definitions ─────────────────────────────
 
 /**
- * The 4 generic Act runtime tools.
+ * The generic Act runtime tools.
  * These are static and session-bound.
  * The workingDir is baked in at write time (changes per workspace, not per thread).
  */
@@ -75,7 +84,7 @@ export default tool({
     args: {
         recipient: tool.schema.string().describe("Teammate display name to message directly. Do not pass relation names like participant_1_to_participant_2."),
         message: tool.schema.string().describe("Message to send"),
-        tag: tool.schema.string().optional().describe("Optional short label for the message"),
+        tag: tool.schema.string().optional().describe("Optional short label for the message. Reuse teammate-facing tags when they fit; if you invent a new tag, keep the message body understandable without it."),
     },
     async execute(args, context) {
         const sessionID = context.sessionID
@@ -102,7 +111,7 @@ export default tool({
 export default tool({
     description: "Create or update a shared note for the whole team. Prefer short Markdown summaries for decisions, findings, task status, and handoffs. Do not paste full deliverables or long raw dumps.",
     args: {
-        entryKey: tool.schema.string().describe("Stable key for the shared note, such as api-spec or review-report"),
+        entryKey: tool.schema.string().describe("Stable key for the shared note, such as api-spec or review-report. Reuse the same key for the same workstream; prefer teammate-facing key patterns when you want them to notice the update."),
         entryType: tool.schema.enum(["artifact", "finding", "task"]).describe("Type of shared note"),
         content: tool.schema.string().describe("Compact Markdown entry content. Prefer a fresh summary over a long transcript or raw dump."),
         mode: tool.schema.enum(["replace", "append"]).optional().describe("How to update an existing shared note. Prefer replace; append is only for short incremental additions."),
@@ -127,26 +136,47 @@ export default tool({
 `,
         },
         {
-            name: 'read_shared_board',
+            name: 'list_shared_board',
             content: `import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-    description: "Read shared notes created by the team. By default this returns a recent summarized view; pass a specific key for the exact entry you need.",
+    description: "List recent shared notes on the board. Use this when you need to see what exists before choosing an exact key.",
     args: {
-        entryKey: tool.schema.string().optional().describe("Optional shared note key. Pass this when you know the relevant key you need."),
-        mode: tool.schema.enum(["summary", "full"]).optional().describe("Optional board read mode when no key is provided. Use full only when you truly need a full-board resync."),
+        kind: tool.schema.enum(["artifact", "finding", "task"]).optional().describe("Optional shared note kind filter. Use this instead of passing values like artifact or recent as a key."),
+        mode: tool.schema.enum(["summary", "full"]).optional().describe("Optional list detail mode. Use full only when you truly need a full-board resync."),
     },
     async execute(args, context) {
         const sessionID = context.sessionID
         const params = new URLSearchParams()
-        if (args.entryKey) params.set("key", args.entryKey)
-        if (!args.entryKey && args.mode === "full") params.set("summaryOnly", "false")
+        if (args.kind) params.set("kind", args.kind)
+        if (args.mode === "full") params.set("summaryOnly", "false")
         const qs = params.toString()
         const suffix = qs ? "&" + qs : ""
-        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/read-shared-board?workingDir=${wd}\` + suffix)
+        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/list-shared-board?workingDir=${wd}\` + suffix)
         const data = await res.json()
         if (!data.ok) return data.error
         return JSON.stringify(data.entries, null, 2)
+    },
+})
+`,
+        },
+        {
+            name: 'get_shared_board_entry',
+            content: `import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+    description: "Read one exact shared note by key. Pass the literal key you want, such as review-report. Do not pass values like recent or artifact here.",
+    args: {
+        entryKey: tool.schema.string().describe("Exact shared note key to read."),
+    },
+    async execute(args, context) {
+        const sessionID = context.sessionID
+        const params = new URLSearchParams()
+        params.set("key", args.entryKey)
+        const res = await fetch(\`${base}/api/act/session/\${encodeURIComponent(sessionID)}/get-shared-board-entry?workingDir=${wd}&\` + params.toString())
+        const data = await res.json()
+        if (!data.ok) return data.error
+        return JSON.stringify(data.entry, null, 2)
     },
 })
 `,
@@ -179,7 +209,7 @@ export default tool({
         })
         const data = await res.json()
         if (!data.ok) return data.error
-        return "Wait condition saved. You will resume when it is satisfied."
+        return "Wait condition saved. End your turn now and do not call more collaboration tools until you are resumed."
     },
 })
 `,

@@ -1,5 +1,4 @@
 import type { ChatMessage } from '../../types'
-import { stripAssistantActionBlock } from '../assistant/assistant-protocol'
 
 export function hasVisibleUserMessageContent(message: Pick<ChatMessage, 'content' | 'attachments'>): boolean {
     if ((message.content || '').trim()) {
@@ -10,7 +9,7 @@ export function hasVisibleUserMessageContent(message: Pick<ChatMessage, 'content
 }
 
 export function hasVisibleAssistantMessageContent(message: Pick<ChatMessage, 'content' | 'parts'>): boolean {
-    const visibleText = stripAssistantActionBlock(message.content || '').trim()
+    const visibleText = (message.content || '').trim()
     if (visibleText) {
         return true
     }

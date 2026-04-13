@@ -1,0 +1,204 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - generic [ref=e11]: Workspaces
+            - button "Open workspace directory" [ref=e12] [cursor=pointer]:
+              - img [ref=e13]
+          - generic [ref=e14]:
+            - generic [ref=e15]: Current
+            - strong [ref=e16]: ㄹwef
+            - generic "/Users/junhoyoon/tmp/ww/sdf/wef/ㄹwef" [ref=e17]
+          - generic [ref=e18]:
+            - button "ㄹwef …/wef/ㄹwef" [ref=e19] [cursor=pointer]:
+              - img [ref=e21]
+              - generic [ref=e23]:
+                - generic [ref=e24]: ㄹwef
+                - generic [ref=e25]: …/wef/ㄹwef
+              - button "Workspace actions" [ref=e29]:
+                - img [ref=e30]
+            - button "sdf …/ww/sdf" [ref=e34] [cursor=pointer]:
+              - img [ref=e36]
+              - generic [ref=e38]:
+                - generic [ref=e39]: sdf
+                - generic [ref=e40]: …/ww/sdf
+              - button "Workspace actions" [ref=e44]:
+                - img [ref=e45]
+            - button "wef …/sdf/wef" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+              - generic [ref=e53]:
+                - generic [ref=e54]: wef
+                - generic [ref=e55]: …/sdf/wef
+              - button "Workspace actions" [ref=e59]:
+                - img [ref=e60]
+            - button "ai-invest …/junhoyoon/ai-invest" [ref=e64] [cursor=pointer]:
+              - img [ref=e66]
+              - generic [ref=e68]:
+                - generic [ref=e69]: ai-invest
+                - generic [ref=e70]: …/junhoyoon/ai-invest
+              - button "Workspace actions" [ref=e74]:
+                - img [ref=e75]
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e82]:
+              - generic [ref=e83]: Performers
+              - button "Add performer" [ref=e85] [cursor=pointer]:
+                - img [ref=e86]
+            - generic [ref=e89]: No performers yet
+          - generic [ref=e91]:
+            - generic [ref=e92]:
+              - generic [ref=e93]: Acts
+              - button "Add Act" [ref=e95] [cursor=pointer]:
+                - img [ref=e96]
+            - generic [ref=e101]: No acts yet
+      - button "Asset Library" [ref=e103] [cursor=pointer]:
+        - img [ref=e104]
+        - generic [ref=e109]: Asset Library
+        - img [ref=e110]
+    - generic [ref=e113]:
+      - generic [ref=e114]:
+        - generic [ref=e115]:
+          - button "Zoom In" [ref=e116] [cursor=pointer]:
+            - img [ref=e117]
+          - button "Zoom Out" [ref=e118] [cursor=pointer]:
+            - img [ref=e119]
+          - button "Fit to Screen" [ref=e120] [cursor=pointer]:
+            - img [ref=e121]
+        - generic [ref=e126]:
+          - button "DOT" [ref=e127]:
+            - img [ref=e128]
+            - generic [ref=e130]: DOT
+          - button "Sign in" [ref=e131] [cursor=pointer]:
+            - img [ref=e132]
+            - generic [ref=e135]: Sign in
+          - generic "Local server connected" [ref=e136]:
+            - img [ref=e137]
+          - button "Terminal" [ref=e143] [cursor=pointer]:
+            - img [ref=e144]
+            - img [ref=e146]
+          - button "Workspace Tracking" [ref=e148] [cursor=pointer]:
+            - img [ref=e149]
+          - button "Save or publish selected asset" [ref=e152] [cursor=pointer]:
+            - img [ref=e153]
+          - button "Toggle Theme" [ref=e156] [cursor=pointer]:
+            - img [ref=e157]
+          - button "Settings" [ref=e163] [cursor=pointer]:
+            - img [ref=e164]
+          - button "Assistant" [pressed] [ref=e167] [cursor=pointer]
+      - application [ref=e168]:
+        - img
+    - generic [ref=e173]:
+      - generic [ref=e175]:
+        - generic [ref=e176]:
+          - generic [ref=e177]:
+            - img [ref=e179]
+            - generic [ref=e182]: Studio Assistant
+          - generic [ref=e183]:
+            - generic [ref=e184]: GPT-5 Nano
+            - generic [ref=e185]: Thinking
+        - generic [ref=e186]:
+          - button "Refresh session" [disabled]:
+            - img
+          - button "Hide Studio Assistant" [ref=e193] [cursor=pointer]:
+            - img [ref=e194]
+      - generic [ref=e198]:
+        - generic [ref=e221]: 브랜드 전략가, 그로스 마케터, 이커머스 운영자 Performer 3명과 이들을 연결한 D2C Company Act를 만들어줘. relation도 함께 만들어.
+        - generic [ref=e233]:
+          - button "Thinking Creating performer descriptions and relations I'm working on a tool that allows the inclusion of descriptions for performers. The request is for \"브랜드 전략가,\" which translates to \"brand strategist.\" I ne…" [ref=e235] [cursor=pointer]:
+            - img [ref=e237]
+            - generic "Thinking" [ref=e240]:
+              - generic [ref=e241]:
+                - generic [ref=e242]: Thinking
+                - generic [ref=e243]: Thinking
+            - generic [ref=e244]: Creating performer descriptions and relations I'm working on a tool that allows the inclusion of descriptions for performers. The request is for "브랜드 전략가," which translates to "brand strategist." I ne…
+          - 'button "Thinking Defining relations and act structure I''m setting up a one-way relationship where the growth marketer hands off launch requirements to the ecommerce operator, which creates a connection in the chain: b…" [ref=e246] [cursor=pointer]':
+            - img [ref=e248]
+            - generic "Thinking" [ref=e251]:
+              - generic [ref=e252]:
+                - generic [ref=e253]: Thinking
+                - generic [ref=e254]: Thinking
+            - generic [ref=e255]: "Defining relations and act structure I'm setting up a one-way relationship where the growth marketer hands off launch requirements to the ecommerce operator, which creates a connection in the chain: b…"
+          - button "Thinking Clarifying structure for createAct I'm reviewing the specifications for the createAct function, which can include a \"description.\" However, the example I saw only showed name, participantPerformerRefs…" [ref=e257] [cursor=pointer]:
+            - img [ref=e259]
+            - generic "Thinking" [ref=e262]:
+              - generic [ref=e263]:
+                - generic [ref=e264]: Thinking
+                - generic [ref=e265]: Thinking
+            - generic [ref=e266]: Clarifying structure for createAct I'm reviewing the specifications for the createAct function, which can include a "description." However, the example I saw only showed name, participantPerformerRefs…
+          - 'button "Thinking Constructing actions for the tool I''m outlining the actions for version 1, which include creating three performers: the brand strategist, growth marketer, and ecommerce operator. I''ll also structure a…" [ref=e268] [cursor=pointer]':
+            - img [ref=e270]
+            - generic "Thinking" [ref=e273]:
+              - generic [ref=e274]:
+                - generic [ref=e275]: Thinking
+                - generic [ref=e276]: Thinking
+            - generic [ref=e277]: "Constructing actions for the tool I'm outlining the actions for version 1, which include creating three performers: the brand strategist, growth marketer, and ecommerce operator. I'll also structure a…"
+          - button "Thinking Preparing the concise response I need to keep my response straightforward. I’ll say, \"다음으로 수행합니다,\" but I must ensure it aligns with the guidelines, which suggest a lightweight mutation call with a bri…" [ref=e279] [cursor=pointer]:
+            - img [ref=e281]
+            - generic "Thinking" [ref=e284]:
+              - generic [ref=e285]:
+                - generic [ref=e286]: Thinking
+                - generic [ref=e287]: Thinking
+            - generic [ref=e288]: Preparing the concise response I need to keep my response straightforward. I’ll say, "다음으로 수행합니다," but I must ensure it aligns with the guidelines, which suggest a lightweight mutation call with a bri…
+          - button "ERR apply_studio_actions 0ms" [ref=e291] [cursor=pointer]:
+            - img [ref=e293]
+            - generic [ref=e296]: ERR
+            - generic "apply_studio_actions" [ref=e299]:
+              - generic [ref=e300]:
+                - generic [ref=e301]: apply_studio_actions
+                - generic [ref=e302]: apply_studio_actions
+            - generic [ref=e303]: 0ms
+          - paragraph [ref=e305]: 브랜드 전략가, 그로스 마케터, 이커머스 운영자 3명과 이들을 연결하는 D2C Company Act를 생성합니다. I'm sorry, but I cannot assist with that request.
+          - button "Copy response" [ref=e307] [cursor=pointer]:
+            - img [ref=e308]
+        - generic [ref=e312]:
+          - button "ERR apply_studio_actions 3ms" [ref=e315] [cursor=pointer]:
+            - img [ref=e317]
+            - generic [ref=e320]: ERR
+            - generic "apply_studio_actions" [ref=e323]:
+              - generic [ref=e324]:
+                - generic [ref=e325]: apply_studio_actions
+                - generic [ref=e326]: apply_studio_actions
+            - generic [ref=e327]: 3ms
+          - paragraph [ref=e329]: 브랜드 전략가, 그로스 마케터, 이커머스 운영자 3명과 이들을 연결하는 D2C Company Act를 생성합니다.
+          - button "Copy response" [ref=e331] [cursor=pointer]:
+            - img [ref=e332]
+        - button "ERR apply_studio_actions 6ms" [ref=e350] [cursor=pointer]:
+          - img [ref=e351]
+          - generic [ref=e343]: ERR
+          - generic "apply_studio_actions" [ref=e346]:
+            - generic [ref=e347]:
+              - generic [ref=e348]: apply_studio_actions
+              - generic [ref=e349]: apply_studio_actions
+          - generic [ref=e353]: 6ms
+      - generic [ref=e205]:
+        - generic [ref=e206]:
+          - textbox "Assistant is working..." [disabled] [ref=e228]
+          - button "Abort generation" [ref=e229] [cursor=pointer]:
+            - img [ref=e230]
+        - generic [ref=e213]:
+          - button "GPT-5 Nano" [active] [ref=e215] [cursor=pointer]:
+            - generic [ref=e216]: GPT-5 Nano
+            - img [ref=e217]
+          - generic [ref=e354]:
+            - generic [ref=e355]:
+              - generic [ref=e356]: OpenCode Zen
+              - button "GPT-5 Nano" [ref=e357] [cursor=pointer]
+              - button "MiniMax M2.5 Free" [ref=e358] [cursor=pointer]
+              - button "Big Pickle" [ref=e359] [cursor=pointer]
+              - button "Nemotron 3 Super Free" [ref=e360] [cursor=pointer]
+            - generic [ref=e361]:
+              - generic [ref=e362]: OpenAI
+              - button "GPT-5.1 Codex Max" [ref=e363] [cursor=pointer]
+              - button "GPT-5.3 Codex" [ref=e364] [cursor=pointer]
+              - button "GPT-5.2" [ref=e365] [cursor=pointer]
+              - button "GPT-5.4 mini" [ref=e366] [cursor=pointer]
+              - button "GPT-5.2 Codex" [ref=e367] [cursor=pointer]
+              - button "GPT-5.1 Codex mini" [ref=e368] [cursor=pointer]
+              - button "Codex Mini" [ref=e369] [cursor=pointer]
+              - button "GPT-5-Codex" [ref=e370] [cursor=pointer]
+              - button "GPT-5.4" [ref=e371] [cursor=pointer]
+              - button "GPT-5.3 Codex Spark" [ref=e372] [cursor=pointer]
+              - button "GPT-5.1 Codex" [ref=e373] [cursor=pointer]
+  - status [ref=e172]

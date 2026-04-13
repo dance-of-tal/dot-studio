@@ -2,6 +2,9 @@
 // This file serves as a barrel re-export for the split modules.
 
 import { assetUrnDisplayName } from '../../lib/asset-urn'
+import type { McpServer } from '../../types'
+import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
+import type { AssetPanelAsset, LibraryAsset, McpPanelAsset, ModelPanelAsset } from './asset-panel-types'
 export {
     ALL_MODEL_PROVIDER_FILTER,
     type ModelProviderFilter,
@@ -71,6 +74,54 @@ export function getAssetSelectionKey(asset: AssetSelectionKeyInput): string {
         return `mcp:${asset.name}`
     }
     return `${asset.kind}:${asset.name}:${asset.author || ''}`
+}
+
+export function resolveSelectedAssetSnapshot(
+    selectedAsset: AssetPanelAsset | null,
+    options: {
+        installedAssets?: LibraryAsset[]
+        registryAssets?: LibraryAsset[]
+        models?: RuntimeModelCatalogEntry[]
+        mcps?: McpServer[]
+    },
+): AssetPanelAsset | null {
+    if (!selectedAsset) return null
+
+    const selectedKey = getAssetSelectionKey(selectedAsset)
+    if (!selectedKey) return selectedAsset
+
+    const installedMatch = (options.installedAssets || []).find((asset) => getAssetSelectionKey(asset) === selectedKey)
+    if (installedMatch) {
+        return installedMatch
+    }
+
+    const registryMatch = (options.registryAssets || []).find((asset) => getAssetSelectionKey(asset) === selectedKey)
+    if (registryMatch) {
+        return registryMatch
+    }
+
+    const modelMatch = (options.models || []).find((model) => (
+        getAssetSelectionKey({ kind: 'model', ...model }) === selectedKey
+    ))
+    if (modelMatch) {
+        return {
+            ...modelMatch,
+            kind: 'model',
+            name: modelMatch.name || modelMatch.id,
+        } satisfies ModelPanelAsset
+    }
+
+    const mcpMatch = (options.mcps || []).find((mcp) => (
+        getAssetSelectionKey({ kind: 'mcp', ...mcp }) === selectedKey
+    ))
+    if (mcpMatch) {
+        return {
+            ...mcpMatch,
+            kind: 'mcp',
+        } satisfies McpPanelAsset
+    }
+
+    return selectedAsset
 }
 
 // Re-export from split modules

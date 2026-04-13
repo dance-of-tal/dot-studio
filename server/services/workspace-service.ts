@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { createHash } from 'crypto'
+import type { SharedAssetRef } from '../../shared/chat-contracts.js'
 import { getOpencode } from '../lib/opencode.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { workspacesDir, workspaceDir } from '../lib/config.js'
@@ -17,6 +18,21 @@ type WorkspaceLinkedSnapshot = {
     performers?: Array<{ id?: string }>
     acts?: Array<{ id?: string }>
 } & Record<string, unknown>
+
+export type WorkspacePerformerSnapshot = {
+    id: string
+    name: string
+    model: { provider: string; modelId: string } | null
+    modelVariant?: string | null
+    talRef?: SharedAssetRef | null
+    danceRefs?: SharedAssetRef[]
+    mcpServerNames?: string[]
+    agentId?: string | null
+    planMode?: boolean
+    meta?: {
+        derivedFrom?: string | null
+    }
+}
 
 function isAllowedWorkspaceCharacter(char: string) {
     const code = char.charCodeAt(0)
@@ -51,6 +67,37 @@ function workspaceIdForWorkingDir(workingDir: string): string {
 
 function workspacePathForId(id: string): string {
     return path.join(workspaceDir(id), 'workspace.json')
+}
+
+function workspacePathForWorkingDir(workingDir: string) {
+    return workspacePathForId(workspaceIdForWorkingDir(workingDir))
+}
+
+async function readWorkspaceSnapshotForDir(workingDir: string): Promise<WorkspaceLinkedSnapshot | null> {
+    const normalized = normalizeWorkingDir(workingDir)
+    if (!normalized) {
+        return null
+    }
+
+    try {
+        const raw = await fs.readFile(workspacePathForWorkingDir(normalized), 'utf-8')
+        return JSON.parse(raw) as WorkspaceLinkedSnapshot
+    } catch {
+        return null
+    }
+}
+
+export async function listWorkspacePerformersForDir(workingDir: string): Promise<WorkspacePerformerSnapshot[]> {
+    const workspace = await readWorkspaceSnapshotForDir(workingDir)
+    if (!workspace || !Array.isArray(workspace.performers)) {
+        return []
+    }
+
+    return workspace.performers.filter((performer): performer is WorkspacePerformerSnapshot => (
+        typeof performer?.id === 'string'
+        && performer.id.length > 0
+        && typeof (performer as WorkspacePerformerSnapshot).name === 'string'
+    ))
 }
 
 async function purgeLinkedOpencodeData(workspace: WorkspaceLinkedSnapshot) {

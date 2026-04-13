@@ -8,11 +8,13 @@
 
 import type { ActDefinition } from '../../../shared/act-types.js'
 import type { SharedAssetRef } from '../../../shared/chat-contracts.js'
-import { workspaceIdForDir, workspaceDir } from '../../lib/config.js'
-import fs from 'fs/promises'
-import path from 'path'
+import {
+    listWorkspacePerformersForDir,
+    type WorkspacePerformerSnapshot,
+} from '../workspace-service.js'
 
 export interface ResolvedPerformerConfig {
+    performerId: string
     performerName: string
     model: { provider: string; modelId: string } | null
     modelVariant: string | null
@@ -24,31 +26,12 @@ export interface ResolvedPerformerConfig {
 }
 
 /**
- * Workspace performer shape — subset of PerformerNode fields needed here.
- * Not importing the full client type to avoid coupling server→client code.
- */
-interface WorkspacePerformer {
-    id: string
-    name: string
-    model: { provider: string; modelId: string } | null
-    modelVariant?: string | null
-    talRef: SharedAssetRef | null
-    danceRefs: SharedAssetRef[]
-    mcpServerNames: string[]
-    agentId?: string | null
-    planMode?: boolean
-    meta?: {
-        derivedFrom?: string | null
-    }
-}
-
-/**
  * Resolve the performer config for a participant in an Act.
- * Reads the workspace.json file to find the performer matching the
+ * Reads the saved workspace snapshot to find the performer matching the
  * participant's performerRef (draft id or registry URN).
  *
  * Returns null if:
- * - workspace.json not found
+ * - the workspace snapshot is not available
  * - participant not in actDefinition
  * - no matching performer in workspace
  */
@@ -63,16 +46,9 @@ export async function resolvePerformerForWake(
     const ref = binding.performerRef
 
     // Read workspace.json to find performers
-    const wsId = workspaceIdForDir(workingDir)
-    const wsPath = path.join(workspaceDir(wsId), 'workspace.json')
-
-    let performers: WorkspacePerformer[]
-    try {
-        const raw = await fs.readFile(wsPath, 'utf-8')
-        const parsed = JSON.parse(raw)
-        performers = Array.isArray(parsed.performers) ? parsed.performers : []
-    } catch {
-        console.warn(`[wake-resolver] Cannot read workspace at ${wsPath}`)
+    const performers = await listWorkspacePerformersForDir(workingDir)
+    if (performers.length === 0) {
+        console.warn(`[wake-resolver] Cannot read performers for workspace ${workingDir}`)
         return null
     }
 
@@ -86,10 +62,11 @@ export async function resolvePerformerForWake(
     }
 
     return {
+        performerId: performer.id,
         performerName: performer.name,
         model: performer.model,
         modelVariant: performer.modelVariant ?? null,
-        talRef: performer.talRef,
+        talRef: performer.talRef || null,
         danceRefs: performer.danceRefs || [],
         mcpServerNames: performer.mcpServerNames || [],
         agentId: performer.agentId ?? null,
@@ -98,9 +75,9 @@ export async function resolvePerformerForWake(
 }
 
 function matchPerformer(
-    performers: WorkspacePerformer[],
+    performers: WorkspacePerformerSnapshot[],
     ref: SharedAssetRef,
-): WorkspacePerformer | null {
+): WorkspacePerformerSnapshot | null {
     if (ref.kind === 'draft') {
         return (
             performers.find((p) => p.id === ref.draftId) ||

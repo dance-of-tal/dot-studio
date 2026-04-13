@@ -1,5 +1,4 @@
 import type { RuntimeModelCatalogEntry } from '../../shared/model-variants'
-import type { AdapterViewActionRequest, AdapterViewProjection } from '../../shared/adapter-view'
 import type { McpCatalog } from '../../shared/mcp-catalog'
 import type {
     ProviderAuthInput,
@@ -10,7 +9,7 @@ import type {
     ProviderSummary,
 } from '../../shared/provider-auth'
 import type { FileStatus, ModelConfig, LspServerInfo } from '../types'
-import { createApiEventSource, deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
+import { deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
 
 export const opencodeApi = {
     health: () =>
@@ -78,15 +77,6 @@ export const opencodeApi = {
                 method: 'POST',
                 body: JSON.stringify(payload),
             }),
-    },
-
-    adapter: {
-        list: (performerId?: string) =>
-            fetchJSON<{ projections: AdapterViewProjection[] }>(
-                `/api/adapter/views${performerId ? `?performerId=${encodeURIComponent(performerId)}` : ''}`,
-            ),
-        action: (payload: AdapterViewActionRequest) => postJSON<unknown>('/api/adapter/action', payload),
-        events: () => createApiEventSource('/api/adapter/events'),
     },
 
     config: {

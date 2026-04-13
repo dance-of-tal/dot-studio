@@ -8,7 +8,7 @@
  * This slice only manages:
  *   - isAssistantOpen (sidebar toggle)
  *   - assistantModel (selected runtime model)
- *   - appliedAssistantActionMessageIds (dedupe applied action blocks)
+ *   - appliedAssistantActionMessageIds (dedupe applied assistant mutation messages)
  */
 import type { StateCreator } from 'zustand'
 import type { StudioState, AssistantSlice } from './types'

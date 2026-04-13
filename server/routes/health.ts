@@ -29,7 +29,7 @@ health.get('/api/studio/pick-directory', async (c) => {
 
 // ── Studio Config ───────────────────────────────────────
 health.get('/api/studio/config', async (c) => {
-    return c.json(await getStudioConfig(requestWorkingDir(c)))
+    return c.json(await getStudioConfig())
 })
 
 health.put('/api/studio/config', async (c) => {

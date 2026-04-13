@@ -41,6 +41,7 @@ import {
     groupModels,
     isInstalledAssetKind,
     placeholderForLocalSection,
+    resolveSelectedAssetSnapshot,
 } from './asset-library-utils'
 
 export function useAssetLibraryController() {
@@ -67,7 +68,6 @@ export function useAssetLibraryController() {
     const [searchEnabled, setSearchEnabled] = useState(false)
     const [selectedAsset, setSelectedAsset] = useState<AssetPanelAsset | null>(null)
     const [expandedModelProviders, setExpandedModelProviders] = useState<Record<string, boolean>>({})
-    const [expandedMcpEntries, setExpandedMcpEntries] = useState<Record<string, boolean>>({})
     const [authoringHint, setAuthoringHint] = useState<string | null>(null)
     const [detailActionStatus, setDetailActionStatus] = useState<string | null>(null)
     const [detailActionLoading, setDetailActionLoading] = useState<AssetPanelAction | null>(null)
@@ -93,18 +93,16 @@ export function useAssetLibraryController() {
     const mcp = useMcpCatalog(workingDir, showMcps)
     const mcpServers = useMemo(() => mcp.mcpServers ?? [], [mcp.mcpServers])
     const {
-        mcpDraftEntries,
-        mcpCatalogDirty,
+        mcpEntries,
         mcpCatalogStatus,
         mcpCatalogSaving,
         runtimeReloadPending,
         pendingMcpAuthName,
         mcpImpactDialog,
         mcpImpactSaving,
-        updateMcpEntry,
-        addMcpEntry,
-        removeMcpEntry,
-        saveMcpCatalog,
+        createMcpEntryDraft,
+        saveMcpEntry,
+        deleteMcpEntry,
         connectMcpServer,
         startMcpAuthFlow,
         clearMcpAuth,
@@ -430,18 +428,28 @@ export function useAssetLibraryController() {
         [registryResults],
     )
 
-    const selectedAssetKey = selectedAsset ? getAssetSelectionKey(selectedAsset) : null
+    const resolvedSelectedAsset = useMemo(
+        () => resolveSelectedAssetSnapshot(selectedAsset, {
+            installedAssets: visibleInstalledAssets,
+            registryAssets: registryResults as LibraryAsset[],
+            models,
+            mcps: mcpServers,
+        }),
+        [mcpServers, models, registryResults, selectedAsset, visibleInstalledAssets],
+    )
+
+    const selectedAssetKey = resolvedSelectedAsset ? getAssetSelectionKey(resolvedSelectedAsset) : null
     useEffect(() => {
         setDetailActionStatus(null)
         setDetailActionLoading(null)
     }, [selectedAssetKey])
 
     const selectedInstalled = useMemo(() => {
-        if (!selectedAsset) return false
-        if (selectedAsset.source && selectedAsset.urn) return true
-        const urn = getAssetUrn(selectedAsset)
+        if (!resolvedSelectedAsset) return false
+        if (resolvedSelectedAsset.source && resolvedSelectedAsset.urn) return true
+        const urn = getAssetUrn(resolvedSelectedAsset)
         return urn ? installedUrns.has(urn) : false
-    }, [installedUrns, selectedAsset])
+    }, [installedUrns, resolvedSelectedAsset])
 
     const localPlaceholder = placeholderForLocalSection(localSection, runtimeKind)
 
@@ -467,7 +475,7 @@ export function useAssetLibraryController() {
         groupedModels,
         filteredMcps,
         liveMcpServers: mcpServers,
-        selectedAsset,
+        selectedAsset: resolvedSelectedAsset,
         setSelectedAsset,
         selectedAssetKey,
         selectedInstalled,
@@ -480,25 +488,21 @@ export function useAssetLibraryController() {
         showInstalledAssets,
         showModels,
         showMcps,
-        mcpDraftEntries,
-        mcpCatalogDirty,
+        mcpEntries,
         mcpCatalogStatus,
         mcpCatalogSaving,
         runtimeReloadPending,
         pendingMcpAuthName,
         mcpImpactDialog,
         mcpImpactSaving,
-        updateMcpEntry,
-        addMcpEntry,
-        removeMcpEntry,
-        saveMcpCatalog,
+        createMcpEntryDraft,
+        saveMcpEntry,
+        deleteMcpEntry,
         connectMcpServer,
         startMcpAuthFlow,
         clearMcpAuth,
         confirmMcpImpactSave,
         cancelMcpImpactSave,
-        expandedMcpEntries,
-        setExpandedMcpEntries,
         expandedModelProviders,
         setExpandedModelProviders,
         modelProviderTabs,

@@ -1,7 +1,4 @@
 import type { ChatMessage, ChatMessagePart } from '../types'
-import { extractAssistantActionEnvelope } from '../features/assistant/assistant-protocol'
-
-type AssistantActions = NonNullable<NonNullable<ChatMessage['metadata']>['assistantActions']>
 
 type SessionPartLike = {
     id?: string
@@ -108,7 +105,6 @@ function extractAssistantErrorMessage(message: SessionMessageLike): string | nul
 
 function buildMessageMetadata(
     message: SessionMessageLike,
-    assistantActions: AssistantActions,
 ): ChatMessage['metadata'] | undefined {
     const agentName = readSessionString(message, 'agent')
         || readSessionString(message, 'info', 'agent')
@@ -126,7 +122,7 @@ function buildMessageMetadata(
         || readSessionString(message, 'variant')
         || readSessionString(message, 'info', 'variant')
 
-    if (!agentName && !provider && !modelId && !variant && !assistantActions?.length) {
+    if (!agentName && !provider && !modelId && !variant) {
         return undefined
     }
 
@@ -135,7 +131,6 @@ function buildMessageMetadata(
         ...(provider ? { provider } : {}),
         ...(modelId ? { modelId } : {}),
         ...(variant ? { variant } : {}),
-        ...(assistantActions?.length ? { assistantActions } : {}),
     }
 }
 
@@ -236,12 +231,8 @@ export function mapSessionMessageToChatMessage(message: SessionMessageLike): Cha
         ? stripInjectedContextFromUserMessage(rawTextContent)
         : rawTextContent
     const errorContent = extractAssistantErrorMessage(message)
-    const parsedAssistantEnvelope = extractAssistantActionEnvelope(strippedText.trim() || errorContent || '')
-    const textContent = parsedAssistantEnvelope.content
-    const metadata = buildMessageMetadata(
-        message,
-        parsedAssistantEnvelope.envelope?.actions || [],
-    )
+    const textContent = strippedText || errorContent || ''
+    const metadata = buildMessageMetadata(message)
     const role = (
         errorContent && rawRole === 'assistant'
             ? 'system'
@@ -396,7 +387,6 @@ function mergeMessageMetadata(
         modelId: serverMetadata.modelId || currentMetadata.modelId,
         variant: serverMetadata.variant || currentMetadata.variant,
         isWakeUp: serverMetadata.isWakeUp || currentMetadata.isWakeUp,
-        assistantActions: serverMetadata.assistantActions || currentMetadata.assistantActions,
     }
 }
 

@@ -10,7 +10,6 @@ type FakeEventSource = {
 
 const {
     chatEventsMock,
-    adapterEventsMock,
     listPendingPermissionsMock,
     resolveSessionMock,
     chatMessagesMock,
@@ -20,7 +19,6 @@ const {
     currentSources,
 } = vi.hoisted(() => ({
     chatEventsMock: vi.fn(),
-    adapterEventsMock: vi.fn(),
     listPendingPermissionsMock: vi.fn(),
     resolveSessionMock: vi.fn(),
     chatMessagesMock: vi.fn(),
@@ -29,7 +27,6 @@ const {
     compileMock: vi.fn(),
     currentSources: {
         chat: null as FakeEventSource | null,
-        adapter: null as FakeEventSource | null,
     },
 }))
 
@@ -41,9 +38,6 @@ vi.mock('../api', () => ({
             resolveSession: resolveSessionMock,
             messages: chatMessagesMock,
             status: statusMock,
-        },
-        adapter: {
-            events: adapterEventsMock,
         },
         lsp: {
             status: lspStatusMock,
@@ -97,7 +91,6 @@ function createBaseState(loadThreads: ReturnType<typeof vi.fn>): StudioState {
         sessionLoading: {},
         sessionReverts: {},
         runtimeReloadPending: false,
-        adapterViewsByPerformer: {},
         workspaceId: 'workspace-1',
         drafts: {},
         markdownEditors: [],
@@ -131,10 +124,9 @@ function createBaseState(loadThreads: ReturnType<typeof vi.fn>): StudioState {
         assistantAvailableModels: [],
         appliedAssistantActionMessageIds: {},
         assistantActionResults: {},
-        upsertAdapterViewProjection: vi.fn(),
-        clearAdapterViewsForPerformer: vi.fn(),
         loadThreads,
         applyPendingRuntimeReload: vi.fn(async () => false),
+        clearProjectionDirty: vi.fn(),
         registerBinding: vi.fn(),
         upsertSession: vi.fn(),
         clearChatDraftMessages: vi.fn(),
@@ -158,6 +150,17 @@ function createHarness(loadThreads: ReturnType<typeof vi.fn>) {
     })
     state.upsertSession = vi.fn((session) => {
         state.seEntities[session.id] = session
+    })
+    state.clearProjectionDirty = vi.fn((patch) => {
+        const performerIds = new Set(patch?.performerIds || [])
+        const actIds = new Set(patch?.actIds || [])
+        const draftIds = new Set(patch?.draftIds || [])
+        state.projectionDirty = {
+            performerIds: state.projectionDirty.performerIds.filter((id) => !performerIds.has(id)),
+            actIds: state.projectionDirty.actIds.filter((id) => !actIds.has(id)),
+            draftIds: state.projectionDirty.draftIds.filter((id) => !draftIds.has(id)),
+            workspaceWide: patch?.workspaceWide ? false : state.projectionDirty.workspaceWide,
+        }
     })
     state.clearChatDraftMessages = vi.fn((chatKey: string) => {
         delete state.chatDrafts[chatKey]
@@ -201,7 +204,6 @@ describe('integrationSlice act participant sync', () => {
         vi.useFakeTimers()
         rafCallbacks = []
         currentSources.chat = null
-        currentSources.adapter = null
 
         vi.stubGlobal('requestAnimationFrame', (callback: () => void) => {
             rafCallbacks.push(callback)
@@ -212,11 +214,6 @@ describe('integrationSlice act participant sync', () => {
         chatEventsMock.mockReset().mockImplementation(() => {
             const source = createFakeEventSource()
             currentSources.chat = source
-            return source as unknown as EventSource
-        })
-        adapterEventsMock.mockReset().mockImplementation(() => {
-            const source = createFakeEventSource()
-            currentSources.adapter = source
             return source as unknown as EventSource
         })
         listPendingPermissionsMock.mockReset().mockResolvedValue([])
@@ -283,6 +280,40 @@ describe('integrationSlice act participant sync', () => {
         expect(harness.get().actThreads['act-1']?.[0]?.participantSessions?.['participant-2']).toBe('session-2')
         expect(chatMessagesMock).toHaveBeenCalledWith('session-2')
         expect(loadThreads).not.toHaveBeenCalled()
+
+        harness.get().cleanupRealtimeEvents()
+    })
+
+    it('clears matching projection dirtiness from runtime projection consumption events', async () => {
+        const loadThreads = vi.fn(async () => {})
+        const harness = createHarness(loadThreads)
+        harness.get().projectionDirty = {
+            performerIds: ['performer-1', 'performer-2'],
+            actIds: ['act-1'],
+            draftIds: ['draft-1', 'draft-2'],
+            workspaceWide: true,
+        }
+
+        harness.get().initRealtimeEvents()
+
+        emitEvent(currentSources.chat, {
+            type: 'runtime.projection.consumed',
+            properties: {
+                patch: {
+                    performerIds: ['performer-2'],
+                    actIds: ['act-1'],
+                    draftIds: ['draft-2'],
+                    workspaceWide: true,
+                },
+            },
+        })
+
+        expect(harness.get().projectionDirty).toEqual({
+            performerIds: ['performer-1'],
+            actIds: [],
+            draftIds: ['draft-1'],
+            workspaceWide: false,
+        })
 
         harness.get().cleanupRealtimeEvents()
     })

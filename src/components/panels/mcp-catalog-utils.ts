@@ -8,6 +8,7 @@ export type McpEntryDraft = {
     key: string
     name: string
     transport: 'stdio' | 'http'
+    enabled: boolean
     timeoutText: string
     command: string
     args: string[]
@@ -60,6 +61,7 @@ export function createMcpEntryDraft(key: string, name = ''): McpEntryDraft {
         key,
         name,
         transport: 'stdio',
+        enabled: true,
         timeoutText: '',
         command: '',
         args: [],
@@ -101,6 +103,7 @@ export function buildMcpDrafts(catalog: McpCatalog): McpEntryDraft[] {
                 return {
                     ...base,
                     transport: 'http' as const,
+                    enabled: entry.enabled !== false,
                     timeoutText: typeof entry.timeout === 'number' ? String(entry.timeout) : '',
                     url: entry.url,
                     headers: kvPairsFromRecord(entry.headers),
@@ -115,6 +118,7 @@ export function buildMcpDrafts(catalog: McpCatalog): McpEntryDraft[] {
             return {
                 ...base,
                 transport: 'stdio' as const,
+                enabled: entry.enabled !== false,
                 timeoutText: typeof entry.timeout === 'number' ? String(entry.timeout) : '',
                 command: command || '',
                 args,
@@ -286,6 +290,7 @@ export function serializeMcpEntries(entries: McpEntryDraft[]): McpCatalog {
                     return [name, {
                         type: 'remote',
                         url: entry.url.trim(),
+                        ...(entry.enabled === false ? { enabled: false } : {}),
                         ...(typeof timeout === 'number' && Number.isFinite(timeout) ? { timeout } : {}),
                         ...(headers ? { headers } : {}),
                         ...(entry.oauthEnabled
@@ -306,6 +311,7 @@ export function serializeMcpEntries(entries: McpEntryDraft[]): McpCatalog {
                 return [name, {
                     type: 'local',
                     command,
+                    ...(entry.enabled === false ? { enabled: false } : {}),
                     ...(typeof timeout === 'number' && Number.isFinite(timeout) ? { timeout } : {}),
                     ...(environment ? { environment } : {}),
                 }]

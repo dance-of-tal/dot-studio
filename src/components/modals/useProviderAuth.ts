@@ -147,17 +147,19 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
     }
 
     async function handleAuthSuccess(providerId: string, providerName: string) {
-        clearProviderFlow(providerId)
         const refreshedProviders = await refreshProviderState()
         const refreshedProvider = refreshedProviders.find((provider) => provider.id === providerId)
         const nextProviderName = refreshedProvider?.name || providerName
 
         if (getProviderAuthSuccessAction(selectedPerformer) === 'pick-model') {
             await openModelPicker(providerId, nextProviderName)
+            clearProviderFlow(providerId)
             return
         }
 
+        clearProviderFlow(providerId)
         setModelPicker((current) => current?.providerId === providerId ? null : current)
+        setStatusMessage(`${nextProviderName} connected.`)
     }
 
     async function waitForBrowserOauth(providerId: string, methodIndex: number) {

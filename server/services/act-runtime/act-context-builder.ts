@@ -1,7 +1,7 @@
 /**
- * act-context-builder.ts — Collaboration context injection
+ * act-context-builder.ts — Collaboration system prompt construction
  *
- * PRD §9: Stable collaboration context is injected at the agent/system level.
+ * PRD §9: Stable collaboration context is injected as a turn-scoped system prompt.
  * Includes: goal, participants, collaboration tools, relations, coordination signals, and rules.
  */
 
@@ -73,7 +73,7 @@ function coordinationSignalLines(
 }
 
 /**
- * Build markdown Act context for a participant's agent prompt.
+ * Build markdown Act context for a participant's system prompt.
  */
 export function buildActContext(
     actDefinition: ActDefinition,
@@ -104,13 +104,22 @@ export function buildActContext(
     lines.push('- Use `update_shared_board` to keep compact shared state: decisions, task status, findings, and handoffs.')
     lines.push('- Write shared board entries as short Markdown summaries. Use headings, bullets, and checklists when they help teammates scan quickly.')
     lines.push('- Do not use the shared board as the storage location for full deliverables. Keep final outputs in the working directory or the proper destination, then post a short Markdown handoff or summary.')
-    lines.push('- Use `read_shared_board` for the relevant key you need. Avoid reading the full board unless you need a full resync.')
+    lines.push('- Reuse the same shared note key when you are updating the same deliverable, decision, or workstream. Create a new key only when the work meaningfully splits into a different artifact, finding set, or task.')
+    lines.push('- If a directly connected teammate exposes shared note key patterns below, prefer a key that matches their pattern when you want them to notice or self-wake on that update.')
+    lines.push('- If you must create a new shared note key that teammates would not infer, send a direct message naming the exact key and what they should do with it.')
+    lines.push('- Use `list_shared_board` when you need to inspect what shared notes exist. It can filter by kind and defaults to compact summaries.')
+    lines.push('- When you are unsure whether a note already exists, inspect the board first and then either reuse the existing key or replace it with a fresher summary.')
+    lines.push('- Use `get_shared_board_entry` only when you already know the exact shared note key you need.')
+    lines.push('- Do not pass placeholder values like `recent` or category names like `artifact` as a shared note key.')
+    lines.push('- Treat message tags as lightweight coordination labels. Reuse teammate-facing tags when they fit the intent.')
+    lines.push('- If you invent a new tag, do not assume teammates subscribe to it. Keep the message understandable without the tag, or explain the new label in the message body.')
     lines.push('- Before acting, check only the sender or shared note key relevant to the current event.')
     lines.push('- Prefer replacing stale shared notes with a fresh summary instead of appending long incremental logs.')
     lines.push('- Use `wait_until` instead of polling the full shared board when you are blocked on future input.')
     lines.push('- Common wait conditions: `message_received`, `board_key_exists`, and `wake_at`.')
     lines.push('- Use `all_of` or `any_of` only when you need to combine conditions.')
     lines.push('- `wake_at` schedules your own self-wake at an absolute timestamp.')
+    lines.push('- After you call `wait_until`, end your turn immediately. Do not call `message_teammate`, `update_shared_board`, `list_shared_board`, or `get_shared_board_entry` again until you are resumed.')
     lines.push('')
 
     const teammateNames = messageablePartners.map((key) => participantDisplayName(actDefinition, key))

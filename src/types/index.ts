@@ -1,7 +1,6 @@
 // DOT Studio — Core Types
 
 import type { RuntimeModelVariant } from '../../shared/model-variants'
-import type { AssistantAction } from '../../shared/assistant-actions'
 import type {
     ActParticipantV1 as InstalledActParticipant,
     ActRelationV1 as InstalledActRelation,
@@ -376,7 +375,6 @@ export interface ChatMessage {
         modelId?: string
         provider?: string
         variant?: string
-        assistantActions?: AssistantAction[]
         isWakeUp?: boolean
     }
 }

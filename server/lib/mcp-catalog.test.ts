@@ -26,4 +26,25 @@ describe('summarizeMcpCatalog', () => {
             }),
         ])
     })
+
+    it('marks disabled MCPs as disabled when they are saved with startup off', () => {
+        const summary = summarizeMcpCatalog(
+            {
+                tradingview: {
+                    type: 'remote',
+                    url: 'https://mcp.example.com',
+                    enabled: false,
+                    oauth: false,
+                },
+            },
+            {},
+        )
+
+        expect(summary).toEqual([
+            expect.objectContaining({
+                name: 'tradingview',
+                status: 'disabled',
+            }),
+        ])
+    })
 })

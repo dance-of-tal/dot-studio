@@ -16,9 +16,10 @@ import {
     buildDraftAssetCards,
     labelForInstalledKind,
     buildInstalledAssetDragPayload,
+    resolveSelectedAssetSnapshot,
 } from './asset-library-utils'
-import type { AssetCard, DraftAsset } from '../../types'
-import type { LibraryAsset } from './asset-panel-types'
+import type { AssetCard, DraftAsset, McpServer } from '../../types'
+import type { LibraryAsset, ModelPanelAsset } from './asset-panel-types'
 import type { InstalledKind } from './asset-library-utils'
 
 describe('normalizeAuthor', () => {
@@ -354,6 +355,98 @@ describe('buildInstalledAssetDragPayload', () => {
             source: 'draft',
             draftId: 'act-draft-1',
             draftContent,
+        })
+    })
+})
+
+describe('resolveSelectedAssetSnapshot', () => {
+    it('refreshes selected draft details from the latest installed asset snapshot', () => {
+        const selected: LibraryAsset = {
+            kind: 'tal',
+            source: 'draft',
+            urn: 'draft/draft-1',
+            draftId: 'draft-1',
+            name: 'Head Manager Tal',
+            author: '@draft',
+            description: 'Old description',
+            content: 'Old content',
+        }
+
+        const latest: LibraryAsset = {
+            ...selected,
+            description: 'Updated description',
+            content: 'Updated content',
+        }
+
+        expect(resolveSelectedAssetSnapshot(selected, {
+            installedAssets: [latest],
+        })).toEqual(latest)
+    })
+
+    it('refreshes selected runtime assets from live model and MCP snapshots', () => {
+        const selectedModel: ModelPanelAsset = {
+            kind: 'model',
+            provider: 'openai',
+            providerName: 'OpenAI',
+            id: 'gpt-5.4',
+            name: 'GPT-5.4',
+            connected: false,
+            context: 128000,
+            output: 16000,
+            toolCall: true,
+            reasoning: true,
+            attachment: true,
+            temperature: false,
+            modalities: {
+                input: ['text'],
+                output: ['text'],
+            },
+            variants: [],
+        }
+        const updatedModel = {
+            provider: 'openai',
+            providerName: 'OpenAI',
+            id: 'gpt-5.4',
+            name: 'GPT-5.4',
+            connected: true,
+            context: 128000,
+            output: 16000,
+            toolCall: true,
+            reasoning: true,
+            attachment: true,
+            temperature: false,
+            modalities: {
+                input: ['text'],
+                output: ['text'],
+            },
+            variants: [],
+        }
+
+        const selectedMcp = {
+            kind: 'mcp',
+            name: 'filesystem',
+            status: 'disconnected',
+            tools: [],
+            resources: [],
+        } satisfies McpServer & { kind: 'mcp' }
+        const updatedMcp: McpServer = {
+            name: 'filesystem',
+            status: 'connected',
+            tools: [],
+            resources: [],
+        }
+
+        expect(resolveSelectedAssetSnapshot(selectedModel, {
+            models: [updatedModel],
+        })).toMatchObject({
+            kind: 'model',
+            connected: true,
+        })
+        expect(resolveSelectedAssetSnapshot(selectedMcp, {
+            mcps: [updatedMcp],
+        })).toMatchObject({
+            kind: 'mcp',
+            status: 'connected',
         })
     })
 })

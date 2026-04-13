@@ -1,7 +1,7 @@
 /**
  * Shared EventSource reconnection factory.
  *
- * Each EventSource stream (chat, act-runtime, adapter-view) follows the same
+ * Each EventSource stream (chat, act-runtime, and similar managed feeds) follows the same
  * lifecycle pattern: guard against redundant connections, close stale ones,
  * create fresh instances, and wire up onmessage/onerror. This module
  * captures that pattern once and lets each stream supply only its unique

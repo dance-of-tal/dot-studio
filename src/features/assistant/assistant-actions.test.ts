@@ -287,7 +287,7 @@ describe('assistant-actions', () => {
         expect(actResult.success).toBe(false)
     })
 
-    it('creates and updates an act from same-block performer refs', async () => {
+    it('creates and updates an act from same-call performer refs', async () => {
         const result = await applyAssistantActions([
             {
                 type: 'createPerformer',
@@ -456,7 +456,7 @@ describe('assistant-actions', () => {
         expect(useStudioStore.getState().acts).toHaveLength(0)
     })
 
-    it('creates a dance draft and writes bundle files using same-block draft refs', async () => {
+    it('creates a dance draft and writes bundle files using same-call draft refs', async () => {
         createDraftMock.mockResolvedValue({
             id: 'dance-draft-1',
             kind: 'dance',

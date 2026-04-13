@@ -1,13 +1,3 @@
-/**
- * Session Selectors — Phase 1
- *
- * Derived selectors that read from the normalized session entity store.
- * Each selector resolves chatKey → sessionId then reads the entity table.
- * These replace direct reads from the old flat chat/session maps.
- *
- * Entity fields use `se` prefix (seMessages, seStatuses, etc.)
- * to coexist with legacy ChatSlice during migration.
- */
 import type { StudioState } from '../types'
 import type { ChatMessage } from '../../types'
 import type { SessionStatus } from './types'
@@ -15,10 +5,10 @@ import type { PermissionRequest, QuestionRequest, Todo } from '@opencode-ai/sdk/
 import { mergeSystemPrefixMessages } from '../../lib/chat-messages'
 import { parseActParticipantChatKey } from '../../../shared/chat-targets'
 import { canAbortSessionExecution, resolveSessionActivity } from './session-activity'
+import { deriveChatSessionState, IDLE_STATUS } from './chat-session-state'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_TODOS: Todo[] = []
-const IDLE_STATUS: SessionStatus = { type: 'idle' }
 
 // ── Session resolution ──
 
@@ -180,19 +170,19 @@ export function selectSessionRevert(state: StudioState, sessionId: string) {
 
 export function selectChatSessionState(state: StudioState, chatKey: string) {
     const sessionId = selectSessionIdForChatKey(state, chatKey)
-    return {
+    return deriveChatSessionState({
         chatKey,
         sessionId,
-        messages: selectMessagesForChatKey(state, chatKey),
-        prefixCount: selectPrefixCountForChatKey(state, chatKey),
-        isLoading: selectChatKeyIsLoading(state, chatKey),
-        canAbort: sessionId ? selectSessionCanAbort(state, sessionId) : false,
-        isMutating: sessionId ? selectSessionIsMutating(state, sessionId) : false,
-        activityKind: sessionId ? selectSessionActivityKind(state, sessionId) : 'idle',
-        status: sessionId ? selectSessionStatus(state, sessionId) : IDLE_STATUS,
-        permission: sessionId ? selectPendingPermission(state, sessionId) : null,
-        question: sessionId ? selectPendingQuestion(state, sessionId) : null,
-        todos: sessionId ? selectTodos(state, sessionId) : EMPTY_TODOS,
-        revert: sessionId ? selectSessionRevert(state, sessionId) : null,
-    }
+        draftMessages: state.chatDrafts[chatKey] || EMPTY_MESSAGES,
+        prefixMessages: state.chatPrefixes[chatKey] || EMPTY_MESSAGES,
+        sessionMessages: sessionId ? state.seMessages[sessionId] || EMPTY_MESSAGES : EMPTY_MESSAGES,
+        rawLoading: sessionId ? !!state.sessionLoading[sessionId] : false,
+        rawStatus: sessionId ? state.seStatuses[sessionId] || null : null,
+        status: sessionId ? state.seStatuses[sessionId] || IDLE_STATUS : IDLE_STATUS,
+        permission: sessionId ? state.sePermissions[sessionId] || null : null,
+        question: sessionId ? state.seQuestions[sessionId] || null : null,
+        todos: sessionId ? state.seTodos[sessionId] || EMPTY_TODOS : EMPTY_TODOS,
+        revert: sessionId ? state.sessionReverts[sessionId] || null : null,
+        isMutating: sessionId ? !!state.sessionMutationPending[sessionId] : false,
+    })
 }

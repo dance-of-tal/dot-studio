@@ -41,6 +41,21 @@ import {
 import { showToast } from '../lib/toast'
 import { clearChatSessionView } from './session'
 
+function relationConflicts(
+    left: { between: [string, string]; direction: 'both' | 'one-way' },
+    right: { between: [string, string]; direction: 'both' | 'one-way' },
+) {
+    const sameOrderedPair = left.between[0] === right.between[0] && left.between[1] === right.between[1]
+    const sameUnorderedPair = sameOrderedPair
+        || (left.between[0] === right.between[1] && left.between[1] === right.between[0])
+
+    if (left.direction === 'both' || right.direction === 'both') {
+        return sameUnorderedPair
+    }
+
+    return sameOrderedPair && left.direction === right.direction
+}
+
 export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set, get) => ({
     acts: [],
     selectedActId: null,
@@ -383,11 +398,24 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         set((s) => ({
             acts: s.acts.map((a) => {
                 if (a.id !== actId) return a
+
+                const current = a.relations.find((relation) => relation.id === relationId)
+                if (!current) {
+                    return a
+                }
+
+                const nextRelation = { ...current, ...update }
                 return {
                     ...a,
-                    relations: a.relations.map((r) =>
-                        r.id === relationId ? { ...r, ...update } : r,
-                    ),
+                    relations: a.relations.filter((relation) => {
+                        if (relation.id === relationId) {
+                            return true
+                        }
+
+                        return !relationConflicts(nextRelation, relation)
+                    }).map((relation) => (
+                        relation.id === relationId ? nextRelation : relation
+                    )),
                 }
             }),
             workspaceDirty: true,

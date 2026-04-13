@@ -1,4 +1,5 @@
 import type { AssistantStageContext } from './assistant-actions.js'
+import type { ProjectionDirtyPatch } from './projection-dirty.js'
 
 export type SharedAssetRef =
     | { kind: 'registry'; urn: string }
@@ -22,11 +23,6 @@ export type CompilePromptRequest = {
         performerName: string
         description?: string
     }>
-    relatedPerformers?: Array<{
-        performerId: string
-        performerName: string
-        description?: string
-    }>
 }
 
 export type ChatSessionCreateRequest = {
@@ -43,6 +39,7 @@ export type ChatSessionCreateResponse = {
 
 export type ChatSendRequest = {
     message: string
+    projectionScope?: ProjectionDirtyPatch | null
     performer: {
         performerId: string
         performerName: string
