@@ -60,3 +60,25 @@ describe('getStudioConfig', () => {
         })
     })
 })
+
+describe('initializeStudioProject', () => {
+    beforeEach(() => {
+        readStudioConfigMock.mockReset().mockResolvedValue({ theme: 'dark', lastWorkspaceId: 'workspace-1' })
+        writeStudioConfigMock.mockReset()
+        getExplicitActiveProjectDirMock.mockReset().mockReturnValue(null)
+        getActiveProjectDirMock.mockReset().mockReturnValue('/tmp/workspace')
+        setActiveProjectDirMock.mockReset()
+        ensureDotDirMock.mockReset()
+        invalidateAllMock.mockReset()
+    })
+
+    it('primes the requested workspace directory for CLI startup restore', async () => {
+        const { initializeStudioProject } = await import('./studio-service.js')
+
+        await expect(initializeStudioProject('/tmp/workspace/')).resolves.toBe('/tmp/workspace')
+
+        expect(ensureDotDirMock).toHaveBeenCalledWith('/tmp/workspace')
+        expect(setActiveProjectDirMock).toHaveBeenCalledWith('/tmp/workspace')
+        expect(invalidateAllMock).toHaveBeenCalledTimes(1)
+    })
+})

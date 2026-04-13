@@ -58,6 +58,7 @@ type Props = {
     rejectQuestion: (sessionId: string, questionId: string) => Promise<void>
     onSetAgentId: (id: string, agentId: string | null) => void
     onSetModelVariant: (id: string, variant: string | null) => void
+    showModeToggle?: boolean
 }
 
 export default function PerformerChatComposer(props: Props) {
@@ -104,6 +105,7 @@ export default function PerformerChatComposer(props: Props) {
         rejectQuestion,
         onSetAgentId,
         onSetModelVariant,
+        showModeToggle = true,
     } = props
 
     const {
@@ -215,6 +217,7 @@ export default function PerformerChatComposer(props: Props) {
                 planAgent={planAgent}
                 onSetAgentId={onSetAgentId}
                 onSetModelVariant={onSetModelVariant}
+                showModeToggle={showModeToggle}
             />
         </div>
     )

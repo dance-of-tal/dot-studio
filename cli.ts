@@ -10,6 +10,11 @@ import { spawn, spawnSync } from 'child_process'
 import readline from 'readline/promises'
 import { parseDotAssetUrn } from './server/lib/dot-source.js'
 import { resolvePackageBin } from './server/lib/package-bin.js'
+import {
+    buildOpencodeProjectCheckUrl,
+    ensureOpenProjectDir,
+    validateExistingProjectDir,
+} from './server/lib/cli-utils.js'
 
 type StudioPackageMeta = {
     name: string
@@ -445,16 +450,6 @@ async function promptForNpmUpdate(packageMeta: StudioPackageMeta) {
     return true
 }
 
-async function validateProjectDir(projectDir: string) {
-    const stat = await fs.stat(projectDir).catch(() => null)
-    if (!stat) {
-        throw new Error(`Directory not found: ${projectDir}`)
-    }
-    if (!stat.isDirectory()) {
-        throw new Error(`Not a directory: ${projectDir}`)
-    }
-}
-
 async function resolveOpenPort(requestedPort: number | null) {
     const basePort = requestedPort || Number.parseInt(process.env.PORT || '', 10) || DEFAULT_PORT
     let resolvedPort = basePort
@@ -491,10 +486,9 @@ function resolveOpencodeExecutable() {
     return resolvePackageBin('opencode-ai', 'opencode') || findCommandInPath('opencode')
 }
 
-async function checkOpencodeReachable(url: string) {
+async function checkOpencodeReachable(url: string, projectDir: string) {
     try {
-        const target = new URL('/project', url)
-        target.searchParams.set('directory', process.cwd())
+        const target = buildOpencodeProjectCheckUrl(url, projectDir)
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 1_500)
         try {
@@ -523,29 +517,23 @@ async function runDoctor(command: DoctorCommand, packageMeta: StudioPackageMeta)
         detail: nodeRange ? `${process.version} (requires ${nodeRange})` : process.version,
     })
 
-    const projectStat = await fs.stat(command.projectDir).catch(() => null)
-    if (!projectStat) {
-        checks.push({
-            label: 'Workspace path',
-            status: 'fail',
-            detail: `Directory not found: ${command.projectDir}`,
-        })
-    } else if (!projectStat.isDirectory()) {
-        checks.push({
-            label: 'Workspace path',
-            status: 'fail',
-            detail: `Not a directory: ${command.projectDir}`,
-        })
-    } else {
+    try {
+        const validatedProjectDir = await validateExistingProjectDir(command.projectDir)
         checks.push({
             label: 'Workspace path',
             status: 'ok',
-            detail: command.projectDir,
+            detail: validatedProjectDir,
         })
         checks.push({
             label: 'Workspace init',
             status: 'info',
             detail: 'Workspace metadata will be initialized automatically when you open it.',
+        })
+    } catch (error) {
+        checks.push({
+            label: 'Workspace path',
+            status: 'fail',
+            detail: error instanceof Error ? error.message : `Directory not found: ${command.projectDir}`,
         })
     }
 
@@ -573,7 +561,7 @@ async function runDoctor(command: DoctorCommand, packageMeta: StudioPackageMeta)
                 detail: `Invalid --opencode-url: ${command.opencodeUrl}`,
             })
         } else {
-            const reachable = await checkOpencodeReachable(parsedUrl.toString())
+        const reachable = await checkOpencodeReachable(parsedUrl.toString(), command.projectDir)
             checks.push({
                 label: 'OpenCode',
                 status: reachable ? 'ok' : 'fail',
@@ -625,13 +613,10 @@ async function runOpen(command: OpenCommand, packageMeta: StudioPackageMeta) {
         process.exit(0)
     }
 
-    await validateProjectDir(command.projectDir)
+    const resolvedProjectDir = await ensureOpenProjectDir(command.projectDir)
     const resolvedPort = await resolveOpenPort(command.port)
 
-    const { ensureDotDir } = await import('./server/lib/dot-source.js')
-    await ensureDotDir(command.projectDir)
-
-    process.env.PROJECT_DIR = command.projectDir
+    process.env.PROJECT_DIR = resolvedProjectDir
     process.env.DOT_STUDIO_PRODUCTION = '1'
     process.env.PORT = String(resolvedPort)
     if (command.opencodeUrl) {
@@ -640,11 +625,14 @@ async function runOpen(command: OpenCommand, packageMeta: StudioPackageMeta) {
         delete process.env.OPENCODE_URL
     }
 
+    const { initializeStudioProject } = await import('./server/services/studio-service.js')
+    await initializeStudioProject(resolvedProjectDir)
+
     const studioUrl = `http://localhost:${resolvedPort}`
     const launchUrl = buildStudioLaunchUrl(studioUrl, command.startupAssetTarget)
 
     if (command.verbose) {
-        console.log(`Opening DOT Studio for ${command.projectDir}`)
+        console.log(`Opening DOT Studio for ${resolvedProjectDir}`)
         if (command.opencodeUrl) {
             console.log(`Using external OpenCode at ${command.opencodeUrl}`)
         } else {
@@ -658,7 +646,7 @@ async function runOpen(command: OpenCommand, packageMeta: StudioPackageMeta) {
     await import('./server/index.js')
 
     console.log(`DOT Studio running at ${studioUrl}`)
-    console.log(`Workspace: ${command.projectDir}`)
+    console.log(`Workspace: ${resolvedProjectDir}`)
     if (command.startupAssetTarget) {
         console.log(`Launch URL: ${launchUrl}`)
     }

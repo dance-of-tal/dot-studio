@@ -38,6 +38,7 @@ type PerformerChatPanelProps = {
     drafts: Record<string, DraftAsset>
     onSetAgentId: (id: string, agentId: string | null) => void
     onSetModelVariant: (id: string, variant: string | null) => void
+    showModeToggle?: boolean
 }
 
 export default function PerformerChatPanel({
@@ -58,6 +59,7 @@ export default function PerformerChatPanel({
     drafts,
     onSetAgentId,
     onSetModelVariant,
+    showModeToggle = true,
 }: PerformerChatPanelProps) {
     const {
         abortChat,
@@ -150,6 +152,7 @@ export default function PerformerChatPanel({
                         rejectQuestion={rejectQuestion}
                         onSetAgentId={onSetAgentId}
                         onSetModelVariant={onSetModelVariant}
+                        showModeToggle={showModeToggle}
                     />
                 )}
             />

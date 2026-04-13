@@ -18,7 +18,6 @@ import {
 } from './workspace-helpers'
 import { buildExitFocusModeState } from './workspace-focus-actions'
 import { isPerformerAttachedToAct } from '../features/act/act-inspector-helpers'
-import { scheduleActRuntimeSync } from './act-slice-helpers'
 import {
     resolveFocusTarget,
     resolveNodeBaselineHidden,
@@ -27,26 +26,70 @@ import {
 
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
+const LIVE_ACT_WORKSPACE_PERSIST_DELAY_MS = 300
+const liveActWorkspacePersistTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 /**
  * After a runtime-affecting performer mutation, if the performer participates
- * in a live Act, persist workspace immediately so auto-wake reads the latest
- * performer config from workspace.json (instead of stale autosave data).
+ * in a live Act, persist workspace so auto-wake and participant execution
+ * read the latest performer config from workspace.json.
+ *
+ * Performer runtime config changes do not alter Act definitions, so this path
+ * intentionally avoids Act runtime-definition sync and only saves workspace.
  */
-function scheduleActWorkspacePersist(get: GetFn, set: SetFn, performerId: string) {
+function scheduleLiveActWorkspacePersist(get: GetFn, performerId: string) {
     const state = get()
     const performer = state.performers.find((p) => p.id === performerId)
     if (!performer) return
-    for (const act of state.acts) {
-        if (!isPerformerAttachedToAct(act, performer)) continue
-        const hasLiveThread = (state.actThreads[act.id] || []).some(
+
+    const isAttachedToLiveAct = state.acts.some((act) => {
+        if (!isPerformerAttachedToAct(act, performer)) {
+            return false
+        }
+        return (state.actThreads[act.id] || []).some(
             (thread) => thread.status === 'active' || thread.status === 'idle',
         )
-        if (hasLiveThread) {
-            scheduleActRuntimeSync(get, set, act.id)
-            return // One sync is enough — it saves workspace as part of its flow
+    })
+
+    if (!isAttachedToLiveAct) {
+        const existing = liveActWorkspacePersistTimers.get(performerId)
+        if (existing) {
+            clearTimeout(existing)
+            liveActWorkspacePersistTimers.delete(performerId)
         }
+        return
     }
+
+    const existing = liveActWorkspacePersistTimers.get(performerId)
+    if (existing) {
+        clearTimeout(existing)
+    }
+
+    liveActWorkspacePersistTimers.set(performerId, setTimeout(() => {
+        liveActWorkspacePersistTimers.delete(performerId)
+        const latest = get()
+        const latestPerformer = latest.performers.find((p) => p.id === performerId)
+        if (!latestPerformer) {
+            return
+        }
+
+        const stillAttachedToLiveAct = latest.acts.some((act) => {
+            if (!isPerformerAttachedToAct(act, latestPerformer)) {
+                return false
+            }
+            return (latest.actThreads[act.id] || []).some(
+                (thread) => thread.status === 'active' || thread.status === 'idle',
+            )
+        })
+
+        if (!stillAttachedToLiveAct || !latest.workspaceDirty) {
+            return
+        }
+
+        void latest.saveWorkspace().catch((error) => {
+            console.warn('[act-sync] Failed to persist workspace for live Act performer update', error)
+        })
+    }, LIVE_ACT_WORKSPACE_PERSIST_DELAY_MS))
 }
 
 function markPerformerProjectionDirty(get: GetFn, performerId: string) {
@@ -66,7 +109,7 @@ export function setPerformerTal(set: SetFn, get: GetFn, performerId: string, tal
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 export function setPerformerTalRef(set: SetFn, get: GetFn, performerId: string, talRef: AssetRef | null) {
@@ -75,7 +118,7 @@ export function setPerformerTalRef(set: SetFn, get: GetFn, performerId: string, 
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 // ── Dance ───────────────────────────────────────────────
@@ -92,7 +135,7 @@ export function addPerformerDance(set: SetFn, get: GetFn, performerId: string, d
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 export function addPerformerDanceRef(set: SetFn, get: GetFn, performerId: string, danceRef: AssetRef) {
@@ -107,7 +150,7 @@ export function addPerformerDanceRef(set: SetFn, get: GetFn, performerId: string
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 export function replacePerformerDanceRef(set: SetFn, get: GetFn, performerId: string, currentRef: AssetRef, nextRef: AssetRef) {
@@ -118,7 +161,7 @@ export function replacePerformerDanceRef(set: SetFn, get: GetFn, performerId: st
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 export function removePerformerDance(set: SetFn, get: GetFn, performerId: string, danceUrn: string) {
@@ -138,7 +181,7 @@ export function removePerformerDance(set: SetFn, get: GetFn, performerId: string
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 // ── Model ───────────────────────────────────────────────
@@ -160,7 +203,7 @@ export function setPerformerModel(set: SetFn, get: GetFn, performerId: string, m
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 export function setPerformerModelVariant(set: SetFn, get: GetFn, performerId: string, modelVariant: string | null) {
@@ -169,7 +212,7 @@ export function setPerformerModelVariant(set: SetFn, get: GetFn, performerId: st
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 // ── Agent ───────────────────────────────────────────────
@@ -186,7 +229,7 @@ export function setPerformerAgentId(set: SetFn, get: GetFn, performerId: string,
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 // ── MCP ─────────────────────────────────────────────────
@@ -203,7 +246,7 @@ export function addPerformerMcp(set: SetFn, get: GetFn, performerId: string, mcp
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 export function removePerformerMcp(set: SetFn, get: GetFn, performerId: string, mcpName: string) {
@@ -222,7 +265,7 @@ export function removePerformerMcp(set: SetFn, get: GetFn, performerId: string, 
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 export function setPerformerMcpBinding(set: SetFn, get: GetFn, performerId: string, placeholderName: string, serverName: string | null) {
@@ -244,7 +287,7 @@ export function setPerformerMcpBinding(set: SetFn, get: GetFn, performerId: stri
         workspaceDirty: true,
     }))
     markPerformerProjectionDirty(get, performerId)
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 // ── Metadata & visibility ───────────────────────────────
@@ -267,7 +310,7 @@ export function updatePerformerAuthoringMeta(set: SetFn, get: GetFn, performerId
         )),
         workspaceDirty: true,
     }))
-    scheduleActWorkspacePersist(get, set, performerId)
+    scheduleLiveActWorkspacePersist(get, performerId)
 }
 
 export function togglePerformerVisibility(set: SetFn, _get: GetFn, id: string) {

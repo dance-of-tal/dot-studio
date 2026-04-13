@@ -336,6 +336,11 @@ export default function AgentFrame({ data, id }: AgentFrameProps) {
                         drafts={drafts}
                         onSetAgentId={setPerformerAgentId}
                         onSetModelVariant={setPerformerModelVariant}
+                        // Keep the build/plan runtime wiring in place even while the
+                        // standalone performer composer temporarily hides the toggle.
+                        // We'll re-enable this control after the standalone build-mode
+                        // behavior is fixed, so this is intentionally not dead code.
+                        showModeToggle={false}
                     />
                 )}
             </CanvasWindowFrame>

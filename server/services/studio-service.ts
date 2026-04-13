@@ -40,6 +40,14 @@ export async function updateStudioConfig(patch: Partial<StudioConfig>) {
     return writeStudioConfig(patch)
 }
 
+export async function initializeStudioProject(workingDir: string) {
+    const resolved = path.resolve(workingDir.replace(/\/+$/, ''))
+    await ensureDotDir(resolved)
+    setActiveProjectDir(resolved)
+    invalidateAll()
+    return getActiveProjectDir()
+}
+
 export async function activateStudioProject(workingDir: string) {
     if (!workingDir) {
         return { ok: false as const, status: 400, error: 'workingDir is required' }
@@ -56,9 +64,7 @@ export async function activateStudioProject(workingDir: string) {
         return { ok: false as const, status: 400, error: `Directory not found: ${resolved}` }
     }
 
-    await ensureDotDir(resolved)
-    setActiveProjectDir(resolved)
-    invalidateAll()
+    const activeProjectDir = await initializeStudioProject(resolved)
 
     import('./studio-assistant/assistant-service.js').then(({ ensureAssistantAgent }) =>
         ensureAssistantAgent(resolved).catch(() => {}),
@@ -66,7 +72,7 @@ export async function activateStudioProject(workingDir: string) {
 
     return {
         ok: true as const,
-        activeProjectDir: getActiveProjectDir(),
+        activeProjectDir,
     }
 }
 

@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createPerformerNode } from '../lib/performers-node'
-import { removePerformerDance, setPerformerModel } from './workspace-performer-config'
+import { removePerformerDance, setPerformerModel, setPerformerModelVariant } from './workspace-performer-config'
 import type { StudioState } from './types'
 
 function makeState(): StudioState {
@@ -22,10 +22,19 @@ function makeState(): StudioState {
         actThreads: {},
         workspaceDirty: false,
         recordStudioChange: () => {},
+        saveWorkspace: vi.fn(async () => {}),
     } as unknown as StudioState
 }
 
 describe('workspace-performer-config', () => {
+    beforeEach(() => {
+        vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+        vi.useRealTimers()
+    })
+
     it('removes draft dance refs by plain draft id', () => {
         let state = makeState()
         const get = () => state
@@ -79,5 +88,47 @@ describe('workspace-performer-config', () => {
         setPerformerModel(set, get, 'performer-1', { provider: 'anthropic', modelId: 'claude-sonnet-4' })
 
         expect(state.performers[0].modelVariant).toBeNull()
+    })
+
+    it('persists workspace for live Act performer runtime changes without requiring Act sync', async () => {
+        let state = {
+            ...makeState(),
+            workspaceDirty: true,
+            acts: [{
+                id: 'act-1',
+                name: 'Review Flow',
+                position: { x: 0, y: 0 },
+                width: 400,
+                height: 300,
+                participants: {
+                    reviewer: {
+                        performerRef: { kind: 'draft', draftId: 'performer-1' },
+                        position: { x: 0, y: 0 },
+                    },
+                },
+                relations: [],
+                createdAt: Date.now(),
+            }],
+            actThreads: {
+                'act-1': [{
+                    id: 'thread-1',
+                    actId: 'act-1',
+                    status: 'active',
+                    participantSessions: {},
+                    participantStatuses: {},
+                    createdAt: Date.now(),
+                }],
+            },
+        } as unknown as StudioState
+        const get = () => state
+        const set = (partial: Partial<StudioState> | ((value: StudioState) => Partial<StudioState>)) => {
+            const update = typeof partial === 'function' ? partial(state) : partial
+            state = { ...state, ...update }
+        }
+
+        setPerformerModelVariant(set, get, 'performer-1', 'high')
+        await vi.advanceTimersByTimeAsync(350)
+
+        expect(state.saveWorkspace).toHaveBeenCalledTimes(1)
     })
 })
