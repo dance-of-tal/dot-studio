@@ -20,6 +20,7 @@ import type {
     ActDefinition,
     ActParticipantSessionStatus,
     ActThreadSummary,
+    MailboxState,
 } from '../../../shared/act-types.js'
 import type { SharedAssetRef } from '../../../shared/chat-contracts.js'
 import { Mailbox } from './mailbox.js'
@@ -44,6 +45,7 @@ interface PersistedThreadState {
     id: string
     actId: string
     name?: string
+    mailbox?: MailboxState
     participantSessions: Record<string, string>
     participantStatuses: Record<string, ActParticipantSessionStatus>
     retiredParticipantSessions: Record<string, string[]>
@@ -107,6 +109,7 @@ export class ThreadManager {
                 id: runtime.thread.id,
                 actId: runtime.thread.actId,
                 ...(runtime.thread.name ? { name: runtime.thread.name } : {}),
+                mailbox: runtime.mailbox.getState(),
                 participantSessions: { ...runtime.thread.participantSessions },
                 participantStatuses: cloneParticipantStatuses(runtime.thread.participantStatuses),
                 retiredParticipantSessions: Object.fromEntries(
@@ -164,7 +167,19 @@ export class ThreadManager {
                         await fs.rm(join(actDir, threadDir), { recursive: true, force: true })
                         continue
                     }
-                    this.threads.set(threadDir, {
+                    const restoredMailboxState = persistedThread.mailbox
+                        ? {
+                            ...persistedThread.mailbox,
+                            // board.json remains the authoritative durable board snapshot.
+                            board: Object.fromEntries(persistedBoard.map((entry) => [entry.key, entry])),
+                        }
+                        : null
+                    if (restoredMailboxState) {
+                        mailbox.restoreFromState(restoredMailboxState)
+                    } else {
+                        mailbox.restoreBoard(persistedBoard)
+                    }
+                    const runtime: ThreadRuntime = {
                         thread: {
                             id: persistedThread.id,
                             actId: persistedThread.actId,
@@ -179,7 +194,8 @@ export class ThreadManager {
                         eventLogger,
                         actDefinition: snapshot.actDefinition,
                         retiredParticipantSessions: { ...(persistedThread.retiredParticipantSessions || {}) },
-                    })
+                    }
+                    this.threads.set(threadDir, runtime)
                 } catch {
                     // skip invalid/missing thread.json
                 }
@@ -260,6 +276,10 @@ export class ThreadManager {
             }
         }
         return results
+    }
+
+    listLoadedThreadIds(): string[] {
+        return Array.from(this.threads.keys())
     }
 
     async deleteThread(threadId: string): Promise<boolean> {

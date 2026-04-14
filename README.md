@@ -214,8 +214,8 @@ Behavior:
 
 - `dot-studio` opens the current directory as a workspace
 - `dot-studio <path>` opens that directory as a workspace
-- `--performer <urn>` opens the workspace and focuses that performer when it is already on the canvas, otherwise imports the installed performer
-- `--act <urn>` opens the workspace and focuses that act when it is already on the canvas, otherwise imports the installed act
+- `--performer <urn>` opens the workspace and focuses that performer when it is already on the canvas, otherwise installs it from the registry when needed and imports it
+- `--act <urn>` opens the workspace and focuses that act when it is already on the canvas, otherwise installs it from the registry when needed and imports it
 - startup restore is scoped by working directory, so `dot-studio .` and `dot-studio <path>` reopen that directory's saved workspace when one exists
 - if the target directory is not initialized yet, Studio initializes the workspace automatically
 - `dot-studio doctor` checks Node.js, workspace path, Studio port, and OpenCode readiness

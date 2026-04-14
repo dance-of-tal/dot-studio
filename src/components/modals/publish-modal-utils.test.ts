@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 
 let buildAuthoringPayloadForPublishApi: typeof import('./publish-modal-utils').buildAuthoringPayloadForPublishApi
+let buildPublishFormSeed: typeof import('./publish-modal-utils').buildPublishFormSeed
 
 beforeAll(async () => {
     Object.defineProperty(globalThis, 'localStorage', {
@@ -12,7 +13,7 @@ beforeAll(async () => {
         },
     })
 
-    ;({ buildAuthoringPayloadForPublishApi } = await import('./publish-modal-utils'))
+    ;({ buildAuthoringPayloadForPublishApi, buildPublishFormSeed } = await import('./publish-modal-utils'))
 })
 
 describe('buildAuthoringPayloadForPublishApi', () => {
@@ -57,6 +58,55 @@ describe('buildAuthoringPayloadForPublishApi', () => {
                 modelId: 'gpt-5.4',
             },
             modelVariant: 'reasoning-high',
+        })
+    })
+})
+
+describe('buildPublishFormSeed', () => {
+    it('prefills act publish fields from authoring metadata and canvas description', () => {
+        expect(buildPublishFormSeed({
+            act: {
+                id: 'act-1',
+                name: 'Review Flow',
+                description: 'Coordinate review and approval.',
+                position: { x: 0, y: 0 },
+                width: 320,
+                height: 200,
+                participants: {},
+                relations: [],
+                createdAt: 1,
+                meta: {
+                    authoring: {
+                        slug: 'review-flow',
+                        description: 'Registry-ready review workflow',
+                        tags: ['workflow', 'review'],
+                    },
+                },
+            },
+        })).toEqual({
+            slug: 'review-flow',
+            description: 'Registry-ready review workflow',
+            tagsText: 'workflow, review',
+        })
+    })
+
+    it('falls back to the canvas act description when authoring description is unset', () => {
+        expect(buildPublishFormSeed({
+            act: {
+                id: 'act-2',
+                name: 'Launch Flow',
+                description: 'Ship the launch checklist end-to-end.',
+                position: { x: 0, y: 0 },
+                width: 320,
+                height: 200,
+                participants: {},
+                relations: [],
+                createdAt: 1,
+            },
+        })).toEqual({
+            slug: 'launch-flow',
+            description: 'Ship the launch checklist end-to-end.',
+            tagsText: '',
         })
     })
 })

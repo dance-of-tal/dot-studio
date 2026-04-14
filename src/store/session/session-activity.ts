@@ -22,6 +22,17 @@ function getLastNonSystemMessage(messages: ChatMessage[]) {
     return null
 }
 
+function getLastNonSystemMessageIndex(messages: ChatMessage[]) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const message = messages[index]
+        if (message.role !== 'system') {
+            return index
+        }
+    }
+
+    return -1
+}
+
 function hasSettledAssistantSnapshot(messages: ChatMessage[]) {
     const lastMessage = getLastNonSystemMessage(messages)
     if (!lastMessage || lastMessage.role !== 'assistant') {
@@ -45,8 +56,16 @@ function hasSettledAssistantSnapshot(messages: ChatMessage[]) {
 }
 
 export function isSessionParkedByWaitUntil(messages: ChatMessage[]) {
-    const lastMessage = getLastNonSystemMessage(messages)
+    const lastMessageIndex = getLastNonSystemMessageIndex(messages)
+    const lastMessage = lastMessageIndex >= 0 ? messages[lastMessageIndex] : null
     if (!lastMessage || lastMessage.role !== 'assistant') {
+        return false
+    }
+
+    // Once a later system message arrives, the parked turn is no longer the
+    // latest transport activity. This lets wake-up notices clear the parked UI
+    // state before the resumed assistant turn starts streaming.
+    if (lastMessageIndex !== messages.length - 1) {
         return false
     }
 

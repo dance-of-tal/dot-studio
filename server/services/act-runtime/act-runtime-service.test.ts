@@ -18,6 +18,7 @@ vi.mock('../opencode-projection/stage-projection-service.js', () => ({
 }))
 
 vi.mock('./wake-cascade.js', () => ({
+    BLOCKED_PROJECTION_RETRY_MESSAGE: 'Waiting for the current workspace run to finish before applying projection changes.',
     clearParticipantCircuit: clearParticipantCircuitMock,
     clearParticipantQueueRunning: clearParticipantQueueRunningMock,
     drainParticipantQueueAfterSettlement: drainParticipantQueueAfterSettlementMock,
@@ -395,5 +396,87 @@ describe('ActRuntimeService projection prewarm', () => {
             status: 400,
             error: 'condition.type "timeout" is not supported',
         })
+    })
+
+    it('replays blocked participant wakes from persisted retry state on load', async () => {
+        const { workspaceIdForDir, workspaceDir } = await import('../../lib/config.js')
+        const workspaceId = workspaceIdForDir(workingDir)
+        const threadId = 'thread-recover'
+        const threadDir = path.join(workspaceDir(workspaceId), 'act-runtime', actDefinition.id, threadId)
+        const pendingTimestamp = Date.now()
+
+        await fs.mkdir(threadDir, { recursive: true })
+        await fs.writeFile(path.join(threadDir, 'thread.json'), JSON.stringify({
+            schemaVersion: 2,
+            thread: {
+                id: threadId,
+                actId: actDefinition.id,
+                mailbox: {
+                    pendingMessages: [{
+                        id: 'mail-1',
+                        from: 'Head',
+                        to: 'Analyst',
+                        content: 'Resume this analysis after restart.',
+                        tag: 'handoff',
+                        timestamp: pendingTimestamp,
+                        status: 'pending',
+                    }],
+                    board: {},
+                    wakeConditions: [],
+                },
+                participantSessions: {
+                    Analyst: 'session-analyst',
+                },
+                participantStatuses: {
+                    Analyst: {
+                        type: 'retry',
+                        updatedAt: pendingTimestamp + 1,
+                        message: 'Waiting for the current workspace run to finish before applying projection changes.',
+                    },
+                },
+                retiredParticipantSessions: {},
+                createdAt: pendingTimestamp,
+                status: 'active',
+            },
+            actDefinition,
+        }, null, 2), 'utf-8')
+        await fs.writeFile(path.join(threadDir, 'board.json'), JSON.stringify([], null, 2), 'utf-8')
+        await fs.writeFile(path.join(threadDir, 'events.jsonl'), `${JSON.stringify({
+            id: 'evt-1',
+            type: 'message.sent',
+            sourceType: 'performer',
+            source: 'Head',
+            timestamp: pendingTimestamp,
+            payload: {
+                from: 'Head',
+                to: 'Analyst',
+                tag: 'handoff',
+                threadId,
+            },
+        })}\n`, 'utf-8')
+
+        const { getActRuntimeService } = await import('./act-runtime-service.js')
+        const service = getActRuntimeService(workingDir)
+
+        const listed = await service.listThreads(actDefinition.id)
+        expect(listed.ok).toBe(true)
+
+        expect(processWakeTargetsMock).toHaveBeenCalledWith(
+            [
+                expect.objectContaining({
+                    participantKey: 'Analyst',
+                    reason: 'subscription',
+                    triggerEvent: expect.objectContaining({
+                        type: 'message.sent',
+                        source: 'Head',
+                    }),
+                }),
+            ],
+            actDefinition,
+            expect.anything(),
+            expect.anything(),
+            threadId,
+            workingDir,
+        )
     })
 })

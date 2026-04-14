@@ -5,10 +5,13 @@ import type {
     MailboxEvent,
     ActThreadSummary,
     WakeCondition,
+    ParticipantSubscriptions,
+    ActRelation,
 } from '../../../shared/act-types.js'
 import { SafetyGuard } from './safety-guard.js'
 import { ThreadManager } from './thread-manager.js'
 import {
+    BLOCKED_PROJECTION_RETRY_MESSAGE,
     clearParticipantCircuit,
     clearParticipantQueueRunning,
     drainParticipantQueueAfterSettlement,
@@ -21,12 +24,148 @@ import { workspaceIdForDir } from '../../lib/config.js'
 import { serverDebug } from '../../lib/server-logger.js'
 import { evaluateWakeCondition } from './wake-evaluator.js'
 import { validateConditionExpr } from './wake-condition-validator.js'
+import { payloadString } from './act-runtime-utils.js'
+import type { WakeUpTarget } from './event-router.js'
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unknown error'
 }
 
 const MAX_WAKE_CONDITION_ALARM_DELAY_MS = 2_147_483_647
+
+function matchCallboardKey(patterns: string[] | undefined, key: string | undefined) {
+    if (!key || !patterns?.length) {
+        return false
+    }
+
+    return patterns.some((pattern) => {
+        if (pattern.endsWith('*')) {
+            return key.startsWith(pattern.slice(0, -1))
+        }
+        return key === pattern
+    })
+}
+
+function hasRelationPermission(
+    participantKey: string,
+    source: string,
+    relations: ActRelation[],
+) {
+    if (!source || source === participantKey) {
+        return false
+    }
+
+    return relations.some((relation) => {
+        const [left, right] = relation.between
+        const pairMatch = (left === source && right === participantKey) || (left === participantKey && right === source)
+        if (!pairMatch) {
+            return false
+        }
+        if (relation.direction === 'one-way') {
+            return left === source && right === participantKey
+        }
+        return true
+    })
+}
+
+function matchesParticipantSubscription(
+    participantKey: string,
+    subscriptions: ParticipantSubscriptions | undefined,
+    event: MailboxEvent,
+) {
+    if (!subscriptions) {
+        return false
+    }
+
+    switch (event.type) {
+        case 'message.sent':
+        case 'message.delivered': {
+            if (payloadString(event.payload, 'to') !== participantKey) {
+                return false
+            }
+            const from = payloadString(event.payload, 'from')
+            const tag = payloadString(event.payload, 'tag')
+            return (subscriptions.messagesFrom?.includes(from || '') ?? false)
+                || (subscriptions.messageTags?.includes(tag || '') ?? false)
+        }
+        case 'board.posted':
+        case 'board.updated':
+            return matchCallboardKey(subscriptions.callboardKeys, payloadString(event.payload, 'key'))
+        case 'runtime.idle':
+            return subscriptions.eventTypes?.includes('runtime.idle') ?? false
+        default:
+            return false
+    }
+}
+
+function buildRecoverableWakeTarget(params: {
+    participantKey: string
+    actDefinition: ActDefinition
+    threadId: string
+    recentEvents: MailboxEvent[]
+    updatedAt?: number
+    triggeredCondition?: WakeCondition | null
+}) {
+    const {
+        participantKey,
+        actDefinition,
+        threadId,
+        recentEvents,
+        updatedAt,
+        triggeredCondition,
+    } = params
+
+    if (triggeredCondition) {
+        return {
+            participantKey,
+            reason: 'wake-condition',
+            wakeCondition: triggeredCondition,
+            triggerEvent: {
+                id: nanoid(),
+                type: 'runtime.idle',
+                sourceType: 'system',
+                source: 'wait_until',
+                timestamp: Date.now(),
+                payload: { threadId, conditionId: triggeredCondition.id },
+            },
+        } satisfies WakeUpTarget
+    }
+
+    const candidateEvents = recentEvents
+        .filter((event) => typeof updatedAt !== 'number' || event.timestamp <= updatedAt)
+        .reverse()
+
+    for (const event of candidateEvents) {
+        if (event.source === participantKey) {
+            continue
+        }
+
+        const relationAllowed = hasRelationPermission(participantKey, event.source, actDefinition.relations)
+        if (!relationAllowed) {
+            continue
+        }
+
+        if ((event.type === 'message.sent' || event.type === 'message.delivered')
+            && payloadString(event.payload, 'to') === participantKey) {
+            return {
+                participantKey,
+                triggerEvent: event,
+                reason: 'subscription',
+            } satisfies WakeUpTarget
+        }
+
+        const subscriptions = actDefinition.participants[participantKey]?.subscriptions
+        if (matchesParticipantSubscription(participantKey, subscriptions, event)) {
+            return {
+                participantKey,
+                triggerEvent: event,
+                reason: 'subscription',
+            } satisfies WakeUpTarget
+        }
+    }
+
+    return null
+}
 
 function nextWakeConditionAlarmAt(condition: ConditionExpr, now: number): number | null {
     switch (condition.type) {
@@ -106,6 +245,7 @@ class ActRuntimeService {
     private readonly workingDir: string
     private readonly safetyGuards = new Map<string, SafetyGuard>()
     private readonly wakeConditionAlarms = new Map<string, ReturnType<typeof setTimeout>>()
+    private readonly blockedWakeRecoveryInFlight = new Set<string>()
     private _threadsLoaded = false
 
     constructor(workspaceId: string, workingDir: string) {
@@ -119,7 +259,116 @@ class ActRuntimeService {
         this._threadsLoaded = true
         serverDebug('act-runtime', `Loading persisted threads for workspace ${this.workingDir}`)
         await this.threadManager.loadPersistedThreads()
+        await this.recoverLoadedThreadRuntimeState()
         serverDebug('act-runtime', `Loaded ${this.threadManager.getActiveThreadCount()} threads`)
+    }
+
+    private async recoverLoadedThreadRuntimeState() {
+        for (const threadId of this.threadManager.listLoadedThreadIds()) {
+            const runtime = this.threadManager.getThreadRuntime(threadId)
+            const actDefinition = this.threadManager.getActDefinition(threadId)
+            if (!runtime || !actDefinition) {
+                continue
+            }
+
+            const recentEvents = await this.threadManager.getRecentEvents(threadId, 50)
+
+            for (const condition of runtime.mailbox.getWakeConditions()) {
+                if (evaluateWakeCondition(condition, runtime.mailbox.getBoardMap(), recentEvents, actDefinition)) {
+                    condition.status = 'triggered'
+                    await processWakeTargets(
+                        [{
+                            participantKey: condition.createdBy,
+                            triggerEvent: {
+                                id: nanoid(),
+                                type: 'runtime.idle',
+                                sourceType: 'system',
+                                source: 'wait_until',
+                                timestamp: Date.now(),
+                                payload: { threadId, conditionId: condition.id },
+                            },
+                            wakeCondition: condition,
+                            reason: 'wake-condition',
+                        }],
+                        actDefinition,
+                        runtime.mailbox,
+                        this.threadManager,
+                        threadId,
+                        this.workingDir,
+                    )
+                    continue
+                }
+
+                this.scheduleWakeConditionAlarm(threadId, condition)
+            }
+
+            for (const [participantKey, status] of Object.entries(runtime.thread.participantStatuses || {})) {
+                if (status.type !== 'retry' || status.message !== BLOCKED_PROJECTION_RETRY_MESSAGE) {
+                    continue
+                }
+                await this.recoverBlockedParticipantWake({
+                    threadId,
+                    participantKey,
+                    statusUpdatedAt: status.updatedAt,
+                    actDefinition,
+                    recentEvents,
+                })
+            }
+        }
+    }
+
+    private async recoverBlockedParticipantWake(params: {
+        threadId: string
+        participantKey: string
+        statusUpdatedAt?: number
+        actDefinition: ActDefinition
+        recentEvents: MailboxEvent[]
+    }) {
+        const {
+            threadId,
+            participantKey,
+            statusUpdatedAt,
+            actDefinition,
+            recentEvents,
+        } = params
+        const recoveryKey = `${threadId}:${participantKey}`
+        if (this.blockedWakeRecoveryInFlight.has(recoveryKey)) {
+            return
+        }
+
+        const runtime = this.threadManager.getThreadRuntime(threadId)
+        if (!runtime) {
+            return
+        }
+
+        const triggeredCondition = runtime.mailbox.getWakeConditionsForParticipant(participantKey, {
+            statuses: ['triggered'],
+        })[0] || null
+        const target = buildRecoverableWakeTarget({
+            participantKey,
+            actDefinition,
+            threadId,
+            recentEvents,
+            updatedAt: statusUpdatedAt,
+            triggeredCondition,
+        })
+        if (!target) {
+            return
+        }
+
+        this.blockedWakeRecoveryInFlight.add(recoveryKey)
+        try {
+            await processWakeTargets(
+                [target],
+                actDefinition,
+                runtime.mailbox,
+                this.threadManager,
+                threadId,
+                this.workingDir,
+            )
+        } finally {
+            this.blockedWakeRecoveryInFlight.delete(recoveryKey)
+        }
     }
 
     private getSafetyGuard(threadId: string): SafetyGuard {

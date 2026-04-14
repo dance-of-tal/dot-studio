@@ -97,6 +97,41 @@ describe('act chat panel helpers', () => {
         ]))
     })
 
+    it('prefers actual session activity over thread retry markers for tab loading dots', () => {
+        expect(buildActParticipantLoadingStates({
+            currentThread: {
+                id: 'thread-1',
+                actId: 'act-1',
+                status: 'idle',
+                participantSessions: {
+                    alpha: 'session-1',
+                    beta: 'session-2',
+                },
+                participantStatuses: {
+                    alpha: { type: 'retry', updatedAt: 1, message: 'Deferred wake pending' },
+                    beta: { type: 'busy', updatedAt: 1 },
+                },
+                createdAt: 1,
+            },
+            participantKeys: ['alpha', 'beta'],
+            executionStatesByParticipant: {
+                alpha: {
+                    loading: false,
+                    status: { type: 'idle' },
+                    messages: [],
+                },
+                beta: {
+                    loading: true,
+                    status: { type: 'busy' },
+                    messages: [],
+                },
+            },
+        })).toEqual(new Map([
+            ['alpha', false],
+            ['beta', true],
+        ]))
+    })
+
     it('treats idle participant runtime states as not loading', () => {
         expect(buildActParticipantLoadingStates({
             currentThread: {

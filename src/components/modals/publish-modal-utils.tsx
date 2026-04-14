@@ -9,7 +9,7 @@
 
 import type { AssetCard, PerformerNode, WorkspaceAct } from '../../types'
 import { useStudioStore } from '../../store'
-import { registryUrnFromRef } from '../../lib/performers'
+import { registryUrnFromRef, slugifyAssetName } from '../../lib/performers'
 
 // ── Types ───────────────────────────────────────────────
 
@@ -18,6 +18,11 @@ export type PickerItemDraft = { kind: 'tal'; source: 'draft'; editorId: string; 
 export type PickerItemPerformer = { kind: 'performer'; source: 'canvas'; performerId: string; name: string; issue?: string }
 export type PickerItemAct = { kind: 'act'; source: 'canvas'; actId: string; name: string; issue?: string }
 export type PickerItem = PickerItemLocal | PickerItemDraft | PickerItemPerformer | PickerItemAct
+export type PublishFormSeed = {
+    slug: string
+    description: string
+    tagsText: string
+}
 
 export type PerformerPreflightEntry = {
     label: string
@@ -194,6 +199,49 @@ export function buildMarkdownAssetPayload(markdownEditor: NonNullable<ReturnType
         tags,
         content: typeof draft.content === 'string' ? draft.content : '',
     }
+}
+
+export function buildPublishFormSeed(args: {
+    performer?: PerformerNode | null
+    draft?: NonNullable<ReturnType<typeof useStudioStore.getState>['drafts'][string]> | null
+    act?: WorkspaceAct | null
+    localItem?: PickerItemLocal | null
+}): PublishFormSeed | null {
+    const { performer, draft, act, localItem } = args
+
+    if (performer) {
+        return {
+            slug: performer.meta?.authoring?.slug || slugifyAssetName(performer.name),
+            description: performer.meta?.authoring?.description || performer.name,
+            tagsText: (performer.meta?.authoring?.tags || []).join(', '),
+        }
+    }
+
+    if (draft) {
+        return {
+            slug: draft.slug || slugifyAssetName(draft.name),
+            description: draft.description || draft.name,
+            tagsText: (draft.tags || []).join(', '),
+        }
+    }
+
+    if (act) {
+        return {
+            slug: act.meta?.authoring?.slug || slugifyAssetName(act.name),
+            description: act.meta?.authoring?.description || act.description || act.name,
+            tagsText: (act.meta?.authoring?.tags || []).join(', '),
+        }
+    }
+
+    if (localItem) {
+        return {
+            slug: localItem.slug,
+            description: localItem.name,
+            tagsText: '',
+        }
+    }
+
+    return null
 }
 
 export function buildAuthoringPayloadForPublishApi(asset: {

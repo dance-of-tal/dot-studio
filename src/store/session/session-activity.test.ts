@@ -110,6 +110,43 @@ describe('session activity', () => {
         })
     })
 
+    it('clears the parked state once a later system wake-up message arrives', () => {
+        expect(resolveSessionActivity({
+            loading: true,
+            status: { type: 'busy' },
+            messages: [
+                {
+                    id: 'msg-1',
+                    role: 'assistant',
+                    content: '',
+                    timestamp: 1,
+                    parts: [{
+                        id: 'tool-1',
+                        type: 'tool',
+                        tool: {
+                            name: 'wait_until',
+                            callId: 'call-1',
+                            status: 'completed',
+                        },
+                    }],
+                },
+                {
+                    id: 'msg-2',
+                    role: 'system',
+                    content: 'Wake-up: teammate replied.',
+                    timestamp: 2,
+                },
+            ],
+            permission: null,
+            question: null,
+        })).toMatchObject({
+            kind: 'running',
+            isActive: true,
+            canAbort: true,
+            isTransportActive: true,
+        })
+    })
+
     it('does not revive settled sessions from stale loading once idle status is known', () => {
         expect(resolveSessionActivity({
             loading: true,

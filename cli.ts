@@ -97,9 +97,9 @@ Options:
       --opencode-url <url>
                         Connect to an existing OpenCode instance instead of managed mode.
       --performer <urn>
-                        Focus or import an installed performer after opening the workspace.
+                        Focus a canvas performer or install/import the performer from the registry.
       --act <urn>
-                        Focus or import an installed act after opening the workspace.
+                        Focus a canvas act or install/import the act from the registry.
       --no-open         Do not open the browser window.
       --open            Explicitly open the browser window after startup.
       --verbose         Print extra startup details.

@@ -77,13 +77,30 @@ describe('ThreadManager full-rewrite persistence', () => {
         }
     })
 
-    it('restores board entries from board.json instead of stale thread mailbox state', async () => {
+    it('restores board entries from board.json while keeping pending mailbox state from thread snapshots', async () => {
         const studioDir = await makeTempStudioDir()
         try {
             const workspaceId = 'workspace-2'
             const actId = 'act-2'
             const threadId = 'thread-2'
             const threadDir = path.join(studioDir, 'workspaces', workspaceId, 'act-runtime', actId, threadId)
+            const pendingMessage = {
+                id: 'msg-1',
+                from: 'Lead',
+                to: 'Researcher',
+                content: 'Please pick this back up after restart.',
+                timestamp: Date.now(),
+                status: 'pending' as const,
+            }
+            const wakeCondition = {
+                id: 'wait-1',
+                target: 'self' as const,
+                createdBy: 'Researcher',
+                createdAt: Date.now(),
+                onSatisfiedMessage: 'Resume when review-summary exists.',
+                condition: { type: 'board_key_exists' as const, key: 'review-summary' },
+                status: 'waiting' as const,
+            }
             const artifactEntry: BoardEntry = {
                 id: 'entry-1',
                 key: 'artifact-report',
@@ -102,6 +119,23 @@ describe('ThreadManager full-rewrite persistence', () => {
                 thread: {
                     id: threadId,
                     actId,
+                    mailbox: {
+                        pendingMessages: [pendingMessage],
+                        board: {
+                            'stale-board-key': {
+                                id: 'stale-entry',
+                                key: 'stale-board-key',
+                                kind: 'artifact',
+                                author: 'Lead',
+                                content: 'stale',
+                                ownership: 'authoritative',
+                                updateMode: 'replace',
+                                version: 1,
+                                timestamp: Date.now(),
+                            },
+                        },
+                        wakeConditions: [wakeCondition],
+                    },
                     participantSessions: {},
                     participantStatuses: {},
                     retiredParticipantSessions: {},
@@ -120,6 +154,8 @@ describe('ThreadManager full-rewrite persistence', () => {
             expect(thread?.mailbox.board).toEqual({
                 [artifactEntry.key]: artifactEntry,
             })
+            expect(thread?.mailbox.pendingMessages).toEqual([pendingMessage])
+            expect(thread?.mailbox.wakeConditions).toEqual([wakeCondition])
         } finally {
             await cleanupStudioDir(studioDir)
         }

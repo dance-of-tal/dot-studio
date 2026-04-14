@@ -1,4 +1,5 @@
 import type { AssetCard, PerformerNode, WorkspaceAct } from '../types';
+import { formatStudioApiErrorMessage } from './api-errors';
 
 export type StartupAssetTarget =
     | { kind: 'performer'; urn: string }
@@ -111,6 +112,50 @@ function showMissingAssetToast(
     );
 }
 
+function showInstallFailedToast(
+    showToast: (message: string, kind: 'info' | 'success' | 'error' | 'warning', options?: Record<string, unknown>) => void,
+    target: StartupAssetTarget,
+    error: unknown,
+) {
+    showToast(
+        `Studio could not install ${target.kind} asset ${target.urn} from the registry. ${formatStudioApiErrorMessage(error, false)}`,
+        'error',
+        {
+            title: `${target.kind === 'performer' ? 'Performer' : 'Act'} install failed`,
+            dedupeKey: `startup-asset-install-failed:${target.kind}:${target.urn}`,
+        },
+    );
+}
+
+async function ensureInstalledAssetByUrn(
+    api: {
+        assets: { list: (kind: string) => Promise<Array<Record<string, unknown>>> }
+        dot: { install: (urn: string, localName?: string, force?: boolean, scope?: 'global' | 'stage') => Promise<unknown> }
+    },
+    showToast: (message: string, kind: 'info' | 'success' | 'error' | 'warning', options?: Record<string, unknown>) => void,
+    target: StartupAssetTarget,
+): Promise<AssetCard | null> {
+    const installedAsset = await findInstalledAssetByUrn(api, target.kind, target.urn);
+    if (installedAsset) {
+        return installedAsset;
+    }
+
+    try {
+        await api.dot.install(target.urn, undefined, false, 'stage');
+    } catch (error) {
+        showInstallFailedToast(showToast, target, error);
+        return null;
+    }
+
+    const installedAfterFetch = await findInstalledAssetByUrn(api, target.kind, target.urn);
+    if (!installedAfterFetch) {
+        showMissingAssetToast(showToast, target);
+        return null;
+    }
+
+    return installedAfterFetch;
+}
+
 export async function openStartupAssetTarget(target: StartupAssetTarget): Promise<boolean> {
     const { api, useStudioStore, showToast } = await loadStartupRuntime();
 
@@ -121,13 +166,14 @@ export async function openStartupAssetTarget(target: StartupAssetTarget): Promis
             return true;
         }
 
-        const asset = await findInstalledAssetByUrn(api, 'performer', target.urn);
+        const asset = await ensureInstalledAssetByUrn(api, showToast, target);
         if (!asset) {
-            showMissingAssetToast(showToast, target);
             return false;
         }
 
-        useStudioStore.getState().addPerformerFromAsset(asset);
+        const { loadPerformerImportContext, normalizeImportedPerformerAsset } = await import('./performer-import');
+        const context = await loadPerformerImportContext();
+        useStudioStore.getState().addPerformerFromAsset(normalizeImportedPerformerAsset(asset, context));
         const created = findPerformerByUrn(useStudioStore, target.urn);
         if (created) {
             focusPerformer(useStudioStore, created.id);
@@ -141,9 +187,8 @@ export async function openStartupAssetTarget(target: StartupAssetTarget): Promis
         return true;
     }
 
-    const asset = await findInstalledAssetByUrn(api, 'act', target.urn);
+    const asset = await ensureInstalledAssetByUrn(api, showToast, target);
     if (!asset) {
-        showMissingAssetToast(showToast, target);
         return false;
     }
 

@@ -7,6 +7,7 @@
  */
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
+import type { PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import { Send, Square, Workflow, Users, User, Circle, Pencil, Plus, AlertCircle, Clipboard } from 'lucide-react'
 import { useStudioStore } from '../../store'
 import { hasModelConfig } from '../../lib/performers'
@@ -68,6 +69,11 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         respondToQuestion: state.respondToQuestion,
         rejectQuestion: state.rejectQuestion,
     })))
+    const sessionLoadingById = useStudioStore((state) => state.sessionLoading)
+    const sessionStatusesById = useStudioStore((state) => state.seStatuses)
+    const sessionMessagesById = useStudioStore((state) => state.seMessages)
+    const sessionPermissionsById = useStudioStore((state) => state.sePermissions)
+    const sessionQuestionsById = useStudioStore((state) => state.seQuestions)
 
     const act = useMemo(() => acts.find((a) => a.id === actId), [acts, actId])
     const [input, setInput] = useState('')
@@ -141,11 +147,37 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         [act, activeParticipantKey, performers],
     )
     const participantLoadingStates = useMemo(() => {
+        const executionStatesByParticipant = Object.fromEntries(
+            participantKeys.map((participantKey) => {
+                const participantSessionId = currentThread?.participantSessions?.[participantKey]
+                if (!participantSessionId) {
+                    return [participantKey, null]
+                }
+
+                return [participantKey, {
+                    loading: !!sessionLoadingById[participantSessionId],
+                    status: sessionStatusesById[participantSessionId],
+                    messages: sessionMessagesById[participantSessionId] || EMPTY_MESSAGES,
+                    permission: (sessionPermissionsById[participantSessionId] || null) as PermissionRequest | null,
+                    question: (sessionQuestionsById[participantSessionId] || null) as QuestionRequest | null,
+                }]
+            }),
+        )
+
         return buildActParticipantLoadingStates({
             currentThread,
             participantKeys,
+            executionStatesByParticipant,
         })
-    }, [currentThread, participantKeys])
+    }, [
+        currentThread,
+        participantKeys,
+        sessionLoadingById,
+        sessionStatusesById,
+        sessionMessagesById,
+        sessionPermissionsById,
+        sessionQuestionsById,
+    ])
 
     // Resolve performer model from ref binding
     const resolvedPerformer = useMemo(

@@ -10,13 +10,13 @@ import {
     buildPerformerPublishPayload,
     getActPublishDependencyIssues,
     getPerformerPublishBlockReasons,
-    slugifyAssetName,
 } from '../../lib/performers'
 import { queryKeys, useAssetKind } from '../../hooks/queries'
 import { useDotLogin } from '../../hooks/useDotLogin'
 import {
     buildMarkdownAssetPayload,
     buildAuthoringPayloadForPublishApi,
+    buildPublishFormSeed,
     buildPerformerPreflight,
     buildPickerItems,
     getActPublishBlockReasons,
@@ -32,6 +32,7 @@ export function usePublishModalController(open: boolean) {
     const acts = useStudioStore((state) => state.acts)
 
     const updatePerformerAuthoringMeta = useStudioStore((state) => state.updatePerformerAuthoringMeta)
+    const updateActAuthoringMeta = useStudioStore((state) => state.updateActAuthoringMeta)
     const updateMarkdownEditorBaseline = useStudioStore((state) => state.updateMarkdownEditorBaseline)
     const upsertDraft = useStudioStore((state) => state.upsertDraft)
     const setPerformerTalRef = useStudioStore((state) => state.setPerformerTalRef)
@@ -91,24 +92,18 @@ export function usePublishModalController(open: boolean) {
         if (step !== 'form' || !pickerSelection) return
         setStatus(null)
 
-        if (performer) {
-            setSlug(performer.meta?.authoring?.slug || slugifyAssetName(performer.name))
-            setDescription(performer.meta?.authoring?.description || performer.name)
-            setTagsText((performer.meta?.authoring?.tags || []).join(', '))
-            return
-        }
-        if (draft) {
-            setSlug(draft.slug || slugifyAssetName(draft.name))
-            setDescription(draft.description || draft.name)
-            setTagsText((draft.tags || []).join(', '))
-            return
-        }
-        if (isLocalAsset && pickerSelection && pickerSelection.source === 'local') {
-            setSlug(pickerSelection.slug)
-            setDescription(pickerSelection.name)
-            setTagsText('')
-        }
-    }, [step, pickerSelection, performer, draft, isLocalAsset])
+        const formSeed = buildPublishFormSeed({
+            performer,
+            draft,
+            act: selectedAct,
+            localItem: isLocalAsset && pickerSelection.source === 'local' ? pickerSelection : null,
+        })
+        if (!formSeed) return
+
+        setSlug(formSeed.slug)
+        setDescription(formSeed.description)
+        setTagsText(formSeed.tagsText)
+    }, [draft, isLocalAsset, performer, pickerSelection, selectedAct, step])
 
     const performerPreflight = useMemo(() => buildPerformerPreflight(performer), [performer])
 
@@ -198,6 +193,21 @@ export function usePublishModalController(open: boolean) {
         }
     }
 
+    const syncActAuthoringMeta = (actId: string, tags: string[]) => {
+        const act = acts.find((entry) => entry.id === actId)
+        if (!act) return
+
+        updateActAuthoringMeta(actId, {
+            ...act.meta,
+            authoring: {
+                ...(act.meta?.authoring || {}),
+                slug,
+                description,
+                tags,
+            },
+        })
+    }
+
     const handleSaveLocal = async () => {
         if (!target) return
         try {
@@ -222,6 +232,7 @@ export function usePublishModalController(open: boolean) {
             }
 
             if (target.kind === 'act' && selectedAct) {
+                syncActAuthoringMeta(selectedAct.id, tags)
                 const payload = buildActAssetPayload(selectedAct, { description, tags })
                 const result = await api.dot.saveLocalAsset('act', slug, payload, authUser?.username || undefined)
                 await invalidateKind('act')
@@ -290,6 +301,7 @@ export function usePublishModalController(open: boolean) {
             }
 
             if (target.kind === 'act' && selectedAct) {
+                syncActAuthoringMeta(selectedAct.id, tags)
                 const publishInput = buildActPublishPayload(selectedAct, { slug, description, tags }, {
                     drafts,
                     performers,
