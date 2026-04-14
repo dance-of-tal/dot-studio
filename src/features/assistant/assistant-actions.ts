@@ -10,6 +10,7 @@ import type { AssetCard } from '../../types'
 import type { StudioState } from '../../store/types'
 import { useStudioStore } from '../../store'
 import { api } from '../../api'
+import { loadPerformerImportContext, normalizeImportedPerformerAsset } from '../../lib/performer-import'
 import {
     collectVisibleCanvasNodeRects,
     resolveActCreationClusterLayout,
@@ -539,7 +540,8 @@ export async function applyAssistantAction(
                     name: action.performerName,
                 })
                 if (!asset) return { success: false }
-                store().addPerformerFromAsset(asset)
+                const context = await loadPerformerImportContext()
+                store().addPerformerFromAsset(normalizeImportedPerformerAsset(asset, context))
                 return { success: true }
             }
             case 'importInstalledAct': {

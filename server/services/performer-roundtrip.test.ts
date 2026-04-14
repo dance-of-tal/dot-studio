@@ -41,7 +41,7 @@ describe('performer publish/install round-trip', () => {
         await fs.rm(installDir, { recursive: true, force: true }).catch(() => {})
     })
 
-    it('preserves canonical model ids across publish and install', async () => {
+    it('preserves canonical model ids and MCP config across publish and install', async () => {
         const stage = stageFromWorkingDir(publishDir)
         const registry = new Map<string, PublishedRegistryPackage>()
         const publishedPayloads: Record<string, unknown>[] = []
@@ -107,6 +107,10 @@ describe('performer publish/install round-trip', () => {
                     modelId: 'gpt-5.4',
                 },
                 modelVariant: 'reasoning-high',
+                mcp_config: {
+                    github: { command: ['npx', '@modelcontextprotocol/server-github'] },
+                    sentry: { url: 'https://mcp.sentry.dev/mcp' },
+                },
             },
             providedAssets: [{
                 kind: 'tal',
@@ -132,6 +136,7 @@ describe('performer publish/install round-trip', () => {
             payload: {
                 model?: { provider: string; modelId: string }
                 modelVariant?: string
+                mcp_config?: Record<string, unknown>
             }
         } | undefined
 
@@ -142,6 +147,10 @@ describe('performer publish/install round-trip', () => {
             modelId: 'gpt-5.4',
         })
         expect(publishedPerformer?.payload.modelVariant).toBe('reasoning-high')
+        expect(publishedPerformer?.payload.mcp_config).toEqual({
+            github: { command: ['npx', '@modelcontextprotocol/server-github'] },
+            sentry: { url: 'https://mcp.sentry.dev/mcp' },
+        })
 
         await installDotAsset(installDir, {
             urn: publishResult.urn,
@@ -157,6 +166,11 @@ describe('performer publish/install round-trip', () => {
             },
             modelVariant: 'reasoning-high',
             talUrn: `tal/@acme/${stage}/reviewer-tal`,
+            mcpConfig: {
+                github: { command: ['npx', '@modelcontextprotocol/server-github'] },
+                sentry: { url: 'https://mcp.sentry.dev/mcp' },
+            },
+            declaredMcpServerNames: ['github', 'sentry'],
         }))
     })
 })

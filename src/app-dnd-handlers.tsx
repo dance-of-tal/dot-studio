@@ -2,9 +2,8 @@ import { Hexagon, Zap, Cpu, Server, Package } from 'lucide-react'
 import { useStudioStore } from './store'
 import type { StudioState } from './store'
 import { api } from './api'
+import { loadPerformerImportContext, normalizeImportedPerformerAsset } from './lib/performer-import'
 import { showToast } from './lib/toast'
-import { normalizeAssetMcpForStudio, normalizeAssetModelForStudio } from './lib/performers'
-import { mcpServerNamesFromConfig } from '../shared/mcp-catalog'
 import { extractMcpServerNamesFromConfig } from '../shared/mcp-config'
 import { resolvePerformerMcpPortability } from '../shared/performer-mcp-portability'
 import {
@@ -90,13 +89,8 @@ export async function resolvePerformerAssetForStudio(
     asset: DragAsset,
     showDropWarning: (message: string) => void,
 ): Promise<PerformerAssetPayload> {
-    const globalConfig = await api.config.getGlobal().catch(() => ({}))
-    const availableMcpServerNames = mcpServerNamesFromConfig(globalConfig)
-    const runtimeModels = await api.models.list()
-    const normalized = normalizeAssetMcpForStudio(
-        normalizeAssetModelForStudio(asset, runtimeModels),
-        availableMcpServerNames,
-    )
+    const context = await loadPerformerImportContext()
+    const normalized = normalizeImportedPerformerAsset(asset, context)
     if (!normalized.model && normalized.modelPlaceholder) {
         showDropWarning(`Model ${normalized.modelPlaceholder.provider}/${normalized.modelPlaceholder.modelId} is not available in this Studio runtime. A placeholder was kept so you can pick a replacement.`)
     }
@@ -110,7 +104,7 @@ export async function resolvePerformerAssetForStudio(
             matchedMcpServerNames: asset.matchedMcpServerNames,
             missingMcpServerNames: asset.missingMcpServerNames,
         }
-        : resolvePerformerMcpPortability(asset.mcpConfig, availableMcpServerNames)
+        : resolvePerformerMcpPortability(asset.mcpConfig, context.availableMcpServerNames)
 
     const declaredMcpNames = portability.declaredMcpServerNames.length > 0
         ? portability.declaredMcpServerNames
