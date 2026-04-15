@@ -12,9 +12,20 @@ const markParticipantQueueRunningMock = vi.fn()
 const processWakeCascadeMock = vi.fn()
 const processWakeTargetsMock = vi.fn()
 const tripParticipantCircuitMock = vi.fn()
+const sessionStatusMock = vi.fn()
+const sessionMessagesMock = vi.fn()
 
 vi.mock('../opencode-projection/stage-projection-service.js', () => ({
     ensurePerformerProjection: ensurePerformerProjectionMock,
+}))
+
+vi.mock('../../lib/opencode.js', () => ({
+    getOpencode: async () => ({
+        session: {
+            status: sessionStatusMock,
+            messages: sessionMessagesMock,
+        },
+    }),
 }))
 
 vi.mock('./wake-cascade.js', () => ({
@@ -86,6 +97,8 @@ describe('ActRuntimeService projection prewarm', () => {
             errors: [],
         })
         tripParticipantCircuitMock.mockReset()
+        sessionStatusMock.mockReset().mockResolvedValue({ data: {} })
+        sessionMessagesMock.mockReset().mockResolvedValue({ data: [] })
 
         const { workspaceIdForDir, workspaceDir } = await import('../../lib/config.js')
         const wsDir = workspaceDir(workspaceIdForDir(workingDir))
@@ -478,5 +491,59 @@ describe('ActRuntimeService projection prewarm', () => {
             threadId,
             workingDir,
         )
+    })
+
+    it('reconciles stale persisted busy participant statuses against current session status on load', async () => {
+        const { workspaceIdForDir, workspaceDir } = await import('../../lib/config.js')
+        const workspaceId = workspaceIdForDir(workingDir)
+        const threadId = 'thread-stale-busy'
+        const sessionId = 'session-head'
+        const threadDir = path.join(workspaceDir(workspaceId), 'act-runtime', actDefinition.id, threadId)
+
+        await fs.mkdir(threadDir, { recursive: true })
+        await fs.writeFile(path.join(threadDir, 'thread.json'), JSON.stringify({
+            schemaVersion: 2,
+            thread: {
+                id: threadId,
+                actId: actDefinition.id,
+                mailbox: {
+                    pendingMessages: [],
+                    board: {},
+                    wakeConditions: [],
+                },
+                participantSessions: {
+                    Head: sessionId,
+                },
+                participantStatuses: {
+                    Head: {
+                        type: 'busy',
+                        updatedAt: Date.now(),
+                    },
+                },
+                retiredParticipantSessions: {},
+                createdAt: Date.now(),
+                status: 'active',
+            },
+            actDefinition,
+        }, null, 2), 'utf-8')
+        await fs.writeFile(path.join(threadDir, 'board.json'), JSON.stringify([], null, 2), 'utf-8')
+        await fs.writeFile(path.join(threadDir, 'events.jsonl'), '', 'utf-8')
+
+        sessionStatusMock.mockResolvedValueOnce({
+            data: {
+                [sessionId]: { type: 'idle' },
+            },
+        })
+
+        const { getActRuntimeService } = await import('./act-runtime-service.js')
+        const service = getActRuntimeService(workingDir)
+        const listed = await service.listThreads(actDefinition.id)
+
+        expect(listed.ok).toBe(true)
+        if (!listed.ok) return
+        expect(listed.threads[0]?.participantStatuses?.Head?.type).toBe('idle')
+
+        const persisted = JSON.parse(await fs.readFile(path.join(threadDir, 'thread.json'), 'utf-8'))
+        expect(persisted.thread.participantStatuses.Head.type).toBe('idle')
     })
 })

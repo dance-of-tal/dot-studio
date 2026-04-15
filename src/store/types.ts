@@ -240,9 +240,12 @@ export interface ActThreadState {
     createdAt: number
 }
 
+export type ActEditorTab = 'overview' | 'participants' | 'relations' | 'rules'
+
 export interface ActEditorState {
     actId: string
     mode: 'act' | 'participant' | 'relation'
+    tab?: ActEditorTab | null
     participantKey: string | null
     relationId: string | null
 }
@@ -277,7 +280,7 @@ export interface ActSlice {
     openActEditor: (
         actId: string,
         mode?: ActEditorState['mode'],
-        options?: { participantKey?: string | null; relationId?: string | null }
+        options?: { participantKey?: string | null; relationId?: string | null; tab?: ActEditorTab | null }
     ) => void
     closeActEditor: () => void
     openActParticipantEditor: (actId: string, participantKey: string) => void

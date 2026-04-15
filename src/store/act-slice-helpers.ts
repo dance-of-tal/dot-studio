@@ -24,7 +24,7 @@ import {
 import { showToast } from '../lib/toast'
 import { buildActParticipantChatKey, parseActParticipantChatKey } from '../../shared/chat-targets'
 import { mcpServerNamesFromConfig } from '../../shared/mcp-catalog'
-import type { ActEditorState, StudioState } from './types'
+import type { ActEditorState, ActEditorTab, StudioState } from './types'
 import { clearChatSessionView, registerSessionBinding, syncSessionSnapshot } from './session'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
@@ -153,11 +153,12 @@ export function buildActEditorSelectionState(
 export function createActEditorState(
     actId: string,
     mode: ActEditorState['mode'],
-    options: { participantKey?: string | null; relationId?: string | null } = {},
+    options: { participantKey?: string | null; relationId?: string | null; tab?: ActEditorTab | null } = {},
 ): ActEditorState {
     return {
         actId,
         mode,
+        ...(options.tab !== undefined ? { tab: options.tab } : {}),
         participantKey: options.participantKey ?? null,
         relationId: options.relationId ?? null,
     }

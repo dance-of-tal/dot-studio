@@ -122,6 +122,20 @@ function extractBodyMessage(body: unknown): string | null {
     return body.trim()
 }
 
+function sanitizeMessage(message: string): string {
+    const trimmed = message.trim()
+    if (!trimmed) {
+        return trimmed
+    }
+
+    const firstLine = trimmed
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line.length > 0)
+
+    return firstLine || trimmed
+}
+
 function extractMessage(err: unknown): string {
     const message = [
         readString(err, 'data', 'message'),
@@ -134,7 +148,7 @@ function extractMessage(err: unknown): string {
     ].find((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0)
 
     if (message) {
-        return message
+        return sanitizeMessage(message)
     }
 
     // Stringify raw error for debuggability — truncate if huge
@@ -182,6 +196,7 @@ function isRuntimeUnavailableError(message: string, status?: number) {
     return status === 502
         || status === 503
         || status === 504
+        || /\bAll fibers interrupted without error\b/i.test(message)
         || /\b(ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up|failed to fetch|network error|connection refused|service unavailable|gateway timeout)\b/i.test(message)
 }
 
@@ -280,7 +295,9 @@ export function normalizeOpencodeError(
 
     if (isRuntimeUnavailableError(detail, status)) {
         return {
-            error: 'OpenCode is unavailable right now. Retry in a moment or restart OpenCode from Settings.',
+            error: /\bAll fibers interrupted without error\b/i.test(detail)
+                ? 'OpenCode interrupted the current run unexpectedly. Retry in a moment, and if it keeps happening restart OpenCode from Settings.'
+                : 'OpenCode is unavailable right now. Retry in a moment or restart OpenCode from Settings.',
             detail,
             code: 'runtime_unavailable',
             action: 'restart_opencode',

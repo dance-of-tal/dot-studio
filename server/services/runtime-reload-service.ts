@@ -1,5 +1,5 @@
 import { getOpencode } from '../lib/opencode.js'
-import { hasSettledLatestAssistantTurn, isSessionParkedByWaitUntil } from '../lib/chat-session.js'
+import { isSessionEffectivelyRunning, isSessionStatusActive } from '../lib/chat-session.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
 import { clearProjectionRuntimePending } from './opencode-projection/projection-manifest.js'
 
@@ -23,13 +23,13 @@ type OpenCodeSessionMessage = {
     parts?: unknown[]
 } & Record<string, unknown>
 
-async function isSessionEffectivelyRunning(
+async function isSessionCountedAsRunning(
     oc: Awaited<ReturnType<typeof getOpencode>>,
     directory: string,
     sessionId: string,
     status: OpenCodeSessionStatus | undefined,
 ) {
-    if (status?.type !== 'busy' && status?.type !== 'retry') {
+    if (!isSessionStatusActive(status)) {
         return false
     }
 
@@ -38,9 +38,7 @@ async function isSessionEffectivelyRunning(
             directory,
             sessionID: sessionId,
         })) || []
-        if (isSessionParkedByWaitUntil(rawMessages) || hasSettledLatestAssistantTurn(rawMessages)) {
-            return false
-        }
+        return isSessionEffectivelyRunning({ directStatus: status, messages: rawMessages })
     } catch {
         // If message inspection fails, fall back to the authoritative busy/retry status.
     }
@@ -75,7 +73,7 @@ export async function countRunningSessions(workingDir: string) {
                 continue
             }
             const status = statuses?.[session.id]
-            if (await isSessionEffectivelyRunning(oc, directory, session.id, status)) {
+            if (await isSessionCountedAsRunning(oc, directory, session.id, status)) {
                 runningSessions += 1
             }
         }

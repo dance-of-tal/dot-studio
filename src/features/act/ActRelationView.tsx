@@ -38,7 +38,7 @@ export default function ActRelationView() {
                     type="button"
                     className="icon-btn"
                     title="Back to Act Config"
-                    onClick={() => openActEditor(activeActId, 'act')}
+                    onClick={() => openActEditor(activeActId, 'act', { tab: 'relations' })}
                 >
                     <ChevronLeft size={12} />
                 </button>
@@ -52,7 +52,7 @@ export default function ActRelationView() {
                     title="Delete relation"
                     onClick={() => {
                         removeRelation(activeActId, relationId)
-                        openActEditor(activeActId, 'act')
+                        openActEditor(activeActId, 'act', { tab: 'relations' })
                     }}
                 >
                     <Trash2 size={12} />

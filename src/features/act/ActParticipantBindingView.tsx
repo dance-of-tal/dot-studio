@@ -82,7 +82,7 @@ export default function ActParticipantBindingView() {
                     type="button"
                     className="icon-btn"
                     title="Back to Act Config"
-                    onClick={() => openActEditor(activeActId, 'act')}
+                    onClick={() => openActEditor(activeActId, 'act', { tab: 'participants' })}
                 >
                     <ChevronLeft size={12} />
                 </button>
@@ -96,7 +96,7 @@ export default function ActParticipantBindingView() {
                     title="Remove participant"
                     onClick={() => {
                         unbindPerformerFromAct(activeActId, participantKey)
-                        openActEditor(activeActId, 'act')
+                        openActEditor(activeActId, 'act', { tab: 'participants' })
                     }}
                 >
                     <Trash2 size={12} />

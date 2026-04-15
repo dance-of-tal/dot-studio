@@ -1,8 +1,9 @@
 import type { QuestionAnswer, PermissionRequest, QuestionRequest } from '@opencode-ai/sdk/v2'
 import { getOpencode } from '../lib/opencode.js'
 import {
-    deriveImplicitIdleSessionState,
+    isSessionStatusActive,
     normalizeIncompleteToolParts,
+    resolveEffectiveSessionStatus,
     waitForSessionToSettle,
 } from '../lib/chat-session.js'
 import { unwrapOpencodeResult } from '../lib/opencode-errors.js'
@@ -42,6 +43,14 @@ type OpenCodeSessionStatus = {
 } & Record<string, unknown>
 
 type SessionMessageLike = {
+    info?: {
+        role?: string
+        error?: unknown
+        time?: {
+            completed?: number
+        }
+    }
+    role?: string
     parts?: unknown[]
 } & Record<string, unknown>
 
@@ -118,18 +127,32 @@ export async function getStudioChatSessionStatus(workingDir: string, sessionId: 
         ...directoryQuery,
     })) || {}
     const directStatus = statuses[sessionId] || null
-    if (directStatus) {
+    if (directStatus && !isSessionStatusActive(directStatus)) {
         return {
             status: directStatus,
         }
     }
 
-    const rawMessages = unwrapOpencodeResult<SessionMessageLike[]>(await oc.session.messages({
-        sessionID: sessionId,
-        ...directoryQuery,
-    })) || []
+    let rawMessages: SessionMessageLike[] = []
+    try {
+        rawMessages = unwrapOpencodeResult<SessionMessageLike[]>(await oc.session.messages({
+            sessionID: sessionId,
+            ...directoryQuery,
+        })) || []
+    } catch (error) {
+        if (directStatus) {
+            return {
+                status: directStatus,
+            }
+        }
+        throw error
+    }
+
     return {
-        status: deriveImplicitIdleSessionState(rawMessages).status,
+        status: resolveEffectiveSessionStatus({
+            directStatus,
+            messages: rawMessages,
+        }),
     }
 }
 

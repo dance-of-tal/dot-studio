@@ -26,6 +26,10 @@ type MessageWithParts = {
     parts?: unknown[]
 } & Record<string, unknown>
 
+export type SessionStatusLike = {
+    type?: 'idle' | 'busy' | 'retry' | 'error'
+} & Record<string, unknown>
+
 function isToolPartLike(value: unknown): value is ToolPartLike {
     return !!value && typeof value === 'object'
 }
@@ -102,6 +106,42 @@ export function isSessionParkedByWaitUntil(messages: MessageWithParts[]) {
     }
 
     return toolParts.some((part) => readToolName(part) === 'wait_until' && part.state?.status === 'completed')
+}
+
+export function isSessionStatusActive(status: SessionStatusLike | null | undefined) {
+    return status?.type === 'busy' || status?.type === 'retry'
+}
+
+export function isSessionEffectivelySettled(messages: MessageWithParts[]) {
+    return isSessionParkedByWaitUntil(messages) || hasSettledLatestAssistantTurn(messages)
+}
+
+export function resolveEffectiveSessionStatus<T extends SessionStatusLike>(params: {
+    directStatus?: T | null
+    messages: MessageWithParts[]
+}) {
+    const { directStatus, messages } = params
+
+    if (directStatus?.type === 'idle' || directStatus?.type === 'error') {
+        return directStatus
+    }
+
+    if (isSessionStatusActive(directStatus) && isSessionEffectivelySettled(messages)) {
+        return { type: 'idle' } as const
+    }
+
+    if (directStatus?.type) {
+        return directStatus
+    }
+
+    return deriveImplicitIdleSessionState(messages).status
+}
+
+export function isSessionEffectivelyRunning(params: {
+    directStatus?: SessionStatusLike | null
+    messages: MessageWithParts[]
+}) {
+    return isSessionStatusActive(params.directStatus) && !isSessionEffectivelySettled(params.messages)
 }
 
 function hasCompletedAssistantTurn(messages: MessageWithParts[]) {
@@ -194,7 +234,7 @@ export async function waitForSessionToSettle(
             ...directoryQuery,
         }))
         const status = statuses?.[sessionId]
-        if (status?.type === 'busy' || status?.type === 'retry') {
+        if (isSessionStatusActive(status)) {
             observedBusy = true
         }
         if (status?.type === 'idle') {

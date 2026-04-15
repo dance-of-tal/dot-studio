@@ -189,4 +189,28 @@ describe('session activity', () => {
             isTransportActive: false,
         })
     })
+
+    it('does not treat stale authoritative busy status as active after a settled assistant snapshot', () => {
+        expect(resolveSessionActivity({
+            loading: false,
+            status: { type: 'busy' },
+            messages: [{
+                id: 'msg-1',
+                role: 'assistant',
+                content: 'done',
+                timestamp: 1,
+                parts: [{
+                    id: 'part-1',
+                    type: 'step-finish',
+                }],
+            }],
+            permission: null,
+            question: null,
+        })).toMatchObject({
+            kind: 'idle',
+            isActive: false,
+            canAbort: false,
+            isTransportActive: false,
+        })
+    })
 })

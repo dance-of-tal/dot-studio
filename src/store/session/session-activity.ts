@@ -55,6 +55,23 @@ function hasSettledAssistantSnapshot(messages: ChatMessage[]) {
     return tools.length > 0 && tools.some((tool) => tool.status === 'completed' || tool.status === 'error')
 }
 
+function hasStaleActiveStatus(params: {
+    status: SessionStatus | null | undefined
+    messages: ChatMessage[]
+}) {
+    const { status, messages } = params
+    if (status?.type !== 'busy' && status?.type !== 'retry') {
+        return false
+    }
+
+    const lastNonSystemMessageIndex = getLastNonSystemMessageIndex(messages)
+    if (lastNonSystemMessageIndex < 0 || lastNonSystemMessageIndex !== messages.length - 1) {
+        return false
+    }
+
+    return hasSettledAssistantSnapshot(messages)
+}
+
 export function isSessionParkedByWaitUntil(messages: ChatMessage[]) {
     const lastMessageIndex = getLastNonSystemMessageIndex(messages)
     const lastMessage = lastMessageIndex >= 0 ? messages[lastMessageIndex] : null
@@ -111,6 +128,15 @@ export function resolveSessionActivity(params: {
     if (isSessionParkedByWaitUntil(messages)) {
         return {
             kind: 'parked',
+            isActive: false,
+            canAbort: false,
+            isTransportActive: false,
+        } satisfies SessionActivity
+    }
+
+    if (hasStaleActiveStatus({ status, messages })) {
+        return {
+            kind: 'idle',
             isActive: false,
             canAbort: false,
             isTransportActive: false,

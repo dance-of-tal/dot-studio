@@ -133,7 +133,6 @@ export async function sendStudioChatMessage(
 
     const projectionDirtyPatch = buildProjectionDirtyPatch({
         performerId: projectionPerformerId || null,
-        actId: request.actId || null,
         talRef: request.performer.talRef,
         danceRefs: [...(request.performer.danceRefs || []), ...(request.performer.extraDanceRefs || [])],
     })

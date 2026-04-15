@@ -64,7 +64,7 @@ export function throwIfRuntimePreparationBlocked(
 
     throw new StudioValidationError(
         prepared.reason === 'projection_update_pending'
-            ? 'New chats are blocked until the current run finishes and Studio reapplies the latest projection changes.'
+            ? 'You cannot start a new chat while another Studio session is still running. Wait for the current run to finish, then try again.'
             : 'Studio could not prepare the latest runtime state.',
         'fix_input',
     )

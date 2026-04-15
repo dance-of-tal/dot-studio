@@ -369,7 +369,6 @@ async function injectWakeTarget(
                 if (prepared.requiresDispose) {
                     publishProjectionConsumed(threadManager.workingDir, buildProjectionDirtyPatch({
                         performerId: performerConfig.performerId,
-                        actId: actDefinition.id,
                         talRef: performerConfig.talRef,
                         danceRefs: performerConfig.danceRefs,
                     }))

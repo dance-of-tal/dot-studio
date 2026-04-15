@@ -21,7 +21,13 @@ import {
     tripParticipantCircuit,
 } from './wake-cascade.js'
 import { workspaceIdForDir } from '../../lib/config.js'
+import { getOpencode } from '../../lib/opencode.js'
+import { unwrapOpencodeResult } from '../../lib/opencode-errors.js'
 import { serverDebug } from '../../lib/server-logger.js'
+import {
+    isSessionStatusActive,
+    resolveEffectiveSessionStatus,
+} from '../../lib/chat-session.js'
 import { evaluateWakeCondition } from './wake-evaluator.js'
 import { validateConditionExpr } from './wake-condition-validator.js'
 import { payloadString } from './act-runtime-utils.js'
@@ -213,6 +219,22 @@ type ReadBoardInput = {
     summaryOnly?: boolean
 }
 
+type OpenCodeSessionStatus = {
+    type?: 'idle' | 'busy' | 'retry' | 'error'
+} & Record<string, unknown>
+
+type OpenCodeSessionMessage = {
+    info?: {
+        role?: string
+        error?: unknown
+        time?: {
+            completed?: number
+        }
+    }
+    role?: string
+    parts?: unknown[]
+} & Record<string, unknown>
+
 type ListBoardInput = {
     kind?: 'artifact' | 'finding' | 'task'
     limit?: number
@@ -264,6 +286,8 @@ class ActRuntimeService {
     }
 
     private async recoverLoadedThreadRuntimeState() {
+        await this.reconcileLoadedParticipantStatuses()
+
         for (const threadId of this.threadManager.listLoadedThreadIds()) {
             const runtime = this.threadManager.getThreadRuntime(threadId)
             const actDefinition = this.threadManager.getActDefinition(threadId)
@@ -315,6 +339,76 @@ class ActRuntimeService {
                 })
             }
         }
+    }
+
+    private async reconcileLoadedParticipantStatuses() {
+        const oc = await getOpencode()
+        let statuses: Record<string, OpenCodeSessionStatus> = {}
+
+        try {
+            statuses = unwrapOpencodeResult<Record<string, OpenCodeSessionStatus>>(await oc.session.status({
+                directory: this.workingDir,
+            })) || {}
+        } catch {
+            statuses = {}
+        }
+
+        for (const threadId of this.threadManager.listLoadedThreadIds()) {
+            const runtime = this.threadManager.getThreadRuntime(threadId)
+            if (!runtime) {
+                continue
+            }
+
+            for (const [participantKey, sessionId] of Object.entries(runtime.thread.participantSessions || {})) {
+                const persistedStatus = runtime.thread.participantStatuses?.[participantKey]
+                if (persistedStatus?.type !== 'busy' && persistedStatus?.type !== 'retry') {
+                    continue
+                }
+
+                const reconciled = await this.resolveLoadedParticipantSessionStatus(oc, statuses, sessionId)
+                if (!reconciled || reconciled.type === persistedStatus.type) {
+                    continue
+                }
+
+                serverDebug(
+                    'act-runtime',
+                    `Reconciled stale participant status for "${participantKey}" in thread ${threadId}: ${persistedStatus.type} -> ${reconciled.type}`,
+                )
+                await this.threadManager.setParticipantStatus(threadId, participantKey, reconciled)
+            }
+        }
+    }
+
+    private async resolveLoadedParticipantSessionStatus(
+        oc: Awaited<ReturnType<typeof getOpencode>>,
+        statuses: Record<string, OpenCodeSessionStatus>,
+        sessionId: string,
+    ): Promise<{ type: 'idle' | 'busy' | 'retry' | 'error'; message?: string } | null> {
+        const direct = statuses[sessionId]
+        if (direct?.type === 'idle' || direct?.type === 'error') {
+            return { type: direct.type }
+        }
+
+        const shouldInspectMessages = !direct?.type || isSessionStatusActive(direct)
+        if (!shouldInspectMessages) {
+            return direct?.type ? { type: direct.type } : null
+        }
+
+        try {
+            const rawMessages = unwrapOpencodeResult<OpenCodeSessionMessage[]>(await oc.session.messages({
+                directory: this.workingDir,
+                sessionID: sessionId,
+            })) || []
+            const effectiveStatus = resolveEffectiveSessionStatus({
+                directStatus: direct,
+                messages: rawMessages,
+            })
+            return effectiveStatus?.type ? { type: effectiveStatus.type } : null
+        } catch {
+            // If message inspection fails, keep the authoritative direct status.
+        }
+
+        return direct?.type ? { type: direct.type } : null
     }
 
     private async recoverBlockedParticipantWake(params: {

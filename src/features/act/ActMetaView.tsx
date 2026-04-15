@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import {
     AlertTriangle, AlertCircle, CheckCircle2, User, ArrowRightLeft, Shield, Trash2,
@@ -9,8 +9,7 @@ import { resolveActParticipantLabel } from './participant-labels'
 import { evaluateActReadiness } from './act-readiness'
 import ActSafetyEditor from './ActSafetyEditor'
 import Tip from './Tip'
-
-type ActConfigTab = 'overview' | 'participants' | 'relations' | 'rules'
+import type { ActEditorTab } from '../../store/types'
 
 export default function ActMetaView() {
     const {
@@ -41,8 +40,12 @@ export default function ActMetaView() {
     const act = acts.find((a) => a.id === activeActId)
 
     const meta = act?.meta?.authoring || {}
-    const [activeTab, setActiveTab] = useState<ActConfigTab>('overview')
+    const [activeTab, setActiveTab] = useState<ActEditorTab>(actEditorState?.tab || 'overview')
     const [ruleInput, setRuleInput] = useState('')
+
+    useEffect(() => {
+        setActiveTab(actEditorState?.tab || 'overview')
+    }, [actEditorState?.actId, actEditorState?.tab])
 
     const participantKeys = act ? Object.keys(act.participants) : []
 
@@ -70,7 +73,7 @@ export default function ActMetaView() {
 
     if (!act || !activeActId) return null
 
-    const tabs: Array<{ key: ActConfigTab; label: string; count?: number; icon: ReactNode }> = [
+    const tabs: Array<{ key: ActEditorTab; label: string; count?: number; icon: ReactNode }> = [
         { key: 'overview', label: 'Overview', icon: <CheckCircle2 size={12} /> },
         { key: 'participants', label: 'Participants', count: participantKeys.length, icon: <User size={12} /> },
         { key: 'relations', label: 'Relations', count: act.relations.length, icon: <ArrowRightLeft size={12} /> },

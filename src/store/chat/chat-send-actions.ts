@@ -206,7 +206,7 @@ export function createChatSendActions(
                 set,
                 get,
                 chatKey,
-                'New chats are blocked until the current run finishes and Studio reapplies the latest runtime changes.',
+                'You cannot start a new chat while another Studio session is still running. Wait for the current run to finish, then try again.',
             )
             return
         }

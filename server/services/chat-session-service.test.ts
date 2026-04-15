@@ -38,4 +38,60 @@ describe('getStudioChatSessionStatus', () => {
             status: { type: 'idle' },
         })
     })
+
+    it('downgrades stale busy status to idle when the latest assistant turn already settled', async () => {
+        statusMock.mockResolvedValueOnce({
+            data: {
+                'session-1': { type: 'busy' },
+            },
+        })
+        messagesMock.mockResolvedValueOnce({
+            data: [
+                {
+                    info: {
+                        role: 'assistant',
+                        time: { completed: 123 },
+                    },
+                    parts: [
+                        { type: 'text', text: 'Done.' },
+                    ],
+                },
+            ],
+        })
+
+        const { getStudioChatSessionStatus } = await import('./chat-session-service.js')
+        await expect(getStudioChatSessionStatus('/tmp/workspace', 'session-1')).resolves.toEqual({
+            status: { type: 'idle' },
+        })
+    })
+
+    it('keeps busy status when the latest assistant turn is still running', async () => {
+        statusMock.mockResolvedValueOnce({
+            data: {
+                'session-1': { type: 'busy' },
+            },
+        })
+        messagesMock.mockResolvedValueOnce({
+            data: [
+                {
+                    info: {
+                        role: 'assistant',
+                    },
+                    parts: [
+                        {
+                            type: 'tool',
+                            state: {
+                                status: 'running',
+                            },
+                        },
+                    ],
+                },
+            ],
+        })
+
+        const { getStudioChatSessionStatus } = await import('./chat-session-service.js')
+        await expect(getStudioChatSessionStatus('/tmp/workspace', 'session-1')).resolves.toEqual({
+            status: { type: 'busy' },
+        })
+    })
 })

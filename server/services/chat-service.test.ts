@@ -371,6 +371,84 @@ describe('sendStudioChatMessage', () => {
         expect(maybeGenerateStandaloneSessionTitleMock).not.toHaveBeenCalled()
     })
 
+    it('does not widen Act participant projection adoption scope from the target act alone', async () => {
+        listWorkspacePerformersForDirMock.mockResolvedValue([
+            {
+                id: 'performer-1',
+                name: 'Performer 1',
+                model: { provider: 'openai', modelId: 'gpt-5' },
+                talRef: null,
+                danceRefs: [],
+                mcpServerNames: [],
+            },
+            {
+                id: 'performer-2',
+                name: 'Performer 2',
+                model: { provider: 'openai', modelId: 'gpt-5' },
+                talRef: null,
+                danceRefs: [],
+                mcpServerNames: [],
+            },
+        ])
+        parseActSessionOwnershipOwnerIdMock.mockReturnValue({
+            actId: 'act-1',
+            threadId: 'thread-1',
+            participantKey: 'Lead',
+        })
+        getActDefinitionForThreadMock.mockResolvedValue({
+            id: 'act-1',
+            name: 'Act 1',
+            participants: {
+                Lead: { performerRef: { kind: 'draft', draftId: 'lead' } },
+            },
+            relations: [],
+            actRules: [],
+        })
+        ensurePerformerProjectionMock.mockImplementation(async ({ performerId }: { performerId: string }) => ({
+            compiled: {
+                agentNames: {
+                    build: `dot-studio/workspace/hash/${performerId}--build`,
+                },
+            },
+            toolResolution: {
+                selectedMcpServers: [],
+                requestedTools: [],
+                availableTools: [],
+                resolvedTools: [],
+                unavailableTools: [],
+                unavailableDetails: [],
+            },
+            toolMap: {},
+            capabilitySnapshot: null,
+            changed: false,
+        }))
+
+        const { sendStudioChatMessage } = await import('./chat-service.js')
+
+        await sendStudioChatMessage(
+            '/tmp/workspace',
+            'session-act',
+            {
+                message: 'Run only this participant with the latest performer projection.',
+                performer: {
+                    performerId: 'act:act-1:thread:thread-1:participant:Lead',
+                    performerName: 'Lead',
+                    talRef: null,
+                    danceRefs: [],
+                    model: {
+                        provider: 'openai',
+                        modelId: 'gpt-5',
+                    },
+                    mcpServerNames: [],
+                },
+                actId: 'act-1',
+                actThreadId: 'thread-1',
+            },
+        )
+
+        expect(ensurePerformerProjectionMock).toHaveBeenCalledTimes(1)
+    })
+
     it('injects Act collaboration context into a turn-scoped system prompt instead of the projected agent file', async () => {
         parseActSessionOwnershipOwnerIdMock.mockReturnValue({
             actId: 'act-1',

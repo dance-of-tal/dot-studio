@@ -218,6 +218,14 @@ describe('participant binding helpers', () => {
             relationId: null,
         })
 
+        expect(createActEditorState('act-1', 'act', { tab: 'relations' })).toEqual({
+            actId: 'act-1',
+            mode: 'act',
+            tab: 'relations',
+            participantKey: null,
+            relationId: null,
+        })
+
         expect(resolveActEditorStateAfterRelationRemoval(
             createActEditorState('act-1', 'participant', { participantKey: 'alpha' }),
             'act-1',
