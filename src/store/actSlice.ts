@@ -306,6 +306,50 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
         scheduleActRuntimeSync(get, set, actId)
     },
 
+    reorderActParticipants: (actId, orderedParticipantKeys) => {
+        set((state) => {
+            const act = state.acts.find((entry) => entry.id === actId)
+            if (!act) {
+                return {}
+            }
+
+            const currentKeys = Object.keys(act.participants)
+            if (currentKeys.length <= 1) {
+                return {}
+            }
+
+            const orderedKnownKeys = orderedParticipantKeys.filter((key) => key in act.participants)
+            const orderedKnownKeySet = new Set(orderedKnownKeys)
+            const nextKeys = [
+                ...orderedKnownKeys,
+                ...currentKeys.filter((key) => !orderedKnownKeySet.has(key)),
+            ]
+
+            const orderChanged = nextKeys.length === currentKeys.length
+                && nextKeys.some((key, index) => key !== currentKeys[index])
+
+            if (!orderChanged) {
+                return {}
+            }
+
+            return {
+                acts: state.acts.map((entry) => {
+                    if (entry.id !== actId) {
+                        return entry
+                    }
+
+                    return {
+                        ...entry,
+                        participants: Object.fromEntries(
+                            nextKeys.map((key) => [key, entry.participants[key]]),
+                        ),
+                    }
+                }),
+                workspaceDirty: true,
+            }
+        })
+    },
+
     openActEditor: (actId, mode = 'act', options = {}) => {
         set((state) => buildActEditorSelectionState(
             state,

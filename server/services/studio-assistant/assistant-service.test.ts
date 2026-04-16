@@ -218,6 +218,8 @@ describe('ensureAssistantAgent', () => {
         expect(prompt).toContain('Do not paste raw mutation JSON into the reply')
         expect(prompt).toContain('Omit unspecified optional fields entirely')
         expect(prompt).toContain('Tool arguments must be a valid action envelope with version=1 and an actions array')
+        expect(prompt).toContain('Missing Tal, Dance, or model details alone are not enough to block a direct team or workflow creation request')
+        expect(prompt).toContain('you may still create role-appropriate Performers without Tal setup')
         expect(prompt).toContain('Canonical createAct tool args')
     })
 

@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { STUDIO_API_PORT, STUDIO_VITE_PORT } from '../shared/default-ports.js'
 
-const SERVER_URL = 'http://127.0.0.1:3001/api/health'
-const OPENCODE_HEALTH_URL = 'http://127.0.0.1:3001/api/opencode/health'
+const SERVER_URL = `http://127.0.0.1:${STUDIO_API_PORT}/api/health`
+const OPENCODE_HEALTH_URL = `http://127.0.0.1:${STUDIO_API_PORT}/api/opencode/health`
 const STARTUP_TIMEOUT_MS = 30_000
 const POLL_INTERVAL_MS = 250
 const SHUTDOWN_TIMEOUT_MS = 5_000
@@ -122,7 +123,7 @@ async function main() {
         void stopAll(0)
     })
 
-    console.log('[dev:all] Starting Hono server on 3001...')
+    console.log(`[dev:all] Starting Hono server on ${STUDIO_API_PORT}...`)
     spawnManaged('server', 'tsx --watch server/index.ts')
     await waitForHttpOk('Hono server', SERVER_URL)
 
@@ -132,7 +133,7 @@ async function main() {
         `${OPENCODE_HEALTH_URL}?workingDir=${encodeURIComponent(process.cwd())}`,
     )
 
-    console.log('[dev:all] Hono server is ready. Starting Vite on 5173...')
+    console.log(`[dev:all] Hono server is ready. Starting Vite on ${STUDIO_VITE_PORT}...`)
     spawnManaged('vite', 'vite')
 
     await new Promise<void>(() => {})

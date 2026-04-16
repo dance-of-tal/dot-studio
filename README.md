@@ -79,8 +79,14 @@ dot-studio
 DOT Studio can start OpenCode for you, or you can point it to an existing instance:
 
 ```bash
-OPENCODE_URL=http://localhost:4096 dot-studio
+OPENCODE_URL=http://localhost:43102 dot-studio
 ```
+
+Default local ports are grouped in the `43100` range to avoid collisions with more common development defaults:
+
+- Studio dev client: `43100`
+- Studio API: `43101`
+- managed OpenCode sidecar: `43102`
 
 ## Core Concepts
 
@@ -205,9 +211,9 @@ dot-studio ~/projects/dance-of-tal
 dot-studio ~/projects/dance-of-tal --performer performer/@acme/workflows/reviewer
 dot-studio open . --no-open
 dot-studio open . --act act/@acme/workflows/review-flow
-dot-studio open . --port 3010
+dot-studio open . --port 43111
 dot-studio doctor
-dot-studio doctor ~/projects/dance-of-tal --opencode-url http://localhost:4096
+dot-studio doctor ~/projects/dance-of-tal --opencode-url http://localhost:43102
 ```
 
 Behavior:

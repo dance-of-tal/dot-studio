@@ -29,6 +29,7 @@ Use this skill when the user is asking about Act structure, relation design, or 
 - If the user asks for something like a `d2c company`, `investment team`, or `review workflow`, create the Act with participants and relations in the same `createAct` action.
 - For a brand-new Act whose participants are already known, prefer one `createAct` with `participantPerformerRefs`, `participantPerformerIds`, or `participantPerformerNames` instead of follow-up attach actions.
 - For a direct team/workflow creation request, do not stop after creating performers if the intended Act is already clear.
+- Missing Tal details alone are not a reason to block a clear Act creation request. If the requested roles are clear, create the needed Performers first and then the Act.
 - Use `attachPerformerToAct` mainly when extending an existing Act.
 - If the Act needs missing participants, create the missing Performers first in cascade and make sure those Performers also match the user intent.
 - Always give each new relation both a clear `name` and `description`.

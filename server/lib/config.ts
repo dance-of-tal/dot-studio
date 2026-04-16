@@ -4,6 +4,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import os from 'os'
 import { createHash } from 'crypto'
+import { STUDIO_API_PORT, STUDIO_OPENCODE_PORT } from '../../shared/default-ports.js'
 
 function resolvePort(value: string | undefined, fallback: number) {
     const parsed = Number.parseInt(value || '', 10)
@@ -23,8 +24,8 @@ function resolveDefaultProjectDir() {
 }
 
 // ── Constants ───────────────────────────────────────────
-export const PORT = resolvePort(process.env.PORT, 3001)
-export const OPENCODE_URL = process.env.OPENCODE_URL || 'http://localhost:4096'
+export const PORT = resolvePort(process.env.PORT, STUDIO_API_PORT)
+export const OPENCODE_URL = process.env.OPENCODE_URL || `http://localhost:${STUDIO_OPENCODE_PORT}`
 export const OPENCODE_MANAGED = !process.env.OPENCODE_URL
 export const DEFAULT_PROJECT_DIR = resolveDefaultProjectDir()
 export const STUDIO_DIR = process.env.STUDIO_DIR || path.join(os.homedir(), '.dot-studio')

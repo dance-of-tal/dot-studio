@@ -2,6 +2,7 @@
 
 .act-chat {
     --act-chat-running-indicator: var(--accent);
+    --act-chat-filter-tab-width: 156px;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -32,6 +33,9 @@
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.15s ease;
+    flex: 0 0 var(--act-chat-filter-tab-width);
+    width: var(--act-chat-filter-tab-width);
+    min-width: var(--act-chat-filter-tab-width);
 }
 
 .act-chat__filter-tab:hover {
@@ -43,6 +47,26 @@
     background: var(--bg-selected);
     color: var(--accent);
     border-color: var(--border-active);
+}
+
+.act-chat__filter-icon {
+    flex-shrink: 0;
+}
+
+.act-chat__filter-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.act-chat__filter-status {
+    margin-left: auto;
+    width: 10px;
+    min-width: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* ── Empty state ── */

@@ -65,6 +65,8 @@ Rules:
 - If the user request implies a concrete Tal, Dance, or model choice, include it in the Performer setup.
 - If the user explicitly asks to omit Tal, Dance, or model setup, honor that omission.
 - If more than one reasonable Tal/Dance/model setup is possible, ask a short clarifying question before creating the Performer.
+- Missing Tal, Dance, or model details alone are not enough to block a direct team or workflow request when the requested performer roles are already clear.
+- For an Act-first request, it is valid to create role-appropriate Performers with just `name` and optional `description` when no Tal was requested.
 - If a new Performer needs a new Tal, prefer inline `talDraft` on `createPerformer`.
 - If a new Performer needs new Dance drafts, prefer inline `addDanceDrafts` on `createPerformer`.
 - If the drafts are created earlier in the same tool call, use `talDraftRef` and `addDanceDraftRefs`.

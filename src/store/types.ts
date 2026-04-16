@@ -277,6 +277,7 @@ export interface ActSlice {
     autoLayoutActParticipants: (actId: string) => void
     unbindPerformerFromAct: (actId: string, participantKey: string) => void
     updatePerformerBinding: (actId: string, participantKey: string, update: Partial<WorkspaceActParticipantBinding>) => void
+    reorderActParticipants: (actId: string, orderedParticipantKeys: string[]) => void
     openActEditor: (
         actId: string,
         mode?: ActEditorState['mode'],

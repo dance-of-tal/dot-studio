@@ -42,6 +42,20 @@ import './ActChatPanel.css'
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_THREADS: never[] = []
 
+function moveParticipantKey(keys: string[], activeKey: string, overKey: string) {
+    const activeIndex = keys.indexOf(activeKey)
+    const overIndex = keys.indexOf(overKey)
+
+    if (activeIndex === -1 || overIndex === -1 || activeIndex === overIndex) {
+        return keys
+    }
+
+    const nextKeys = [...keys]
+    const [movedKey] = nextKeys.splice(activeIndex, 1)
+    nextKeys.splice(overIndex, 0, movedKey)
+    return nextKeys
+}
+
 interface ActChatPanelProps {
     actId: string
 }
@@ -50,7 +64,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const {
         acts, performers, sendActMessage, abortChat,
         actThreads, activeThreadId, activeThreadParticipantKey,
-        selectThreadParticipant, openActEditor, createThread, selectThread, loadThreads,
+        selectThreadParticipant, openActEditor, createThread, selectThread, loadThreads, reorderActParticipants,
         respondToPermission, respondToQuestion, rejectQuestion,
     } = useStudioStore(useShallow((state) => ({
         acts: state.acts,
@@ -65,6 +79,7 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         createThread: state.createThread,
         selectThread: state.selectThread,
         loadThreads: state.loadThreads,
+        reorderActParticipants: state.reorderActParticipants,
         respondToPermission: state.respondToPermission,
         respondToQuestion: state.respondToQuestion,
         rejectQuestion: state.rejectQuestion,
@@ -79,6 +94,8 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
     const [input, setInput] = useState('')
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const [isCreatingThread, setIsCreatingThread] = useState(false)
+    const [draggedParticipantKey, setDraggedParticipantKey] = useState<string | null>(null)
+    const [dropParticipantKey, setDropParticipantKey] = useState<string | null>(null)
 
     // Readiness evaluation
     const readiness = useMemo(
@@ -235,6 +252,11 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         resizeTextarea(inputRef.current)
     }, [input])
 
+    const clearParticipantDragState = useCallback(() => {
+        setDraggedParticipantKey(null)
+        setDropParticipantKey(null)
+    }, [])
+
     const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
         setInput(e.target.value)
         resizeTextarea(e.target)
@@ -244,6 +266,49 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
         if (!chatKey) return
         void abortChat(chatKey)
     }, [abortChat, chatKey])
+
+    const commitParticipantReorder = useCallback((overParticipantKey: string | null) => {
+        if (!draggedParticipantKey || !overParticipantKey || draggedParticipantKey === overParticipantKey) {
+            clearParticipantDragState()
+            return
+        }
+
+        const nextKeys = moveParticipantKey(participantKeys, draggedParticipantKey, overParticipantKey)
+        reorderActParticipants(actId, nextKeys)
+        clearParticipantDragState()
+    }, [
+        actId,
+        clearParticipantDragState,
+        draggedParticipantKey,
+        participantKeys,
+        reorderActParticipants,
+    ])
+
+    const handleParticipantDragStart = useCallback((event: React.DragEvent<HTMLButtonElement>, participantKey: string) => {
+        event.stopPropagation()
+        event.dataTransfer.effectAllowed = 'move'
+        event.dataTransfer.setData('text/plain', participantKey)
+        setDraggedParticipantKey(participantKey)
+        setDropParticipantKey(participantKey)
+    }, [])
+
+    const handleParticipantDragOver = useCallback((event: React.DragEvent<HTMLButtonElement>, participantKey: string) => {
+        if (!draggedParticipantKey) {
+            return
+        }
+
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'move'
+        if (dropParticipantKey !== participantKey) {
+            setDropParticipantKey(participantKey)
+        }
+    }, [draggedParticipantKey, dropParticipantKey])
+
+    const handleParticipantDrop = useCallback((event: React.DragEvent<HTMLButtonElement>, participantKey: string) => {
+        event.preventDefault()
+        event.stopPropagation()
+        commitParticipantReorder(participantKey)
+    }, [commitParticipantReorder])
 
     const renderMessage = useCallback((msg: ChatMessage, index: number) => {
         const isStreamingAssistant = isStreamingAssistantMessage(messages, index, isLoading)
@@ -430,30 +495,31 @@ export default function ActChatPanel({ actId }: ActChatPanelProps) {
                     className={`act-chat__filter-tab ${isCallboardView ? 'act-chat__filter-tab--active' : ''}`}
                     onClick={() => selectThreadParticipant(null)}
                 >
-                    <Clipboard size={10} />
-                    <span>Board</span>
+                    <Clipboard size={10} className="act-chat__filter-icon" />
+                    <span className="act-chat__filter-label">Board</span>
+                    <span className="act-chat__filter-status" aria-hidden="true" />
                 </button>
-                {participantKeys.length === 1 ? (
-                    <button
-                        className={`act-chat__filter-tab ${activeParticipantKey === participantKeys[0] ? 'act-chat__filter-tab--active' : ''}`}
-                        onClick={() => selectThreadParticipant(participantKeys[0])}
-                    >
-                        <User size={10} />
-                        <span>{resolveActParticipantLabel(act, participantKeys[0], performers)}</span>
-                        {isLoading && activeParticipantKey === participantKeys[0] && <Circle size={6} className="act-chat__loading-dot" />}
-                    </button>
-                ) : participantKeys.map((key) => {
+                {participantKeys.map((key) => {
                     const isActive = activeParticipantKey === key
                     const isKeyLoading = participantLoadingStates.get(key) || false
+                    const label = resolveActParticipantLabel(act, key, performers)
                     return (
                         <button
                             key={key}
                             className={`act-chat__filter-tab ${isActive ? 'act-chat__filter-tab--active' : ''}`}
                             onClick={() => selectThreadParticipant(key)}
+                            draggable={participantKeys.length > 1}
+                            onDragStart={(event) => handleParticipantDragStart(event, key)}
+                            onDragEnd={clearParticipantDragState}
+                            onDragOver={(event) => handleParticipantDragOver(event, key)}
+                            onDrop={(event) => handleParticipantDrop(event, key)}
+                            title={participantKeys.length > 1 ? `${label} · Drag to reorder` : label}
                         >
-                            <User size={10} />
-                            <span>{resolveActParticipantLabel(act, key, performers)}</span>
-                            {isKeyLoading && <Circle size={5} className="act-chat__loading-dot" />}
+                            <User size={10} className="act-chat__filter-icon" />
+                            <span className="act-chat__filter-label">{label}</span>
+                            <span className="act-chat__filter-status" aria-hidden={!isKeyLoading}>
+                                {isKeyLoading ? <Circle size={5} className="act-chat__loading-dot" /> : null}
+                            </span>
                         </button>
                     )
                 })}

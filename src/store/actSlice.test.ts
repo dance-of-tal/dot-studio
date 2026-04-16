@@ -215,6 +215,48 @@ describe('actSlice', () => {
         expect(harness.get().activeThreadParticipantKey).toBeNull()
     })
 
+    it('reorders act participants without rewriting their bindings', () => {
+        const harness = createHarness({
+            ...createBaseState(),
+            acts: [{
+                id: 'act-1',
+                name: 'Review Flow',
+                position: { x: 0, y: 0 },
+                width: 400,
+                height: 300,
+                participants: {
+                    alpha: {
+                        performerRef: { kind: 'draft', draftId: 'performer-1' },
+                        displayName: 'Alpha',
+                        position: { x: 0, y: 0 },
+                    },
+                    beta: {
+                        performerRef: { kind: 'registry', urn: 'performer/@studio/beta' },
+                        displayName: 'Beta',
+                        position: { x: 100, y: 0 },
+                    },
+                    gamma: {
+                        performerRef: { kind: 'registry', urn: 'performer/@studio/gamma' },
+                        displayName: 'Gamma',
+                        position: { x: 200, y: 0 },
+                    },
+                },
+                relations: [],
+                createdAt: Date.now(),
+            }],
+        } as StudioState)
+
+        const originalBindings = harness.get().acts[0]?.participants
+        harness.get().reorderActParticipants('act-1', ['gamma', 'alpha', 'beta'])
+
+        const reorderedAct = harness.get().acts.find((entry) => entry.id === 'act-1')
+        expect(Object.keys(reorderedAct?.participants || {})).toEqual(['gamma', 'alpha', 'beta'])
+        expect(reorderedAct?.participants.gamma).toBe(originalBindings?.gamma)
+        expect(reorderedAct?.participants.alpha).toBe(originalBindings?.alpha)
+        expect(reorderedAct?.participants.beta).toBe(originalBindings?.beta)
+        expect(harness.get().workspaceDirty).toBe(true)
+    })
+
     it('collapses opposite one-way duplicates when a relation is changed to both', () => {
         const harness = createHarness({
             ...createBaseState(),

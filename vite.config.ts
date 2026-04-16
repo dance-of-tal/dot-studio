@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { STUDIO_API_PORT, STUDIO_VITE_PORT } from './shared/default-ports.js'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -63,13 +64,14 @@ export default defineConfig({
     },
   },
   server: {
+    port: STUDIO_VITE_PORT,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:3001',
+        target: `http://127.0.0.1:${STUDIO_API_PORT}`,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://127.0.0.1:3001',
+        target: `ws://127.0.0.1:${STUDIO_API_PORT}`,
         changeOrigin: true,
         ws: true,
       },

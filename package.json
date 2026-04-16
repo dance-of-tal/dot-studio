@@ -1,6 +1,6 @@
 {
   "name": "dot-studio",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "DOT Studio visual workspace for composing and running Dance of Tal performers and acts on top of OpenCode.",
   "license": "MIT",
   "author": "monarchjuno",
@@ -30,7 +30,7 @@
   "scripts": {
     "start": "tsx server/start.ts",
     "dev": "vite",
-    "kill-ports": "lsof -ti:5173,3001,4096 | xargs kill -9 2>/dev/null || true",
+    "kill-ports": "lsof -ti:43100,43101,43102 | xargs kill -9 2>/dev/null || true",
     "dev:all": "npm run kill-ports && tsx server/start.ts",
     "server": "tsx server/index.ts",
     "server:dev": "tsx --watch server/index.ts",
@@ -44,7 +44,7 @@
     "test": "vitest run",
     "lint": "eslint .",
     "preview": "vite preview",
-    "opencode": "opencode serve --port 4096",
+    "opencode": "opencode serve --port 43102",
     "prepublishOnly": "npm run build:all"
   },
   "bin": {
