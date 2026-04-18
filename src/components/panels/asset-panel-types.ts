@@ -1,5 +1,5 @@
 import type { AssetCard, McpServer } from '../../types'
-import type { AssetSource, AssetListItem } from '../../../shared/asset-contracts'
+import type { AssetSource, AssetListItem, GitHubDanceSourceInfo } from '../../../shared/asset-contracts'
 import type { RuntimeModelCatalogEntry } from '../../../shared/model-variants'
 import type { ModelConfigV1 } from '../../../shared/dot-types'
 
@@ -59,6 +59,7 @@ type PanelAssetSharedFields = {
     stars?: number
     tier?: string
     updatedAt?: string
+    github?: GitHubDanceSourceInfo
 }
 
 export type LibraryAsset = ((AssetCard & { kind: InstalledAssetKind }) | (AssetListItem & { kind: InstalledAssetKind })) & PanelAssetSharedFields
@@ -80,6 +81,10 @@ export type AssetPanelAuthUser = {
 }
 
 export type AssetPanelAction = 'save-local' | 'publish' | 'import'
+    | 'dance-check-updates'
+    | 'dance-update'
+    | 'dance-check-repo'
+    | 'dance-reimport'
 
 export type AssetPanelHandler = (asset: AssetPanelAsset) => void | Promise<void>
 

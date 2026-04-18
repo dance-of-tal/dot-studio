@@ -50,6 +50,10 @@ type Props = {
     onDeleteDraft: AssetPanelHandler
     onEditDraft?: AssetPanelHandler
     onUninstall?: AssetPanelHandler
+    onCheckDanceUpdates?: AssetPanelHandler
+    onUpdateDance?: AssetPanelHandler
+    onCheckDanceRepoChanges?: AssetPanelHandler
+    onReimportDanceSource?: AssetPanelHandler
     createNewPerformer: () => void
     createNewAct: () => void
     createNewPerformerDraftEntry: (kind: 'tal' | 'dance') => void
@@ -105,6 +109,10 @@ export default function AssetLibraryLocalView({
     onDeleteDraft,
     onEditDraft,
     onUninstall,
+    onCheckDanceUpdates,
+    onUpdateDance,
+    onCheckDanceRepoChanges,
+    onReimportDanceSource,
     createNewPerformer,
     createNewAct,
     createNewPerformerDraftEntry,
@@ -282,6 +290,10 @@ export default function AssetLibraryLocalView({
                     onDeleteDraft={onDeleteDraft}
                     onEditDraft={onEditDraft}
                     onUninstall={onUninstall}
+                    onCheckDanceUpdates={onCheckDanceUpdates}
+                    onUpdateDance={onUpdateDance}
+                    onCheckDanceRepoChanges={onCheckDanceRepoChanges}
+                    onReimportDanceSource={onReimportDanceSource}
                 />
             ) : null}
         </div>

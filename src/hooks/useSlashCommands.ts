@@ -4,21 +4,50 @@ const SLASH_COMMANDS = [
     { cmd: '/dance', desc: 'Add dance for this turn', mode: 'compose' as const },
 ]
 
+export function getSlashMenuQuery(input: string) {
+    const trimmed = input.trimStart()
+    if (!trimmed.startsWith('/')) return null
+    if (/\s/.test(trimmed)) return null
+    return trimmed
+}
+
+export function resolveSelectedSlashCommand(input: string, activeCommand: string | null) {
+    if (!activeCommand) return null
+    const trimmed = input.trimStart()
+    if (!trimmed.startsWith(activeCommand)) return null
+    const nextChar = trimmed.charAt(activeCommand.length)
+    if (nextChar && !/\s/.test(nextChar)) return null
+    return activeCommand
+}
+
 export function useSlashCommands(input: string, setInput: (v: string) => void) {
     const [showSlashMenu, setShowSlashMenu] = useState(false)
     const [slashIndex, setSlashIndex] = useState(0)
+    const [activeCommand, setActiveCommand] = useState<string | null>(null)
 
-    const filteredCommands = SLASH_COMMANDS.filter((c) => c.cmd.startsWith(input.trim()))
+    const slashMenuQuery = getSlashMenuQuery(input)
+    const filteredCommands = slashMenuQuery
+        ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith(slashMenuQuery))
+        : []
+
+    const applySelectedCommand = useCallback((command: string) => {
+        setActiveCommand(command)
+        setInput(`${command} `)
+        setShowSlashMenu(false)
+    }, [setInput])
 
     const handleInputChange = useCallback((val: string) => {
         setInput(val)
-        if (val.startsWith('/')) {
+        const nextActiveCommand = resolveSelectedSlashCommand(val, activeCommand)
+        setActiveCommand(nextActiveCommand)
+        const nextSlashMenuQuery = getSlashMenuQuery(val)
+        if (nextSlashMenuQuery && nextActiveCommand === null) {
             setShowSlashMenu(true)
             setSlashIndex(0)
         } else {
             setShowSlashMenu(false)
         }
-    }, [setInput])
+    }, [activeCommand, setInput])
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent, onSendText?: (text: string) => void) => {
         if (showSlashMenu && filteredCommands.length > 0) {
@@ -36,8 +65,7 @@ export function useSlashCommands(input: string, setInput: (v: string) => void) {
                 e.preventDefault()
                 const selected = filteredCommands[slashIndex]
                 if (selected) {
-                    setInput(`${selected.cmd} `)
-                    setShowSlashMenu(false)
+                    applySelectedCommand(selected.cmd)
                 }
                 return true
             }
@@ -52,7 +80,7 @@ export function useSlashCommands(input: string, setInput: (v: string) => void) {
 
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
-            if (text.startsWith('/')) {
+            if (activeCommand) {
                 // in dance selection mode, do nothing on Enter
                 return true
             }
@@ -66,13 +94,15 @@ export function useSlashCommands(input: string, setInput: (v: string) => void) {
         }
 
         return false
-    }, [input, setInput, showSlashMenu, filteredCommands, slashIndex])
+    }, [activeCommand, applySelectedCommand, filteredCommands, input, setInput, showSlashMenu, slashIndex])
 
     return {
+        activeCommand,
         showSlashMenu,
         setShowSlashMenu,
         slashIndex,
         filteredCommands,
+        applySelectedCommand,
         handleInputChange,
         handleKeyDown,
     }

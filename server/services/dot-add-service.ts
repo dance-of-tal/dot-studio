@@ -4,17 +4,19 @@ import {
     parseSource,
     getOwnerRepo,
     shallowClone,
-    discoverSkills,
-    copySkillDir,
-    upsertSkillLockEntry,
-    readPluginManifest,
     ensureDotDir,
-    danceAssetDir,
     getGlobalCwd,
     reportInstall,
 } from '../lib/dot-source.js'
 import { invalidate } from '../lib/cache.js'
-import type { DiscoveredSkill } from '../lib/dot-source.js'
+import {
+    buildGitHubDanceLockEntryInput,
+    copyGitHubDanceSkill,
+    discoverGitHubDanceSkills,
+    getGitHubTreeSha,
+    resolveGitHubRef,
+    upsertGitHubDanceLockEntry,
+} from './dance-github-source.js'
 
 const REGISTRY_URL = process.env.DOT_REGISTRY_URL || 'https://registry.dance-of-tal.workers.dev'
 
@@ -25,7 +27,7 @@ export interface AddResult {
 
 async function autoRegisterInRegistry(
     urn: string,
-    skill: DiscoveredSkill,
+    skill: { name: string; description: string; tags: string[]; repoRootSkillPath: string },
     sourceUrl: string,
     ref?: string,
 ): Promise<void> {
@@ -45,7 +47,7 @@ async function autoRegisterInRegistry(
                 resource: {
                     type: 'github',
                     repo: ownerRepo,
-                    path: skill.relativePath,
+                    path: skill.repoRootSkillPath,
                     ref: ref || 'main',
                 },
             }),
@@ -61,28 +63,16 @@ async function autoRegisterInRegistry(
 
 export async function addDanceFromGitHub(cwd: string, source: string, scope?: 'global' | 'stage'): Promise<AddResult> {
     const parsed = parseSource(source)
+    const resolvedRef = await resolveGitHubRef(parsed.owner, parsed.repo, parsed.ref)
 
-    const { tempDir, cleanup } = await shallowClone({ url: parsed.url, ref: parsed.ref })
+    const { tempDir, cleanup } = await shallowClone({ url: parsed.url, ref: resolvedRef !== 'HEAD' ? resolvedRef : undefined })
 
     try {
-        const searchDir = parsed.subpath ? path.join(tempDir, parsed.subpath) : tempDir
-        let skills = await discoverSkills(searchDir)
-
-        // Check plugin manifest for additional skill paths
-        const manifest = await readPluginManifest(tempDir)
-        if (manifest && manifest.skills.length > 0) {
-            const existingNames = new Set(skills.map((s: DiscoveredSkill) => s.name))
-            for (const entry of manifest.skills) {
-                if (existingNames.has(entry.name)) continue
-                const skillDir = path.join(tempDir, entry.path)
-                const discovered = await discoverSkills(skillDir)
-                skills.push(...discovered.filter((s: DiscoveredSkill) => !existingNames.has(s.name)))
-            }
-        }
+        let skills = await discoverGitHubDanceSkills(tempDir, parsed)
 
         // Apply skill filter from @skill shorthand
         if (parsed.skillFilter) {
-            skills = skills.filter((s: DiscoveredSkill) => s.name === parsed.skillFilter)
+            skills = skills.filter((s) => s.skill.name === parsed.skillFilter)
             if (skills.length === 0) {
                 throw new Error(`Skill '${parsed.skillFilter}' not found in ${parsed.url}`)
             }
@@ -101,22 +91,36 @@ export async function addDanceFromGitHub(cwd: string, source: string, scope?: 'g
         await ensureDotDir(targetCwd)
 
         for (const skill of skills) {
-            const urn = `dance/@${owner}/${stage}/${skill.name}`
-            const destDir = danceAssetDir(targetCwd, urn)
-            const srcDir = path.dirname(skill.skillMdPath)
+            const urn = `dance/@${owner}/${stage}/${skill.skill.name}`
+            const srcDir = path.dirname(skill.skill.skillMdPath)
+            const remoteHash = await getGitHubTreeSha(
+                parsed.owner,
+                parsed.repo,
+                resolvedRef,
+                skill.repoRootSkillPath,
+            )
 
-            copySkillDir(srcDir, destDir)
+            await copyGitHubDanceSkill(targetCwd, urn, srcDir)
+            await upsertGitHubDanceLockEntry(
+                targetCwd,
+                urn,
+                buildGitHubDanceLockEntryInput(
+                    parsed,
+                    resolvedRef,
+                    skill.repoRootSkillPath,
+                    remoteHash.status === 'ok' ? remoteHash.hash : undefined,
+                ),
+            )
 
-            await upsertSkillLockEntry(targetCwd, urn, {
-                source: 'github',
-                sourceUrl: parsed.url.replace(/\.git$/, ''),
-                skillPath: skill.relativePath,
-            })
-
-            await autoRegisterInRegistry(urn, skill, parsed.url, parsed.ref)
+            await autoRegisterInRegistry(urn, {
+                name: skill.skill.name,
+                description: skill.skill.description,
+                tags: skill.skill.tags,
+                repoRootSkillPath: skill.repoRootSkillPath,
+            }, parsed.url, resolvedRef)
             reportInstall(urn).catch(() => {})
 
-            installed.push({ urn, name: skill.name, description: skill.description })
+            installed.push({ urn, name: skill.skill.name, description: skill.skill.description })
         }
 
         invalidate('assets')

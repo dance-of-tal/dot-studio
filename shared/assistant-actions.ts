@@ -38,11 +38,17 @@ export interface AssistantModelBlueprint {
     modelId: string
 }
 
+export interface AssistantModelVariantSummary {
+    id: string
+    summary: string
+}
+
 export interface AssistantActSafetyInput extends ActSafetyConfig {}
 
 // Fields shared by createPerformer (inline) and updatePerformer (patch)
 export interface AssistantPerformerFields {
     model?: AssistantModelBlueprint | null
+    modelVariant?: string | null
     description?: string | null
     // Tal — specify at most one
     talUrn?: string | null          // registry URN  (null = clear Tal)
@@ -93,6 +99,7 @@ export interface AssistantAvailableModelSummary {
     providerName: string
     modelId: string
     name: string
+    variants?: AssistantModelVariantSummary[]
 }
 
 export interface AssistantStagePerformerSummary {
@@ -100,6 +107,7 @@ export interface AssistantStagePerformerSummary {
     name: string
     description?: string
     model: { provider: string; modelId: string } | null
+    modelVariant: string | null
     talUrn: string | null
     talDraftId: string | null
     danceUrns: string[]

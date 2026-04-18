@@ -13,7 +13,24 @@ describe('normalizeImportedPerformerAsset', () => {
             },
         }, {
             runtimeModels: [
-                { provider: 'openai', id: 'gpt-5.4', connected: true },
+                {
+                    provider: 'openai',
+                    providerName: 'OpenAI',
+                    id: 'gpt-5.4',
+                    name: 'GPT-5.4',
+                    connected: true,
+                    context: 128000,
+                    output: 16384,
+                    toolCall: true,
+                    reasoning: true,
+                    attachment: true,
+                    temperature: true,
+                    modalities: {
+                        input: ['text'],
+                        output: ['text'],
+                    },
+                    variants: [],
+                },
             ],
             availableMcpServerNames: ['github'],
         })

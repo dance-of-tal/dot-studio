@@ -40,10 +40,13 @@ export function resolveStartupWorkspaceTarget(
     }
 
     if (config.lastWorkspaceId) {
-        return {
-            kind: 'workspace',
-            workspaceId: config.lastWorkspaceId,
-        };
+        const matchingWorkspace = workspaces.find((workspace) => workspace.id === config.lastWorkspaceId);
+        if (matchingWorkspace) {
+            return {
+                kind: 'workspace',
+                workspaceId: config.lastWorkspaceId,
+            };
+        }
     }
 
     return { kind: 'none' };

@@ -1,7 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 
-import type { AssetListItem } from '../../shared/asset-contracts.js'
+import type { AssetListItem, GitHubDanceSourceInfo } from '../../shared/asset-contracts.js'
 import type {
     ActAsset,
     DanceAsset,
@@ -20,6 +20,7 @@ import {
 } from '../lib/dot-source.js'
 import { readGlobalMcpCatalog } from '../lib/mcp-catalog.js'
 import { resolvePerformerMcpPortability } from '../../shared/performer-mcp-portability.js'
+import { readGitHubDanceSourceMap } from './dance-github-source.js'
 
 type ParsedInstalledAsset = TalAsset | DanceAsset | PerformerAsset | ActAsset
 
@@ -57,6 +58,7 @@ function normalizeAsset(
     asset: ParsedInstalledAsset,
     source: 'global' | 'stage' | 'registry',
     availableMcpServerNames: string[],
+    githubSource: GitHubDanceSourceInfo | null,
     detail = false,
 ): AssetListItem {
     switch (asset.kind) {
@@ -84,6 +86,7 @@ function normalizeAsset(
                 description: asset.description || '',
                 tags: asset.tags || [],
                 schema: assetSchema(asset),
+                ...(githubSource ? { github: githubSource } : {}),
                 ...(detail ? { content: asset.payload.content } : {}),
             }
         case 'performer': {
@@ -170,6 +173,7 @@ async function scanAssetDir(
     source: 'global' | 'stage',
     resultsMap: Map<string, AssetListItem>,
     availableMcpServerNames: string[],
+    githubSources: Map<string, GitHubDanceSourceInfo>,
 ) {
     const kindDir = path.join(baseDir, 'assets', kind)
     try {
@@ -197,7 +201,7 @@ async function scanAssetDir(
                         if (!parsed) continue
                         try {
                             const asset = parseDotAsset(parsed) as ParsedInstalledAsset
-                            resultsMap.set(asset.urn, normalizeAsset(asset, source, availableMcpServerNames, false))
+                            resultsMap.set(asset.urn, normalizeAsset(asset, source, availableMcpServerNames, githubSources.get(asset.urn) || null, false))
                         } catch {
                             // invalid asset, skip
                         }
@@ -215,7 +219,7 @@ async function scanAssetDir(
                         if (!file.endsWith('.json')) continue
                         const parsed = await parseInstalledAssetFile(path.join(stageDir, file))
                         if (!parsed || parsed.kind !== kind) continue
-                        resultsMap.set(parsed.urn, normalizeAsset(parsed, source, availableMcpServerNames, false))
+                        resultsMap.set(parsed.urn, normalizeAsset(parsed, source, availableMcpServerNames, null, false))
                     }
                 }
             }
@@ -298,8 +302,15 @@ export async function listStudioAssets(
 ): Promise<AssetListItem[]> {
     const resultsMap = new Map<string, AssetListItem>()
     const availableMcpServerNames = Object.keys(await readGlobalMcpCatalog())
-    await scanAssetDir(getGlobalDotDir(), getGlobalCwd(), kind, 'global', resultsMap, availableMcpServerNames)
-    await scanAssetDir(getDotDir(cwd), cwd, kind, 'stage', resultsMap, availableMcpServerNames)
+    const [globalGithubSources, stageGithubSources] = kind === 'dance'
+        ? await Promise.all([
+            readGitHubDanceSourceMap(getGlobalCwd()),
+            readGitHubDanceSourceMap(cwd),
+        ])
+        : [new Map<string, GitHubDanceSourceInfo>(), new Map<string, GitHubDanceSourceInfo>()]
+
+    await scanAssetDir(getGlobalDotDir(), getGlobalCwd(), kind, 'global', resultsMap, availableMcpServerNames, globalGithubSources)
+    await scanAssetDir(getDotDir(cwd), cwd, kind, 'stage', resultsMap, availableMcpServerNames, stageGithubSources)
     return Array.from(resultsMap.values())
 }
 
@@ -352,7 +363,10 @@ export async function getStudioAsset(cwd: string, kind: string, author: string, 
     const parsed = parseDotAsset(raw) as ParsedInstalledAsset
     const source = await resolveStudioAssetSource(cwd, resolvedUrn)
     const availableMcpServerNames = Object.keys(await readGlobalMcpCatalog())
-    return normalizeAsset(parsed, source, availableMcpServerNames, true)
+    const githubSources = parsed.kind === 'dance'
+        ? await readGitHubDanceSourceMap(source === 'global' ? getGlobalCwd() : cwd)
+        : new Map<string, GitHubDanceSourceInfo>()
+    return normalizeAsset(parsed, source, availableMcpServerNames, githubSources.get(resolvedUrn) || null, true)
 }
 
 export async function getRegistryAssetDetail(_cwd: string, kind: string, author: string, assetPath: string) {
@@ -362,7 +376,7 @@ export async function getRegistryAssetDetail(_cwd: string, kind: string, author:
     const availableMcpServerNames = Object.keys(await readGlobalMcpCatalog())
 
     return {
-        ...normalizeAsset(parsed, 'registry', availableMcpServerNames, true),
+        ...normalizeAsset(parsed, 'registry', availableMcpServerNames, null, true),
         ...extractRegistryDetailMeta(pkg),
     }
 }

@@ -74,9 +74,56 @@ describe('assistant-models', () => {
             'gpt-5-nano',
             'big-pickle',
         ])
+        expect(models[0]).toEqual({
+            provider: 'openai',
+            providerName: 'OpenAI',
+            modelId: 'gpt-5.4-mini',
+            name: 'GPT-5.4 mini',
+        })
         expect(pickPreferredAssistantModel(models)).toMatchObject({
             provider: 'openai',
             modelId: 'gpt-5.4-mini',
         })
+    })
+
+    it('keeps assistant-visible model variants for compatible models', () => {
+        const models = toAssistantAvailableModels([
+            {
+                provider: 'openai',
+                providerName: 'OpenAI',
+                id: 'gpt-5.4',
+                name: 'GPT-5.4',
+                connected: true,
+                toolCall: true,
+                context: 0,
+                output: 0,
+                reasoning: true,
+                attachment: false,
+                temperature: false,
+                modalities: { input: ['text'], output: ['text'] },
+                variants: [
+                    {
+                        id: 'reasoning-high',
+                        summary: 'reasoning.effort=high',
+                        options: {},
+                    },
+                ],
+            },
+        ])
+
+        expect(models).toEqual([
+            {
+                provider: 'openai',
+                providerName: 'OpenAI',
+                modelId: 'gpt-5.4',
+                name: 'GPT-5.4',
+                variants: [
+                    {
+                        id: 'reasoning-high',
+                        summary: 'reasoning.effort=high',
+                    },
+                ],
+            },
+        ])
     })
 })

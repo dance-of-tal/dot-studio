@@ -8,6 +8,8 @@ import type { AssetRef } from '../types'
 import type { AssetCard, McpServer, ModelConfig, RuntimeToolResolution } from '../types'
 import { useStudioStore } from '../store'
 import type { RuntimeModelCatalogEntry } from '../../shared/model-variants'
+import type { GitHubDanceSyncStatus } from '../../shared/asset-contracts'
+import type { InstalledDanceLocator } from '../../shared/dot-contracts'
 
 type InstallableAssetKind = 'tal' | 'dance' | 'performer' | 'act'
 
@@ -24,6 +26,8 @@ export const queryKeys = {
     dotStatus: (workingDir: string) => ['dot-status', workingDir] as const,
     dotAuthUser: ['dot-auth-user'] as const,
     registrySearch: (workingDir: string, q: string) => ['registry-search', workingDir, q] as const,
+    danceUpdateChecks: (workingDir: string, assetsKey: string, includeRepoDrift: boolean) =>
+        ['dance-update-checks', workingDir, assetsKey, includeRepoDrift ? 'drift' : 'light'] as const,
 } as const
 
 // ── Assets ──────────────────────────────────────────────
@@ -165,6 +169,30 @@ export function useRegistrySearch(
     })
 }
 
+export function useDanceUpdateChecks(
+    assets: InstalledDanceLocator[],
+    includeRepoDrift = false,
+    enabled = true,
+) {
+    const workingDir = useStudioStore((s) => s.workingDir)
+    const assetsKey = assets
+        .map((asset) => `${asset.scope}:${asset.urn}`)
+        .sort()
+        .join('|')
+
+    return useQuery<Array<InstalledDanceLocator & { sync: GitHubDanceSyncStatus }>>({
+        queryKey: queryKeys.danceUpdateChecks(workingDir, assetsKey, includeRepoDrift),
+        queryFn: async () => {
+            const response = await api.dot.checkDanceUpdates({ assets, includeRepoDrift })
+            return response.results
+        },
+        enabled: enabled && assets.length > 0,
+        staleTime: 5 * 60_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
+    })
+}
+
 // ── Mutations ───────────────────────────────────────────
 
 export function useInstallAsset() {
@@ -190,6 +218,32 @@ export function useAddDance() {
             queryClient.invalidateQueries({ queryKey: queryKeys.assets(workingDir) })
             queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(workingDir) })
             queryClient.invalidateQueries({ queryKey: queryKeys.dotStatus(workingDir) })
+        },
+    })
+}
+
+export function useApplyDanceUpdates() {
+    const queryClient = useQueryClient()
+    const workingDir = useStudioStore((s) => s.workingDir)
+    return useMutation({
+        mutationFn: (assets: InstalledDanceLocator[]) => api.dot.applyDanceUpdates({ assets }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.assets(workingDir) })
+            queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(workingDir) })
+            queryClient.invalidateQueries({ queryKey: ['dance-update-checks', workingDir] })
+        },
+    })
+}
+
+export function useReimportDanceSource() {
+    const queryClient = useQueryClient()
+    const workingDir = useStudioStore((s) => s.workingDir)
+    return useMutation({
+        mutationFn: (asset: InstalledDanceLocator) => api.dot.reimportDanceSource(asset),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.assets(workingDir) })
+            queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(workingDir) })
+            queryClient.invalidateQueries({ queryKey: ['dance-update-checks', workingDir] })
         },
     })
 }

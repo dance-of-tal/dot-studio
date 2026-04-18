@@ -37,7 +37,23 @@ describe('resolveStartupWorkspaceTarget', () => {
         });
     });
 
-    it('falls back to the last workspace only when no project directory was provided', () => {
+    it('falls back to the last workspace only when no project directory was provided and it is still visible', () => {
+        const target = resolveStartupWorkspaceTarget(
+            {
+                lastWorkspaceId: 'workspace-b',
+            },
+            [
+                { id: 'workspace-b', workingDir: '/tmp/project-b', updatedAt: 2 },
+            ],
+        );
+
+        expect(target).toEqual({
+            kind: 'workspace',
+            workspaceId: 'workspace-b',
+        });
+    });
+
+    it('does not restore a hidden last workspace when it is absent from the visible workspace list', () => {
         const target = resolveStartupWorkspaceTarget(
             {
                 lastWorkspaceId: 'workspace-b',
@@ -46,8 +62,7 @@ describe('resolveStartupWorkspaceTarget', () => {
         );
 
         expect(target).toEqual({
-            kind: 'workspace',
-            workspaceId: 'workspace-b',
+            kind: 'none',
         });
     });
 

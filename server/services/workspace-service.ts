@@ -15,8 +15,12 @@ type WorkspaceSessionSummary = { id?: string }
 type WorkspaceLinkedSnapshot = {
     workingDir?: string
     hiddenFromList?: boolean
-    performers?: Array<{ id?: string }>
-    acts?: Array<{ id?: string }>
+    performers?: Array<{
+        id?: string
+        name?: string
+        model?: { provider: string; modelId: string } | null
+    } & Record<string, unknown>>
+    acts?: Array<{ id?: string } & Record<string, unknown>>
 } & Record<string, unknown>
 
 export type WorkspacePerformerSnapshot = {
@@ -227,10 +231,11 @@ export async function saveWorkspaceSnapshot(body: WorkspaceLinkedSnapshot) {
     })
 
     const id = workspaceIdForWorkingDir(workingDir)
+    const existingWorkspace = await readWorkspaceSnapshotForDir(workingDir)
     const workspace = {
         ...body,
         workingDir,
-        hiddenFromList: body.hiddenFromList === true,
+        hiddenFromList: body.hiddenFromList ?? (existingWorkspace?.hiddenFromList === true),
     }
     const wsDir = workspaceDir(id)
     await fs.mkdir(wsDir, { recursive: true })
@@ -252,6 +257,7 @@ export async function saveWorkspaceSnapshot(body: WorkspaceLinkedSnapshot) {
         id,
         workingDir,
         updatedAt: stat.mtimeMs,
+        hiddenFromList: workspace.hiddenFromList,
     }
 }
 

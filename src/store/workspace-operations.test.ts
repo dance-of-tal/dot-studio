@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../api'
+import { StudioApiError } from '../lib/api-errors'
 import type { StudioState } from './types'
 import { loadWorkspace, newWorkspace, saveWorkspace } from './workspace-operations'
+
+const { showToastMock } = vi.hoisted(() => ({
+    showToastMock: vi.fn(),
+}))
+
+vi.mock('../lib/toast', () => ({
+    showToast: showToastMock,
+}))
 
 function createWorkspaceState(): StudioState {
     return {
@@ -101,6 +110,19 @@ describe('workspace operations', () => {
         expect(harness.read().canvasTerminals).toEqual([])
         expect(harness.read().trackingWindow).toBeNull()
         expect(harness.read().workspaceDirty).toBe(true)
+    })
+
+    it('does not show an error toast when directory selection is cancelled', async () => {
+        const harness = createHarness()
+
+        vi.spyOn(api.studio, 'pickDirectory').mockRejectedValue(
+            new StudioApiError({ error: 'Selection cancelled or failed' }, 400),
+        )
+
+        await newWorkspace(harness.get, harness.set)
+
+        expect(showToastMock).not.toHaveBeenCalled()
+        expect(harness.read().workingDir).toBe('/tmp/old-workspace')
     })
 
     it('persists assistant action dedupe state when saving a workspace', async () => {

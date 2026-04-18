@@ -116,7 +116,7 @@ export interface WorkspaceSlice {
     closeEditor: () => void
     setWorkingDir: (dir: string) => void
     newWorkspace: () => Promise<void>
-    closeWorkspace: () => Promise<void>
+    closeWorkspace: (workspaceId: string) => Promise<void>
     saveWorkspace: () => Promise<void>
     loadWorkspace: (workspaceId: string) => Promise<void>
     listWorkspaces: () => Promise<void>
@@ -314,13 +314,31 @@ export interface ActSlice {
 export interface AssistantSlice {
     isAssistantOpen: boolean
     assistantModel: { provider: string; modelId: string } | null
-    assistantAvailableModels: Array<{ provider: string; providerName: string; modelId: string; name: string }>
+    assistantAvailableModels: Array<{
+        provider: string
+        providerName: string
+        modelId: string
+        name: string
+        variants?: Array<{
+            id: string
+            summary: string
+        }>
+    }>
     appliedAssistantActionMessageIds: Record<string, true>
     assistantActionResults: Record<string, { applied: number; failed: number }>
 
     toggleAssistant: () => void
     setAssistantModel: (model: { provider: string; modelId: string } | null) => void
-    setAssistantAvailableModels: (models: Array<{ provider: string; providerName: string; modelId: string; name: string }>) => void
+    setAssistantAvailableModels: (models: Array<{
+        provider: string
+        providerName: string
+        modelId: string
+        name: string
+        variants?: Array<{
+            id: string
+            summary: string
+        }>
+    }>) => void
     markAssistantActionsApplied: (messageId: string) => void
     recordAssistantActionResult: (messageId: string, result: { applied: number; failed: number }) => void
     resetAssistantRuntimeState: () => void

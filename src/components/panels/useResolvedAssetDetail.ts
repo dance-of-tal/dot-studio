@@ -39,7 +39,17 @@ export function useResolvedAssetDetail(asset: AssetPanelAsset | null) {
             const response = asset.source === 'stage' || asset.source === 'global'
                 ? await api.assets.get(asset.kind, author, path)
                 : await api.assets.getRegistry(asset.kind, author, path)
-            return response as LibraryAsset
+            const resolved = response as LibraryAsset
+            if (asset.kind === 'dance' && asset.github) {
+                return {
+                    ...resolved,
+                    github: {
+                        ...(resolved.github || asset.github),
+                        ...(asset.github.sync ? { sync: asset.github.sync } : {}),
+                    },
+                }
+            }
+            return resolved
         },
         retry: false,
     })

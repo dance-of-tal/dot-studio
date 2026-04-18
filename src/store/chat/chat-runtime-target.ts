@@ -128,6 +128,7 @@ export function buildAssistantStageContext(get: ChatGet): AssistantStageContext 
                         modelId: performer.model.modelId,
                     }
                     : null,
+                modelVariant: performer.modelVariant || null,
                 talUrn: performer.talRef?.kind === 'registry' ? performer.talRef.urn : null,
                 talDraftId: performer.talRef?.kind === 'draft' ? performer.talRef.draftId : null,
                 danceUrns: performer.danceRefs
@@ -156,6 +157,14 @@ export function buildAssistantStageContext(get: ChatGet): AssistantStageContext 
             providerName: model.providerName,
             modelId: model.modelId,
             name: model.name,
+            ...(model.variants?.length
+                ? {
+                    variants: model.variants.map((variant) => ({
+                        id: variant.id,
+                        summary: variant.summary,
+                    })),
+                }
+                : {}),
         })),
     }
 }

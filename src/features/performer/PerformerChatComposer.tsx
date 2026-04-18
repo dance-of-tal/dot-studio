@@ -41,9 +41,9 @@ type Props = {
     danceSearchIndex: number
     addTurnDanceSelection: (item: DanceSearchItem) => void
     showSlashMenu: boolean
-    setShowSlashMenu: (value: boolean) => void
     slashIndex: number
     filteredCommands: Array<{ cmd: string; desc: string; mode: 'compose' }>
+    applySelectedCommand: (command: string) => void
     isFileMentioning: boolean
     fileMentionResults: FileMention[]
     fileMentionIndex: number
@@ -90,9 +90,9 @@ export default function PerformerChatComposer(props: Props) {
         danceSearchIndex,
         addTurnDanceSelection,
         showSlashMenu,
-        setShowSlashMenu,
         slashIndex,
         filteredCommands,
+        applySelectedCommand,
         isFileMentioning,
         fileMentionResults,
         fileMentionIndex,
@@ -155,9 +155,9 @@ export default function PerformerChatComposer(props: Props) {
                 danceSearchIndex={danceSearchIndex}
                 addTurnDanceSelection={addTurnDanceSelection}
                 showSlashMenu={showSlashMenu}
-                setShowSlashMenu={setShowSlashMenu}
                 slashIndex={slashIndex}
                 filteredCommands={filteredCommands}
+                applySelectedCommand={applySelectedCommand}
             />
 
             {activePermissionRequest ? (

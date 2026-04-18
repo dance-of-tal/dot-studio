@@ -96,6 +96,11 @@ describe('chat-runtime-target', () => {
             name: 'Writer',
             x: 0,
             y: 0,
+            model: {
+                provider: 'openai',
+                modelId: 'gpt-5.4',
+            },
+            modelVariant: 'reasoning-high',
             meta: {
                 authoring: {
                     description: 'Drafts polished answers for the team.',
@@ -138,7 +143,20 @@ describe('chat-runtime-target', () => {
                     saveState: 'unsaved',
                 },
             },
-            assistantAvailableModels: [],
+            assistantAvailableModels: [
+                {
+                    provider: 'openai',
+                    providerName: 'OpenAI',
+                    modelId: 'gpt-5.4',
+                    name: 'GPT-5.4',
+                    variants: [
+                        {
+                            id: 'reasoning-high',
+                            summary: 'reasoning.effort=high',
+                        },
+                    ],
+                },
+            ],
         })) as never)
 
         expect(context?.performers).toEqual([
@@ -146,11 +164,29 @@ describe('chat-runtime-target', () => {
                 id: 'performer-1',
                 name: 'Writer',
                 description: 'Drafts polished answers for the team.',
-                model: null,
+                model: {
+                    provider: 'openai',
+                    modelId: 'gpt-5.4',
+                },
+                modelVariant: 'reasoning-high',
                 talUrn: null,
                 talDraftId: 'tal-unsaved',
                 danceUrns: ['dance/@dot/stage/review'],
                 danceDraftIds: ['dance-unsaved'],
+            },
+        ])
+        expect(context?.availableModels).toEqual([
+            {
+                provider: 'openai',
+                providerName: 'OpenAI',
+                modelId: 'gpt-5.4',
+                name: 'GPT-5.4',
+                variants: [
+                    {
+                        id: 'reasoning-high',
+                        summary: 'reasoning.effort=high',
+                    },
+                ],
             },
         ])
         expect(context?.drafts).toEqual([

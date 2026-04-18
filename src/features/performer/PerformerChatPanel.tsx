@@ -135,9 +135,9 @@ export default function PerformerChatPanel({
                         danceSearchIndex={composerState.danceSearchIndex}
                         addTurnDanceSelection={composerState.addTurnDanceSelection}
                         showSlashMenu={composerState.showSlashMenu}
-                        setShowSlashMenu={composerState.setShowSlashMenu}
                         slashIndex={composerState.slashIndex}
                         filteredCommands={composerState.filteredCommands}
+                        applySelectedCommand={composerState.applySelectedCommand}
                         isFileMentioning={composerState.isFileMentioning}
                         fileMentionResults={composerState.fileMentionResults}
                         fileMentionIndex={composerState.fileMentionIndex}

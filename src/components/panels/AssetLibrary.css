@@ -156,6 +156,35 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1;
+}
+
+.asset-sync-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--bg-hover);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.asset-sync-badge--up_to_date {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+}
+
+.asset-sync-badge--update_available,
+.asset-sync-badge--repo_drift {
+    background: rgba(245, 158, 11, 0.14);
+    color: #d97706;
+}
+
+.asset-sync-badge--upstream_missing,
+.asset-sync-badge--legacy_unverifiable,
+.asset-sync-badge--check_failed {
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
 }
 
 .asset-card__author {

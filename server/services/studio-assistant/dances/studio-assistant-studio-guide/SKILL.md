@@ -266,6 +266,11 @@ Local scope is split into:
   - `Workspace`
   - `Global`
 - This path is for Dance bundles coming from GitHub or compatible remote sources.
+- Installed GitHub Dance bundles keep source provenance so Studio can later check for update availability.
+- Studio checks installed GitHub Dance bundles when the user opens Local Installed Dance and can re-check on demand.
+- Studio never auto-applies GitHub Dance updates; update and repo-drift import are explicit user actions.
+- For `owner/repo` installs, Studio preserves the installed skill set and surfaces newly added upstream skills as optional imports.
+- If an upstream skill is removed, Studio keeps the local installed Dance until the user uninstalls it.
 
 ### Asset Card And Detail Behavior
 - Hovering a card can show a popover with quick details.

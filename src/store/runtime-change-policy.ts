@@ -34,6 +34,11 @@ export type StudioChangeDescriptor =
         workspaceWide?: boolean
     }
     | {
+        kind: 'installed_asset'
+        urns?: string[]
+        workspaceWide?: boolean
+    }
+    | {
         kind: 'runtime_config'
     }
 
@@ -59,6 +64,7 @@ export function classifyStudioChange(change: StudioChangeDescriptor): RuntimeCha
             return 'runtime_reload'
         case 'performer':
         case 'draft':
+        case 'installed_asset':
             return 'lazy_projection'
     }
 }
@@ -69,13 +75,15 @@ export function isRuntimeAffectingChange(change: StudioChangeDescriptor) {
 
 export function mergeProjectionDirtyState(
     current: ProjectionDirtyState,
-    change: Extract<StudioChangeDescriptor, { kind: 'performer' | 'act' | 'draft' }>,
+    change: Extract<StudioChangeDescriptor, { kind: 'performer' | 'act' | 'draft' | 'installed_asset' }>,
 ): ProjectionDirtyState {
     const actIds = 'actIds' in change ? change.actIds : undefined
+    const performerIds = 'performerIds' in change ? change.performerIds : undefined
+    const draftIds = 'draftIds' in change ? change.draftIds : undefined
     return {
-        performerIds: unique([...current.performerIds, ...(change.performerIds || [])]),
+        performerIds: unique([...current.performerIds, ...(performerIds || [])]),
         actIds: unique([...current.actIds, ...(actIds || [])]),
-        draftIds: unique([...current.draftIds, ...(change.draftIds || [])]),
+        draftIds: unique([...current.draftIds, ...(draftIds || [])]),
         workspaceWide: current.workspaceWide || change.workspaceWide === true,
     }
 }

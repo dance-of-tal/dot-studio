@@ -44,7 +44,7 @@ export const api = {
     workspaces: {
         list: (includeHidden = false) => fetchJSON<SavedWorkspaceSummary[]>(`/api/workspaces${includeHidden ? '?includeHidden=1' : ''}`),
         get: (id: string) => fetchJSON<SavedWorkspaceSnapshot>(`/api/workspaces/${id}`),
-        save: (data: SavedWorkspaceSnapshot) => putJSON<{ ok: boolean; id: string; workingDir: string; updatedAt: number }>('/api/workspaces', data),
+        save: (data: SavedWorkspaceSnapshot) => putJSON<{ ok: boolean; id: string; workingDir: string; updatedAt: number; hiddenFromList?: boolean }>('/api/workspaces', data),
         setHidden: (id: string, hiddenFromList: boolean) => patchJSON<{ ok: boolean; id: string; hiddenFromList: boolean }>(`/api/workspaces/${id}`, { hiddenFromList }),
         delete: (id: string) => deleteJSON<{ ok: boolean }>(`/api/workspaces/${id}`),
     },

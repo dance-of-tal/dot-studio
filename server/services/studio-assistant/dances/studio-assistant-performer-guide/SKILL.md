@@ -45,6 +45,7 @@ Use this skill when you need the exact current mutation surface.
 `createPerformer` and `updatePerformer` support:
 - `description`
 - `model`
+- `modelVariant`
 - `talUrn`
 - `talDraftId`
 - `talDraftRef`
@@ -63,14 +64,17 @@ Rules:
 - A new Performer should reflect the user's requested role and working style, not a generic placeholder.
 - If the user explicitly names the requested performer roles, use those roles directly in `name` and mirror the requested job focus in `description`.
 - If the user request implies a concrete Tal, Dance, or model choice, include it in the Performer setup.
+- If the user request implies a concrete model variant, include `modelVariant` too.
 - If the user explicitly asks to omit Tal, Dance, or model setup, honor that omission.
 - If more than one reasonable Tal/Dance/model setup is possible, ask a short clarifying question before creating the Performer.
 - Missing Tal, Dance, or model details alone are not enough to block a direct team or workflow request when the requested performer roles are already clear.
-- For an Act-first request, it is valid to create role-appropriate Performers with just `name` and optional `description` when no Tal was requested.
+- If the user asks to create a Performer or an Act participant and Tal was not requested, prefer proposing a role-appropriate inline `talDraft` first and ask whether Studio should apply it as-is before mutating.
+- Do not default to creating a new Performer with only `name` and `description` when a reasonable Tal draft can be proposed from the request.
 - If a new Performer needs a new Tal, prefer inline `talDraft` on `createPerformer`.
 - If a new Performer needs new Dance drafts, prefer inline `addDanceDrafts` on `createPerformer`.
 - If the drafts are created earlier in the same tool call, use `talDraftRef` and `addDanceDraftRefs`.
 - Prefer one dependency-complete `createPerformer` over `createPerformer` followed by `updatePerformer` when the required Tal or Dance is already known.
+- If a model variant is required, choose only from the selected model's `variants` listed in the current snapshot.
 - `addMcpServerNames` and `removeMcpServerNames` only reference existing Studio MCP library server names.
 - Do not invent MCP server names and do not treat Performer actions as a way to create or edit Studio MCP library entries.
 

@@ -5,6 +5,7 @@ import type {
     ActParticipantV1 as InstalledActParticipant,
     ActRelationV1 as InstalledActRelation,
 } from '../../shared/dot-types'
+import type { GitHubDanceSourceInfo } from '../../shared/asset-contracts'
 
 export type AssetKind = 'tal' | 'dance' | 'act' | 'performer' | 'model' | 'mcp'
 
@@ -37,6 +38,7 @@ export interface AssetCard {
     stars?: number
     tier?: string
     updatedAt?: string
+    github?: GitHubDanceSourceInfo
     connected?: boolean
     context?: number
     output?: number

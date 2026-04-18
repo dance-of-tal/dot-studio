@@ -4,6 +4,25 @@ import { displayUrn, getAssetUrn, normalizeAuthor } from './asset-library-utils'
 import type { AssetPanelAsset, McpPanelAsset } from './asset-panel-types'
 import { ActCascadePreview, PerformerCascadePreview } from './AssetCascadePreview'
 
+function syncLabel(state: string) {
+    switch (state) {
+        case 'up_to_date':
+            return 'Up to date'
+        case 'update_available':
+            return 'Update available'
+        case 'upstream_missing':
+            return 'Upstream removed'
+        case 'repo_drift':
+            return 'Repo drift'
+        case 'legacy_unverifiable':
+            return 'Needs relink'
+        case 'check_failed':
+            return 'Check failed'
+        default:
+            return state
+    }
+}
+
 export default function AssetDetailBody({
     asset,
     loading,
@@ -29,12 +48,14 @@ export default function AssetDetailBody({
                 : null
     const participantCount = asset.participantCount || (Array.isArray(asset.participants) ? asset.participants.length : 0)
     const relationCount = Array.isArray(asset.relations) ? asset.relations.length : 0
+    const danceSync = asset.kind === 'dance' ? asset.github?.sync : null
     const hasStructuredDetail = !!inlineContent
         || !!asset.talUrn
         || (Array.isArray(asset.danceUrns) && asset.danceUrns.length > 0)
         || !!asset.model
         || participantCount > 0
         || relationCount > 0
+        || !!danceSync
     const summaryOnly = asset.source === 'registry' && !loading && !hasStructuredDetail
 
     return (
@@ -84,6 +105,37 @@ export default function AssetDetailBody({
                     {tags.map((tag: string) => (
                         <span key={tag} className="asset-popover__tag">{tag}</span>
                     ))}
+                </div>
+            )}
+
+            {asset.kind === 'dance' && asset.github?.source === 'github' && (
+                <div className="asset-popover__section">
+                    <div className="section-title">GitHub Source</div>
+                    <div className="asset-popover__section-item">{asset.github.sourceUrl}</div>
+                    {asset.github.ref && (
+                        <div className="asset-popover__section-item">Ref: {asset.github.ref}</div>
+                    )}
+                    {asset.github.repoRootSkillPath && (
+                        <div className="asset-popover__section-item">Path: {asset.github.repoRootSkillPath}</div>
+                    )}
+                    {danceSync && (
+                        <>
+                            <div className="asset-popover__section-item">Status: {syncLabel(danceSync.state)}</div>
+                            {danceSync.message && (
+                                <div className="asset-popover__section-item">{danceSync.message}</div>
+                            )}
+                            {danceSync.repoDrift?.newSkills?.length ? (
+                                <div className="asset-popover__section-item">
+                                    New upstream skills: {danceSync.repoDrift.newSkills.map((skill) => skill.name).join(', ')}
+                                </div>
+                            ) : null}
+                            {danceSync.repoDrift?.missingInstalledUrns?.length ? (
+                                <div className="asset-popover__section-item">
+                                    Missing upstream installs: {danceSync.repoDrift.missingInstalledUrns.map((item) => displayUrn(item)).join(', ')}
+                                </div>
+                            ) : null}
+                        </>
+                    )}
                 </div>
             )}
 

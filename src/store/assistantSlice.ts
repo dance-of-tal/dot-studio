@@ -47,6 +47,19 @@ function sameAvailableModels(
         ) {
             return false
         }
+        const currentVariants = current.variants || []
+        const nextVariants = next.variants || []
+        if (currentVariants.length !== nextVariants.length) {
+            return false
+        }
+        for (let variantIndex = 0; variantIndex < currentVariants.length; variantIndex += 1) {
+            if (
+                currentVariants[variantIndex].id !== nextVariants[variantIndex].id
+                || currentVariants[variantIndex].summary !== nextVariants[variantIndex].summary
+            ) {
+                return false
+            }
+        }
     }
     return true
 }

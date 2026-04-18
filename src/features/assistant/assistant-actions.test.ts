@@ -239,12 +239,14 @@ describe('assistant-actions', () => {
                 ref: 'writer',
                 name: 'Writer',
                 model: { provider: 'openai', modelId: 'gpt-5.4' },
+                modelVariant: 'reasoning-high',
             },
             {
                 type: 'updatePerformer',
                 performerRef: 'writer',
                 name: 'Senior Writer',
                 model: { provider: 'anthropic', modelId: 'claude-sonnet-4' },
+                modelVariant: 'thinking-deep',
             },
         ])
 
@@ -253,6 +255,7 @@ describe('assistant-actions', () => {
         const performer = useStudioStore.getState().performers[0]
         expect(performer?.name).toBe('Senior Writer')
         expect(performer?.model).toEqual({ provider: 'anthropic', modelId: 'claude-sonnet-4' })
+        expect(performer?.modelVariant).toBe('thinking-deep')
     })
 
     it('deletes a performer and removes attached act bindings', async () => {

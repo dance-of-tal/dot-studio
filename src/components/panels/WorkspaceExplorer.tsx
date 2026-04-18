@@ -249,8 +249,7 @@ export default function WorkspaceExplorer() {
                             'separator',
                             {
                                 label: 'Close workspace',
-                                onClick: () => closeWorkspace(),
-                                disabled: entry.id !== workspaceId,
+                                onClick: () => closeWorkspace(entry.id),
                             },
                             'separator',
                             {

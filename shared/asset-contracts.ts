@@ -9,6 +9,51 @@ export type AssetSource = 'global' | 'stage' | 'registry' | 'draft'
 
 export type InstalledAssetKind = DotAssetKind
 
+export type GitHubDanceSyncState =
+    | 'up_to_date'
+    | 'update_available'
+    | 'upstream_missing'
+    | 'repo_drift'
+    | 'legacy_unverifiable'
+    | 'check_failed'
+
+export type GitHubDanceRepoDriftItem = {
+    name: string
+    urn: string
+    repoRootSkillPath: string
+}
+
+export type GitHubDanceRepoDrift = {
+    newSkills: GitHubDanceRepoDriftItem[]
+    missingInstalledUrns: string[]
+}
+
+export type GitHubDanceSyncStatus = {
+    state: GitHubDanceSyncState
+    checkedAt?: string
+    message?: string
+    canUpdate?: boolean
+    currentHash?: string
+    remoteHash?: string
+    repoDrift?: GitHubDanceRepoDrift
+}
+
+export type GitHubDanceSourceInfo = {
+    source: 'github'
+    sourceUrl: string
+    owner?: string
+    repo?: string
+    ref?: string
+    sourceSubpath?: string
+    repoRootSkillPath?: string
+    skillFolderHash?: string
+    installedAt?: string
+    updatedAt?: string
+    legacy?: boolean
+    verifiable?: boolean
+    sync?: GitHubDanceSyncStatus
+}
+
 type AssetListItemBase<K extends InstalledAssetKind> = {
     kind: K
     urn?: string
@@ -31,6 +76,7 @@ export type TalAssetListItem = AssetListItemBase<'tal'> & {
 
 export type DanceAssetListItem = AssetListItemBase<'dance'> & {
     content?: string
+    github?: GitHubDanceSourceInfo
 }
 
 export type PerformerAssetListItem = AssetListItemBase<'performer'> & {

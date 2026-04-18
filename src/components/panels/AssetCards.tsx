@@ -39,6 +39,26 @@ function performerMcpSummary(asset: LibraryAsset) {
     return `MCP ${asset.declaredMcpServerNames.length} declared · ${matchCount} match · ${missingCount} need mapping`
 }
 
+function danceSyncLabel(asset: LibraryAsset) {
+    const state = asset.kind === 'dance' ? asset.github?.sync?.state : null
+    switch (state) {
+        case 'up_to_date':
+            return 'Up to date'
+        case 'update_available':
+            return 'Update available'
+        case 'upstream_missing':
+            return 'Upstream removed'
+        case 'repo_drift':
+            return 'Repo drift'
+        case 'legacy_unverifiable':
+            return 'Needs relink'
+        case 'check_failed':
+            return 'Check failed'
+        default:
+            return null
+    }
+}
+
 function assetKindIcon(kind: string, className = 'asset-icon combo') {
     if (kind === 'tal') return <Hexagon size={12} className="asset-icon tal" />
     if (kind === 'dance') return <Zap size={12} className="asset-icon dance" />
@@ -120,6 +140,7 @@ export function DraggableAsset({
                     trailing={
                         <>
                             {asset.source ? <span className={`source-badge ${asset.source}`}>{asset.source}</span> : undefined}
+                            {danceSyncLabel(asset) ? <span className={`asset-sync-badge asset-sync-badge--${asset.github?.sync?.state}`}>{danceSyncLabel(asset)}</span> : undefined}
                             {asset.source === 'draft' && (asset.kind === 'tal' || asset.kind === 'dance') && onEditDraft && (
                                 <button
                                     className="asset-card__edit-btn"
@@ -145,6 +166,9 @@ export function DraggableAsset({
                 />
                 <div className="asset-card__author">{asset.author}</div>
                 <div className="asset-card__desc">{asset.description || 'No description provided.'}</div>
+                {danceSyncLabel(asset) ? (
+                    <div className="asset-card__desc">{asset.github?.sync?.message || danceSyncLabel(asset)}</div>
+                ) : null}
                 {performerMcpSummary(asset) ? (
                     <div className="asset-card__desc">{performerMcpSummary(asset)}</div>
                 ) : null}

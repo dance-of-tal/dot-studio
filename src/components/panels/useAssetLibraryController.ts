@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
+import type { GitHubDanceSyncStatus } from '../../../shared/asset-contracts'
+import type { InstalledDanceLocator } from '../../../shared/dot-contracts'
 import {
     ALL_MODEL_PROVIDER_FILTER,
     buildRuntimeModelProviderTabs,
@@ -11,12 +13,15 @@ import { slugifyAssetName } from '../../lib/performers'
 import { buildDraftDeleteCascade, buildInstalledDeleteCascade } from '../../store/cascade-cleanup'
 import { removeMarkdownEditorsByDraftIds } from '../../store/workspace-helpers'
 import {
+    useApplyDanceUpdates,
     useAssetKind,
     useAssets,
+    useDanceUpdateChecks,
     useDotAuthUser,
     useInstallAsset,
     useModels,
     queryKeys,
+    useReimportDanceSource,
     useRegistrySearch,
 } from '../../hooks/queries'
 import { useMcpCatalog } from './useMcpCatalog'
@@ -43,6 +48,57 @@ import {
     placeholderForLocalSection,
     resolveSelectedAssetSnapshot,
 } from './asset-library-utils'
+
+function getInstalledDanceLocator(asset: AssetPanelAsset | LibraryAsset | null | undefined): InstalledDanceLocator | null {
+    if (!asset || asset.kind !== 'dance' || !asset.urn || (asset.source !== 'global' && asset.source !== 'stage')) {
+        return null
+    }
+    return {
+        urn: asset.urn,
+        scope: asset.source,
+    }
+}
+
+function danceSyncKey(locator: InstalledDanceLocator) {
+    return `${locator.scope}:${locator.urn}`
+}
+
+function syncLabelForState(state: GitHubDanceSyncStatus['state']) {
+    switch (state) {
+        case 'up_to_date':
+            return 'Up to date'
+        case 'update_available':
+            return 'Update available'
+        case 'upstream_missing':
+            return 'Upstream removed'
+        case 'repo_drift':
+            return 'Repo drift'
+        case 'legacy_unverifiable':
+            return 'Needs relink'
+        case 'check_failed':
+            return 'Check failed'
+    }
+}
+
+function mergeDanceSyncIntoAsset(asset: LibraryAsset, syncByKey: Record<string, GitHubDanceSyncStatus>) {
+    const locator = getInstalledDanceLocator(asset)
+    if (!locator || asset.kind !== 'dance' || !asset.github) {
+        return asset
+    }
+
+    const sync = syncByKey[danceSyncKey(locator)]
+    if (!sync) {
+        return asset
+    }
+
+    return {
+        ...asset,
+        github: {
+            ...asset.github,
+            sync,
+        },
+    }
+}
 
 export function useAssetLibraryController() {
     const workingDir = useStudioStore((state) => state.workingDir)
@@ -115,12 +171,40 @@ export function useAssetLibraryController() {
         [drafts, installedKind],
     )
 
-    const visibleInstalledAssets = useMemo(
-        () => [...draftAssetCards, ...installedAssets],
-        [draftAssetCards, installedAssets],
+    const installMutation = useInstallAsset()
+    const applyDanceUpdatesMutation = useApplyDanceUpdates()
+    const reimportDanceSourceMutation = useReimportDanceSource()
+    const [danceSyncByKey, setDanceSyncByKey] = useState<Record<string, GitHubDanceSyncStatus>>({})
+
+    const installedDanceLocators = useMemo(
+        () => installedAssets
+            .filter((asset) => asset.kind === 'dance' && asset.github?.source === 'github')
+            .map((asset) => getInstalledDanceLocator(asset))
+            .filter((asset): asset is InstalledDanceLocator => !!asset),
+        [installedAssets],
     )
 
-    const installMutation = useInstallAsset()
+    const { data: autoDanceSyncResults = [] } = useDanceUpdateChecks(
+        installedDanceLocators,
+        false,
+        showInstalledAssets && installedKind === 'dance' && installedDanceLocators.length > 0,
+    )
+
+    useEffect(() => {
+        if (autoDanceSyncResults.length === 0) return
+        setDanceSyncByKey((current) => {
+            const next = { ...current }
+            for (const result of autoDanceSyncResults) {
+                next[danceSyncKey(result)] = result.sync
+            }
+            return next
+        })
+    }, [autoDanceSyncResults])
+
+    const visibleInstalledAssets = useMemo(
+        () => [...draftAssetCards, ...installedAssets.map((asset) => mergeDanceSyncIntoAsset(asset, danceSyncByKey))],
+        [danceSyncByKey, draftAssetCards, installedAssets],
+    )
 
     const isLibraryAsset = (asset: AssetPanelAsset | null | undefined): asset is LibraryAsset =>
         !!asset && isInstalledAssetKind(asset.kind)
@@ -172,7 +256,7 @@ export function useAssetLibraryController() {
         if (item?.tags?.includes('skills.sh') && item.kind === 'dance') {
             // owner contains "owner/repo", name is the skill name → "owner/repo@name"
             const source = `${item.owner}@${item.name}`
-            return api.dot.addFromGitHub(source)
+            return api.dot.addFromGitHub(source, targetScope)
         }
         return installMutation.mutateAsync({ urn, scope: targetScope })
     }
@@ -206,6 +290,95 @@ export function useAssetLibraryController() {
             queryClient.invalidateQueries({ queryKey: queryKeys.assetInventory(workingDir) }),
             queryClient.invalidateQueries({ queryKey: queryKeys.assetKind(workingDir, kind) }),
         ])
+    }
+
+    const mergeDanceSyncResults = (results: Array<InstalledDanceLocator & { sync: GitHubDanceSyncStatus }>) => {
+        setDanceSyncByKey((current) => {
+            const next = { ...current }
+            for (const result of results) {
+                next[danceSyncKey(result)] = result.sync
+            }
+            return next
+        })
+    }
+
+    const recordInstalledDanceChange = () => {
+        useStudioStore.getState().recordStudioChange({
+            kind: 'installed_asset',
+            workspaceWide: true,
+        })
+    }
+
+    const handleCheckDanceUpdates = async (asset: AssetPanelAsset, includeRepoDrift = false) => {
+        const locator = getInstalledDanceLocator(asset)
+        if (!locator) return
+
+        try {
+            setDetailActionLoading(includeRepoDrift ? 'dance-check-repo' : 'dance-check-updates')
+            setDetailActionStatus(null)
+            const response = await api.dot.checkDanceUpdates({
+                assets: [locator],
+                includeRepoDrift,
+            })
+            mergeDanceSyncResults(response.results)
+            const sync = response.results[0]?.sync
+            if (sync) {
+                setDetailActionStatus(sync.message || syncLabelForState(sync.state))
+            }
+        } catch (error: unknown) {
+            setDetailActionStatus(error instanceof Error ? error.message : 'Dance update check failed.')
+        } finally {
+            setDetailActionLoading(null)
+        }
+    }
+
+    const handleUpdateDance = async (asset: AssetPanelAsset) => {
+        const locator = getInstalledDanceLocator(asset)
+        if (!locator) return
+
+        try {
+            setDetailActionLoading('dance-update')
+            setDetailActionStatus(null)
+            const response = await applyDanceUpdatesMutation.mutateAsync([locator])
+            mergeDanceSyncResults(response.updated)
+            const skippedWithSync = response.skipped.flatMap((entry) => (
+                entry.sync ? [{ urn: entry.urn, scope: entry.scope, sync: entry.sync }] : []
+            ))
+            mergeDanceSyncResults(skippedWithSync)
+
+            if (response.updated.length > 0) {
+                recordInstalledDanceChange()
+                await invalidateInstalledAssetQueries('dance')
+                setDetailActionStatus(`Updated ${response.updated.length} Dance bundle${response.updated.length > 1 ? 's' : ''} from GitHub.`)
+                return
+            }
+
+            setDetailActionStatus(response.skipped[0]?.reason || 'No GitHub Dance assets were updated.')
+        } catch (error: unknown) {
+            setDetailActionStatus(error instanceof Error ? error.message : 'Dance update failed.')
+        } finally {
+            setDetailActionLoading(null)
+        }
+    }
+
+    const handleReimportDanceSource = async (asset: AssetPanelAsset) => {
+        const locator = getInstalledDanceLocator(asset)
+        if (!locator) return
+
+        try {
+            setDetailActionLoading('dance-reimport')
+            setDetailActionStatus(null)
+            const response = await reimportDanceSourceMutation.mutateAsync(locator)
+            recordInstalledDanceChange()
+            await invalidateInstalledAssetQueries('dance')
+            setDetailActionStatus(response.installed.length > 0
+                ? `Imported ${response.installed.length} newly available Dance bundle${response.installed.length > 1 ? 's' : ''}.`
+                : 'No newly available GitHub Dance bundles were found for this source.')
+        } catch (error: unknown) {
+            setDetailActionStatus(error instanceof Error ? error.message : 'Dance re-import failed.')
+        } finally {
+            setDetailActionLoading(null)
+        }
     }
 
     const handlePinnedAssetAction = async (asset: AssetPanelAsset, action: 'save-local' | 'publish') => {
@@ -518,6 +691,9 @@ export function useAssetLibraryController() {
         handleQueryChange,
         handleRegistryInstall,
         handlePinnedAssetAction,
+        handleCheckDanceUpdates,
+        handleUpdateDance,
+        handleReimportDanceSource,
         handleDeleteDraft,
         handleEditDraft,
         handleUninstallAsset,

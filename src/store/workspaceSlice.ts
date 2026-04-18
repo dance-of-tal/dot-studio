@@ -509,19 +509,22 @@ export const createWorkspaceSlice: StateCreator<
 
     newWorkspace: async () => newWorkspaceImpl(get, set),
 
-    closeWorkspace: async () => {
-        const currentWorkspaceId = get().workspaceId
-        if (currentWorkspaceId) {
-            if (get().workspaceDirty) {
-                await saveWorkspaceImpl(get, set)
-            }
-            await api.workspaces.setHidden(currentWorkspaceId, true)
+    closeWorkspace: async (workspaceId) => {
+        if (!workspaceId) {
+            return
         }
-        get().cleanupRealtimeEvents()
-        setApiWorkingDirContext(null)
-        set(buildClosedWorkspaceState())
+
+        const currentWorkspaceId = get().workspaceId
+        if (currentWorkspaceId === workspaceId && get().workspaceDirty) {
+            await saveWorkspaceImpl(get, set)
+        }
+
+        await api.workspaces.setHidden(workspaceId, true)
         await get().listWorkspaces()
-        api.studio.updateConfig({ lastWorkspaceId: undefined }).catch(err => console.warn('[studio] clear lastWorkspaceId failed', err))
+
+        if (currentWorkspaceId === workspaceId) {
+            api.studio.updateConfig({ lastWorkspaceId: undefined }).catch(err => console.warn('[studio] clear lastWorkspaceId failed', err))
+        }
     },
 
     saveWorkspace: async () => saveWorkspaceImpl(get, set),

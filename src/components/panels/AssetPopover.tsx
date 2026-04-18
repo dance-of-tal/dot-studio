@@ -92,6 +92,10 @@ export function PinnedDetailPanel({
     onImportToStage,
     onDeleteDraft,
     onUninstall,
+    onCheckDanceUpdates,
+    onUpdateDance,
+    onCheckDanceRepoChanges,
+    onReimportDanceSource,
     onEditMcp,
     onDeleteMcp,
 }: {
@@ -106,10 +110,18 @@ export function PinnedDetailPanel({
     onImportToStage?: AssetPanelHandler
     onDeleteDraft?: AssetPanelHandler
     onUninstall?: AssetPanelHandler
+    onCheckDanceUpdates?: AssetPanelHandler
+    onUpdateDance?: AssetPanelHandler
+    onCheckDanceRepoChanges?: AssetPanelHandler
+    onReimportDanceSource?: AssetPanelHandler
     onEditMcp?: AssetPanelHandler
     onDeleteMcp?: AssetPanelHandler
 }) {
     const { resolvedAsset, loading } = useResolvedAssetDetail(asset)
+    const danceSync = resolvedAsset?.kind === 'dance' ? resolvedAsset.github?.sync : null
+    const updateDisabled = actionLoading !== null
+        || danceSync?.state === 'upstream_missing'
+        || danceSync?.state === 'legacy_unverifiable'
 
     if (!asset) {
         return (
@@ -160,6 +172,32 @@ export function PinnedDetailPanel({
                     </button>
                 </div>
             ) : null}
+            {resolvedAsset?.kind === 'dance'
+                && (resolvedAsset?.source === 'global' || resolvedAsset?.source === 'stage')
+                && resolvedAsset.github?.source === 'github' ? (
+                    <div className="btns">
+                        {onCheckDanceUpdates ? (
+                            <button className="btn" onClick={() => onCheckDanceUpdates(resolvedAsset)} disabled={actionLoading !== null}>
+                                {actionLoading === 'dance-check-updates' ? 'Checking…' : 'Check updates'}
+                            </button>
+                        ) : null}
+                        {onUpdateDance ? (
+                            <button className="btn" onClick={() => onUpdateDance(resolvedAsset)} disabled={updateDisabled}>
+                                {actionLoading === 'dance-update' ? 'Updating…' : 'Update'}
+                            </button>
+                        ) : null}
+                        {onCheckDanceRepoChanges ? (
+                            <button className="btn" onClick={() => onCheckDanceRepoChanges(resolvedAsset)} disabled={actionLoading !== null}>
+                                {actionLoading === 'dance-check-repo' ? 'Checking…' : 'Check repo changes'}
+                            </button>
+                        ) : null}
+                        {onReimportDanceSource && danceSync?.repoDrift?.newSkills?.length ? (
+                            <button className="btn" onClick={() => onReimportDanceSource(resolvedAsset)} disabled={actionLoading !== null}>
+                                {actionLoading === 'dance-reimport' ? 'Importing…' : 'Import newly available skills'}
+                            </button>
+                        ) : null}
+                    </div>
+                ) : null}
             {resolvedAsset?.kind === 'mcp' && (onEditMcp || onDeleteMcp) ? (
                 <div className="btns">
                     {onEditMcp ? (

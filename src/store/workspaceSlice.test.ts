@@ -3,10 +3,12 @@ import type { StudioState } from './types'
 import { createWorkspaceSlice } from './workspaceSlice'
 import { createEmptyProjectionDirtyState } from './runtime-change-policy'
 
-const { applyRuntimeReloadMock, deleteSessionMock, showToastMock } = vi.hoisted(() => ({
+const { applyRuntimeReloadMock, deleteSessionMock, showToastMock, setHiddenMock, updateConfigMock } = vi.hoisted(() => ({
     applyRuntimeReloadMock: vi.fn(),
     deleteSessionMock: vi.fn(),
     showToastMock: vi.fn(),
+    setHiddenMock: vi.fn(),
+    updateConfigMock: vi.fn(),
 }))
 
 function overlaps(
@@ -27,7 +29,10 @@ vi.mock('../api', () => ({
         chat: {
             deleteSession: deleteSessionMock,
         },
-        studio: { updateConfig: vi.fn() },
+        workspaces: {
+            setHidden: setHiddenMock,
+        },
+        studio: { updateConfig: updateConfigMock },
     },
     setApiWorkingDirContext: vi.fn(),
 }))
@@ -118,6 +123,8 @@ describe('workspace runtime reload', () => {
         applyRuntimeReloadMock.mockReset()
         deleteSessionMock.mockReset()
         showToastMock.mockReset()
+        setHiddenMock.mockReset().mockResolvedValue({ ok: true, id: 'workspace-1', hiddenFromList: true })
+        updateConfigMock.mockReset().mockResolvedValue({ ok: true })
         vi.stubGlobal('localStorage', {
             getItem: vi.fn(() => 'light'),
             setItem: vi.fn(),
@@ -267,6 +274,27 @@ describe('workspace runtime reload', () => {
         expect(clearSessionData).toHaveBeenCalledWith('session-1')
         expect(unregisterBinding).toHaveBeenCalledWith('performer-1')
         expect(removeSession).toHaveBeenCalledWith('session-1')
+    })
+
+    it('hides a non-active workspace from the list without resetting the current workspace state', async () => {
+        const listWorkspaces = vi.fn(async () => {})
+        const cleanupRealtimeEvents = vi.fn()
+        const harness = createHarness({
+            ...createBaseState(),
+            workspaceId: 'workspace-1',
+            workingDir: '/tmp/workspace-a',
+            listWorkspaces,
+            cleanupRealtimeEvents,
+        } as StudioState)
+
+        await harness.get().closeWorkspace('workspace-2')
+
+        expect(setHiddenMock).toHaveBeenCalledWith('workspace-2', true)
+        expect(listWorkspaces).toHaveBeenCalled()
+        expect(cleanupRealtimeEvents).not.toHaveBeenCalled()
+        expect(harness.get().workspaceId).toBe('workspace-1')
+        expect(harness.get().workingDir).toBe('/tmp/workspace-a')
+        expect(updateConfigMock).not.toHaveBeenCalled()
     })
 })
 

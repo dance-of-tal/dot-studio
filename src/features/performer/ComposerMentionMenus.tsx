@@ -44,9 +44,9 @@ interface ComposerMentionMenusProps {
     addTurnDanceSelection: (item: DanceSearchItem) => void
     // Slash commands
     showSlashMenu: boolean
-    setShowSlashMenu: (value: boolean) => void
     slashIndex: number
     filteredCommands: Array<{ cmd: string; desc: string; mode: 'compose' }>
+    applySelectedCommand: (command: string) => void
 }
 
 export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
@@ -64,9 +64,9 @@ export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
         danceSearchIndex,
         addTurnDanceSelection,
         showSlashMenu,
-        setShowSlashMenu,
         slashIndex,
         filteredCommands,
+        applySelectedCommand,
     } = props
 
     return (
@@ -136,8 +136,7 @@ export default function ComposerMentionMenus(props: ComposerMentionMenusProps) {
                             key={command.cmd}
                             className={`slash-menu-item ${i === slashIndex ? 'active' : ''}`}
                             onClick={() => {
-                                setInput(`${command.cmd} `)
-                                setShowSlashMenu(false)
+                                applySelectedCommand(command.cmd)
                             }}
                         >
                             <span className="slash-cmd">{command.cmd}</span>

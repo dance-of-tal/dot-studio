@@ -1,3 +1,5 @@
+import type { GitHubDanceSyncStatus } from './asset-contracts.js'
+
 export type DotStatusResponse = {
     initialized: boolean
     stageInitialized: boolean
@@ -75,4 +77,42 @@ export type DanceExportResponse = {
     slug: string
     exportPath: string
     exportRelativeName: string
+}
+
+export type InstalledDanceLocator = {
+    urn: string
+    scope: 'global' | 'stage'
+}
+
+export type DotDanceUpdateCheckRequest = {
+    assets: InstalledDanceLocator[]
+    includeRepoDrift?: boolean
+}
+
+export type DotDanceUpdateCheckResponse = {
+    results: Array<InstalledDanceLocator & {
+        sync: GitHubDanceSyncStatus
+    }>
+}
+
+export type DotDanceUpdateApplyRequest = {
+    assets: InstalledDanceLocator[]
+}
+
+export type DotDanceUpdateApplyResponse = {
+    updated: Array<InstalledDanceLocator & {
+        sync: GitHubDanceSyncStatus
+    }>
+    skipped: Array<InstalledDanceLocator & {
+        reason: string
+        sync?: GitHubDanceSyncStatus
+    }>
+}
+
+export type DotDanceReimportSourceRequest = InstalledDanceLocator
+
+export type DotDanceReimportSourceResponse = {
+    sourceUrl: string
+    installed: Array<{ urn: string; name: string; description: string }>
+    skippedExistingUrns: string[]
 }

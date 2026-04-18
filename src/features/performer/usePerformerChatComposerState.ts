@@ -51,10 +51,12 @@ export function usePerformerChatComposerState({
     const composerInputRef = useRef<HTMLTextAreaElement>(null)
 
     const {
+        activeCommand,
         showSlashMenu,
         setShowSlashMenu,
         slashIndex,
         filteredCommands,
+        applySelectedCommand,
         handleInputChange: onSlashInputChange,
         handleKeyDown: onSlashKeyDown,
     } = useSlashCommands(input, setInput)
@@ -71,10 +73,13 @@ export function usePerformerChatComposerState({
     } = useFileMentions(composerInputRef)
 
     const danceSlashMatch = useMemo(() => {
+        if (activeCommand !== '/dance') return null
         const trimmed = input.trimStart()
-        if (!trimmed.startsWith('/')) return null
-        return trimmed.slice(1).trim().toLowerCase()
-    }, [input])
+        if (!trimmed.startsWith('/dance')) return null
+        const trailing = trimmed.slice('/dance'.length)
+        if (trailing.length > 0 && !trailing.startsWith(' ')) return null
+        return trailing.trim().toLowerCase()
+    }, [activeCommand, input])
 
     const danceSearchSections = useMemo(
         () => buildDanceSearchSections(danceAssets, danceSlashMatch, drafts, performer),
@@ -258,6 +263,7 @@ export function usePerformerChatComposerState({
         setShowSlashMenu,
         slashIndex,
         filteredCommands,
+        applySelectedCommand,
         isFileMentioning,
         fileMentionResults,
         fileMentionIndex,

@@ -90,9 +90,7 @@ export default function App() {
           localStorage.setItem('dot-theme', config.theme);
         }
 
-        const workspaces = config.projectDir
-          ? await api.workspaces.list(true).catch(() => [])
-          : [];
+        const workspaces = await api.workspaces.list(config.projectDir ? true : false).catch(() => []);
         const startupTarget = resolveStartupWorkspaceTarget(config, workspaces);
 
         if (startupTarget.kind === 'workspace') {

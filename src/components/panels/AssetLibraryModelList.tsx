@@ -30,6 +30,10 @@ type Props = {
     onDeleteDraft: AssetPanelHandler
     onEditDraft?: AssetPanelHandler
     onUninstall?: AssetPanelHandler
+    onCheckDanceUpdates?: AssetPanelHandler
+    onUpdateDance?: AssetPanelHandler
+    onCheckDanceRepoChanges?: AssetPanelHandler
+    onReimportDanceSource?: AssetPanelHandler
     onEditMcp?: AssetPanelHandler
     onDeleteMcp?: AssetPanelHandler
 }
@@ -59,6 +63,10 @@ export default function AssetLibraryModelList({
     onDeleteDraft,
     onEditDraft,
     onUninstall,
+    onCheckDanceUpdates,
+    onUpdateDance,
+    onCheckDanceRepoChanges,
+    onReimportDanceSource,
     onEditMcp,
     onDeleteMcp,
 }: Props) {
@@ -146,6 +154,10 @@ export default function AssetLibraryModelList({
                 onImportToStage={undefined}
                 onDeleteDraft={onDeleteDraft}
                 onUninstall={onUninstall}
+                onCheckDanceUpdates={onCheckDanceUpdates}
+                onUpdateDance={onUpdateDance}
+                onCheckDanceRepoChanges={onCheckDanceRepoChanges}
+                onReimportDanceSource={onReimportDanceSource}
                 onEditMcp={onEditMcp}
                 onDeleteMcp={onDeleteMcp}
             />

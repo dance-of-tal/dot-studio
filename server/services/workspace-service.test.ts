@@ -63,4 +63,35 @@ describe('saveWorkspaceSnapshot', () => {
             { id: 'performer-2', name: 'Performer 2', model: null },
         ])
     })
+
+    it('preserves hiddenFromList when saving an already-hidden workspace without that field', async () => {
+        const { getSavedWorkspace, saveWorkspaceSnapshot, setSavedWorkspaceHidden } = await import('./workspace-service.js')
+        const workingDir = path.join(studioDir, 'project')
+
+        const initialSave = await saveWorkspaceSnapshot({
+            workingDir,
+            performers: [{ id: 'performer-1' }],
+            acts: [],
+        })
+
+        expect(initialSave.ok).toBe(true)
+        if (!initialSave.ok) {
+            return
+        }
+
+        await setSavedWorkspaceHidden(initialSave.id, true)
+        await saveWorkspaceSnapshot({
+            workingDir,
+            performers: [{ id: 'performer-1' }, { id: 'performer-2' }],
+            acts: [],
+        })
+
+        const savedWorkspace = await getSavedWorkspace(initialSave.id)
+        expect(savedWorkspace.ok).toBe(true)
+        if (!savedWorkspace.ok) {
+            return
+        }
+
+        expect(savedWorkspace.workspace.hiddenFromList).toBe(true)
+    })
 })

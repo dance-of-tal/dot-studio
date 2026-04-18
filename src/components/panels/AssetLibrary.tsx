@@ -72,6 +72,10 @@ export default function AssetLibrary({ onClose }: { onClose?: () => void }) {
                     onDeleteDraft={controller.handleDeleteDraft}
                     onEditDraft={controller.handleEditDraft}
                     onUninstall={controller.handleUninstallAsset}
+                    onCheckDanceUpdates={controller.handleCheckDanceUpdates}
+                    onUpdateDance={controller.handleUpdateDance}
+                    onCheckDanceRepoChanges={(asset) => controller.handleCheckDanceUpdates(asset, true)}
+                    onReimportDanceSource={controller.handleReimportDanceSource}
                     createNewPerformer={controller.createNewPerformer}
                     createNewAct={controller.createNewAct}
                     createNewPerformerDraftEntry={controller.createNewPerformerDraftEntry}

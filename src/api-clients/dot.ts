@@ -1,6 +1,12 @@
 import type {
     DanceExportRequest,
     DanceExportResponse,
+    DotDanceReimportSourceRequest,
+    DotDanceReimportSourceResponse,
+    DotDanceUpdateApplyRequest,
+    DotDanceUpdateApplyResponse,
+    DotDanceUpdateCheckRequest,
+    DotDanceUpdateCheckResponse,
     DotAuthUserResponse,
     DotInitResponse,
     DotInstallRequest,
@@ -95,6 +101,15 @@ export const dotApi = {
             installed: Array<{ urn: string; name: string; description: string }>
             source: string
         }>('/api/dot/add', { source, scope }),
+
+    checkDanceUpdates: (body: DotDanceUpdateCheckRequest) =>
+        postJSON<DotDanceUpdateCheckResponse>('/api/dot/dance-updates/check', body),
+
+    applyDanceUpdates: (body: DotDanceUpdateApplyRequest) =>
+        postJSON<DotDanceUpdateApplyResponse>('/api/dot/dance-updates/apply', body),
+
+    reimportDanceSource: (body: DotDanceReimportSourceRequest) =>
+        postJSON<DotDanceReimportSourceResponse>('/api/dot/dance-updates/reimport-source', body),
 
     exportDanceBundle: (draftId: string, slug: string, destinationParentPath: string, overwrite = false) =>
         postJSON<DanceExportResponse>(

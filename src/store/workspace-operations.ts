@@ -129,6 +129,10 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
             api.studio.activate(dir).catch(err => console.warn('[studio] activate failed', err))
         }
     } catch (err) {
+        const normalized = coerceStudioApiError(err)
+        if (normalized.message === 'Selection cancelled or failed') {
+            return
+        }
         console.error('Failed to pick directory', err)
         showToast('Studio could not open the working directory picker.', 'error', {
             title: 'Directory picker failed',
@@ -185,7 +189,7 @@ export async function saveWorkspace(get: GetFn, set: SetFn) {
     const saved = await api.workspaces.save(snapshot)
     set({ workspaceDirty: false, workspaceId: saved.id })
     get().listWorkspaces()
-    api.studio.updateConfig({ lastWorkspaceId: saved.id }).catch(err => console.warn('[studio] lastWorkspaceId persist failed', err))
+    api.studio.updateConfig({ lastWorkspaceId: saved.hiddenFromList ? undefined : saved.id }).catch(err => console.warn('[studio] lastWorkspaceId persist failed', err))
 }
 
 /**

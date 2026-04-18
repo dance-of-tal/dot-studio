@@ -34,6 +34,10 @@ export function useAssistantModels({
         providerName: string
         modelId: string
         name: string
+        variants?: Array<{
+            id: string
+            summary: string
+        }>
     }>) => void
 }) {
     const connectedModels = useMemo(

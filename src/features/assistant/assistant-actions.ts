@@ -444,6 +444,9 @@ async function applyPerformerFields(
     if (fields.model !== undefined) {
         s.setPerformerModel(performerId, fields.model)
     }
+    if (fields.modelVariant !== undefined) {
+        s.setPerformerModelVariant(performerId, fields.modelVariant || null)
+    }
     for (const name of fields.addMcpServerNames || []) {
         s.addPerformerMcp(performerId, { name, status: 'connected', tools: [], resources: [] })
     }

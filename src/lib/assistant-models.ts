@@ -5,6 +5,10 @@ export type AssistantAvailableModelSummary = {
     providerName: string
     modelId: string
     name: string
+    variants?: Array<{
+        id: string
+        summary: string
+    }>
 }
 
 type AssistantModelLike = {
@@ -71,6 +75,14 @@ export function toAssistantAvailableModels(
             providerName: model.providerName,
             modelId: model.id,
             name: model.name || model.id,
+            ...((model.variants || []).length > 0
+                ? {
+                    variants: (model.variants || []).map((variant) => ({
+                        id: variant.id,
+                        summary: variant.summary,
+                    })),
+                }
+                : {}),
         }))
 
     return sortAssistantAvailableModels(connected)
