@@ -6,7 +6,7 @@
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20.19.0-3c873a?style=flat-square)
 [![License](https://img.shields.io/badge/License-MIT-0f172a?style=flat-square)](./LICENSE)
 
-[Overview](#overview) • [Get Started](#get-started) • [Core Concepts](#core-concepts) • [Typical Workflow](#typical-workflow) • [CLI](#cli)
+[Overview](#overview) • [Quick Start](#quick-start) • [Core Concepts](#core-concepts) • [How Acts Work](#how-acts-work) • [Workflow](#workflow) • [CLI](#cli)
 
 ![DOT Studio screenshot](.github/screenshot.png)
 
@@ -26,53 +26,31 @@ You can author and connect:
 
 ## Overview
 
-DOT Studio is built for local, iterative work.
+DOT Studio is built for local, iterative work:
 
-- Choreograph multiple performers visually on a shared canvas
-- Work in a Figma-style editing flow instead of wiring runtime artifacts by hand
-- Drag and drop performers and Acts, then refine them with detailed editing controls
-- Edit Tal and Dance drafts without leaving the workspace
-- Configure models, MCP servers, and runtime settings in one place
-- Chat with performers and Act participants from the same UI
-- Use the Studio Assistant when you want help building or changing the canvas faster
-- Keep everything local while Studio saves workspace state and prepares runtime output for OpenCode
+- choreograph performers and Acts visually on a shared canvas
+- edit Tal and Dance drafts without leaving the workspace
+- configure models, MCP servers, and runtime settings in one place
+- chat with performers, Act participants, and the Studio Assistant from the same UI
+- keep everything local while Studio saves workspace state and prepares runtime output for OpenCode
 
 > [!IMPORTANT]
 > `.opencode/` is generated output for OpenCode. You usually should not edit it directly.
 
-## Get Started
+## Quick Start
 
 ### Requirements
 
 - Node.js `>=20.19.0`
 - An environment supported by Node.js and OpenCode
 
-### Run with `npx`
-
-```bash
-npx dot-studio
-```
-
-This opens Studio for the current directory and starts the local services it needs.
-If the directory has not been initialized as a DOT workspace yet, Studio prepares it automatically.
-
-### Install globally
-
 ```bash
 npm install -g dot-studio
-dot-studio
+dot-studio /path/to/project
 ```
 
-### Fresh DOT setup
-
-If you are starting from a brand new DOT workspace:
-
-```bash
-npm install -g dance-of-tal dot-studio
-dot init
-dot login
-dot-studio
-```
+This installs the CLI globally and opens Studio for the target directory.
+If the directory has not been initialized as a DOT workspace yet, Studio prepares it automatically.
 
 ### Connect to an existing OpenCode instance
 
@@ -105,19 +83,48 @@ If you are new to DOT Studio, the easiest mental model is:
 
 In other words, Studio is less like a form builder and more like a choreography board for agent systems.
 
-## Typical Workflow
+## How Acts Work
+
+An `Act` is the coordination layer for a group of performers. Its job is not just to list who participates, but to define how work moves between them at runtime.
+
+The basic structure of an Act is:
+
+- `participants`: the performers that take part in the Act
+- `relations`: the links between participants that describe who can coordinate with whom
+- `actRules`: shared choreography rules or constraints for the whole Act
+- `subscriptions`: optional wake-up signals such as teammate messages, shared board keys, tags, or runtime events
+
+The simplest mental model is:
+
+`Performers + participant relationships + wake rules = Act runtime behavior`
+
+In practice, an Act usually works like this:
+
+1. you attach performers as participants
+2. you define the participant relationships and shared rules
+3. Studio projects that authoring state into a runtime Act definition
+4. at runtime, participants coordinate by messaging teammates, updating the shared board, and waking when relevant signals arrive
+
+This separation matters:
+
+- the canvas version of an Act is for authoring and layout
+- the runtime version is what drives execution and collaboration
+- thread state is runtime history, not the canonical Act asset itself
+
+So when you edit an Act in Studio, you are editing the choreography specification. Studio then turns that into the runtime shape OpenCode executes.
+
+## Workflow
 
 ### 1. Open a workspace
 
 Start Studio in a project folder:
 
 ```bash
-dot-studio
+dot-studio /path/to/project
 ```
 
 Studio opens in your browser and restores the saved workspace for that directory when available.
 If there is no saved workspace yet, Studio opens that directory as a fresh workspace instead of jumping to the last workspace from another path.
-You can also point it at another folder with `dot-studio /path/to/project`.
 
 ### 2. Create or import assets
 
@@ -164,34 +171,8 @@ Once a performer or Act is set up, you can use Studio to:
 
 ### 6. Use the Studio Assistant
 
-The Studio Assistant is a built-in chat surface for editing the canvas.
-
-Use direct editing when you want precise control. Use the Assistant when you already know the outcome you want but do not want to wire everything manually.
-
-The Assistant is especially useful when:
-
-- you want to scaffold a performer or Act quickly
-- you want to make several related changes in one go
-- the choreography is getting large and repetitive to edit by hand
-- you are exploring and want Studio to help shape the first draft
-
-You can use it to help with tasks like:
-
-- creating Tal or Dance drafts
-- creating or updating performers
-- creating or updating Acts
-- wiring performers together more quickly
-- handling edits that would otherwise take several manual drag-and-drop steps
-
-## What You Can Do
-
-- create and edit Tal and Dance drafts
-- import installed Performers and Acts onto the canvas
-- configure performer models, MCP servers, and runtime settings
-- build choreography-driven Acts by connecting participants and defining relationships
-- edit directly with drag-and-drop and detailed panels, or delegate tedious setup to the Studio Assistant
-- chat with performers, Act participants, and the Studio Assistant
-- save and reopen local workspaces as you iterate
+The Studio Assistant is the fastest way to make broad canvas changes.
+Use direct editing when you want precise control, and use the Assistant when you want to scaffold or update Tal, Dance, Performers, or Acts without wiring every step manually.
 
 ## CLI
 
