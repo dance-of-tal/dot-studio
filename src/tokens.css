@@ -1,129 +1,129 @@
 /* DOT Studio — Design Tokens */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
 
 :root {
-    /* Figma Light Theme */
-    --bg-canvas: #E5E5E5;
-    --bg-panel: #FFFFFF;
-    --bg-card: #FFFFFF;
-    --bg-hover: #F0F0F0;
-    --bg-selected: #E5F4FF;
+  /* Studio Light Theme */
+  --bg-canvas: #e5e5e5;
+  --bg-panel: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #f0f0f0;
+  --bg-selected: #e5f4ff;
 
-    --border-light: #F0F0F0;
-    --border-main: #E5E5E5;
-    --border-strong: #D0D0D0;
-    --border-active: #0D99FF;
+  --border-light: #f0f0f0;
+  --border-main: #e5e5e5;
+  --border-strong: #d0d0d0;
+  --border-active: #0d99ff;
 
-    --text-primary: #333333;
-    --text-secondary: #888888;
-    --text-muted: #B3B3B3;
+  --text-primary: #333333;
+  --text-secondary: #888888;
+  --text-muted: #b3b3b3;
 
-    --accent: #0D99FF;
-    --accent-hover: #0A85E0;
+  --accent: #0d99ff;
+  --accent-hover: #0a85e0;
 
-    /* Figma-like Shadows */
-    --shadow-window: 0 4px 12px rgba(0, 0, 0, 0.08), 0 20px 40px rgba(0, 0, 0, 0.08);
-    --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.1);
-    --shadow-panel: 1px 0 0 rgba(0, 0, 0, 0.1);
+  /* Studio Shadows */
+  --shadow-window:
+    0 4px 12px rgba(0, 0, 0, 0.08), 0 20px 40px rgba(0, 0, 0, 0.08);
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-panel: 1px 0 0 rgba(0, 0, 0, 0.1);
 
-    --radius-sm: 4px;
-    --radius: 6px;
-    --radius-lg: 8px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
 
-    /* Typography Scale */
-    --font-xs: 10px;
-    --font-sm: 11px;
-    --font-base: 12px;
-    --font-md: 13px;
-    --font-lg: 14px;
+  /* Typography Scale */
+  --font-xs: 10px;
+  --font-sm: 11px;
+  --font-base: 12px;
+  --font-md: 13px;
+  --font-lg: 14px;
 
-    /* Spacing Scale (4px grid) */
-    --space-1: 4px;
-    --space-2: 6px;
-    --space-3: 8px;
-    --space-4: 10px;
-    --space-5: 12px;
-    --space-6: 16px;
+  /* Spacing Scale (4px grid) */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 16px;
 
-    --tal-color: #F24822;
-    --tal-bg: rgba(242, 72, 34, 0.1);
-    --dance-color: #FFA629;
-    --dance-bg: rgba(255, 166, 41, 0.1);
-    --model-color: #9747FF;
-    --model-bg: rgba(151, 71, 255, 0.1);
-    --mcp-color: #14AE5C;
-    --mcp-bg: rgba(20, 174, 92, 0.1);
+  --tal-color: #f24822;
+  --tal-bg: rgba(242, 72, 34, 0.1);
+  --dance-color: #ffa629;
+  --dance-bg: rgba(255, 166, 41, 0.1);
+  --model-color: #9747ff;
+  --model-bg: rgba(151, 71, 255, 0.1);
+  --mcp-color: #14ae5c;
+  --mcp-bg: rgba(20, 174, 92, 0.1);
 
-    /* Status Colors */
-    --status-warning: #f59e0b;
-    --status-warning-bg: rgba(245, 158, 11, 0.1);
-    --status-danger: #ef4444;
-    --status-danger-bg: rgba(239, 68, 68, 0.1);
-    --status-neutral: #6b7280;
-    --status-neutral-dim: #9ca3af;
+  /* Status Colors */
+  --status-warning: #f59e0b;
+  --status-warning-bg: rgba(245, 158, 11, 0.1);
+  --status-danger: #ef4444;
+  --status-danger-bg: rgba(239, 68, 68, 0.1);
+  --status-neutral: #6b7280;
+  --status-neutral-dim: #9ca3af;
 
+  /* Terminal */
+  --terminal-bg: #f7f7f7;
+  --terminal-fg: #1e1e1e;
+  --terminal-output: #555555;
 
-    /* Terminal */
-    --terminal-bg: #f7f7f7;
-    --terminal-fg: #1e1e1e;
-    --terminal-output: #555555;
+  /* Derived token aliases */
+  --bg-main: var(--bg-panel);
+  --primary-rgb: 13, 153, 255;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
-    /* Derived token aliases */
-    --bg-main: var(--bg-panel);
-    --primary-rgb: 13, 153, 255;
-    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-
-    color-scheme: light;
+  color-scheme: light;
 }
 
 [data-theme="dark"] {
-    /* Figma Dark Theme */
-    --bg-canvas: #1E1E1E;
-    --bg-panel: #2C2C2C;
-    --bg-card: #383838;
-    --bg-hover: #444444;
-    --bg-selected: rgba(13, 153, 255, 0.15);
+  /* Studio Dark Theme */
+  --bg-canvas: #1e1e1e;
+  --bg-panel: #2c2c2c;
+  --bg-card: #383838;
+  --bg-hover: #444444;
+  --bg-selected: rgba(13, 153, 255, 0.15);
 
-    --border-light: #383838;
-    --border-main: #444444;
-    --border-strong: #555555;
-    --border-active: #0D99FF;
+  --border-light: #383838;
+  --border-main: #444444;
+  --border-strong: #555555;
+  --border-active: #0d99ff;
 
-    --text-primary: #FFFFFF;
-    --text-secondary: #B3B3B3;
-    --text-muted: #888888;
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-muted: #888888;
 
-    --shadow-window: 0 4px 12px rgba(0, 0, 0, 0.3), 0 20px 40px rgba(0, 0, 0, 0.4);
-    --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.4);
-    --shadow-panel: 1px 0 0 rgba(0, 0, 0, 0.5);
+  --shadow-window:
+    0 4px 12px rgba(0, 0, 0, 0.3), 0 20px 40px rgba(0, 0, 0, 0.4);
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-panel: 1px 0 0 rgba(0, 0, 0, 0.5);
 
-    --tal-color: #F24822;
-    --tal-bg: rgba(242, 72, 34, 0.15);
-    --dance-color: #FFA629;
-    --dance-bg: rgba(255, 166, 41, 0.15);
-    --model-color: #9747FF;
-    --model-bg: rgba(151, 71, 255, 0.15);
-    --mcp-color: #14AE5C;
-    --mcp-bg: rgba(20, 174, 92, 0.15);
+  --tal-color: #f24822;
+  --tal-bg: rgba(242, 72, 34, 0.15);
+  --dance-color: #ffa629;
+  --dance-bg: rgba(255, 166, 41, 0.15);
+  --model-color: #9747ff;
+  --model-bg: rgba(151, 71, 255, 0.15);
+  --mcp-color: #14ae5c;
+  --mcp-bg: rgba(20, 174, 92, 0.15);
 
-    --status-warning: #fbbf24;
-    --status-warning-bg: rgba(251, 191, 36, 0.12);
-    --status-danger: #f87171;
-    --status-danger-bg: rgba(248, 113, 113, 0.12);
-    --status-neutral: #9ca3af;
-    --status-neutral-dim: #6b7280;
+  --status-warning: #fbbf24;
+  --status-warning-bg: rgba(251, 191, 36, 0.12);
+  --status-danger: #f87171;
+  --status-danger-bg: rgba(248, 113, 113, 0.12);
+  --status-neutral: #9ca3af;
+  --status-neutral-dim: #6b7280;
 
+  /* Terminal */
+  --terminal-bg: #1e1e1e;
+  --terminal-fg: #d4d4d4;
+  --terminal-output: #a3a3a3;
 
-    /* Terminal */
-    --terminal-bg: #1e1e1e;
-    --terminal-fg: #d4d4d4;
-    --terminal-output: #a3a3a3;
+  /* Derived token aliases */
+  --bg-main: var(--bg-panel);
+  --primary-rgb: 13, 153, 255;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 
-    /* Derived token aliases */
-    --bg-main: var(--bg-panel);
-    --primary-rgb: 13, 153, 255;
-    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-
-    color-scheme: dark;
+  color-scheme: dark;
 }

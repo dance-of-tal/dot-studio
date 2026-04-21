@@ -143,7 +143,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
     function renderContent() {
         if (loading && activeTab !== 'general') {
-            return <div className="stg-empty">Loading…</div>
+            return <div className="text-center p-4 text-muted">Loading…</div>
         }
 
         switch (activeTab) {
@@ -225,7 +225,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                     {/* Right content */}
                     <div className="stg-content">
                         {error && (
-                            <div className="stg-banner" style={{ color: '#f24822', background: 'rgba(242,72,34,0.1)', margin: '16px 24px 0' }}>
+                            <div className="alert" style={{ color: '#f24822', background: 'rgba(242,72,34,0.1)', margin: '16px 24px 0' }}>
                                 {error}
                             </div>
                         )}

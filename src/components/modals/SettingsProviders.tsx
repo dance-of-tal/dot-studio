@@ -89,27 +89,27 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                 <h2 className="stg-panel__title">Providers</h2>
             </div>
 
-            {statusMessage && <div className="stg-banner stg-banner--success">{statusMessage}</div>}
+            {statusMessage && <div className="alert alert--success">{statusMessage}</div>}
 
             {/* Connected providers */}
             <div className="stg-section">
                 <h3 className="stg-section__title">Connected</h3>
                 <div className="stg-group">
                     {connected.length === 0 ? (
-                        <div className="stg-empty">No providers connected yet.</div>
+                        <div className="text-center p-4 text-muted">No providers connected yet.</div>
                     ) : (
                         connected.map((provider) => (
                             <div key={provider.id} className="stg-provider-row">
                                 <div className="stg-provider-row__info">
                                     <span className="stg-provider-row__name">{provider.name}</span>
-                                    <span className="stg-tag">Connected</span>
+                                    <span className="badge">Connected</span>
                                     {provider.env.length > 0 && (
-                                        <span className="stg-tag stg-tag--subtle">{provider.env[0]}</span>
+                                        <span className="badge badge--subtle">{provider.env[0]}</span>
                                     )}
                                 </div>
                                 <div className="stg-provider-row__actions">
                                     {provider.source === 'env'
-                                        ? <span className="stg-tag stg-tag--subtle">Set via environment</span>
+                                        ? <span className="badge badge--subtle">Set via environment</span>
                                         : (
                                             <button className="btn" onClick={() => disconnectProvider(provider.id, provider.name)}>
                                                 Disconnect

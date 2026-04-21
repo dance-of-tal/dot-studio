@@ -84,9 +84,9 @@ export default function SettingsModels() {
             </div>
 
             {loading ? (
-                <div className="stg-empty">Loading models…</div>
+                <div className="text-center p-4 text-muted">Loading models…</div>
             ) : groups.length === 0 ? (
-                <div className="stg-empty">
+                <div className="text-center p-4 text-muted">
                     {query ? `No models matching "${query}"` : 'No connected models available.'}
                 </div>
             ) : (

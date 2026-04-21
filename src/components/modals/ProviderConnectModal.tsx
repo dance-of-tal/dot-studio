@@ -185,7 +185,7 @@ export default function ProviderConnectModal({
                     {/* Step: API key input */}
                     {step === 'api' && flow && (
                         <div className="provider-connect-modal__api-section">
-                            <div className="stg-note">{flow.instructions || `Paste the API key for ${provider.name}.`}</div>
+                            <div className="alert">{flow.instructions || `Paste the API key for ${provider.name}.`}</div>
                             {renderPromptInputs()}
                             <div className="provider-connect-modal__api-row">
                                 <input
@@ -210,7 +210,7 @@ export default function ProviderConnectModal({
                                     {flow.submitting ? 'Saving…' : 'Save'}
                                 </button>
                             </div>
-                            {flow.error && <div className="stg-note stg-note--error">{flow.error}</div>}
+                            {flow.error && <div className="alert alert--error">{flow.error}</div>}
                         </div>
                     )}
 
@@ -219,7 +219,7 @@ export default function ProviderConnectModal({
                         <div className="provider-connect-modal__oauth-section">
                             {flow.mode === 'prompt' ? (
                                 <>
-                                    <div className="stg-note">{flow.instructions || 'Provide the required details to continue authorization.'}</div>
+                                    <div className="alert">{flow.instructions || 'Provide the required details to continue authorization.'}</div>
                                     {renderPromptInputs()}
                                     <div className="stg-actions">
                                         <button
@@ -233,7 +233,7 @@ export default function ProviderConnectModal({
                                 </>
                             ) : flow.mode === 'code' ? (
                                 <>
-                                    <div className="stg-note">{flow.instructions || 'Complete authorization in the opened browser window.'}</div>
+                                    <div className="alert">{flow.instructions || 'Complete authorization in the opened browser window.'}</div>
                                     <div className="provider-connect-modal__api-row">
                                         <input
                                             className="input"
@@ -260,10 +260,8 @@ export default function ProviderConnectModal({
                                 </>
                             ) : (
                                 <>
-                                    <div className="stg-note stg-note--muted">
-                                        {flow.submitting
-                                            ? 'Waiting for authorization callback…'
-                                            : 'Browser auth is paused. Retry or reopen the auth window.'}
+                                    <div className="alert alert--muted">
+                                        <div className="spinner"></div> Waiting for browser auth…
                                     </div>
                                     <div className="stg-actions">
                                         {flow.url && (
@@ -277,14 +275,14 @@ export default function ProviderConnectModal({
                                     </div>
                                 </>
                             )}
-                            {flow.error && <div className="stg-note stg-note--error">{flow.error}</div>}
+                            {flow.error && <div className="alert alert--error">{flow.error}</div>}
                         </div>
                     )}
 
                     {/* Step: Model picker */}
                     {step === 'pick-model' && modelPicker && (
                         <div className="stg-model-picker">
-                            <div className="stg-note stg-note--success">
+                            <div className="alert alert--success">
                                 {provider.name} connected! Pick a model to assign.
                             </div>
                             <input
@@ -309,7 +307,7 @@ export default function ProviderConnectModal({
                                     </button>
                                 ))}
                                 {visibleModelPickerModels.length === 0 && (
-                                    <div className="stg-note stg-note--muted">No models matched.</div>
+                                    <div className="alert alert--muted">No models matched.</div>
                                 )}
                             </div>
                         </div>

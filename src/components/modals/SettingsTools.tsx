@@ -127,7 +127,7 @@ export default function SettingsTools({ refreshToken }: SettingsToolsProps) {
             <div className="stg-panel__header stg-panel__header--split">
                 <div>
                     <h2 className="stg-panel__title">Tools</h2>
-                    <div className="stg-note stg-note--muted">
+                    <div className="alert alert--muted">
                         Tool permissions and auto-accept behavior live in OpenCode runtime config, not performer projection, so changes are queued and adopted at the next execution boundary.
                     </div>
                 </div>
@@ -136,17 +136,17 @@ export default function SettingsTools({ refreshToken }: SettingsToolsProps) {
                 </button>
             </div>
 
-            {statusMessage && <div className="stg-banner stg-banner--success">{statusMessage}</div>}
-            {error && <div className="stg-note stg-note--error">{error}</div>}
+            {statusMessage && <div className="alert alert--success">{statusMessage}</div>}
+            {error && <div className="alert alert--error">{error}</div>}
             {runtimeReloadPending ? (
-                <div className="stg-note">
-                    <div className="stg-note__title">Runtime reload pending</div>
-                    New chats will wait until the current runtime-affecting changes are adopted.
+                <div className="alert">
+                    <div style={{ fontWeight: 600, marginBottom: '2px' }}>Runtime reload pending</div>
+                    <div style={{ fontSize: 'var(--font-sm)', color: 'var(--text-muted)' }}>Changes will take effect the next time OpenCode processes a turn or session boundary.</div>
                 </div>
             ) : null}
 
             {loading ? (
-                <div className="stg-empty">Loading tool settings…</div>
+                <div className="text-center p-4 text-muted">Loading tool settings…</div>
             ) : (
                 <>
                     <div className="stg-section">
@@ -160,17 +160,23 @@ export default function SettingsTools({ refreshToken }: SettingsToolsProps) {
                                         <div className="stg-row__text">
                                             <span className="stg-row__title">
                                                 {tool.label}
-                                                {available ? <span className="stg-tag stg-tag--subtle stg-row__inline-tag">Live</span> : null}
+                                                {available ? <span className="badge badge--subtle stg-row__inline-tag">Live</span> : null}
                                             </span>
                                             <span className="stg-row__desc">{tool.description}</span>
                                             {tool.aliases && tool.aliases.length > 0 ? (
-                                                <div className="stg-tool-meta">
+                                                <div className="stg-tool-chip-list" style={{ marginTop: '4px' }}>
                                                     {tool.aliases.map((alias) => (
-                                                        <span key={alias} className="stg-tag stg-tag--subtle">{alias}</span>
+                                                        <span key={alias} className="badge badge--subtle">{alias}</span>
                                                     ))}
                                                 </div>
                                             ) : null}
-                                            {tool.note ? <div className="stg-note stg-note--muted">{tool.note}</div> : null}
+                                            {!available && availabilityNote ? (
+                                                <div className="alert">
+                                                    <div style={{ fontWeight: 600, marginBottom: '2px' }}>Requires Action</div>
+                                                    <div style={{ fontSize: 'var(--font-sm)', color: 'var(--text-muted)' }}>{availabilityNote}</div>
+                                                </div>
+                                            ) : null}
+                                            {tool.note ? <div className="alert alert--muted">{tool.note}</div> : null}
                                         </div>
                                         <select
                                             className="select stg-select"
@@ -206,11 +212,11 @@ export default function SettingsTools({ refreshToken }: SettingsToolsProps) {
                     <div className="stg-section">
                         <h3 className="stg-section__title">Detected Runtime Tools</h3>
                         {liveToolIds.length === 0 ? (
-                            <div className="stg-empty">No runtime tools reported by OpenCode.</div>
+                            <div className="text-center p-4 text-muted">No runtime tools reported by OpenCode.</div>
                         ) : (
                             <div className="stg-tool-chip-list">
                                 {liveToolIds.map((toolId) => (
-                                    <span key={toolId} className="stg-tag stg-tag--subtle">{toolId}</span>
+                                    <span key={toolId} className="badge badge--subtle">{toolId}</span>
                                 ))}
                             </div>
                         )}

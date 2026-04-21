@@ -173,7 +173,6 @@
 }
 
 /* ── Badges ──────────────────────────────────────────────── */
-
 .badge {
     display: inline-flex;
     align-items: center;
@@ -187,6 +186,16 @@
     letter-spacing: 0.04em;
     white-space: nowrap;
     flex-shrink: 0;
+}
+
+.badge--subtle {
+    background: var(--bg-hover);
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
 }
 
 /* ── Section Title ───────────────────────────────────────── */
@@ -243,6 +252,172 @@
     padding: 0 4px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.18);
-    font-size: var(--font-xs);
-    font-weight: 700;
+}
+
+/* ── Surface Cards ───────────────────────────────────────── */
+.surface-card {
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    background: var(--bg-canvas);
+    overflow: hidden;
+}
+
+/* ── List Row ────────────────────────────────────────────── */
+.list-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.list-row:last-child {
+    border-bottom: none;
+}
+
+/* ── Modals & Dialogs ────────────────────────────────────── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-dialog {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-window);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.modal-dialog__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modal-dialog__body {
+    padding: 14px 16px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border-main);
+}
+
+/* ── Alert & Callout ─────────────────────────────────────── */
+.alert {
+    border-radius: var(--radius-lg);
+    padding: 10px 12px;
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+.alert--muted {
+    background: transparent;
+    padding: 4px 0;
+}
+
+.alert--success {
+    color: #14ae5c;
+    background: rgba(20, 174, 92, 0.1);
+}
+
+.alert--error {
+    color: #f24822;
+    background: rgba(242, 72, 34, 0.1);
+}
+
+/* ── Toggle Switch ───────────────────────────────────────── */
+.toggle-switch {
+    position: relative;
+    display: inline-flex;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-switch__track {
+    width: 36px;
+    height: 20px;
+    background: var(--border-main);
+    border-radius: 10px;
+    transition: background 0.2s;
+    position: relative;
+}
+
+.toggle-switch__track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-switch__track {
+    background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-switch__track::after {
+    transform: translateX(16px);
+}
+
+/* ── Search Input Container ──────────────────────────────── */
+.search-input-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    background: var(--bg-canvas);
+}
+
+.search-input-container__icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.search-input-container__input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: var(--font-base);
+    outline: none;
+}
+
+.search-input-container__input::placeholder {
+    color: var(--text-muted);
 }
