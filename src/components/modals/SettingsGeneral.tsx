@@ -19,13 +19,13 @@ function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
                 <span className="stg-row__title">{title}</span>
                 <span className="stg-row__desc">{description}</span>
             </div>
-            <label className="stg-toggle">
+            <label className="toggle-switch">
                 <input
                     type="checkbox"
                     checked={checked}
                     onChange={(e) => onChange(e.target.checked)}
                 />
-                <span className="stg-toggle__track" />
+                <span className="toggle-switch__track" />
             </label>
         </div>
     )

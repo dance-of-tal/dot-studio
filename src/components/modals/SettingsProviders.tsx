@@ -96,7 +96,7 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                 <h3 className="stg-section__title">Connected</h3>
                 <div className="stg-group">
                     {connected.length === 0 ? (
-                        <div className="text-center p-4 text-muted">No providers connected yet.</div>
+                        <div className="empty-state">No providers connected yet.</div>
                     ) : (
                         connected.map((provider) => (
                             <div key={provider.id} className="stg-provider-row">

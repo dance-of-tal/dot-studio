@@ -66,10 +66,10 @@ export default function SettingsModels() {
                 <h2 className="stg-panel__title">Models</h2>
             </div>
 
-            <div className="stg-search">
-                <Search size={14} className="stg-search__icon" />
+            <div className="search-input-container" style={{ marginBottom: 16 }}>
+                <Search size={14} className="search-input-container__icon" />
                 <input
-                    className="stg-search__input"
+                    className="search-input-container__input"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search models…"
@@ -84,9 +84,9 @@ export default function SettingsModels() {
             </div>
 
             {loading ? (
-                <div className="text-center p-4 text-muted">Loading models…</div>
+                <div className="empty-state">Loading models…</div>
             ) : groups.length === 0 ? (
-                <div className="text-center p-4 text-muted">
+                <div className="empty-state">
                     {query ? `No models matching "${query}"` : 'No connected models available.'}
                 </div>
             ) : (

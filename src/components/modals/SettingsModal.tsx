@@ -143,7 +143,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
     function renderContent() {
         if (loading && activeTab !== 'general') {
-            return <div className="text-center p-4 text-muted">Loading…</div>
+            return <div className="empty-state">Loading…</div>
         }
 
         switch (activeTab) {

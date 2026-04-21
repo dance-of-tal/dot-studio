@@ -261,7 +261,9 @@ export default function ProviderConnectModal({
                             ) : (
                                 <>
                                     <div className="alert alert--muted">
-                                        <div className="spinner"></div> Waiting for browser auth…
+                                        {flow.submitting
+                                            ? 'Waiting for authorization callback…'
+                                            : 'Browser auth is paused. Retry or reopen the auth window.'}
                                     </div>
                                     <div className="stg-actions">
                                         {flow.url && (

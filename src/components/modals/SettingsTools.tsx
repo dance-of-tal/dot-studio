@@ -146,7 +146,7 @@ export default function SettingsTools({ refreshToken }: SettingsToolsProps) {
             ) : null}
 
             {loading ? (
-                <div className="text-center p-4 text-muted">Loading tool settings…</div>
+                <div className="empty-state">Loading tool settings…</div>
             ) : (
                 <>
                     <div className="stg-section">
@@ -212,7 +212,7 @@ export default function SettingsTools({ refreshToken }: SettingsToolsProps) {
                     <div className="stg-section">
                         <h3 className="stg-section__title">Detected Runtime Tools</h3>
                         {liveToolIds.length === 0 ? (
-                            <div className="text-center p-4 text-muted">No runtime tools reported by OpenCode.</div>
+                            <div className="empty-state">No runtime tools reported by OpenCode.</div>
                         ) : (
                             <div className="stg-tool-chip-list">
                                 {liveToolIds.map((toolId) => (

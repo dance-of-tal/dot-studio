@@ -421,3 +421,10 @@
 .search-input-container__input::placeholder {
     color: var(--text-muted);
 }
+/* ── Empty State ─────────────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: var(--space-6);
+    color: var(--text-muted);
+    font-size: var(--font-base);
+}
