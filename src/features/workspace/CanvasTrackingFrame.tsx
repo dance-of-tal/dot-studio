@@ -23,6 +23,8 @@ export default function CanvasTrackingFrame({ data }: NodeProps<Node<CanvasTrack
     const onActivateTransform = data.onActivateTransform
     const onDeactivateTransform = data.onDeactivateTransform
     const [files, setFiles] = useState<FileStatus[]>([])
+    const isClean = files.length === 0
+    const statusLabel = isClean ? 'Clean' : `${files.length} file${files.length === 1 ? '' : 's'}`
 
     useEffect(() => {
         const fetchFiles = async () => {
@@ -52,8 +54,10 @@ export default function CanvasTrackingFrame({ data }: NodeProps<Node<CanvasTrack
                 <>
                     <Activity size={12} />
                     <span className="canvas-frame__name">{title}</span>
-                    <span className="canvas-tracking-frame__status">
-                        {files.length === 0 ? 'Clean' : `${files.length} file${files.length === 1 ? '' : 's'}`}
+                    <span
+                        className={`badge badge--subtle canvas-tracking-frame__status ${isClean ? 'canvas-tracking-frame__status--clean' : ''}`.trim()}
+                    >
+                        {statusLabel}
                     </span>
                 </>
             )}

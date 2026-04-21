@@ -8,7 +8,7 @@ import type {
     ProviderOauthCallbackRequest,
     ProviderSummary,
 } from '../../shared/provider-auth'
-import type { FileStatus, ModelConfig, LspServerInfo } from '../types'
+import type { FileStatus, ModelConfig } from '../types'
 import { deleteJSON, fetchJSON, postJSON, putJSON } from '../api-core'
 
 export const opencodeApi = {
@@ -33,10 +33,6 @@ export const opencodeApi = {
             runningSessions: number
             disposedDirectories: string[]
         }>('/api/opencode/runtime/apply'),
-
-    lsp: {
-        status: () => fetchJSON<LspServerInfo[]>('/api/lsp/status'),
-    },
 
     mcp: {
         getCatalog: () => fetchJSON<McpCatalog>('/api/mcp/catalog'),

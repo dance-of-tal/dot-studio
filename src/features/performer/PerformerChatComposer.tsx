@@ -194,7 +194,7 @@ export default function PerformerChatComposer(props: Props) {
                         ? 'Select a model before chatting'
                         : isPlanAgent
                             ? 'Plan mode — ask for a plan...'
-                            : 'Message... (# files, / to use dance for this turn)'}
+                            : 'Message... (# files, /dance for this turn)'}
                     rows={1}
                     className="text-input"
                 />

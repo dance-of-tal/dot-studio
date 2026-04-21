@@ -128,29 +128,6 @@ export interface ModelCapabilities {
     }
 }
 
-export interface LspServerInfo {
-    name?: string
-    id?: string
-    status?: string
-}
-
-export interface LspDiagnosticPosition {
-    line?: number
-    character?: number
-}
-
-export interface LspDiagnosticRange {
-    start?: LspDiagnosticPosition
-    end?: LspDiagnosticPosition
-}
-
-export interface LspDiagnostic {
-    severity?: number
-    message: string
-    source?: string
-    range?: LspDiagnosticRange
-}
-
 export interface McpServer {
     name: string           // "github", "postgres", etc.
     status: 'connected' | 'disconnected' | 'disabled' | 'failed' | 'needs_auth' | 'needs_client_registration' | 'unknown'

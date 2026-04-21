@@ -112,8 +112,6 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
                 sessionMutationPending: {},
                 sessionReverts: {},
                 sessions: [],
-                lspServers: [],
-                lspDiagnostics: {},
                 trackingWindow: null,
                 isTrackingOpen: false,
                 workspaceDirty: true,
@@ -341,8 +339,6 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
                 }
                 : null,
             isTrackingOpen: false,
-            lspServers: [],
-            lspDiagnostics: {},
             workspaceDirty: false,
             projectionDirty: createEmptyProjectionDirtyState(),
             runtimeReloadPending: false,

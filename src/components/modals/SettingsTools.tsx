@@ -203,10 +203,10 @@ export default function SettingsTools({ refreshToken }: SettingsToolsProps) {
 
                     <div className="stg-section">
                         <h3 className="stg-section__title">Web Search</h3>
-                        <div className="stg-note">
+                        <div className="alert">
                             `webfetch` retrieves a known URL. `websearch` is discovery and depends on OpenCode advertising the tool.
                         </div>
-                        {availabilityNote ? <div className="stg-note stg-note--muted">{availabilityNote}</div> : null}
+                        {availabilityNote ? <div className="alert alert--muted">{availabilityNote}</div> : null}
                     </div>
 
                     <div className="stg-section">

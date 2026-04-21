@@ -314,8 +314,6 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
         sessionReverts: {},
         sessions: [],
         inspectorFocus: null,
-        lspServers: [],
-        lspDiagnostics: {},
         trackingWindow: null,
         isTrackingOpen: false,
         workspaceDirty: true,

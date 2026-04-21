@@ -188,7 +188,6 @@ export const api = {
             ),
     },
 
-    lsp: opencodeApi.lsp,
     mcp: opencodeApi.mcp,
     models: opencodeApi.models,
     agents: opencodeApi.agents,

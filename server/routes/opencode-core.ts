@@ -4,7 +4,6 @@ import { resolveRuntimeTools } from '../lib/runtime-tools.js'
 import { jsonOpencodeError } from '../lib/opencode-errors.js'
 import { listRuntimeModels, listProviderSummaries } from '../lib/model-catalog.js'
 import {
-    getLspStatus,
     getGlobalOpenCodeConfig,
     getOpenCodeHealth,
     getOpenCodeUnavailableHealth,
@@ -146,14 +145,6 @@ opencodeCore.get('/api/provider/auth', async (c) => {
         return c.json(await getProviderAuthMethods(requestWorkingDir(c)))
     } catch (err) {
         return jsonOpencodeError(c, err, { defaultStatus: 503 })
-    }
-})
-
-opencodeCore.get('/api/lsp/status', async (c) => {
-    try {
-        return c.json(await getLspStatus(requestWorkingDir(c)))
-    } catch (err) {
-        return jsonOpencodeError(c, err)
     }
 })
 

@@ -61,8 +61,6 @@ function createTestState(): StudioState {
         sessionToChatKey: {},
         sessionLoading: {},
         sessionReverts: {},
-        lspServers: [],
-        lspDiagnostics: {},
         isAssistantOpen: true,
         assistantModel: null,
         assistantAvailableModels: [],

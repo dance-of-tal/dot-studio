@@ -14,7 +14,6 @@ const {
     resolveSessionMock,
     chatMessagesMock,
     statusMock,
-    lspStatusMock,
     compileMock,
     currentSources,
 } = vi.hoisted(() => ({
@@ -23,7 +22,6 @@ const {
     resolveSessionMock: vi.fn(),
     chatMessagesMock: vi.fn(),
     statusMock: vi.fn(),
-    lspStatusMock: vi.fn(),
     compileMock: vi.fn(),
     currentSources: {
         chat: null as FakeEventSource | null,
@@ -38,9 +36,6 @@ vi.mock('../api', () => ({
             resolveSession: resolveSessionMock,
             messages: chatMessagesMock,
             status: statusMock,
-        },
-        lsp: {
-            status: lspStatusMock,
         },
         compile: compileMock,
     },
@@ -76,8 +71,6 @@ function createBaseState(loadThreads: ReturnType<typeof vi.fn>): StudioState {
         activeThreadId: 'thread-1',
         activeThreadParticipantKey: null,
         sessions: [],
-        lspServers: [],
-        lspDiagnostics: {},
         seEntities: {},
         seMessages: {},
         seStatuses: {},
@@ -239,7 +232,6 @@ describe('integrationSlice act participant sync', () => {
             nextCursor: null,
         })
         statusMock.mockReset().mockResolvedValue({ status: { type: 'idle' } })
-        lspStatusMock.mockReset().mockResolvedValue([])
         compileMock.mockReset()
     })
 

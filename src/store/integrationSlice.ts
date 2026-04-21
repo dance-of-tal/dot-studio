@@ -5,10 +5,8 @@ import { logChatDebug } from '../lib/chat-debug'
 import { hasModelConfig, resolvePerformerRuntimeConfig } from '../lib/performers'
 import { formatStudioApiErrorComment } from '../lib/api-errors'
 import {
-    handleLspDiagnostics,
-    handleLspUpdated,
-    handleMcpToolsChanged,
     handleMcpBrowserOpenFailed,
+    handleMcpToolsChanged,
 } from './integration-event-handlers'
 import {
     reconnectManagedEventSource,
@@ -467,7 +465,6 @@ export const createIntegrationSlice: StateCreator<
                 }
 
                 if (event.type === 'server.connected') {
-                    get().fetchLspStatus()
                     const knownSessionIds = new Set<string>()
                     for (const sessionId of Object.keys(get().sessionToChatKey)) {
                         knownSessionIds.add(sessionId)
@@ -564,8 +561,6 @@ export const createIntegrationSlice: StateCreator<
                     return
                 }
 
-                if (event.type === 'lsp.client.diagnostics') return handleLspDiagnostics(event, get, set)
-                if (event.type === 'lsp.updated') return handleLspUpdated(get)
                 if (event.type === 'mcp.tools.changed') return handleMcpToolsChanged(get)
                 if (event.type === 'mcp.browser.open.failed') return handleMcpBrowserOpenFailed(event)
             },
@@ -628,18 +623,6 @@ export const createIntegrationSlice: StateCreator<
     })
 
     return ({
-        lspServers: [],
-        lspDiagnostics: {},
-
-        fetchLspStatus: async () => {
-            try {
-                const servers = await api.lsp.status()
-                set({ lspServers: servers })
-            } catch {
-                set({ lspServers: [] })
-            }
-        },
-
         initRealtimeEvents: () => {
             reconnectEventSource()
             api.chat.listPendingPermissions().then((permissions) => {

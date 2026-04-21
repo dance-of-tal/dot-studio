@@ -57,8 +57,6 @@ function createBaseState(): StudioState {
         chatPrefixes: {},
         activeChatPerformerId: null,
         sessions: [],
-        lspServers: [],
-        lspDiagnostics: {},
         selectedActId: null,
         actEditorState: null,
         acts: [],

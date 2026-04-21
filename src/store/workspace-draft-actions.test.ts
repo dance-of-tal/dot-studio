@@ -45,8 +45,6 @@ function createDraftState(): StudioState {
         sessionToChatKey: {},
         sessionLoading: {},
         sessionReverts: {},
-        lspServers: [],
-        lspDiagnostics: {},
         selectedActId: null,
         actEditorState: null,
         actThreads: {},

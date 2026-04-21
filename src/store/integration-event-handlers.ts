@@ -7,45 +7,14 @@
  */
 
 import type { StudioState } from './types'
-import type { LspDiagnostic } from '../types'
-import { diagnosticMatchesWorkingDir } from './integration-streaming'
 import { queryClient } from '../lib/query-client'
 import { showToast } from '../lib/toast'
 
-type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
 
 function invalidateRuntimeQueries(workingDir: string) {
     queryClient.invalidateQueries({ queryKey: ['mcp-servers', workingDir] })
     queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
-}
-
-// ── lsp.client.diagnostics ──
-
-export function handleLspDiagnostics(
-    data: { properties?: { uri?: unknown; diagnostics?: unknown } },
-    get: GetFn,
-    set: SetFn,
-) {
-    const { uri, diagnostics } = data.properties || {}
-    if (typeof uri !== 'string' || !diagnosticMatchesWorkingDir(uri, get().workingDir)) {
-        return
-    }
-    const normalizedDiagnostics: LspDiagnostic[] = Array.isArray(diagnostics)
-        ? diagnostics.filter((item): item is LspDiagnostic => !!item && typeof item === 'object' && typeof (item as LspDiagnostic).message === 'string')
-        : []
-    set((state) => ({
-        lspDiagnostics: {
-            ...state.lspDiagnostics,
-            [uri]: normalizedDiagnostics,
-        },
-    }))
-}
-
-// ── lsp.updated ──
-
-export function handleLspUpdated(get: GetFn) {
-    get().fetchLspStatus()
 }
 
 // ── mcp.tools.changed ──

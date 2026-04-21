@@ -151,12 +151,6 @@ export async function getProviderAuthMethods(directory: string) {
     return unwrapOpencodeResult<ProviderAuthStatus>(await oc.provider.auth({ directory })) || {}
 }
 
-export async function getLspStatus(directory: string) {
-    const oc = await getOpencode()
-    const res = await oc.lsp.status({ directory })
-    return responseData(res, [])
-}
-
 export async function listFiles(directory: string, targetPath: string) {
     const oc = await getOpencode()
     const res = await oc.file.list({ directory, path: targetPath })

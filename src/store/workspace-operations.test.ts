@@ -50,8 +50,6 @@ function createWorkspaceState(): StudioState {
         chatPrefixes: {},
         activeChatPerformerId: null,
         sessions: [],
-        lspServers: [],
-        lspDiagnostics: {},
         selectedActId: null,
         actEditorState: null,
         actThreads: {},

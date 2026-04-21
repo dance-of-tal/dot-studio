@@ -19,6 +19,16 @@
     font-size: var(--font-md);
 }
 
+.canvas-tracking-frame__status {
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+.canvas-tracking-frame__status--clean {
+    background: color-mix(in srgb, var(--mcp-color) 10%, transparent);
+    color: var(--mcp-color);
+}
+
 .canvas-tracking-frame__list {
     list-style: none;
     margin: 0;

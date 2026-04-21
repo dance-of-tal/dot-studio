@@ -1,8 +1,6 @@
 import type {
     AssetRef,
     DraftAsset,
-    LspDiagnostic,
-    LspServerInfo,
     MarkdownEditorKind,
     MarkdownEditorNode,
     PerformerNode,
@@ -215,11 +213,7 @@ export interface ChatSlice {
 }
 
 export interface IntegrationSlice {
-    // Realtime integrations (OpenCode chat stream, LSP diagnostics)
-    lspServers: LspServerInfo[]
-    lspDiagnostics: Record<string, LspDiagnostic[]>
-
-    fetchLspStatus: () => Promise<void>
+    // Realtime integrations (OpenCode chat stream)
     initRealtimeEvents: () => void
     forceReconnectRealtimeEvents: () => void
     cleanupRealtimeEvents: () => void
