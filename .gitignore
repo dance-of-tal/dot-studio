@@ -4,12 +4,14 @@ node_modules/
 # Build output
 dist/
 client/
+output/
 *.tgz
 
 # Local data
 .dance-of-tal/
 test-results/
 tmp-client-sourcemap/
+.playwright-cli/
 
 
 # Environment and machine-local config
