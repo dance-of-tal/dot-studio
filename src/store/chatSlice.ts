@@ -21,7 +21,7 @@ export const createChatSlice: StateCreator<
     [],
     ChatSlice
 > = (set, get) => {
-    const approvals = createChatApprovals(get)
+    const approvals = createChatApprovals(set, get)
     const sessionActions = createChatSessionActions(set, get)
 
     return {

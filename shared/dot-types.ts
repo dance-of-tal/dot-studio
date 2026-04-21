@@ -25,6 +25,3 @@ export type {
     DotAssetKind,
     ModelConfigV1,
 } from 'dance-of-tal/data/types'
-
-// Backward-compat aliases for server code that uses V1 names
-export type { PerformerAsset as PerformerAssetV1 } from 'dance-of-tal/data/types'

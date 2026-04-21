@@ -19,6 +19,11 @@ import {
     selectMessagesForChatKey,
     syncSessionSnapshot,
 } from '../session'
+import {
+    patchSessionRuntimeActor,
+    reconcileSessionRuntimeActor,
+    releaseSessionRuntimeActor,
+} from '../session/session-runtime-manager'
 import { preparePendingRuntimeExecution } from '../runtime-execution'
 
 export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
@@ -26,11 +31,17 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
         sessionId: string,
         action: () => Promise<T>,
     ) => {
-        get().setSessionMutationPending(sessionId, true)
+        patchSessionRuntimeActor(set, get, {
+            sessionId,
+            patch: { mutating: true, errorMessage: null },
+        })
         try {
             return await action()
         } finally {
-            get().setSessionMutationPending(sessionId, false)
+            patchSessionRuntimeActor(set, get, {
+                sessionId,
+                patch: { mutating: false },
+            })
         }
     }
 
@@ -86,6 +97,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
     }
 
     const detachChatSessionInternal = (chatKey: string, notice?: string) => {
+        releaseSessionRuntimeActor(set, get, { chatKey })
         detachChatSession(set, get, chatKey, { notice })
         set((state) => ({
             selectedPerformerSessionId: state.selectedPerformerId === chatKey ? null : state.selectedPerformerSessionId,
@@ -123,6 +135,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                     await api.chat.abort(sessionId)
                     await syncChatMessages(set, get, chatKey, sessionId)
                     get().setSessionStatus(sessionId, { type: 'idle' })
+                    reconcileSessionRuntimeActor(set, get, chatKey, sessionId)
                     appendSystemNotice(get, chatKey, 'Stopped the current turn.')
                 } catch (error) {
                     console.error('Failed to abort chat', error)
@@ -130,7 +143,11 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                 }
             }
             if (sessionId) {
-                get().setSessionLoading(sessionId, false)
+                patchSessionRuntimeActor(set, get, {
+                    chatKey,
+                    sessionId,
+                    patch: { optimistic: false, syncing: false },
+                })
             }
         },
 
@@ -167,6 +184,7 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
             for (const [chatKey, sessionId] of sessionEntries) {
                 try {
                     await syncSessionSnapshot(set, get, chatKey, sessionId)
+                    reconcileSessionRuntimeActor(set, get, chatKey, sessionId)
                 } catch (error) {
                     console.error(`Failed to rehydrate session for ${chatKey}:`, error)
                     staleChatKeys.push(chatKey)
@@ -271,8 +289,10 @@ export function createChatSessionManagement(set: ChatSet, get: ChatGet) {
                 }))
                 get().listSessions()
                 for (const chatKey of affectedChatKeys) {
+                    releaseSessionRuntimeActor(set, get, { chatKey, sessionId })
                     detachChatSession(set, get, chatKey, { keepVisibleMessages: false })
                 }
+                releaseSessionRuntimeActor(set, get, { sessionId })
                 get().removeSession(sessionId)
             } catch (error) {
                 console.error('Failed to delete session', error)

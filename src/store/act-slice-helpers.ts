@@ -26,6 +26,12 @@ import { buildActParticipantChatKey, parseActParticipantChatKey } from '../../sh
 import { mcpServerNamesFromConfig } from '../../shared/mcp-catalog'
 import type { ActEditorState, ActEditorTab, StudioState } from './types'
 import { clearChatSessionView, registerSessionBinding, syncSessionSnapshot } from './session'
+import {
+    ensureSessionRuntimeActor,
+    patchSessionRuntimeActor,
+    reconcileSessionRuntimeActor,
+    releaseSessionRuntimeActor,
+} from './session/session-runtime-manager'
 
 type SetState = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetState = () => StudioState
@@ -399,11 +405,13 @@ export async function applyAuthoritativeActThreads(
     })
 
     for (const chatKey of removedChatKeys) {
+        releaseSessionRuntimeActor(set, get, { chatKey })
         clearChatSessionView(get, chatKey)
     }
 
     for (const [chatKey, sessionId] of Object.entries(authoritativeSessions)) {
         registerSessionBinding(set, get, chatKey, sessionId)
+        ensureSessionRuntimeActor(set, get, chatKey, sessionId)
         const parsed = parseActParticipantChatKey(chatKey)
         if (!parsed) continue
         const thread = threads.find((entry) => entry.id === parsed.threadId)
@@ -411,8 +419,13 @@ export async function applyAuthoritativeActThreads(
         if (!participantStatus) continue
         get().setSessionStatus(sessionId, participantStatus)
         if (participantStatus.type === 'idle' || participantStatus.type === 'error') {
-            get().setSessionLoading(sessionId, false)
+            patchSessionRuntimeActor(set, get, {
+                chatKey,
+                sessionId,
+                patch: { optimistic: false, syncing: false },
+            })
         }
+        reconcileSessionRuntimeActor(set, get, chatKey, sessionId)
     }
 
     for (const chatKey of sessionsToFetch) {

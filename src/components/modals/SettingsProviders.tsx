@@ -71,7 +71,9 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
             connectModelPicker,
             awaitModelAssignmentOnConnect,
         )) {
-            setConnectTargetId(null)
+            queueMicrotask(() => {
+                setConnectTargetId((current) => (current === connectTargetId ? null : current))
+            })
         }
     }, [
         awaitModelAssignmentOnConnect,

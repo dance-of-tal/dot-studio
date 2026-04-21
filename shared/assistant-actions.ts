@@ -43,7 +43,7 @@ export interface AssistantModelVariantSummary {
     summary: string
 }
 
-export interface AssistantActSafetyInput extends ActSafetyConfig {}
+export type AssistantActSafetyInput = ActSafetyConfig
 
 // Fields shared by createPerformer (inline) and updatePerformer (patch)
 export interface AssistantPerformerFields {

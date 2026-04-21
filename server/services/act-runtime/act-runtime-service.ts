@@ -32,6 +32,7 @@ import { evaluateWakeCondition } from './wake-evaluator.js'
 import { validateConditionExpr } from './wake-condition-validator.js'
 import { payloadString } from './act-runtime-utils.js'
 import type { WakeUpTarget } from './event-router.js'
+import { ActRuntimeActorSystem } from './act-runtime-actors.js'
 
 function errorMessage(error: unknown) {
     return error instanceof Error ? error.message : 'Unknown error'
@@ -265,6 +266,7 @@ function summarizeBoardEntry<T extends { content: string }>(entry: T): T {
 class ActRuntimeService {
     private readonly threadManager: ThreadManager
     private readonly workingDir: string
+    private readonly actorSystem: ActRuntimeActorSystem
     private readonly safetyGuards = new Map<string, SafetyGuard>()
     private readonly wakeConditionAlarms = new Map<string, ReturnType<typeof setTimeout>>()
     private readonly blockedWakeRecoveryInFlight = new Set<string>()
@@ -273,6 +275,7 @@ class ActRuntimeService {
     constructor(workspaceId: string, workingDir: string) {
         this.workingDir = workingDir
         this.threadManager = new ThreadManager(workspaceId, workingDir)
+        this.actorSystem = new ActRuntimeActorSystem()
     }
 
     /** Lazy-load persisted threads on first access */
@@ -294,6 +297,7 @@ class ActRuntimeService {
             if (!runtime || !actDefinition) {
                 continue
             }
+            this.actorSystem.markThreadRecovering(threadId, actDefinition)
 
             const recentEvents = await this.threadManager.getRecentEvents(threadId, 50)
 
@@ -327,6 +331,7 @@ class ActRuntimeService {
             }
 
             for (const [participantKey, status] of Object.entries(runtime.thread.participantStatuses || {})) {
+                this.actorSystem.syncParticipantStatus(threadId, participantKey, status)
                 if (status.type !== 'retry' || status.message !== BLOCKED_PROJECTION_RETRY_MESSAGE) {
                     continue
                 }
@@ -338,6 +343,7 @@ class ActRuntimeService {
                     recentEvents,
                 })
             }
+            this.actorSystem.markThreadActive(threadId, actDefinition)
         }
     }
 
@@ -375,6 +381,10 @@ class ActRuntimeService {
                     `Reconciled stale participant status for "${participantKey}" in thread ${threadId}: ${persistedStatus.type} -> ${reconciled.type}`,
                 )
                 await this.threadManager.setParticipantStatus(threadId, participantKey, reconciled)
+                this.actorSystem.syncParticipantStatus(threadId, participantKey, {
+                    ...reconciled,
+                    updatedAt: Date.now(),
+                })
             }
         }
     }
@@ -452,6 +462,7 @@ class ActRuntimeService {
 
         this.blockedWakeRecoveryInFlight.add(recoveryKey)
         try {
+            this.actorSystem.queueParticipant(threadId, participantKey)
             await processWakeTargets(
                 [target],
                 actDefinition,
@@ -460,6 +471,7 @@ class ActRuntimeService {
                 threadId,
                 this.workingDir,
             )
+            this.syncParticipantActorsFromThread(threadId)
         } finally {
             this.blockedWakeRecoveryInFlight.delete(recoveryKey)
         }
@@ -473,6 +485,28 @@ class ActRuntimeService {
         return this.safetyGuards.get(threadId)!
     }
 
+    private syncParticipantActorsFromThread(threadId: string) {
+        const runtime = this.threadManager.getThreadRuntime(threadId)
+        if (!runtime) {
+            return
+        }
+        for (const [participantKey, status] of Object.entries(runtime.thread.participantStatuses || {})) {
+            this.actorSystem.syncParticipantStatus(threadId, participantKey, status)
+        }
+    }
+
+    private recordWakeCascadeResult(
+        threadId: string,
+        result: { injected: string[]; queued: string[] },
+    ) {
+        for (const participantKey of result.injected) {
+            this.actorSystem.markParticipantWaking(threadId, participantKey)
+        }
+        for (const participantKey of result.queued) {
+            this.actorSystem.queueParticipant(threadId, participantKey)
+        }
+    }
+
     private wakeConditionAlarmKey(threadId: string, conditionId: string) {
         return `${threadId}:${conditionId}`
     }
@@ -484,6 +518,7 @@ class ActRuntimeService {
             clearTimeout(alarm)
             this.wakeConditionAlarms.delete(alarmKey)
         }
+        this.actorSystem.clearWakeCondition(threadId, conditionId, this.threadManager.getActDefinition(threadId) || undefined)
     }
 
     private clearThreadWakeConditionAlarms(threadId: string) {
@@ -511,6 +546,7 @@ class ActRuntimeService {
         }
 
         const delay = Math.max(0, Math.min(nextAt - Date.now(), MAX_WAKE_CONDITION_ALARM_DELAY_MS))
+        this.actorSystem.scheduleWakeCondition(threadId, condition.id, this.threadManager.getActDefinition(threadId) || undefined)
         const alarm = setTimeout(() => {
             this.wakeConditionAlarms.delete(this.wakeConditionAlarmKey(threadId, condition.id))
             void this.handleWakeConditionAlarm(threadId, condition).catch((error) => {
@@ -534,6 +570,7 @@ class ActRuntimeService {
         }
 
         condition.status = 'triggered'
+        this.actorSystem.clearWakeCondition(threadId, condition.id, actDefinition)
         await processWakeTargets(
             [{
                 participantKey: condition.createdBy,
@@ -554,6 +591,7 @@ class ActRuntimeService {
             threadId,
             this.workingDir,
         )
+        this.syncParticipantActorsFromThread(threadId)
     }
 
     private async prewarmActParticipantProjections(actDefinition?: ActDefinition): Promise<void> {
@@ -659,7 +697,11 @@ class ActRuntimeService {
         // Fire-and-forget: don't block the tool call response
         if (actDefinition) {
             processWakeCascade(preEvent, actDefinition, runtime.mailbox, this.threadManager, threadId, this.workingDir)
-                .then((cascadeResult) => this.maybeEmitRuntimeIdle(threadId, cascadeResult, actDefinition, runtime.mailbox))
+                .then((cascadeResult) => {
+                    this.recordWakeCascadeResult(threadId, cascadeResult)
+                    this.syncParticipantActorsFromThread(threadId)
+                    return this.maybeEmitRuntimeIdle(threadId, cascadeResult, actDefinition, runtime.mailbox)
+                })
                 .catch((err) => console.error('[act-runtime] Wake cascade error (sendMessage):', err))
         }
 
@@ -746,7 +788,11 @@ class ActRuntimeService {
             // Fire-and-forget: don't block the tool call response
             if (actDefinition) {
                 processWakeCascade(event, actDefinition, runtime.mailbox, this.threadManager, threadId, this.workingDir)
-                    .then((cascadeResult) => this.maybeEmitRuntimeIdle(threadId, cascadeResult, actDefinition, runtime.mailbox))
+                    .then((cascadeResult) => {
+                        this.recordWakeCascadeResult(threadId, cascadeResult)
+                        this.syncParticipantActorsFromThread(threadId)
+                        return this.maybeEmitRuntimeIdle(threadId, cascadeResult, actDefinition, runtime.mailbox)
+                    })
                     .catch((err) => console.error('[act-runtime] Wake cascade error (postToBoard):', err))
             }
 
@@ -819,6 +865,7 @@ class ActRuntimeService {
             const synced = await this.threadManager.syncThreadActDefinition(threadId, actDefinition)
             if (!synced) continue
             anySynced = true
+            this.actorSystem.markThreadActive(threadId, actDefinition)
 
             this.safetyGuards.delete(threadId)
 
@@ -894,7 +941,9 @@ class ActRuntimeService {
                     this.threadManager,
                     threadId,
                     this.workingDir,
-                ).catch((error) => {
+                ).then(() => {
+                    this.syncParticipantActorsFromThread(threadId)
+                }).catch((error) => {
                     console.error('[act-runtime] Immediate wake condition cascade error:', error)
                 })
             } else {
@@ -907,6 +956,7 @@ class ActRuntimeService {
 
     async createThread(actId: string, actDefinition?: ActDefinition) {
         const thread = await this.threadManager.createThread(actId, actDefinition)
+        this.actorSystem.markThreadActive(thread.id, actDefinition)
         await this.prewarmActParticipantProjections(actDefinition)
         return {
             ok: true as const,
@@ -942,6 +992,7 @@ class ActRuntimeService {
         if (!deleted) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
         }
+        this.actorSystem.deleteThread(threadId)
         return { ok: true as const }
     }
 
@@ -963,6 +1014,7 @@ class ActRuntimeService {
     async registerParticipantSession(threadId: string, participantKey: string, sessionId: string) {
         await this.ensureThreadsLoaded()
         await this.threadManager.getOrCreateSession(threadId, participantKey, () => sessionId)
+        this.actorSystem.ensureParticipant(threadId, participantKey)
     }
 
     async beginUserTurn(threadId: string) {
@@ -974,12 +1026,16 @@ class ActRuntimeService {
         await this.ensureThreadsLoaded()
         markParticipantQueueRunning(threadId, participantKey)
         await this.threadManager.setParticipantStatus(threadId, participantKey, { type: 'busy' })
+        this.actorSystem.markParticipantWaking(threadId, participantKey)
+        this.syncParticipantActorsFromThread(threadId)
     }
 
     async clearParticipantSessionBusy(threadId: string, participantKey: string) {
         await this.ensureThreadsLoaded()
         clearParticipantQueueRunning(threadId, participantKey)
         await this.threadManager.setParticipantStatus(threadId, participantKey, { type: 'idle' })
+        this.actorSystem.clearParticipantQueue(threadId, participantKey)
+        this.syncParticipantActorsFromThread(threadId)
     }
 
     async setParticipantSessionStatus(
@@ -989,16 +1045,25 @@ class ActRuntimeService {
     ) {
         await this.ensureThreadsLoaded()
         await this.threadManager.setParticipantStatus(threadId, participantKey, status)
+        if (status.type === 'idle') {
+            this.actorSystem.clearParticipantQueue(threadId, participantKey)
+            this.actorSystem.clearParticipantCircuit(threadId, participantKey)
+        } else if (status.type === 'retry') {
+            this.actorSystem.queueParticipant(threadId, participantKey)
+        }
+        this.syncParticipantActorsFromThread(threadId)
     }
 
     async tripParticipantAutoWakeCircuit(threadId: string, participantKey: string, reason: string) {
         await this.ensureThreadsLoaded()
         tripParticipantCircuit(threadId, participantKey, reason)
+        this.actorSystem.openParticipantCircuit(threadId, participantKey, reason)
     }
 
     async clearParticipantAutoWakeCircuit(threadId: string, participantKey: string) {
         await this.ensureThreadsLoaded()
         clearParticipantCircuit(threadId, participantKey)
+        this.actorSystem.clearParticipantCircuit(threadId, participantKey)
     }
 
     async drainParticipantQueue(threadId: string, participantKey: string) {
@@ -1016,6 +1081,8 @@ class ActRuntimeService {
             threadId,
             this.workingDir,
         )
+        this.actorSystem.clearParticipantQueue(threadId, participantKey)
+        this.syncParticipantActorsFromThread(threadId)
     }
 
     /**
@@ -1054,6 +1121,10 @@ class ActRuntimeService {
         const runtime = this.threadManager.getThreadRuntime(threadId)
         if (runtime) {
             processWakeCascade(idleEvent, actDefinition, mailbox, this.threadManager, threadId, this.workingDir)
+                .then((cascadeResult) => {
+                    this.recordWakeCascadeResult(threadId, cascadeResult)
+                    this.syncParticipantActorsFromThread(threadId)
+                })
                 .catch((err) => console.error('[act-runtime] Wake cascade error (runtime.idle):', err))
         }
     }

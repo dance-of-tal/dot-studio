@@ -6,7 +6,7 @@
  * then optionally transitions to model picker on success.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { X, Key, ExternalLink } from 'lucide-react'
 import type { ProviderCard, ProviderAuthMethod, OauthFlow, ConnectedModel, ModelPickerState } from './settings-utils'
 import {
@@ -56,7 +56,7 @@ export default function ProviderConnectModal({
     const defaultMethod = availableMethods.length === 1 ? availableMethods[0] : null
 
     // Determine current step
-    const [selectedStep, setSelectedStep] = useState<Step | null>(null)
+    const autoOpenedProviderRef = useRef<string | null>(null)
     const step: Step = useMemo(() => {
         if (modelPicker) return 'pick-model'
         if (flow?.authType === 'api') return 'api'
@@ -65,12 +65,16 @@ export default function ProviderConnectModal({
     }, [flow?.authType, modelPicker])
 
     useEffect(() => {
-        if (!defaultMethod || flow || modelPicker || selectedStep !== null) {
+        if (!defaultMethod || flow || modelPicker || autoOpenedProviderRef.current === provider.id) {
             return
         }
-        setSelectedStep(defaultMethod.method.type === 'api' ? 'api' : 'oauth')
+        autoOpenedProviderRef.current = provider.id
         void handleAuthMethod(provider, defaultMethod.methodIndex, defaultMethod.method)
-    }, [defaultMethod, flow, handleAuthMethod, modelPicker, provider, selectedStep])
+    }, [defaultMethod, flow, handleAuthMethod, modelPicker, provider])
+
+    useEffect(() => {
+        autoOpenedProviderRef.current = null
+    }, [provider.id])
 
     function handleClose() {
         if (flow) dismissOauthFlow(provider.id)
@@ -79,7 +83,6 @@ export default function ProviderConnectModal({
     }
 
     function handleMethodClick(methodIndex: number, method: ProviderAuthMethod) {
-        setSelectedStep(method.type === 'api' ? 'api' : 'oauth')
         void handleAuthMethod(provider, methodIndex, method)
     }
 

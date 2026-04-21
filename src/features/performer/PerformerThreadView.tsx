@@ -43,7 +43,10 @@ export default function PerformerThreadView({
     const setSessionTodos = useStudioStore((state) => state.setSessionTodos)
     const getDiff = useStudioStore((state) => state.getDiff)
     const [showReview, setShowReview] = useState(false)
-    const [sessionDiffEntries, setSessionDiffEntries] = useState<Array<Record<string, unknown>> | null>(null)
+    const [sessionDiffState, setSessionDiffState] = useState<{
+        sessionId: string
+        entries: Array<Record<string, unknown>>
+    } | null>(null)
     const revertMessageId = revertState?.messageId ?? null
 
     const visibleMessages = useMemo(() => {
@@ -67,14 +70,16 @@ export default function PerformerThreadView({
 
     useEffect(() => {
         if (!sessionId) {
-            setSessionDiffEntries(null)
             return
         }
 
         let active = true
         void getDiff(performerId).then((entries) => {
             if (active) {
-                setSessionDiffEntries(entries || [])
+                setSessionDiffState({
+                    sessionId,
+                    entries: entries || [],
+                })
             }
         })
 
@@ -82,6 +87,10 @@ export default function PerformerThreadView({
             active = false
         }
     }, [getDiff, performerId, sessionId])
+
+    const sessionDiffEntries = sessionDiffState?.sessionId === sessionId
+        ? sessionDiffState.entries
+        : null
 
     const sessionDiffs = useMemo(
         () => normalizeSessionDiffEntries(sessionDiffEntries),

@@ -24,6 +24,13 @@ import {
     registerSessionBinding,
     syncSessionSnapshot,
 } from './session'
+import {
+    clearSessionRuntimeActors,
+    ensureSessionRuntimeActor,
+    patchSessionRuntimeActor,
+    reconcileSessionRuntimeActor,
+    releaseSessionRuntimeActor,
+} from './session/session-runtime-manager'
 import { hasRunningStudioSessions } from './runtime-reload-utils'
 import {
     applyAuthoritativeActThreads,
@@ -130,6 +137,8 @@ export const createIntegrationSlice: StateCreator<
 
     function registerResolvedSessionBinding(sessionId: string, ownerId: string) {
         registerSessionBinding(set, get, ownerId, sessionId)
+        ensureSessionRuntimeActor(set, get, ownerId, sessionId)
+        reconcileSessionRuntimeActor(set, get, ownerId, sessionId)
     }
 
     function bufferPendingSessionEvent(sessionId: string, event: ChatEvent) {
@@ -167,15 +176,12 @@ export const createIntegrationSlice: StateCreator<
         }
 
         registerSessionBinding(set, get, repairedEntry[0], sessionId)
+        ensureSessionRuntimeActor(set, get, repairedEntry[0], sessionId)
+        reconcileSessionRuntimeActor(set, get, repairedEntry[0], sessionId)
         return resolveSessionTarget(get(), sessionId)
     }
 
-    async function ensureSessionTarget(sessionId: string): Promise<SessionStreamTarget | null> {
-        const repaired = repairKnownSessionBinding(sessionId)
-        if (repaired) {
-            return repaired
-        }
-
+    async function resolveSessionBindingFromServer(sessionId: string) {
         try {
             const result = await api.chat.resolveSession(sessionId)
             if (!result.found || !result.ownerId) {
@@ -185,11 +191,28 @@ export const createIntegrationSlice: StateCreator<
 
             failedResolves.delete(sessionId)
             registerResolvedSessionBinding(sessionId, result.ownerId)
-            return resolveSessionTarget(get(), sessionId)
+            return {
+                ownerId: result.ownerId,
+                ownerKind: result.ownerKind,
+            }
         } catch {
             failedResolves.set(sessionId, Date.now())
             return null
         }
+    }
+
+    async function ensureSessionTarget(sessionId: string): Promise<SessionStreamTarget | null> {
+        const repaired = repairKnownSessionBinding(sessionId)
+        if (repaired) {
+            return repaired
+        }
+
+        const resolved = await resolveSessionBindingFromServer(sessionId)
+        if (!resolved) {
+            return null
+        }
+
+        return resolveSessionTarget(get(), sessionId)
     }
 
     async function syncSessionMessages(
@@ -218,6 +241,15 @@ export const createIntegrationSlice: StateCreator<
         }
 
         syncingSessions.add(sessionId)
+        patchSessionRuntimeActor(set, get, {
+            chatKey,
+            sessionId,
+            patch: {
+                syncing: true,
+                optimistic: false,
+                lastSyncReason: options?.reason || 'background',
+            },
+        })
         try {
             logChatDebug('integration', 'sync session messages', {
                 sessionId,
@@ -226,17 +258,25 @@ export const createIntegrationSlice: StateCreator<
                 target: target.kind,
             })
             await syncSessionSnapshot(set, get, chatKey, sessionId)
+            reconcileSessionRuntimeActor(set, get, chatKey, sessionId)
             lastSyncedAt.set(sessionId, Date.now())
         } catch {
             // Ignore background sync failures and keep streamed content.
         } finally {
+            patchSessionRuntimeActor(set, get, {
+                chatKey,
+                sessionId,
+                patch: {
+                    syncing: false,
+                },
+            })
+            reconcileSessionRuntimeActor(set, get, chatKey, sessionId)
             syncingSessions.delete(sessionId)
         }
     }
 
     const sessionSupervisor = createSessionSupervisor({
         get,
-        set,
         syncSessionMessages: (chatKey, sessionId) => syncSessionSnapshot(set, get, chatKey, sessionId),
         setSessionStatus: (sessionId, status) => get().setSessionStatus(sessionId, status),
         setSessionLoading: (sessionId, loading) => get().setSessionLoading(sessionId, loading),
@@ -283,11 +323,70 @@ export const createIntegrationSlice: StateCreator<
 
         reconcileSessionSupervision(target, sessionId, events)
         for (const event of events) {
+            patchSessionRuntimeActor(set, get, {
+                chatKey: streamTargetToChatKey(target),
+                sessionId,
+                patch: buildRuntimePatchFromEvent(event),
+            })
             if (!event.type || !CHAT_EVENT_TYPES.has(event.type)) {
                 continue
             }
             eventIngest.enqueue(event)
         }
+    }
+
+    function buildRuntimePatchFromEvent(event: ChatEvent) {
+        if (event.type === 'session.status') {
+            const status = event.properties?.status as {
+                type?: 'idle' | 'busy' | 'retry' | 'error'
+                attempt?: number
+                message?: string
+            } | undefined
+            return {
+                ...(status?.type ? {
+                    authoritativeStatus: {
+                        type: status.type,
+                        ...(typeof status.attempt === 'number' ? { attempt: status.attempt } : {}),
+                        ...(typeof status.message === 'string' ? { message: status.message } : {}),
+                    },
+                } : {}),
+                optimistic: false,
+                errorMessage: status?.type === 'error' ? status.message || null : null,
+            }
+        }
+        if (event.type === 'session.idle') {
+            return {
+                authoritativeStatus: { type: 'idle' as const },
+                optimistic: false,
+                syncing: false,
+                supervising: false,
+                errorMessage: null,
+            }
+        }
+        if (event.type === 'session.error') {
+            return {
+                authoritativeStatus: { type: 'error' as const, message: String(event.properties?.error || '') },
+                optimistic: false,
+                syncing: false,
+                errorMessage: String(event.properties?.error || ''),
+            }
+        }
+        if (event.type === 'permission.asked') {
+            return { hasPermission: true, optimistic: false }
+        }
+        if (event.type === 'permission.replied') {
+            return { hasPermission: false }
+        }
+        if (event.type === 'question.asked') {
+            return { hasQuestion: true, optimistic: false }
+        }
+        if (event.type === 'question.replied' || event.type === 'question.rejected') {
+            return { hasQuestion: false }
+        }
+        if (event.type?.startsWith('message.')) {
+            return { parked: false }
+        }
+        return {}
     }
 
     async function handleActThreadUpdated(thread: ActThreadRuntimeSnapshot) {
@@ -304,6 +403,7 @@ export const createIntegrationSlice: StateCreator<
         const removedChatKeys = listActThreadChatKeys(state, actId, threadId)
         set((current) => buildDeletedActThreadState(current, actId, threadId))
         for (const chatKey of removedChatKeys) {
+            releaseSessionRuntimeActor(set, get, { chatKey })
             clearChatSessionView(get, chatKey)
         }
     }
@@ -323,22 +423,19 @@ export const createIntegrationSlice: StateCreator<
         pendingResolves.add(sessionId)
         logChatDebug('integration', 'lazy resolve session start', { sessionId })
 
-        api.chat.resolveSession(sessionId)
+        resolveSessionBindingFromServer(sessionId)
             .then((result) => {
                 pendingResolves.delete(sessionId)
-                if (!result.found || !result.ownerId) {
+                if (!result?.ownerId) {
                     logChatDebug('integration', 'lazy resolve session miss', { sessionId })
-                    failedResolves.set(sessionId, Date.now())
                     return
                 }
 
-                failedResolves.delete(sessionId)
                 logChatDebug('integration', 'lazy resolve session hit', {
                     sessionId,
                     ownerId: result.ownerId,
                     ownerKind: result.ownerKind,
                 })
-                registerResolvedSessionBinding(sessionId, result.ownerId)
                 const queuedEvents = takePendingSessionEvents(sessionId)
                 const target = repairKnownSessionBinding(sessionId) || resolveSessionTarget(get(), sessionId)
                 if (target) {
@@ -378,6 +475,8 @@ export const createIntegrationSlice: StateCreator<
                     for (const sessionId of knownSessionIds) {
                         const target = repairKnownSessionBinding(sessionId) || resolveSessionTarget(get(), sessionId)
                         if (target) {
+                            ensureSessionRuntimeActor(set, get, streamTargetToChatKey(target), sessionId)
+                            reconcileSessionRuntimeActor(set, get, streamTargetToChatKey(target), sessionId)
                             void syncSessionMessages(target, sessionId, { reason: 'server.connected' })
                         }
                     }
@@ -452,6 +551,7 @@ export const createIntegrationSlice: StateCreator<
                         tryLazyResolveSession(sessionID)
                         return
                     }
+                    ensureSessionRuntimeActor(set, get, streamTargetToChatKey(knownTarget), sessionID)
                     processResolvedSessionEvents(knownTarget, sessionID, [
                         ...takePendingSessionEvents(sessionID),
                         event,
@@ -484,6 +584,16 @@ export const createIntegrationSlice: StateCreator<
             logChatDebug('integration', 'session idle callback', { sessionId })
             void ensureSessionTarget(sessionId).then((target) => {
                 if (target) {
+                    patchSessionRuntimeActor(set, get, {
+                        chatKey: streamTargetToChatKey(target),
+                        sessionId,
+                        patch: {
+                            authoritativeStatus: { type: 'idle' },
+                            optimistic: false,
+                            syncing: false,
+                            supervising: false,
+                        },
+                    })
                     return syncSessionMessages(target, sessionId, {
                         force: true,
                         reason: 'session.idle',
@@ -501,6 +611,11 @@ export const createIntegrationSlice: StateCreator<
             logChatDebug('integration', 'session compacted callback', { sessionId })
             void ensureSessionTarget(sessionId).then((target) => {
                 if (target) {
+                    patchSessionRuntimeActor(set, get, {
+                        chatKey: streamTargetToChatKey(target),
+                        sessionId,
+                        patch: { syncing: true },
+                    })
                     return syncSessionMessages(target, sessionId, {
                         force: true,
                         reason: 'session.compacted',
@@ -554,6 +669,7 @@ export const createIntegrationSlice: StateCreator<
             chatSlot.setWorkingDir(null)
             eventIngest.dispose()
             sessionSupervisor.dispose()
+            clearSessionRuntimeActors(set, get)
             syncingSessions.clear()
             pendingResolves.clear()
             failedResolves.clear()
@@ -562,10 +678,27 @@ export const createIntegrationSlice: StateCreator<
         },
 
         watchSessionLifecycle: (chatKey, sessionId) => {
+            ensureSessionRuntimeActor(set, get, chatKey, sessionId)
+            patchSessionRuntimeActor(set, get, {
+                chatKey,
+                sessionId,
+                patch: {
+                    supervising: true,
+                    optimistic: false,
+                },
+            })
             sessionSupervisor.schedule(chatKey, sessionId)
         },
 
         stopWatchingSessionLifecycle: (sessionId) => {
+            patchSessionRuntimeActor(set, get, {
+                sessionId,
+                patch: {
+                    supervising: false,
+                    syncing: false,
+                    optimistic: false,
+                },
+            })
             sessionSupervisor.stop(sessionId)
         },
 

@@ -299,10 +299,13 @@ describe('ActRuntimeService projection prewarm', () => {
         })
         expect(second.ok).toBe(true)
 
-        const runtime = (service as any).threadManager.getThreadRuntime(created.thread.id)
+        const runtime = (service as unknown as {
+            threadManager: { getThreadRuntime(threadId: string): { mailbox: { getState(): { wakeConditions: unknown[] } } } | null }
+        }).threadManager.getThreadRuntime(created.thread.id)
         expect(runtime).toBeTruthy()
-        expect(runtime.mailbox.getState().wakeConditions).toHaveLength(1)
-        expect(runtime.mailbox.getState().wakeConditions[0]).toEqual(expect.objectContaining({
+        const wakeConditions = runtime?.mailbox.getState().wakeConditions || []
+        expect(wakeConditions).toHaveLength(1)
+        expect(wakeConditions[0]).toEqual(expect.objectContaining({
             createdBy: 'Analyst',
             onSatisfiedMessage: 'Resume when review-summary exists.',
             condition: { type: 'board_key_exists', key: 'review-summary' },

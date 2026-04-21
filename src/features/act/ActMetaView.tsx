@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
     AlertTriangle, AlertCircle, CheckCircle2, User, ArrowRightLeft, Shield, Trash2,
@@ -18,6 +18,7 @@ export default function ActMetaView() {
         renameAct,
         updateActAuthoringMeta,
         updateActDescription,
+        openActEditor,
         openActParticipantEditor,
         openActRelationEditor,
         unbindPerformerFromAct,
@@ -30,6 +31,7 @@ export default function ActMetaView() {
         renameAct: state.renameAct,
         updateActAuthoringMeta: state.updateActAuthoringMeta,
         updateActDescription: state.updateActDescription,
+        openActEditor: state.openActEditor,
         openActParticipantEditor: state.openActParticipantEditor,
         openActRelationEditor: state.openActRelationEditor,
         unbindPerformerFromAct: state.unbindPerformerFromAct,
@@ -40,12 +42,10 @@ export default function ActMetaView() {
     const act = acts.find((a) => a.id === activeActId)
 
     const meta = act?.meta?.authoring || {}
-    const [activeTab, setActiveTab] = useState<ActEditorTab>(actEditorState?.tab || 'overview')
     const [ruleInput, setRuleInput] = useState('')
-
-    useEffect(() => {
-        setActiveTab(actEditorState?.tab || 'overview')
-    }, [actEditorState?.actId, actEditorState?.tab])
+    const activeTab: ActEditorTab = actEditorState?.mode === 'act' && actEditorState.tab
+        ? actEditorState.tab
+        : 'overview'
 
     const participantKeys = act ? Object.keys(act.participants) : []
 
@@ -100,7 +100,7 @@ export default function ActMetaView() {
                         role="tab"
                         aria-selected={activeTab === tab.key}
                         className={`act-edit-workbench__tab ${activeTab === tab.key ? 'act-edit-workbench__tab--active' : ''}`}
-                        onClick={() => setActiveTab(tab.key)}
+                        onClick={() => openActEditor(activeActId, 'act', { tab: tab.key })}
                     >
                         {tab.icon}
                         <span>{tab.label}</span>

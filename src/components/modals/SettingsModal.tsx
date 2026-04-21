@@ -98,7 +98,7 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                 setLoading(false)
             }
         }
-    }, [workingDir])
+    }, [])
 
     async function refreshProviderState() {
         const mergedProviders = await loadSettingsState()

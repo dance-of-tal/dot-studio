@@ -74,7 +74,7 @@ export type {
 // Server convenience re-exports of types from shared/dot-types.ts
 // Server code can import types from either dot-source or shared/dot-types.
 export type {
-    PerformerAssetV1,
+    PerformerAsset,
     ActAsset,
     ActAssetPayloadV1,
     ActRelationV1,

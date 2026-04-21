@@ -45,6 +45,7 @@ function createMinimalState(overrides: Partial<StudioState> = {}): StudioState {
         chatKeyToSession: {},
         sessionToChatKey: {},
         sessionLoading: {},
+        sessionMutationPending: {},
         activeChatPerformerId: null,
         sessions: [],
         ...overrides,
@@ -80,11 +81,12 @@ describe('chat approvals', () => {
         const state = createMinimalState({
             sePermissions: { [sessionId]: permission },
         })
+        const set = vi.fn()
         const get = () => state
 
         respondPermissionMock.mockResolvedValue(undefined)
 
-        await createChatApprovals(get).respondToPermission(sessionId, permission.id, 'once')
+        await createChatApprovals(set, get).respondToPermission(sessionId, permission.id, 'once')
 
         expect(state.sePermissions[sessionId]).toBeUndefined()
     })
@@ -95,11 +97,12 @@ describe('chat approvals', () => {
         const state = createMinimalState({
             seQuestions: { [sessionId]: question },
         })
+        const set = vi.fn()
         const get = () => state
 
         respondQuestionMock.mockRejectedValue(new Error('boom'))
 
-        await createChatApprovals(get).respondToQuestion(sessionId, question.id, [])
+        await createChatApprovals(set, get).respondToQuestion(sessionId, question.id, [])
 
         expect(state.seQuestions[sessionId]).toEqual(question)
         expect(showToastMock).toHaveBeenCalled()

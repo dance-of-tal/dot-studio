@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components */
 import { useMemo } from 'react'
 import { FileEdit } from 'lucide-react'
 import type { ChatMessage } from '../../types'

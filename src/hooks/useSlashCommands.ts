@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 const SLASH_COMMANDS = [
     { cmd: '/dance', desc: 'Add dance for this turn', mode: 'compose' as const },
@@ -26,9 +26,14 @@ export function useSlashCommands(input: string, setInput: (v: string) => void) {
     const [activeCommand, setActiveCommand] = useState<string | null>(null)
 
     const slashMenuQuery = getSlashMenuQuery(input)
-    const filteredCommands = slashMenuQuery
-        ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith(slashMenuQuery))
-        : []
+    const filteredCommands = useMemo(
+        () => (
+            slashMenuQuery
+                ? SLASH_COMMANDS.filter((c) => c.cmd.startsWith(slashMenuQuery))
+                : []
+        ),
+        [slashMenuQuery],
+    )
 
     const applySelectedCommand = useCallback((command: string) => {
         setActiveCommand(command)

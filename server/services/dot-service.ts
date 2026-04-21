@@ -1,8 +1,21 @@
 import fs from 'fs/promises'
-import { ensureDotDir, getDotDir, getGlobalCwd, getGlobalDotDir, initRegistry, installActWithDependencies, installAsset, installPerformerWithDeps, readAsset, reportInstall, searchRegistry, parsePerformerAsset } from '../lib/dot-source.js'
-import type { PerformerAssetV1 } from '../lib/dot-source.js'
+import {
+    ensureDotDir,
+    getDotDir,
+    getGlobalCwd,
+    getGlobalDotDir,
+    initRegistry,
+    installActWithDependencies,
+    installAsset,
+    installPerformerWithDeps,
+    parsePerformerAsset,
+    readAsset,
+    reportInstall,
+    searchRegistry,
+    startLogin,
+} from '../lib/dot-source.js'
+import type { PerformerAsset } from '../lib/dot-source.js'
 import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, uninstallStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
-import { startDotLogin } from '../lib/dot-login.js'
 import { invalidate } from '../lib/cache.js'
 import { findInstalledDependents } from './asset-service.js'
 
@@ -46,7 +59,7 @@ export async function getDotStatusSnapshot(cwd: string) {
     }
 }
 
-export async function getDotPerformer(cwd: string, urn: string): Promise<PerformerAssetV1 | null> {
+export async function getDotPerformer(cwd: string, urn: string): Promise<PerformerAsset | null> {
     const raw = await readAsset(cwd, urn)
     if (!raw) return null
     try {
@@ -93,7 +106,7 @@ function formatInstalls(count: number): string {
 }
 
 /** Validates canonical performer assets after parsing. */
-export function validateDotPerformer(performer: PerformerAssetV1): void {
+export function validateDotPerformer(performer: PerformerAsset): void {
     // Canonical assets are already validated by parsePerformerAsset,
     // but we can add extra runtime checks if needed.
     if (!performer.payload.tal && (!performer.payload.dances || performer.payload.dances.length === 0)) {
@@ -153,7 +166,7 @@ export async function getDotAuthUser() {
 }
 
 export async function loginToDot() {
-    const result = await startDotLogin()
+    const result = await startLogin()
     return { ok: true, ...result }
 }
 

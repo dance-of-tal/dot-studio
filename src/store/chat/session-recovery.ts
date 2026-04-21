@@ -2,6 +2,7 @@ import { api } from '../../api'
 import type { ChatMessage } from '../../types'
 import { logChatDebug } from '../../lib/chat-debug'
 import type { StudioState } from '../types'
+import { createActor, fromCallback } from 'xstate'
 
 const SESSION_SUPERVISION_START_GRACE_MS = 1200
 const SESSION_SUPERVISION_POLL_MS = 1000
@@ -14,11 +15,9 @@ type SessionStatusLike = {
 }
 
 type RecoveryGet = () => StudioState
-type RecoverySet = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 
 type RecoveryOptions = {
     get: RecoveryGet
-    set: RecoverySet
     syncSessionMessages: (chatKey: string, sessionId: string) => Promise<{ messages: ChatMessage[] } | null>
     setSessionStatus: (sessionId: string, status: SessionStatusLike) => void
     setSessionLoading: (sessionId: string, loading: boolean) => void
@@ -114,13 +113,20 @@ export function shouldStopSessionSupervision(event: ChatEventLike) {
 
 export function createSessionSupervisor(options: RecoveryOptions) {
     const { get, syncSessionMessages, setSessionStatus, setSessionLoading } = options
-    const activeSessions = new Map<string, symbol>()
+    const activeSessions = new Map<string, { stop: () => void }>()
 
     const stop = (sessionId: string) => {
-        activeSessions.delete(sessionId)
+        const actor = activeSessions.get(sessionId)
+        if (actor) {
+            actor.stop()
+            activeSessions.delete(sessionId)
+        }
     }
 
     const dispose = () => {
+        for (const actor of activeSessions.values()) {
+            actor.stop()
+        }
         activeSessions.clear()
     }
 
@@ -131,83 +137,22 @@ export function createSessionSupervisor(options: RecoveryOptions) {
             return
         }
 
-        const supervisionToken = Symbol(sessionId)
-        activeSessions.set(sessionId, supervisionToken)
-
-        void (async () => {
-            const settledSnapshotSessions = new Set<string>()
-
-            try {
-                await sleep(SESSION_SUPERVISION_START_GRACE_MS)
-                if (activeSessions.get(sessionId) !== supervisionToken) {
-                    return
-                }
-
-                logChatDebug('session-supervisor', 'start session supervision', { chatKey, sessionId })
-
-                for (let attempt = 0; attempt < SESSION_SUPERVISION_MAX_POLLS; attempt += 1) {
-                    if (activeSessions.get(sessionId) !== supervisionToken) {
-                        return
-                    }
-
-                    if (bindingChanged(get, chatKey, sessionId)) {
-                        logChatDebug('session-supervisor', 'stop session supervision: binding changed', {
-                            chatKey,
-                            sessionId,
-                            attempt,
-                        })
-                        return
-                    }
-
-                    try {
-                        const statusResult = await api.chat.status(sessionId)
-                        const status = statusResult.status
-
-                        if (status) {
-                            setSessionStatus(sessionId, status)
-                            setSessionLoading(sessionId, false)
-                        }
-
-                        if (hasActiveAuthoritativeStatus(status)) {
-                            settledSnapshotSessions.delete(sessionId)
-                            await syncSnapshotSafely(syncSessionMessages, chatKey, sessionId)
-                            await sleep(SESSION_SUPERVISION_POLL_MS)
-                            continue
-                        }
-
-                        if ((status?.type === 'idle' || status?.type === 'error') && !settledSnapshotSessions.has(sessionId)) {
-                            await syncSnapshotSafely(syncSessionMessages, chatKey, sessionId)
-                            settledSnapshotSessions.add(sessionId)
-                        }
-
-                        if ((status?.type === 'idle' || status?.type === 'error') || !hasOptimisticLoading(get, sessionId)) {
-                            logChatDebug('session-supervisor', 'stop session supervision: settled', {
-                                chatKey,
-                                sessionId,
-                                attempt,
-                                status: status?.type || null,
-                            })
-                            return
-                        }
-                    } catch (error) {
-                        logChatDebug('session-supervisor', 'supervision poll failed', {
-                            chatKey,
-                            sessionId,
-                            attempt,
-                            error: error instanceof Error ? error.message : String(error),
-                        })
-                    }
-
-                    await sleep(SESSION_SUPERVISION_POLL_MS)
-                }
-
-                logChatDebug('session-supervisor', 'session supervision exhausted', { chatKey, sessionId })
-            } finally {
-                if (activeSessions.get(sessionId) === supervisionToken) {
+        const actor = createActor(createSupervisionLogic({
+            chatKey,
+            sessionId,
+            get,
+            syncSessionMessages,
+            setSessionStatus,
+            setSessionLoading,
+            onComplete: () => {
+                const current = activeSessions.get(sessionId)
+                if (current === actor) {
                     activeSessions.delete(sessionId)
                 }
-            }
-        })()
+            },
+        }))
+        activeSessions.set(sessionId, actor)
+        actor.start()
     }
 
     return {
@@ -216,4 +161,108 @@ export function createSessionSupervisor(options: RecoveryOptions) {
         dispose,
         isRunning,
     }
+}
+
+function createSupervisionLogic(input: {
+    chatKey: string
+    sessionId: string
+    get: RecoveryGet
+    syncSessionMessages: RecoveryOptions['syncSessionMessages']
+    setSessionStatus: RecoveryOptions['setSessionStatus']
+    setSessionLoading: RecoveryOptions['setSessionLoading']
+    onComplete: () => void
+}) {
+    return fromCallback(() => {
+        let cancelled = false
+        void (async () => {
+            const settledSnapshotSessions = new Set<string>()
+
+            try {
+                await sleep(SESSION_SUPERVISION_START_GRACE_MS)
+                if (cancelled) {
+                    return
+                }
+
+                logChatDebug('session-supervisor', 'start session supervision', {
+                    chatKey: input.chatKey,
+                    sessionId: input.sessionId,
+                })
+
+                for (let attempt = 0; attempt < SESSION_SUPERVISION_MAX_POLLS; attempt += 1) {
+                    if (cancelled) {
+                        return
+                    }
+
+                    if (bindingChanged(input.get, input.chatKey, input.sessionId)) {
+                        logChatDebug('session-supervisor', 'stop session supervision: binding changed', {
+                            chatKey: input.chatKey,
+                            sessionId: input.sessionId,
+                            attempt,
+                        })
+                        return
+                    }
+
+                    try {
+                        const statusResult = await api.chat.status(input.sessionId)
+                        const status = statusResult.status
+
+                        if (status) {
+                            input.setSessionStatus(input.sessionId, status)
+                            input.setSessionLoading(input.sessionId, false)
+                        }
+
+                        if (hasActiveAuthoritativeStatus(status)) {
+                            settledSnapshotSessions.delete(input.sessionId)
+                            await syncSnapshotSafely(
+                                input.syncSessionMessages,
+                                input.chatKey,
+                                input.sessionId,
+                            )
+                            await sleep(SESSION_SUPERVISION_POLL_MS)
+                            continue
+                        }
+
+                        if ((status?.type === 'idle' || status?.type === 'error') && !settledSnapshotSessions.has(input.sessionId)) {
+                            await syncSnapshotSafely(
+                                input.syncSessionMessages,
+                                input.chatKey,
+                                input.sessionId,
+                            )
+                            settledSnapshotSessions.add(input.sessionId)
+                        }
+
+                        if ((status?.type === 'idle' || status?.type === 'error') || !hasOptimisticLoading(input.get, input.sessionId)) {
+                            logChatDebug('session-supervisor', 'stop session supervision: settled', {
+                                chatKey: input.chatKey,
+                                sessionId: input.sessionId,
+                                attempt,
+                                status: status?.type || null,
+                            })
+                            return
+                        }
+                    } catch (error) {
+                        logChatDebug('session-supervisor', 'supervision poll failed', {
+                            chatKey: input.chatKey,
+                            sessionId: input.sessionId,
+                            attempt,
+                            error: error instanceof Error ? error.message : String(error),
+                        })
+                    }
+
+                    await sleep(SESSION_SUPERVISION_POLL_MS)
+                }
+
+                logChatDebug('session-supervisor', 'session supervision exhausted', {
+                    chatKey: input.chatKey,
+                    sessionId: input.sessionId,
+                })
+            } finally {
+                input.onComplete()
+            }
+        })()
+
+        return () => {
+            cancelled = true
+        }
+    })
 }

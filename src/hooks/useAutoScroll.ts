@@ -262,10 +262,10 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
             : null
 
         userScrolledRef.current = savedState?.userScrolled ?? false
-        setUserScrolled(savedState?.userScrolled ?? false)
         pendingRestoreRef.current = savedState ?? 'bottom'
 
         queueMicrotask(() => {
+            setUserScrolled(savedState?.userScrolled ?? false)
             applyPendingRestore()
         })
     }, [applyPendingRestore, persistState, restoreMode, stateKey])
@@ -281,7 +281,9 @@ export function useAutoScroll(options: UseAutoScrollOptions): UseAutoScrollRetur
             return
         }
 
-        followIfPinnedToBottom()
+        queueMicrotask(() => {
+            followIfPinnedToBottom()
+        })
     }, [applyPendingRestore, contentVersion, followIfPinnedToBottom])
 
     useEffect(() => {

@@ -44,7 +44,6 @@ describe('createSessionSupervisor', () => {
 
         const supervisor = createSessionSupervisor({
             get: get as never,
-            set: vi.fn() as never,
             syncSessionMessages,
             setSessionStatus,
             setSessionLoading: (sessionId, loading) => {

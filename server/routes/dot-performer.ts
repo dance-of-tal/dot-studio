@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { PerformerAssetV1 } from '../lib/dot-source.js'
+import type { PerformerAsset } from '../lib/dot-source.js'
 import {
     getDotPerformer,
     searchDotRegistry,
@@ -49,7 +49,7 @@ dotPerformer.get('/api/dot/search', async (c) => {
 })
 
 dotPerformer.post('/api/dot/validate', async (c) => {
-    const performer = await c.req.json<PerformerAssetV1>()
+    const performer = await c.req.json<PerformerAsset>()
     try {
         validateDotPerformer(performer)
         return c.json({ valid: true })

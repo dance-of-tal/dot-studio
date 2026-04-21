@@ -107,7 +107,7 @@ export function usePerformerChatComposerState({
         inputRef.current?.focus()
     }, [inputRef, setShowSlashMenu])
 
-    const handleSend = useCallback(() => {
+    const handleSend = () => {
         if (!input.trim() || isLoading || !modelConfigured || danceSlashMatch !== null) return
         const text = input.trim()
         setInput('')
@@ -149,18 +149,7 @@ export function usePerformerChatComposerState({
         )
         setAttachments([])
         setTurnDanceSelections([])
-    }, [
-        attachments,
-        danceSlashMatch,
-        input,
-        isLoading,
-        modelConfigured,
-        runtimeTools,
-        sendMessage,
-        setIsFileMentioning,
-        setShowSlashMenu,
-        turnDanceSelections,
-    ])
+    }
 
     const handleInputChange = (value: string) => {
         setDanceSearchIndex(0)

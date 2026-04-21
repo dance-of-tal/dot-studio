@@ -23,6 +23,11 @@ import {
     resolveChatKeySession,
     selectMessagesForChatKey,
 } from '../session'
+import {
+    ensureSessionRuntimeActor,
+    patchSessionRuntimeActor,
+    reconcileSessionRuntimeActor,
+} from '../session/session-runtime-manager'
 import { preparePendingRuntimeExecution } from '../runtime-execution'
 import { projectionDirtyPatchHasAny } from '../../../shared/projection-dirty'
 
@@ -77,13 +82,21 @@ export function createChatSendActions(
             preserveDraftMessages?: boolean
         },
     ) => Promise<{ sessionId: string | null; runtimeConfig: ChatRuntimeConfig }>,
-) {
-    const rollbackOptimisticMessage = (chatKey: string, messageId: string, sessionId?: string) => {
+    ) {
+        const rollbackOptimisticMessage = (chatKey: string, messageId: string, sessionId?: string) => {
         get().removeChatDraftMessage(chatKey, messageId)
         if (sessionId) {
             get().removeSessionMessage(sessionId, messageId)
-            get().setSessionLoading(sessionId, false)
         }
+        patchSessionRuntimeActor(set, get, {
+            chatKey,
+            sessionId,
+            patch: {
+                optimistic: false,
+                syncing: false,
+                errorMessage: null,
+            },
+        })
     }
 
     const applyOptimisticStandaloneSidebarTitle = (sessionId: string, sidebarTitle: string) => {
@@ -148,6 +161,7 @@ export function createChatSendActions(
         if (!target) {
             return
         }
+        ensureSessionRuntimeActor(set, get, chatKey, sessionId)
 
         if (target.kind === 'assistant' && target.assistantContext) {
             const refreshedModels = await api.models.list().catch(() => null)
@@ -213,12 +227,21 @@ export function createChatSendActions(
 
         const optimisticMsg = createOptimisticUserMessage(text, runtimeConfig, attachments)
         appendChatMessage(set, get, chatKey, optimisticMsg)
+        patchSessionRuntimeActor(set, get, {
+            chatKey,
+            sessionId,
+            patch: {
+                optimistic: true,
+                syncing: false,
+                errorMessage: null,
+            },
+        })
 
         const existingSessionId = resolveChatKeySession(get, chatKey) || undefined
         if (existingSessionId) {
             registerSessionBinding(set, get, chatKey, existingSessionId)
             get().clearSessionRevert(existingSessionId)
-            get().setSessionLoading(existingSessionId, true)
+            reconcileSessionRuntimeActor(set, get, chatKey, existingSessionId)
         }
 
         get().initRealtimeEvents()
@@ -235,7 +258,12 @@ export function createChatSendActions(
                     registerSessionBinding(set, get, chatKey, sessionId)
                     get().clearSessionRevert(sessionId)
                     moveDraftMessageToSession(set, get, chatKey, sessionId, optimisticMsg.id)
-                    get().setSessionLoading(sessionId, true)
+                    reconcileSessionRuntimeActor(set, get, chatKey, sessionId)
+                    patchSessionRuntimeActor(set, get, {
+                        chatKey,
+                        sessionId,
+                        patch: { optimistic: true },
+                    })
                 }
             } catch (error) {
                 console.error('Failed to create session', error)
@@ -290,6 +318,7 @@ export function createChatSendActions(
             if (target.kind !== 'act-participant') {
                 get().watchSessionLifecycle(chatKey, sessionId)
             }
+            reconcileSessionRuntimeActor(set, get, chatKey, sessionId)
             if (shouldSeedThreadTitle) {
                 scheduleThreadTitleRefresh(target)
             }
@@ -307,7 +336,14 @@ export function createChatSendActions(
                 content: formatStudioApiErrorMessage(error),
                 timestamp: Date.now(),
             })
-            get().setSessionLoading(sessionId, false)
+            patchSessionRuntimeActor(set, get, {
+                chatKey,
+                sessionId,
+                patch: {
+                    optimistic: false,
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                },
+            })
         }
     }
 
