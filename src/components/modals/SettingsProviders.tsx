@@ -6,7 +6,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ProviderAuthMethod, ProviderCard, OauthFlow } from './settings-utils'
-import type { ConnectedModel, ModelPickerState } from './settings-utils'
 import {
     buildProviderAuthOptions,
     getAllProviderCards,
@@ -21,28 +20,22 @@ interface SettingsProvidersProps {
     providers: ProviderCard[]
     oauthFlows: Record<string, OauthFlow>
     setOauthFlows: React.Dispatch<React.SetStateAction<Record<string, OauthFlow>>>
-    modelPicker: ModelPickerState | null
-    setModelPicker: React.Dispatch<React.SetStateAction<ModelPickerState | null>>
-    visibleModelPickerModels: ConnectedModel[]
     handleAuthMethod: (provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) => void
     handleOauthPromptSubmit: (providerId: string) => void
     handleOauthCallback: (providerId: string) => void
     handleApiAuthSave: (providerId: string) => void
     dismissOauthFlow: (providerId: string) => void
     disconnectProvider: (providerId: string, providerName: string) => void
-    applyPickedModel: (model: ConnectedModel) => void
     retryBrowserOauth: (providerId: string) => void
     statusMessage: string | null
-    awaitModelAssignmentOnConnect: boolean
 }
 
 export default function SettingsProviders(props: SettingsProvidersProps) {
     const {
-        providers, oauthFlows, setOauthFlows, modelPicker, setModelPicker,
-        visibleModelPickerModels, handleAuthMethod, handleOauthPromptSubmit,
+        providers, oauthFlows, setOauthFlows, handleAuthMethod, handleOauthPromptSubmit,
         handleOauthCallback, handleApiAuthSave, dismissOauthFlow,
-        disconnectProvider, applyPickedModel,
-        retryBrowserOauth, statusMessage, awaitModelAssignmentOnConnect,
+        disconnectProvider,
+        retryBrowserOauth, statusMessage,
     } = props
 
     const [connectTargetId, setConnectTargetId] = useState<string | null>(null)
@@ -56,11 +49,9 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
         [connectTargetId, providers],
     )
     const connectFlow = connectTargetId ? oauthFlows[connectTargetId] : undefined
-    const connectModelPicker = modelPicker?.providerId === connectTargetId ? modelPicker : null
     const shouldShowConnectModal = shouldShowProviderConnectModal(
         connectTarget,
         connectFlow,
-        connectModelPicker,
     )
 
     useEffect(() => {
@@ -71,17 +62,13 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
         if (shouldAutoCloseProviderConnectModal(
             connectTarget,
             connectFlow,
-            connectModelPicker,
-            awaitModelAssignmentOnConnect,
         )) {
             queueMicrotask(() => {
                 setConnectTargetId((current) => (current === connectTargetId ? null : current))
             })
         }
     }, [
-        awaitModelAssignmentOnConnect,
         connectFlow,
-        connectModelPicker,
         connectTarget,
         connectTargetId,
     ])
@@ -175,8 +162,6 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                 <ProviderConnectModal
                     provider={connectTarget}
                     flow={connectFlow}
-                    modelPicker={connectModelPicker}
-                    visibleModelPickerModels={visibleModelPickerModels}
                     onClose={() => setConnectTargetId(null)}
                     handleAuthMethod={handleAuthMethod}
                     handleOauthPromptSubmit={handleOauthPromptSubmit}
@@ -185,8 +170,6 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                     dismissOauthFlow={dismissOauthFlow}
                     retryBrowserOauth={retryBrowserOauth}
                     setOauthFlows={setOauthFlows}
-                    applyPickedModel={applyPickedModel}
-                    setModelPicker={setModelPicker}
                 />
             )}
         </div>

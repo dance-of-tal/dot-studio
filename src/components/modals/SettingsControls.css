@@ -185,52 +185,6 @@
     margin-top: 8px;
 }
 
-/* ── Model picker (inline after provider connect) ──── */
-.stg-model-picker {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.stg-model-picker__list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-height: 180px;
-    overflow-y: auto;
-}
-
-.stg-model-opt {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    width: 100%;
-    border: 1px solid var(--border-light);
-    background: var(--bg-canvas);
-    color: var(--text-primary);
-    border-radius: var(--radius-md, 6px);
-    padding: 8px 10px;
-    cursor: pointer;
-    text-align: left;
-}
-
-.stg-model-opt:hover {
-    border-color: var(--accent);
-    background: var(--bg-panel);
-}
-
-.stg-model-opt__name {
-    font-size: var(--font-base);
-    font-weight: 600;
-}
-
-.stg-model-opt__meta {
-    font-size: var(--font-sm);
-    color: var(--text-muted);
-}
-
 /* ── Models list container ──────────────────────────── */
 .stg-models-list {
     display: flex;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Settings, X, Sliders, Server, LayoutGrid } from 'lucide-react'
 import { api } from '../../api'
@@ -40,9 +40,6 @@ const SECTIONS: SidebarSection[] = [
 export default function SettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
     const queryClient = useQueryClient()
     const workingDir = useStudioStore((state) => state.workingDir)
-    const performers = useStudioStore((state) => state.performers)
-    const selectedPerformerId = useStudioStore((state) => state.selectedPerformerId)
-    const setPerformerModel = useStudioStore((state) => state.setPerformerModel)
 
     const [providers, setProviders] = useState<ProviderCard[]>([])
     const [loading, setLoading] = useState(true)
@@ -52,11 +49,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
     const [refreshToken, setRefreshToken] = useState(0)
     const providersRef = useRef<ProviderCard[]>([])
     const loadRequestIdRef = useRef(0)
-
-    const selectedPerformer = useMemo(
-        () => performers.find((p) => p.id === selectedPerformerId) || null,
-        [performers, selectedPerformerId],
-    )
 
     useEffect(() => {
         providersRef.current = providers
@@ -107,8 +99,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
     const auth = useProviderAuth({
         providers,
-        selectedPerformer: selectedPerformer ? { id: selectedPerformer.id, name: selectedPerformer.name } : null,
-        setPerformerModel,
         refreshProviderState,
         setError,
         setStatusMessage,
@@ -154,19 +144,14 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                         providers={providers}
                         oauthFlows={auth.oauthFlows}
                         setOauthFlows={auth.setOauthFlows}
-                        modelPicker={auth.modelPicker}
-                        setModelPicker={auth.setModelPicker}
-                        visibleModelPickerModels={auth.visibleModelPickerModels}
                         handleAuthMethod={auth.handleAuthMethod}
                         handleOauthPromptSubmit={auth.handleOauthPromptSubmit}
                         handleOauthCallback={auth.handleOauthCallback}
                         handleApiAuthSave={auth.handleApiAuthSave}
                         dismissOauthFlow={auth.dismissOauthFlow}
                         disconnectProvider={auth.disconnectProvider}
-                        applyPickedModel={auth.applyPickedModel}
                         retryBrowserOauth={auth.retryBrowserOauth}
                         statusMessage={statusMessage}
-                        awaitModelAssignmentOnConnect={!!selectedPerformer}
                     />
                 )
 

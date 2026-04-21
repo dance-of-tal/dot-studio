@@ -7,7 +7,6 @@ import {
     buildProviderCards,
     buildVisibleProviderPromptInputs,
     createPromptValueDraft,
-    getProviderAuthSuccessAction,
     getConnectedProviderCards,
     getPopularProviderCards,
     shouldAutoCloseProviderConnectModal,
@@ -195,16 +194,6 @@ describe('provider auth prompts', () => {
     })
 })
 
-describe('getProviderAuthSuccessAction', () => {
-    it('closes the modal when no performer is selected', () => {
-        expect(getProviderAuthSuccessAction(null)).toBe('close-modal')
-    })
-
-    it('opens the model picker when a performer is selected', () => {
-        expect(getProviderAuthSuccessAction({ id: 'p1', name: 'Lead' })).toBe('pick-model')
-    })
-})
-
 describe('buildProviderCards', () => {
     it('attaches auth methods to providers returned by opencode', () => {
         const merged = buildProviderCards([
@@ -335,11 +324,11 @@ describe('shouldShowProviderConnectModal', () => {
             authMethods: [],
         }
 
-        expect(shouldShowProviderConnectModal(provider, undefined, null)).toBe(true)
+        expect(shouldShowProviderConnectModal(provider, undefined)).toBe(true)
     })
 
     it('stays closed when there is no provider and no active flow', () => {
-        expect(shouldShowProviderConnectModal(null, undefined, null)).toBe(false)
+        expect(shouldShowProviderConnectModal(null, undefined)).toBe(false)
     })
 })
 
@@ -356,11 +345,21 @@ describe('shouldAutoCloseProviderConnectModal', () => {
         authMethods: [{ type: 'oauth', label: 'Browser OAuth' }],
     }
 
-    it('closes the connect modal after auth succeeds in settings-only flows', () => {
-        expect(shouldAutoCloseProviderConnectModal(connectedProvider, undefined, null, false)).toBe(true)
+    it('closes the connect modal after auth succeeds', () => {
+        expect(shouldAutoCloseProviderConnectModal(connectedProvider, undefined)).toBe(true)
     })
 
-    it('keeps the modal open when a follow-up model assignment is expected', () => {
-        expect(shouldAutoCloseProviderConnectModal(connectedProvider, undefined, null, true)).toBe(false)
+    it('keeps the modal open while auth flow state is active', () => {
+        expect(shouldAutoCloseProviderConnectModal(connectedProvider, {
+            authType: 'oauth',
+            methodIndex: 0,
+            label: 'Browser OAuth',
+            mode: 'auto',
+            instructions: '',
+            code: '',
+            submitting: true,
+            prompts: [],
+            promptValues: {},
+        })).toBe(false)
     })
 })

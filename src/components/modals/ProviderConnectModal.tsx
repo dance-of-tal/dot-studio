@@ -2,13 +2,12 @@
  * ProviderConnectModal — Dedicated modal for provider connection.
  *
  * Opens inside the settings overlay when a user clicks "Connect" on a provider.
- * Shows auth method options, handles API key input and OAuth flows,
- * then optionally transitions to model picker on success.
+ * Shows auth method options and handles API key input and OAuth flows.
  */
 
 import { useEffect, useMemo, useRef } from 'react'
 import { X, Key, ExternalLink } from 'lucide-react'
-import type { ProviderCard, ProviderAuthMethod, OauthFlow, ConnectedModel, ModelPickerState } from './settings-utils'
+import type { ProviderCard, ProviderAuthMethod, OauthFlow } from './settings-utils'
 import {
     areVisibleProviderPromptsComplete,
     buildProviderAuthOptions,
@@ -17,13 +16,11 @@ import {
 } from './settings-utils'
 import './ProviderConnectModal.css'
 
-type Step = 'choose' | 'api' | 'oauth' | 'pick-model'
+type Step = 'choose' | 'api' | 'oauth'
 
 interface ProviderConnectModalProps {
     provider: ProviderCard
     flow: OauthFlow | undefined
-    modelPicker: ModelPickerState | null
-    visibleModelPickerModels: ConnectedModel[]
     onClose: () => void
     handleAuthMethod: (provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) => void
     handleOauthPromptSubmit: (providerId: string) => void
@@ -32,15 +29,11 @@ interface ProviderConnectModalProps {
     dismissOauthFlow: (providerId: string) => void
     retryBrowserOauth: (providerId: string) => void
     setOauthFlows: React.Dispatch<React.SetStateAction<Record<string, OauthFlow>>>
-    applyPickedModel: (model: ConnectedModel) => void
-    setModelPicker: React.Dispatch<React.SetStateAction<ModelPickerState | null>>
 }
 
 export default function ProviderConnectModal({
     provider,
     flow,
-    modelPicker,
-    visibleModelPickerModels,
     onClose,
     handleAuthMethod,
     handleOauthPromptSubmit,
@@ -49,8 +42,6 @@ export default function ProviderConnectModal({
     dismissOauthFlow,
     retryBrowserOauth,
     setOauthFlows,
-    applyPickedModel,
-    setModelPicker,
 }: ProviderConnectModalProps) {
     const availableMethods = buildProviderAuthOptions(provider)
     const defaultMethod = availableMethods.length === 1 ? availableMethods[0] : null
@@ -58,19 +49,18 @@ export default function ProviderConnectModal({
     // Determine current step
     const autoOpenedProviderRef = useRef<string | null>(null)
     const step: Step = useMemo(() => {
-        if (modelPicker) return 'pick-model'
         if (flow?.authType === 'api') return 'api'
         if (flow?.authType === 'oauth') return 'oauth'
         return 'choose'
-    }, [flow?.authType, modelPicker])
+    }, [flow?.authType])
 
     useEffect(() => {
-        if (!defaultMethod || flow || modelPicker || autoOpenedProviderRef.current === provider.id) {
+        if (!defaultMethod || flow || autoOpenedProviderRef.current === provider.id) {
             return
         }
         autoOpenedProviderRef.current = provider.id
         void handleAuthMethod(provider, defaultMethod.methodIndex, defaultMethod.method)
-    }, [defaultMethod, flow, handleAuthMethod, modelPicker, provider])
+    }, [defaultMethod, flow, handleAuthMethod, provider])
 
     useEffect(() => {
         autoOpenedProviderRef.current = null
@@ -78,7 +68,6 @@ export default function ProviderConnectModal({
 
     function handleClose() {
         if (flow) dismissOauthFlow(provider.id)
-        if (modelPicker) setModelPicker(null)
         onClose()
     }
 
@@ -155,7 +144,7 @@ export default function ProviderConnectModal({
                 {/* Header */}
                 <div className="provider-connect-modal__header">
                     <span className="provider-connect-modal__title">
-                        {step === 'pick-model' ? 'Choose Model' : `Connect ${provider.name}`}
+                        {`Connect ${provider.name}`}
                     </span>
                     <button className="icon-btn" onClick={handleClose}>
                         <X size={14} />
@@ -278,40 +267,6 @@ export default function ProviderConnectModal({
                                 </>
                             )}
                             {flow.error && <div className="alert alert--error">{flow.error}</div>}
-                        </div>
-                    )}
-
-                    {/* Step: Model picker */}
-                    {step === 'pick-model' && modelPicker && (
-                        <div className="stg-model-picker">
-                            <div className="alert alert--success">
-                                {provider.name} connected! Pick a model to assign.
-                            </div>
-                            <input
-                                className="input"
-                                value={modelPicker.query}
-                                onChange={(e) => setModelPicker((cur) => cur ? { ...cur, query: e.target.value } : cur)}
-                                placeholder={`Search ${modelPicker.providerName} models`}
-                                autoFocus
-                            />
-                            <div className="stg-model-picker__list">
-                                {visibleModelPickerModels.slice(0, 12).map((model) => (
-                                    <button
-                                        key={`${model.provider}:${model.id}`}
-                                        className="stg-model-opt"
-                                        onClick={() => { applyPickedModel(model); handleClose() }}
-                                    >
-                                        <span className="stg-model-opt__name">{model.name || model.id}</span>
-                                        <span className="stg-model-opt__meta">
-                                            {model.id}
-                                            {model.toolCall ? ' · tools' : ''}{model.reasoning ? ' · reasoning' : ''}
-                                        </span>
-                                    </button>
-                                ))}
-                                {visibleModelPickerModels.length === 0 && (
-                                    <div className="alert alert--muted">No models matched.</div>
-                                )}
-                            </div>
                         </div>
                     )}
                 </div>

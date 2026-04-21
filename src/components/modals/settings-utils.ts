@@ -51,15 +51,6 @@ export type ConnectedModel = {
     reasoning: boolean
 }
 
-export type ModelPickerState = {
-    providerId: string
-    providerName: string
-    performerId: string | null
-    performerName: string | null
-    models: ConnectedModel[]
-    query: string
-}
-
 /** Auto-detect: server text starting with http(s):// is a remote MCP server */
 export function isRemoteServer(serverText: string): boolean {
     const trimmed = serverText.trim().toLowerCase()
@@ -130,13 +121,12 @@ export function buildProviderAuthOptions(provider: ProviderCard): ProviderAuthOp
 export function shouldShowProviderConnectModal(
     provider: ProviderCard | null | undefined,
     flow: OauthFlow | undefined,
-    modelPicker: ModelPickerState | null,
 ) {
     if (!provider) {
         return false
     }
 
-    if (flow || modelPicker) {
+    if (flow) {
         return true
     }
 
@@ -146,20 +136,8 @@ export function shouldShowProviderConnectModal(
 export function shouldAutoCloseProviderConnectModal(
     provider: ProviderCard | null | undefined,
     flow: OauthFlow | undefined,
-    modelPicker: ModelPickerState | null,
-    awaitModelAssignmentOnConnect: boolean,
 ) {
-    if (awaitModelAssignmentOnConnect) {
-        return false
-    }
-
-    return !!provider && provider.connected && !flow && !modelPicker
-}
-
-export function getProviderAuthSuccessAction(
-    selectedPerformer: { id: string; name: string } | null,
-) {
-    return selectedPerformer ? 'pick-model' : 'close-modal'
+    return !!provider && provider.connected && !flow
 }
 
 export function labelForAuthMethod(method: ProviderAuthMethod) {

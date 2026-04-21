@@ -3,25 +3,22 @@
  * extracted from SettingsModal.
  *
  * Manages: OAuth flow state, browser-auth wait, provider-defined auth prompts,
- * API key save, model picker, provider disconnect.
+ * API key save, and provider disconnect.
  */
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import type {
     ProviderCard,
     ProviderAuthMethod,
     OauthFlow,
-    ConnectedModel,
-    ModelPickerState,
 } from './settings-utils'
 import {
     areVisibleProviderPromptsComplete,
     buildApiKeyProviderAuth,
     buildVisibleProviderPromptInputs,
     createPromptValueDraft,
-    getProviderAuthSuccessAction,
 } from './settings-utils'
 
 type ProjectConfigResponseLike = {
@@ -32,27 +29,6 @@ type ProjectConfigResponseLike = {
             models?: Record<string, unknown>
         }>
     }
-}
-
-function sortConnectedModels(models: ConnectedModel[], providerId: string) {
-    return models
-        .filter((model) => model.provider === providerId && model.connected)
-        .sort((left, right) => {
-            const leftName = left.name || left.id
-            const rightName = right.name || right.id
-            if (left.toolCall !== right.toolCall) {
-                return left.toolCall ? -1 : 1
-            }
-            return leftName.localeCompare(rightName)
-        })
-}
-
-function filterModelPickerModels(modelPicker: ModelPickerState) {
-    const query = modelPicker.query.trim().toLowerCase()
-    return modelPicker.models.filter((model) => {
-        if (!query) return true
-        return `${model.name} ${model.id}`.toLowerCase().includes(query)
-    })
 }
 
 function buildApiInstructions(provider: ProviderCard, method?: ProviderAuthMethod) {
@@ -85,8 +61,6 @@ function findProviderMethod(
 
 interface UseProviderAuthOptions {
     providers: ProviderCard[]
-    selectedPerformer: { id: string; name: string } | null
-    setPerformerModel: (id: string, model: { provider: string; modelId: string }) => void
     refreshProviderState: () => Promise<ProviderCard[]>
     setError: (msg: string | null) => void
     setStatusMessage: (msg: string | null) => void
@@ -95,20 +69,12 @@ interface UseProviderAuthOptions {
 export function useProviderAuth(options: UseProviderAuthOptions) {
     const {
         providers,
-        selectedPerformer,
-        setPerformerModel,
         refreshProviderState,
         setError,
         setStatusMessage,
     } = options
 
     const [oauthFlows, setOauthFlows] = useState<Record<string, OauthFlow>>({})
-    const [modelPicker, setModelPicker] = useState<ModelPickerState | null>(null)
-
-    const visibleModelPickerModels = useMemo(
-        () => modelPicker ? filterModelPickerModels(modelPicker) : [],
-        [modelPicker],
-    )
 
     function clearProviderFlow(providerId: string) {
         setOauthFlows((current) => {
@@ -131,34 +97,12 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
         })
     }
 
-    async function openModelPicker(providerId: string, providerName: string) {
-        const performer = selectedPerformer
-        const models = await api.models.list()
-        const connectedModels = sortConnectedModels(models, providerId)
-
-        setModelPicker({
-            providerId,
-            providerName,
-            performerId: performer?.id || null,
-            performerName: performer?.name || null,
-            models: connectedModels,
-            query: '',
-        })
-    }
-
     async function handleAuthSuccess(providerId: string, providerName: string) {
         const refreshedProviders = await refreshProviderState()
         const refreshedProvider = refreshedProviders.find((provider) => provider.id === providerId)
         const nextProviderName = refreshedProvider?.name || providerName
 
-        if (getProviderAuthSuccessAction(selectedPerformer) === 'pick-model') {
-            await openModelPicker(providerId, nextProviderName)
-            clearProviderFlow(providerId)
-            return
-        }
-
         clearProviderFlow(providerId)
-        setModelPicker((current) => current?.providerId === providerId ? null : current)
         setStatusMessage(`${nextProviderName} connected.`)
     }
 
@@ -179,7 +123,6 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
     }
 
     function openApiKeyFlow(provider: ProviderCard, methodIndex = -1, method?: ProviderAuthMethod) {
-        setModelPicker(null)
         setOauthFlows((current) => ({
             ...current,
             [provider.id]: {
@@ -198,7 +141,6 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
     }
 
     function openOauthPromptFlow(provider: ProviderCard, methodIndex: number, method: ProviderAuthMethod) {
-        setModelPicker(null)
         setOauthFlows((current) => ({
             ...current,
             [provider.id]: {
@@ -433,24 +375,11 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
                 }
             }
             clearProviderFlow(providerId)
-            setModelPicker((current) => current?.providerId === providerId ? null : current)
             await refreshProviderState()
             setStatusMessage(`${providerName} credentials cleared from OpenCode auth store.`)
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err))
         }
-    }
-
-    function applyPickedModel(model: ConnectedModel) {
-        if (!modelPicker?.performerId) {
-            return
-        }
-        setPerformerModel(modelPicker.performerId, {
-            provider: model.provider,
-            modelId: model.id,
-        })
-        setStatusMessage(`${model.name || model.id} applied to ${modelPicker.performerName || 'the selected performer'}.`)
-        setModelPicker(null)
     }
 
     async function retryBrowserOauth(providerId: string) {
@@ -486,16 +415,12 @@ export function useProviderAuth(options: UseProviderAuthOptions) {
     return {
         oauthFlows,
         setOauthFlows,
-        modelPicker,
-        setModelPicker,
-        visibleModelPickerModels,
         handleAuthMethod,
         handleOauthPromptSubmit,
         handleOauthCallback,
         handleApiAuthSave,
         dismissOauthFlow,
         disconnectProvider,
-        applyPickedModel,
         retryBrowserOauth,
         syncFlowsWithProviders,
     }
