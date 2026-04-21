@@ -13,7 +13,7 @@ import {
 import { resolveCanvasResizeChange } from './canvas-resize-router'
 
 type EditingTargetLike = WorkspaceSlice['editingTarget']
-type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
+type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'act'
 
 type UseCanvasFlowHandlersArgs = {
     nodes: Node[]
@@ -37,13 +37,11 @@ type UseCanvasFlowHandlersArgs = {
     onNodesChange: (changes: NodeChange<Node>[]) => void
     updateMarkdownEditorPosition: (id: string, x: number, y: number) => void
     updateCanvasTerminalPosition: (id: string, x: number, y: number) => void
-    updateTrackingWindowPosition: (x: number, y: number) => void
     updateActPosition: (id: string, x: number, y: number) => void
     updatePerformerPosition: (id: string, x: number, y: number) => void
     updateActSize: (id: string, width: number, height: number) => void
     updateMarkdownEditorSize: (id: string, width: number, height: number) => void
     updateCanvasTerminalSize: (id: string, width: number, height: number) => void
-    updateTrackingWindowSize: (width: number, height: number) => void
     updatePerformerSize: (id: string, width: number, height: number) => void
 }
 
@@ -70,13 +68,11 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         onNodesChange,
         updateMarkdownEditorPosition,
         updateCanvasTerminalPosition,
-        updateTrackingWindowPosition,
         updateActPosition,
         updatePerformerPosition,
         updateActSize,
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
-        updateTrackingWindowSize,
         updatePerformerSize,
     } = args
 
@@ -97,9 +93,6 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
             case 'canvasTerminal':
                 updateCanvasTerminalPosition(result.id, result.x, result.y)
                 return
-            case 'stageTracking':
-                updateTrackingWindowPosition(result.x, result.y)
-                return
             case 'act':
                 updateActPosition(result.id, result.x, result.y)
                 return
@@ -110,7 +103,6 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
     }, [
         updateMarkdownEditorPosition,
         updateCanvasTerminalPosition,
-        updateTrackingWindowPosition,
         updateActPosition,
         updatePerformerPosition,
     ])
@@ -133,7 +125,6 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
                 selectMarkdownEditor(result.id)
                 return
             case 'canvasTerminal':
-            case 'stageTracking':
                 closeEditor()
                 // Don't exit Act edit mode when clicking other canvas elements
                 if (!editingActId) {
@@ -248,8 +239,7 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
             if (!resizeResult) return
 
             const ownsResize = (
-                ('id' in resizeResult && !!transformTarget && transformTarget.id === resizeResult.id && transformTarget.type === resizeResult.kind)
-                || (resizeResult.kind === 'stageTracking' && transformTarget?.type === 'stageTracking')
+                'id' in resizeResult && !!transformTarget && transformTarget.id === resizeResult.id && transformTarget.type === resizeResult.kind
             )
             if (!ownsResize) return
 
@@ -259,9 +249,6 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
                     return
                 case 'canvasTerminal':
                     updateCanvasTerminalSize(resizeResult.id, resizeResult.width, resizeResult.height)
-                    return
-                case 'stageTracking':
-                    updateTrackingWindowSize(resizeResult.width, resizeResult.height)
                     return
                 case 'act':
                     updateActSize(resizeResult.id, resizeResult.width, resizeResult.height)
@@ -277,7 +264,6 @@ export function useCanvasFlowHandlers(args: UseCanvasFlowHandlersArgs) {
         transformTarget,
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
-        updateTrackingWindowSize,
         updateActSize,
         updatePerformerSize,
     ])

@@ -50,7 +50,6 @@ function createBaseState(): StudioState {
         isTrackingOpen: false,
         isAssetLibraryOpen: false,
         canvasTerminals: [],
-        trackingWindow: null,
         canvasCenter: { x: 1000, y: 700 },
         layoutActId: null,
         chatDrafts: {},
@@ -168,6 +167,7 @@ describe('actSlice', () => {
                 hiddenTerminalIds: [],
                 assetLibraryOpen: false,
                 assistantOpen: false,
+                trackingOpen: false,
                 terminalOpen: false,
             },
         } as StudioState)

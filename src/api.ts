@@ -191,7 +191,6 @@ export const api = {
     mcp: opencodeApi.mcp,
     models: opencodeApi.models,
     agents: opencodeApi.agents,
-    tools: opencodeApi.tools,
     runtime: opencodeApi.runtime,
     config: opencodeApi.config,
     providers: opencodeApi.providers,

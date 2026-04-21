@@ -8,7 +8,6 @@
 import type { StudioState } from './types'
 import type {
     CanvasTerminalNode,
-    CanvasTrackingWindow,
     MarkdownEditorNode,
     PerformerNode,
     SavedWorkspaceSnapshot,
@@ -32,8 +31,6 @@ import {
 import { performerIdCounter, markdownEditorIdCounter } from './workspaceSlice'
 import { createEmptyProjectionDirtyState } from './runtime-change-policy'
 
-const TRACKING_WINDOW_ID = 'workspace-tracking-window'
-
 type SetFn = (partial: Partial<StudioState> | ((state: StudioState) => Partial<StudioState>)) => void
 type GetFn = () => StudioState
 type PersistedPerformer = PerformerNode & {
@@ -45,7 +42,6 @@ type PersistedMarkdownEditor = Partial<MarkdownEditorNode> & Pick<MarkdownEditor
     kind?: string
 }
 type PersistedCanvasTerminal = Partial<CanvasTerminalNode> & Pick<CanvasTerminalNode, 'id'>
-type PersistedTrackingWindow = Partial<CanvasTrackingWindow>
 type PersistedWorkspaceAct = Partial<WorkspaceAct> & Pick<WorkspaceAct, 'id' | 'name'> & {
     participants?: Record<string, Partial<WorkspaceActParticipantBinding>>
 }
@@ -54,7 +50,6 @@ type PersistedWorkspaceSnapshot = SavedWorkspaceSnapshot & {
     markdownEditors: PersistedMarkdownEditor[]
     acts?: PersistedWorkspaceAct[]
     canvasTerminals?: PersistedCanvasTerminal[]
-    trackingWindow?: PersistedTrackingWindow | null
 }
 
 // ────────────────────────────────────────
@@ -112,7 +107,6 @@ export async function newWorkspace(get: GetFn, set: SetFn) {
                 sessionMutationPending: {},
                 sessionReverts: {},
                 sessions: [],
-                trackingWindow: null,
                 isTrackingOpen: false,
                 workspaceDirty: true,
                 projectionDirty: createEmptyProjectionDirtyState(),
@@ -155,7 +149,6 @@ export async function saveWorkspace(get: GetFn, set: SetFn) {
         appliedAssistantActionMessageIds,
         assistantActionResults,
         workingDir,
-        trackingWindow,
     } = get()
     if (!workingDir) return
     const normalizedPerformers = performers.map((performer) => ({
@@ -181,7 +174,6 @@ export async function saveWorkspace(get: GetFn, set: SetFn) {
             sessionId: null,
             connected: false,
         })),
-        trackingWindow,
         acts: get().acts,
     }
     const saved = await api.workspaces.save(snapshot)
@@ -329,15 +321,6 @@ export async function loadWorkspace(workspaceId: string, get: GetFn, set: SetFn)
                 sessionId: null,
                 connected: false,
             })),
-            trackingWindow: data.trackingWindow && typeof data.trackingWindow === 'object'
-                ? {
-                    id: typeof data.trackingWindow.id === 'string' ? data.trackingWindow.id : TRACKING_WINDOW_ID,
-                    title: typeof data.trackingWindow.title === 'string' ? data.trackingWindow.title : 'Workspace Tracking',
-                    position: data.trackingWindow.position || { x: 260, y: 180 },
-                    width: typeof data.trackingWindow.width === 'number' ? data.trackingWindow.width : 420,
-                    height: typeof data.trackingWindow.height === 'number' ? data.trackingWindow.height : 360,
-                }
-                : null,
             isTrackingOpen: false,
             workspaceDirty: false,
             projectionDirty: createEmptyProjectionDirtyState(),

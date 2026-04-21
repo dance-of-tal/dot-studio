@@ -21,7 +21,6 @@ function createDraftState(): StudioState {
         isTrackingOpen: false,
         isAssetLibraryOpen: false,
         canvasTerminals: [],
-        trackingWindow: null,
         canvasCenter: null,
         layoutActId: null,
         editingTarget: null,

@@ -62,7 +62,8 @@ When answering UI questions:
 ## Main Layout
 - Top toolbar: global workspace controls
 - Left sidebar: Workspace Explorer plus Asset Library drawer
-- Center canvas: performers, Acts, markdown editors, terminals, tracking surfaces
+- Center canvas: performers, Acts, markdown editors, terminals
+- Right side panel: Studio Assistant or Workspace Tracking, with only one open at a time
 - Contextual editing surfaces:
   - performer edit panels open from performer interactions
   - Act editing is centered around the Act surface and Act inspector/panel flows
@@ -75,7 +76,7 @@ When answering UI questions:
 - `Terminal` menu:
   - `Show/Hide Pinned Terminal`
   - `Add Terminal to Canvas`
-- `Workspace Tracking`
+- `Workspace Tracking`: opens the right-side workspace status panel and closes Assistant if needed
 - `Save or publish selected asset`
 - `Toggle Theme`
 - `Settings`
@@ -83,6 +84,7 @@ When answering UI questions:
 
 ## Assistant Panel
 - Open it from the toolbar `Assistant` button.
+- Opening Assistant closes Workspace Tracking if it is open.
 - Header shows:
   - current model
   - status such as `Ready`, `Thinking`, `Running`, `Retrying`, or `Needs attention`

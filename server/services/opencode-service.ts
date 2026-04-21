@@ -122,22 +122,6 @@ export async function listOpenCodeAgents(directory: string) {
     return responseData(res, [])
 }
 
-export async function listOpenCodeToolIds(directory: string) {
-    const oc = await getOpencode()
-    const res = await oc.tool.ids({ directory })
-    return responseData(res, [])
-}
-
-export async function listOpenCodeToolsForModel(directory: string, provider: string, model: string) {
-    const oc = await getOpencode()
-    const res = await oc.tool.list({
-        directory,
-        provider,
-        model,
-    })
-    return responseData(res, [])
-}
-
 export async function getGlobalOpenCodeConfig() {
     return readGlobalConfigFile()
 }

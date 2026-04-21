@@ -62,11 +62,6 @@ export const opencodeApi = {
         }>>('/api/agents'),
     },
 
-    tools: {
-        list: () => fetchJSON<string[]>('/api/tools'),
-        listForModel: (provider: string, model: string) => fetchJSON<Array<Record<string, unknown>>>(`/api/tools/${provider}/${model}`),
-    },
-
     runtime: {
         resolveTools: (payload: { model: ModelConfig | null; mcpServerNames: string[] }) =>
             fetchJSON<import('../types').RuntimeToolResolution>('/api/runtime/tools', {

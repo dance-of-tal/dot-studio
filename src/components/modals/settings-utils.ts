@@ -253,7 +253,6 @@ export function buildProviderCards(
             ...provider,
             authMethods: readProviderAuthMethods(authMethods[provider.id]),
         }))
-        .filter((provider) => provider.connected || provider.authMethods.length > 0 || isPopularProvider(provider.id))
         .sort(compareProviderCards)
 }
 
@@ -268,6 +267,15 @@ export function getPopularProviderCards(providers: ProviderCard[]) {
         !connectedProviderIds.has(provider.id)
         && isPopularProvider(provider.id)
     ))
+}
+
+export function getAllProviderCards(providers: ProviderCard[]) {
+    const visibleProviderIds = new Set([
+        ...getConnectedProviderCards(providers).map((provider) => provider.id),
+        ...getPopularProviderCards(providers).map((provider) => provider.id),
+    ])
+
+    return providers.filter((provider) => !visibleProviderIds.has(provider.id))
 }
 
 export function parseKeyValueText(text: string): Record<string, string> | undefined {

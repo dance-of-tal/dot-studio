@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StudioState } from './types'
 import { createWorkspaceSlice } from './workspaceSlice'
+import { createAssistantSlice } from './assistantSlice'
 import { createEmptyProjectionDirtyState } from './runtime-change-policy'
 
 const { applyRuntimeReloadMock, deleteSessionMock, showToastMock, setHiddenMock, updateConfigMock } = vi.hoisted(() => ({
@@ -64,7 +65,6 @@ function createBaseState(): StudioState {
         isTrackingOpen: false,
         isAssetLibraryOpen: false,
         canvasTerminals: [],
-        trackingWindow: null,
         canvasCenter: null,
         layoutActId: null,
         chatDrafts: {},
@@ -108,8 +108,9 @@ function createHarness(base: StudioState = createBaseState()) {
         state = { ...state, ...next }
     }
     const get = () => state
-    const slice = createWorkspaceSlice(set, get, {} as never)
-    state = { ...slice, ...state } as StudioState
+    const workspaceSlice = createWorkspaceSlice(set, get, {} as never)
+    const assistantSlice = createAssistantSlice(set, get, {} as never)
+    state = { ...assistantSlice, ...workspaceSlice, ...state } as StudioState
     return {
         get: () => state,
     }
@@ -339,6 +340,7 @@ describe('workspace visibility toggles', () => {
                 hiddenTerminalIds: [],
                 assetLibraryOpen: true,
                 assistantOpen: false,
+                trackingOpen: false,
                 terminalOpen: false,
             },
         } as StudioState)
@@ -350,5 +352,34 @@ describe('workspace visibility toggles', () => {
             hiddenPerformerIds: ['performer-2'],
         })
         expect(harness.get().performers.find((entry) => entry.id === 'performer-2')?.hidden).toBe(true)
+    })
+})
+
+describe('workspace side panels', () => {
+    it('opens workspace tracking without dirtying the workspace and closes assistant', () => {
+        const harness = createHarness({
+            ...createBaseState(),
+            isAssistantOpen: true,
+            workspaceDirty: false,
+        } as StudioState)
+
+        harness.get().setTrackingOpen(true)
+
+        expect(harness.get().isTrackingOpen).toBe(true)
+        expect(harness.get().isAssistantOpen).toBe(false)
+        expect(harness.get().workspaceDirty).toBe(false)
+    })
+
+    it('opens assistant by closing workspace tracking', () => {
+        const harness = createHarness({
+            ...createBaseState(),
+            isTrackingOpen: true,
+            isAssistantOpen: false,
+        } as StudioState)
+
+        harness.get().toggleAssistant()
+
+        expect(harness.get().isAssistantOpen).toBe(true)
+        expect(harness.get().isTrackingOpen).toBe(false)
     })
 })

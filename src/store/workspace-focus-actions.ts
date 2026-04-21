@@ -52,6 +52,7 @@ function buildFocusSnapshot(state: StudioState, target: FocusTarget): FocusSnaps
         hiddenTerminalIds: [] as string[],
         assetLibraryOpen: state.isAssetLibraryOpen,
         assistantOpen: state.isAssistantOpen,
+        trackingOpen: state.isTrackingOpen,
         terminalOpen: state.isTerminalOpen,
     }
 }
@@ -87,6 +88,7 @@ function buildEnterFocusModeState(
         markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: true })),
         isAssetLibraryOpen: false,
         isAssistantOpen: false,
+        isTrackingOpen: false,
         isTerminalOpen: false,
         editingTarget: null,
         inspectorFocus: null,
@@ -138,6 +140,7 @@ export function buildExitFocusModeState(state: StudioState): Partial<StudioState
             markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: snapshot.hiddenEditorIds.includes(editor.id) })),
             isAssetLibraryOpen: snapshot.assetLibraryOpen,
             isAssistantOpen: snapshot.assistantOpen,
+            isTrackingOpen: snapshot.trackingOpen,
             isTerminalOpen: snapshot.terminalOpen,
         }
     }
@@ -159,6 +162,7 @@ export function buildExitFocusModeState(state: StudioState): Partial<StudioState
         markdownEditors: state.markdownEditors.map((editor) => ({ ...editor, hidden: snapshot.hiddenEditorIds.includes(editor.id) })),
         isAssetLibraryOpen: snapshot.assetLibraryOpen,
         isAssistantOpen: snapshot.assistantOpen,
+        isTrackingOpen: snapshot.trackingOpen,
         isTerminalOpen: snapshot.terminalOpen,
     }
 }
@@ -314,7 +318,6 @@ export function setWorkingDirImpl(get: GetState, set: SetState, dir: string) {
         sessionReverts: {},
         sessions: [],
         inspectorFocus: null,
-        trackingWindow: null,
         isTrackingOpen: false,
         workspaceDirty: true,
         acts: [],
@@ -384,31 +387,5 @@ export function updateCanvasTerminalSizeImpl(set: SetState, id: string, width: n
 export function updateCanvasTerminalSessionImpl(set: SetState, id: string, sessionId: string | null, connected: boolean) {
     set((state: StudioState) => ({
         canvasTerminals: mapCanvasTerminals(state.canvasTerminals, id, (terminal) => ({ ...terminal, sessionId, connected })),
-    }))
-}
-
-export function closeTrackingWindowImpl(set: SetState) {
-    set({
-        isTrackingOpen: false,
-        trackingWindow: null,
-        workspaceDirty: true,
-    })
-}
-
-export function updateTrackingWindowPositionImpl(set: SetState, x: number, y: number) {
-    set((state: StudioState) => ({
-        trackingWindow: state.trackingWindow
-            ? { ...state.trackingWindow, position: { x, y } }
-            : state.trackingWindow,
-        workspaceDirty: true,
-    }))
-}
-
-export function updateTrackingWindowSizeImpl(set: SetState, width: number, height: number) {
-    set((state: StudioState) => ({
-        trackingWindow: state.trackingWindow
-            ? { ...state.trackingWindow, width, height }
-            : state.trackingWindow,
-        workspaceDirty: true,
     }))
 }

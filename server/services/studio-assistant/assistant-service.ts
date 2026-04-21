@@ -378,7 +378,6 @@ function shouldDiscoverAssets(message: string) {
     return [
         'tal', 'dance', 'performer', 'act', 'workflow', 'agent', 'skill', 'registry', 'install', 'import',
         'search', 'find', 'create', 'build', 'apply', 'use', 'attach',
-        '만들', '찾', '설치', '가져', '불러', '임포트', '적용', '사용', '붙',
     ].some((token) => text.includes(token))
 }
 
@@ -388,7 +387,6 @@ function mentionsSkillContext(message: string) {
     const text = message.toLowerCase()
     return [
         'skill', 'skills.sh', 'dance',
-        '스킬', '댄스',
     ].some((token) => text.includes(token))
 }
 
@@ -401,22 +399,19 @@ function inferAssistantSkillIntent(message: string): AssistantSkillIntent {
         'create skill', 'make skill', 'new skill', 'build skill', 'author skill',
         'create dance', 'new dance', 'edit skill', 'update skill', 'improve skill', 'enhance skill',
         'skill creator', 'dance draft',
-        '스킬 만들', '스킬 작성', '스킬 개선', '스킬 수정', '댄스 만들', '댄스 작성',
     ].some((token) => text.includes(token))
-        || ['create', 'make', 'build', 'author', 'edit', 'update', 'improve', 'enhance', '만들', '작성', '개선', '수정']
+        || ['create', 'make', 'build', 'author', 'edit', 'update', 'improve', 'enhance']
             .some((token) => text.includes(token))
     const find =
         [
         'find skill', 'search skill', 'look for skill', 'is there a skill', 'recommend skill',
         'existing skill', 'skills.sh', 'find dance',
-        '스킬 찾', '스킬 검색', '스킬 추천', '기존 스킬',
     ].some((token) => text.includes(token))
-        || ['find', 'search', 'recommend', '찾', '검색', '추천'].some((token) => text.includes(token))
+        || ['find', 'search', 'recommend'].some((token) => text.includes(token))
     const apply =
         [
         'apply skill', 'use skill', 'install skill', 'add skill', 'attach skill',
         'apply dance', 'use dance', 'install dance', 'attach dance', 'import skill',
-        '적용', '사용', '설치', '추가', '붙이', '붙여',
     ].some((token) => text.includes(token))
         || ['apply', 'install', 'use', 'attach', 'import'].some((token) => text.includes(token))
 
@@ -431,7 +426,7 @@ function inferDiscoveryKinds(message: string): Array<'tal' | 'dance' | 'performe
     const text = message.toLowerCase()
     const kinds = new Set<'tal' | 'dance' | 'performer' | 'act'>()
     if (text.includes('tal')) kinds.add('tal')
-    if (text.includes('dance') || text.includes('skill') || text.includes('skills.sh') || text.includes('댄스') || text.includes('스킬')) kinds.add('dance')
+    if (text.includes('dance') || text.includes('skill') || text.includes('skills.sh')) kinds.add('dance')
     if (text.includes('performer') || text.includes('agent')) kinds.add('performer')
     if (text.includes('act') || text.includes('workflow') || text.includes('pipeline') || text.includes('team')) {
         kinds.add('act')
@@ -449,12 +444,10 @@ function buildDiscoveryQuery(message: string) {
         'please', 'help', 'with', 'that', 'this', 'for', 'from', 'into', 'using', 'make', 'create', 'build',
         'find', 'search', 'install', 'import', 'add', 'use', 'want', 'need', 'the', 'a', 'an',
         'skill', 'skills', 'dance', 'performer', 'act', 'workflow', 'agent', 'tal',
-        '해줘', '해주세요', '찾아줘', '찾아', '설치', '가져와', '가져오기', '불러와', '만들어줘', '만들고', '만들',
-        '하는', '하고', '있는', '으로', '에서', '같은', '스킬', '댄스',
     ])
     const tokens = message
         .toLowerCase()
-        .replace(/[^a-z0-9@/_\-가-힣\s]+/g, ' ')
+        .replace(/[^a-z0-9@/_\-\s]+/g, ' ')
         .split(/\s+/)
         .map((token) => token.trim())
         .filter((token) => token.length >= 2 && !stopwords.has(token))

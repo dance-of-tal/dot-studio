@@ -106,6 +106,6 @@ Do not leave code and docs out of sync.
 
 ## Design System Rule
 
-- 같은 기능을 하는 UI는 같은 디자인/primitive를 쓴다. (예: 리스트 행, 패널, 모달, 버튼, 알림 메시지 등)
-- 새로운 컴포넌트를 스타일링할 때는 먼저 `src/tokens.css`의 토큰(색상, 테두리, 간격 등)과 `src/primitives.css`의 공용 클래스(.alert, .surface-card, .list-row 등)를 확인한다.
-- 로컬 CSS 파일에서 임의의 색상이나 단위 하드코딩을 피하고 가급적 토큰을 사용하며, 공용 패턴은 `src/primitives.css`로 승격시킨다.
+- UI elements with the same role should use the same design language and primitives. Examples include list rows, panels, modals, buttons, and alert messages.
+- Before styling a new component, check the tokens in `src/tokens.css` such as colors, borders, and spacing, along with shared classes in `src/primitives.css` such as `.alert`, `.surface-card`, and `.list-row`.
+- Avoid hardcoding arbitrary colors or spacing units in local CSS files. Prefer shared tokens, and promote reusable patterns into `src/primitives.css`.

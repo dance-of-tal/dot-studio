@@ -10,7 +10,6 @@ import type {
     McpServer,
     SavedWorkspaceSummary,
     CanvasTerminalNode,
-    CanvasTrackingWindow,
     WorkspaceAct,
     WorkspaceActParticipantBinding,
     ActRelation,
@@ -34,6 +33,7 @@ export interface FocusSnapshot {
     nodeSize: { width: number; height: number }
     assetLibraryOpen: boolean
     assistantOpen: boolean
+    trackingOpen: boolean
     terminalOpen: boolean
 }
 
@@ -65,7 +65,6 @@ export interface WorkspaceSlice {
     isTrackingOpen: boolean
     isAssetLibraryOpen: boolean
     canvasTerminals: CanvasTerminalNode[]
-    trackingWindow: CanvasTrackingWindow | null
     canvasCenter: { x: number; y: number } | null
     layoutActId: string | null
 
@@ -145,9 +144,6 @@ export interface WorkspaceSlice {
     updateCanvasTerminalPosition: (id: string, x: number, y: number) => void
     updateCanvasTerminalSize: (id: string, width: number, height: number) => void
     updateCanvasTerminalSession: (id: string, sessionId: string | null, connected: boolean) => void
-    closeTrackingWindow: () => void
-    updateTrackingWindowPosition: (x: number, y: number) => void
-    updateTrackingWindowSize: (width: number, height: number) => void
     upsertDraft: (draft: DraftAsset) => void
     savePerformerAsDraft: (performerId: string) => Promise<void>
     saveActAsDraft: (actId: string) => Promise<void>

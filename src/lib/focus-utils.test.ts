@@ -101,6 +101,7 @@ describe('focus snapshot visibility helpers', () => {
             nodeSize: { width: 320, height: 400 },
             assetLibraryOpen: true,
             assistantOpen: true,
+            trackingOpen: false,
             terminalOpen: true,
         }
 
@@ -120,6 +121,7 @@ describe('focus snapshot visibility helpers', () => {
             nodeSize: { width: 320, height: 400 },
             assetLibraryOpen: true,
             assistantOpen: true,
+            trackingOpen: false,
             terminalOpen: true,
         }
 

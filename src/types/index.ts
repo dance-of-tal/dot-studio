@@ -251,14 +251,6 @@ export interface CanvasTerminalNode {
     connected: boolean
 }
 
-export interface CanvasTrackingWindow {
-    id: string
-    title: string
-    position: { x: number; y: number }
-    width: number
-    height: number
-}
-
 export interface SavedWorkspaceSnapshot {
     schemaVersion: 1
     workingDir: string
@@ -270,7 +262,6 @@ export interface SavedWorkspaceSnapshot {
     acts?: WorkspaceAct[]
     markdownEditors: MarkdownEditorNode[]
     canvasTerminals?: CanvasTerminalNode[]
-    trackingWindow?: CanvasTrackingWindow | null
     hiddenFromList?: boolean
 }
 

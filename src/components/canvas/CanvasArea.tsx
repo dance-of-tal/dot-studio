@@ -25,7 +25,6 @@ const AgentFrame = lazy(() =>
 );
 const MarkdownEditorFrame = lazy(() => import('../../features/assets/MarkdownEditorFrame'));
 const CanvasTerminalFrame = lazy(() => import('../../features/workspace/CanvasTerminalFrame'));
-const CanvasTrackingFrame = lazy(() => import('../../features/workspace/CanvasTrackingFrame'));
 const ActFrame = lazy(() => import('../../features/act/ActFrame'));
 
 const withCanvasNodeSuspense = <TProps extends object>(Component: ComponentType<TProps>) => (props: TProps) => (
@@ -38,7 +37,6 @@ const nodeTypes = {
     performer: withCanvasNodeSuspense(AgentFrame),
     markdownEditor: withCanvasNodeSuspense(MarkdownEditorFrame),
     canvasTerminal: withCanvasNodeSuspense(CanvasTerminalFrame),
-    stageTracking: withCanvasNodeSuspense(CanvasTrackingFrame),
     act: withCanvasNodeSuspense(ActFrame),
 } satisfies NodeTypes;
 
@@ -51,7 +49,6 @@ export default function CanvasArea() {
         performers,
         markdownEditors,
         canvasTerminals,
-        trackingWindow,
         drafts,
         workingDir,
         focusSnapshot,
@@ -66,9 +63,6 @@ export default function CanvasArea() {
         updateCanvasTerminalSize,
         updateCanvasTerminalSession,
         removeCanvasTerminal,
-        closeTrackingWindow,
-        updateTrackingWindowPosition,
-        updateTrackingWindowSize,
         selectedPerformerId,
         selectMarkdownEditor,
         selectPerformer,
@@ -90,7 +84,6 @@ export default function CanvasArea() {
         performers: state.performers,
         markdownEditors: state.markdownEditors,
         canvasTerminals: state.canvasTerminals,
-        trackingWindow: state.trackingWindow,
         drafts: state.drafts,
         workingDir: state.workingDir,
         focusSnapshot: state.focusSnapshot,
@@ -105,9 +98,6 @@ export default function CanvasArea() {
         updateCanvasTerminalSize: state.updateCanvasTerminalSize,
         updateCanvasTerminalSession: state.updateCanvasTerminalSession,
         removeCanvasTerminal: state.removeCanvasTerminal,
-        closeTrackingWindow: state.closeTrackingWindow,
-        updateTrackingWindowPosition: state.updateTrackingWindowPosition,
-        updateTrackingWindowSize: state.updateTrackingWindowSize,
         selectedPerformerId: state.selectedPerformerId,
         selectMarkdownEditor: state.selectMarkdownEditor,
         selectPerformer: state.selectPerformer,
@@ -154,7 +144,6 @@ export default function CanvasArea() {
         performers,
         markdownEditors,
         canvasTerminals,
-        trackingWindow,
     })
 
     const performerMcpSummary = useCallback((performer: typeof performers[number]) => {
@@ -170,7 +159,6 @@ export default function CanvasArea() {
         performers,
         markdownEditors,
         canvasTerminals,
-        trackingWindow,
         drafts,
         workingDir,
         editingActId: actEditorState?.actId || null,
@@ -186,8 +174,6 @@ export default function CanvasArea() {
         onCloseTerminal: removeCanvasTerminal,
         onResizeTerminal: updateCanvasTerminalSize,
         onSessionChange: updateCanvasTerminalSession,
-        onCloseTrackingWindow: closeTrackingWindow,
-        onResizeTrackingWindow: updateTrackingWindowSize,
     })
 
     useCanvasFocusFit({
@@ -279,13 +265,11 @@ export default function CanvasArea() {
         onNodesChange,
         updateMarkdownEditorPosition,
         updateCanvasTerminalPosition,
-        updateTrackingWindowPosition,
         updateActPosition,
         updatePerformerPosition,
         updateActSize,
         updateMarkdownEditorSize,
         updateCanvasTerminalSize,
-        updateTrackingWindowSize,
         updatePerformerSize,
     })
 

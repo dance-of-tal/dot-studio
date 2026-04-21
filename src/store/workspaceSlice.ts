@@ -13,7 +13,6 @@ import {
 import {
     applyPerformerPatch,
     mapMarkdownEditors,
-    resolveCanvasSpawnPosition,
 } from './workspace-helpers'
 import {
     collectVisibleCanvasNodeRects,
@@ -54,7 +53,6 @@ import {
 import {
     addCanvasTerminalImpl,
     buildExitFocusModeState,
-    closeTrackingWindowImpl,
     enterFocusModeImpl,
     exitFocusModeImpl,
     removeCanvasTerminalImpl,
@@ -63,8 +61,6 @@ import {
     updateCanvasTerminalPositionImpl,
     updateCanvasTerminalSessionImpl,
     updateCanvasTerminalSizeImpl,
-    updateTrackingWindowPositionImpl,
-    updateTrackingWindowSizeImpl,
 } from './workspace-focus-actions'
 import { buildPerformerDeleteCascade } from './cascade-cleanup'
 import { hasRunningStudioSessions } from './runtime-reload-utils'
@@ -79,7 +75,6 @@ import { clearChatSessionView } from './session'
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
 export const canvasTerminalIdCounter = { value: 0 }
-const TRACKING_WINDOW_ID = 'workspace-tracking-window'
 const RUNTIME_RELOAD_RETRY_MS = 300
 
 function makeId(prefix: string) {
@@ -118,7 +113,6 @@ function buildClosedWorkspaceState(): Partial<StudioState> {
         drafts: {},
         markdownEditors: [],
         canvasTerminals: [],
-        trackingWindow: null,
         canvasCenter: null,
         layoutActId: null,
         editingTarget: null,
@@ -186,34 +180,14 @@ export const createWorkspaceSlice: StateCreator<
     isTrackingOpen: false,
     isAssetLibraryOpen: false,
     canvasTerminals: [],
-    trackingWindow: null,
     canvasCenter: null,
     layoutActId: null,
     actEditorState: null,
 
     setTerminalOpen: (open) => set({ isTerminalOpen: open }),
-    setTrackingOpen: (open) => set((state) => {
-        const created = open && !state.trackingWindow
-        const trackingPosition = resolveCanvasSpawnPosition({
-            canvasCenter: state.canvasCenter,
-            existingCount: state.canvasTerminals.length,
-            width: 420,
-            height: 360,
-        })
-        return {
-            isTrackingOpen: open,
-            trackingWindow: open
-                ? (state.trackingWindow || {
-                    id: TRACKING_WINDOW_ID,
-                    title: 'Workspace Tracking',
-                    position: trackingPosition,
-                    width: 420,
-                    height: 360,
-                })
-                : state.trackingWindow,
-            workspaceDirty: created ? true : state.workspaceDirty,
-        }
-    }),
+    setTrackingOpen: (open) => set(open
+        ? { isTrackingOpen: true, isAssistantOpen: false }
+        : { isTrackingOpen: false }),
     setAssetLibraryOpen: (open) => set({ isAssetLibraryOpen: open }),
 
     toggleTheme: () => set((s) => {
@@ -655,11 +629,6 @@ export const createWorkspaceSlice: StateCreator<
 
     updateCanvasTerminalSession: (id, sessionId, connected) => updateCanvasTerminalSessionImpl(set, id, sessionId, connected),
 
-    closeTrackingWindow: () => closeTrackingWindowImpl(set),
-
-    updateTrackingWindowPosition: (x, y) => updateTrackingWindowPositionImpl(set, x, y),
-
-    updateTrackingWindowSize: (width, height) => updateTrackingWindowSizeImpl(set, width, height),
     upsertDraft: (draft) => {
         upsertDraftImpl(get, set, scheduleDraftPersist, draft)
     },

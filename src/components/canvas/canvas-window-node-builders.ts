@@ -1,7 +1,6 @@
 import type { Node } from '@xyflow/react'
 import type {
     CanvasTerminalNode,
-    CanvasTrackingWindow,
     DraftAsset,
     MarkdownEditorNode,
     PerformerNode,
@@ -15,7 +14,7 @@ import {
 import { assetUrnDisplayName } from '../../lib/asset-urn'
 import { hasModelConfig } from '../../lib/performers'
 
-type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
+type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'act'
 
 function getCanvasWindowZIndex({
     selected = false,
@@ -235,45 +234,6 @@ export function buildCanvasTerminalWindowNodes(args: {
         } as Record<string, unknown>,
         style: { width: terminal.width || 600, height: terminal.height || 400 },
     })) satisfies Node[]
-}
-
-export function buildTrackingWindowNodes(args: {
-    trackingWindow: CanvasTrackingWindow | null | undefined
-    transformTarget: { id: string; type: CanvasNodeKind } | null
-    onActivateTransform: (type: CanvasNodeKind, id: string) => void
-    onDeactivateTransform: (type: CanvasNodeKind, id: string) => void
-    onCloseTrackingWindow: () => void
-    onResizeTrackingWindow: (width: number, height: number) => void
-}) {
-    const {
-        trackingWindow,
-        transformTarget,
-        onActivateTransform,
-        onDeactivateTransform,
-        onCloseTrackingWindow,
-        onResizeTrackingWindow,
-    } = args
-
-    return trackingWindow ? [{
-        id: trackingWindow.id,
-        type: 'stageTracking',
-        position: trackingWindow.position,
-        dragHandle: '.canvas-frame__header',
-        zIndex: getCanvasWindowZIndex({
-            transformActive: transformTarget?.type === 'stageTracking' && transformTarget.id === trackingWindow.id,
-        }),
-        data: {
-            title: trackingWindow.title,
-            width: trackingWindow.width,
-            height: trackingWindow.height,
-            transformActive: transformTarget?.type === 'stageTracking' && transformTarget.id === trackingWindow.id,
-            onActivateTransform: () => onActivateTransform('stageTracking', trackingWindow.id),
-            onDeactivateTransform: () => onDeactivateTransform('stageTracking', trackingWindow.id),
-            onClose: () => onCloseTrackingWindow(),
-            onResize: (width: number, height: number) => onResizeTrackingWindow(width, height),
-        } as Record<string, unknown>,
-        style: { width: trackingWindow.width || 420, height: trackingWindow.height || 360 },
-    }] satisfies Node[] : []
 }
 
 export function buildActCanvasNodes(args: {

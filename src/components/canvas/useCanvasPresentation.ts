@@ -4,7 +4,6 @@ import type { Node } from '@xyflow/react'
 import type { WorkspaceSlice } from '../../store/types'
 import type {
     CanvasTerminalNode,
-    CanvasTrackingWindow,
     DraftAsset,
     MarkdownEditorNode,
     PerformerNode,
@@ -17,17 +16,15 @@ import {
     buildCanvasTerminalWindowNodes,
     buildMarkdownEditorCanvasNodes,
     buildPerformerCanvasNodes,
-    buildTrackingWindowNodes,
 } from './canvas-window-node-builders'
 
-type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'stageTracking' | 'act'
+type CanvasNodeKind = 'performer' | 'markdownEditor' | 'canvasTerminal' | 'act'
 
 type UseCanvasPresentationArgs = {
     acts: WorkspaceAct[]
     performers: PerformerNode[]
     markdownEditors: MarkdownEditorNode[]
     canvasTerminals: CanvasTerminalNode[]
-    trackingWindow: CanvasTrackingWindow | null | undefined
     drafts: Record<string, DraftAsset>
     workingDir: string
     editingActId: string | null
@@ -43,8 +40,6 @@ type UseCanvasPresentationArgs = {
     onCloseTerminal: (id: string) => void
     onResizeTerminal: (id: string, width: number, height: number) => void
     onSessionChange: (id: string, sessionId: string | null, connected: boolean) => void
-    onCloseTrackingWindow: () => void
-    onResizeTrackingWindow: (width: number, height: number) => void
 }
 
 export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
@@ -53,7 +48,6 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
         performers,
         markdownEditors,
         canvasTerminals,
-        trackingWindow,
         drafts,
         workingDir,
         editingActId,
@@ -69,8 +63,6 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
         onCloseTerminal,
         onResizeTerminal,
         onSessionChange,
-        onCloseTrackingWindow,
-        onResizeTrackingWindow,
     } = args
 
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
@@ -135,22 +127,6 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
         onSessionChange,
     ])
 
-    const buildTrackingNodes = useCallback(() => buildTrackingWindowNodes({
-        trackingWindow,
-        transformTarget,
-        onActivateTransform,
-        onDeactivateTransform,
-        onCloseTrackingWindow,
-        onResizeTrackingWindow,
-    }), [
-        trackingWindow,
-        transformTarget,
-        onActivateTransform,
-        onDeactivateTransform,
-        onCloseTrackingWindow,
-        onResizeTrackingWindow,
-    ])
-
     const buildActNodes = useCallback(() => buildActCanvasNodes({
         acts,
         editingActId,
@@ -172,14 +148,12 @@ export function useCanvasPresentation(args: UseCanvasPresentationArgs) {
             performerNodes: buildPerformerNodes(),
             markdownEditorNodes: buildMarkdownEditorNodes(),
             canvasTerminalNodes: buildCanvasTerminalNodes(),
-            trackingNodes: buildTrackingNodes(),
             actNodes: buildActNodes(),
         }))
     }, [
         buildPerformerNodes,
         buildMarkdownEditorNodes,
         buildCanvasTerminalNodes,
-        buildTrackingNodes,
         buildActNodes,
         setNodes,
     ])

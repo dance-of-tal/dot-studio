@@ -29,6 +29,9 @@ const TerminalPanel = lazy(() =>
 const AssistantChat = lazy(() =>
   import('./features/assistant/AssistantChat').then((module) => ({ default: module.AssistantChat })),
 );
+const WorkspaceTrackingPanel = lazy(() =>
+  import('./features/workspace/WorkspaceTrackingPanel').then((module) => ({ default: module.WorkspaceTrackingPanel })),
+);
 
 export default function App() {
   const theme = useStudioStore(s => s.theme);
@@ -43,6 +46,7 @@ export default function App() {
   const workspaceDirty = useStudioStore(s => s.workspaceDirty);
   const isTerminalOpen = useStudioStore(s => s.isTerminalOpen);
   const setTerminalOpen = useStudioStore(s => s.setTerminalOpen);
+  const isTrackingOpen = useStudioStore(s => s.isTrackingOpen);
   const focusSnapshot = useStudioStore(s => s.focusSnapshot);
   const isAnyFocusActive = !!focusSnapshot;
 
@@ -172,7 +176,7 @@ export default function App() {
           </ReactFlowProvider>
           {!isAnyFocusActive && (
             <Suspense fallback={null}>
-              <AssistantChat />
+              {isTrackingOpen ? <WorkspaceTrackingPanel /> : <AssistantChat />}
             </Suspense>
           )}
         </div>

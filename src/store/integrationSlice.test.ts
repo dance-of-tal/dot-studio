@@ -107,7 +107,6 @@ function createBaseState(loadThreads: ReturnType<typeof vi.fn>): StudioState {
         isTrackingOpen: false,
         isAssetLibraryOpen: false,
         canvasTerminals: [],
-        trackingWindow: null,
         canvasCenter: null,
         layoutActId: null,
         selectedActId: null,

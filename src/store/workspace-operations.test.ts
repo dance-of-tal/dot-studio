@@ -43,7 +43,6 @@ function createWorkspaceState(): StudioState {
         isTerminalOpen: false,
         isTrackingOpen: false,
         isAssetLibraryOpen: false,
-        trackingWindow: null,
         canvasCenter: null,
         layoutActId: null,
         chatDrafts: {},
@@ -106,7 +105,7 @@ describe('workspace operations', () => {
 
         expect(harness.read().workingDir).toBe('/tmp/new-workspace')
         expect(harness.read().canvasTerminals).toEqual([])
-        expect(harness.read().trackingWindow).toBeNull()
+        expect(harness.read().isTrackingOpen).toBe(false)
         expect(harness.read().workspaceDirty).toBe(true)
     })
 

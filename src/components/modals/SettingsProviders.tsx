@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ProviderAuthMethod, ProviderCard, OauthFlow } from './settings-utils'
 import type { ConnectedModel, ModelPickerState } from './settings-utils'
 import {
+    buildProviderAuthOptions,
+    getAllProviderCards,
     getConnectedProviderCards,
     getPopularProviderCards,
     shouldAutoCloseProviderConnectModal,
@@ -47,6 +49,7 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
 
     const connected = useMemo(() => getConnectedProviderCards(providers), [providers])
     const popular = useMemo(() => getPopularProviderCards(providers), [providers])
+    const allProviders = useMemo(() => getAllProviderCards(providers), [providers])
 
     const connectTarget = useMemo(
         () => connectTargetId ? providers.find((provider) => provider.id === connectTargetId) || null : null,
@@ -83,6 +86,46 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
         connectTargetId,
     ])
 
+    function renderProviderRow(provider: ProviderCard) {
+        const isConnected = provider.connected && (provider.id !== 'opencode' || provider.hasPaidModels)
+        const canConnect = buildProviderAuthOptions(provider).length > 0
+
+        return (
+            <div key={provider.id} className="stg-provider-row">
+                <div className="stg-provider-row__info">
+                    <span className="stg-provider-row__name">{provider.name}</span>
+                    {isConnected ? (
+                        <span className="badge">Connected</span>
+                    ) : (
+                        <span className="stg-provider-row__meta">{provider.modelCount} models</span>
+                    )}
+                    {provider.env.length > 0 && (
+                        <span className="badge badge--subtle">{provider.env[0]}</span>
+                    )}
+                </div>
+                <div className="stg-provider-row__actions">
+                    {isConnected
+                        ? (
+                            provider.source === 'env'
+                                ? <span className="badge badge--subtle">Set via environment</span>
+                                : (
+                                    <button className="btn" onClick={() => disconnectProvider(provider.id, provider.name)}>
+                                        Disconnect
+                                    </button>
+                                )
+                        )
+                        : canConnect ? (
+                            <button className="btn btn--primary" onClick={() => setConnectTargetId(provider.id)}>
+                                Connect
+                            </button>
+                        ) : (
+                            <span className="badge badge--subtle">Config only</span>
+                        )}
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="stg-panel">
             <div className="stg-panel__header">
@@ -98,27 +141,7 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
                     {connected.length === 0 ? (
                         <div className="empty-state">No providers connected yet.</div>
                     ) : (
-                        connected.map((provider) => (
-                            <div key={provider.id} className="stg-provider-row">
-                                <div className="stg-provider-row__info">
-                                    <span className="stg-provider-row__name">{provider.name}</span>
-                                    <span className="badge">Connected</span>
-                                    {provider.env.length > 0 && (
-                                        <span className="badge badge--subtle">{provider.env[0]}</span>
-                                    )}
-                                </div>
-                                <div className="stg-provider-row__actions">
-                                    {provider.source === 'env'
-                                        ? <span className="badge badge--subtle">Set via environment</span>
-                                        : (
-                                            <button className="btn" onClick={() => disconnectProvider(provider.id, provider.name)}>
-                                                Disconnect
-                                            </button>
-                                        )
-                                    }
-                                </div>
-                            </div>
-                        ))
+                        connected.map((provider) => renderProviderRow(provider))
                     )}
                 </div>
             </div>
@@ -127,19 +150,23 @@ export default function SettingsProviders(props: SettingsProvidersProps) {
             <div className="stg-section">
                 <h3 className="stg-section__title">Popular</h3>
                 <div className="stg-group">
-                    {popular.map((provider) => (
-                        <div key={provider.id} className="stg-provider-row">
-                            <div className="stg-provider-row__info">
-                                <span className="stg-provider-row__name">{provider.name}</span>
-                                <span className="stg-provider-row__meta">{provider.modelCount} models</span>
-                            </div>
-                            <div className="stg-provider-row__actions">
-                                <button className="btn btn--primary" onClick={() => setConnectTargetId(provider.id)}>
-                                    Connect
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                    {popular.length === 0 ? (
+                        <div className="empty-state">No popular providers available.</div>
+                    ) : (
+                        popular.map((provider) => renderProviderRow(provider))
+                    )}
+                </div>
+            </div>
+
+            {/* All providers */}
+            <div className="stg-section">
+                <h3 className="stg-section__title">All providers</h3>
+                <div className="stg-group">
+                    {allProviders.length === 0 ? (
+                        <div className="empty-state">All available providers are already surfaced above.</div>
+                    ) : (
+                        allProviders.map((provider) => renderProviderRow(provider))
+                    )}
                 </div>
             </div>
 

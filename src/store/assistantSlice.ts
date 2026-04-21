@@ -72,7 +72,11 @@ export const createAssistantSlice: StateCreator<StudioState, [], [], AssistantSl
     assistantActionResults: {},
 
     toggleAssistant: () => {
-        set((state) => ({ isAssistantOpen: !state.isAssistantOpen }))
+        set((state) => (
+            state.isAssistantOpen
+                ? { isAssistantOpen: false }
+                : { isAssistantOpen: true, isTrackingOpen: false }
+        ))
     },
 
     setAssistantModel: (model) => set((state) => (

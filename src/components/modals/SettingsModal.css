@@ -120,13 +120,6 @@
     font-weight: 600;
 }
 
-.stg-sidebar__footer {
-    padding: 8px;
-    color: var(--text-muted);
-    font-size: 11px;
-    line-height: 1.4;
-}
-
 /* ── Right content pane ─────────────────────────────── */
 .stg-content {
     flex: 1;

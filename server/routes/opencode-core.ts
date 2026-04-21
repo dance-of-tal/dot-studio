@@ -10,8 +10,6 @@ import {
     getProviderAuthMethods,
     getVcsStatus,
     listOpenCodeAgents,
-    listOpenCodeToolIds,
-    listOpenCodeToolsForModel,
     readProjectConfigSnapshot,
     restartManagedOpenCode,
     updateGlobalOpenCodeConfig,
@@ -71,26 +69,6 @@ opencodeCore.get('/api/agents', async (c) => {
         return c.json(await listOpenCodeAgents(requestWorkingDir(c)))
     } catch {
         return c.json([])
-    }
-})
-
-opencodeCore.get('/api/tools', async (c) => {
-    try {
-        return c.json(await listOpenCodeToolIds(requestWorkingDir(c)))
-    } catch {
-        return c.json([])
-    }
-})
-
-opencodeCore.get('/api/tools/:provider/:model', async (c) => {
-    try {
-        return c.json(await listOpenCodeToolsForModel(
-            requestWorkingDir(c),
-            c.req.param('provider'),
-            c.req.param('model'),
-        ))
-    } catch (err) {
-        return jsonOpencodeError(c, err)
     }
 })
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Settings, X, Sliders, Server, LayoutGrid, Wrench } from 'lucide-react'
+import { RefreshCw, Settings, X, Sliders, Server, LayoutGrid } from 'lucide-react'
 import { api } from '../../api'
 import { useStudioStore } from '../../store'
 import { queryKeys } from '../../hooks/queries'
@@ -13,9 +13,8 @@ import { buildProviderCards } from './settings-utils'
 import SettingsGeneral from './SettingsGeneral'
 import SettingsProviders from './SettingsProviders'
 import SettingsModels from './SettingsModels'
-import SettingsTools from './SettingsTools'
 
-type SettingsTab = 'general' | 'providers' | 'models' | 'tools'
+type SettingsTab = 'general' | 'providers' | 'models'
 
 interface SidebarSection {
     label: string
@@ -34,7 +33,6 @@ const SECTIONS: SidebarSection[] = [
         items: [
             { key: 'providers', label: 'Providers', icon: <Server size={14} /> },
             { key: 'models', label: 'Models', icon: <LayoutGrid size={14} /> },
-            { key: 'tools', label: 'Tools', icon: <Wrench size={14} /> },
         ],
     },
 ]
@@ -174,9 +172,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
 
             case 'models':
                 return <SettingsModels key={`models-${refreshToken}`} />
-
-            case 'tools':
-                return <SettingsTools refreshToken={refreshToken} />
         }
     }
 
@@ -217,9 +212,6 @@ export default function SettingsModal({ open, onClose }: { open: boolean; onClos
                                 </div>
                             ))}
                         </nav>
-                        <div className="stg-sidebar__footer">
-                            DOT Studio<br />v0.1.0
-                        </div>
                     </div>
 
                     {/* Right content */}

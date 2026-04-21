@@ -6,7 +6,6 @@ type EditingTargetLike = WorkspaceSlice['editingTarget'] | undefined
 export type CanvasDragStopResult =
     | { kind: 'markdownEditor'; id: string; x: number; y: number }
     | { kind: 'canvasTerminal'; id: string; x: number; y: number }
-    | { kind: 'stageTracking'; x: number; y: number }
     | { kind: 'act'; id: string; x: number; y: number }
     | { kind: 'performer'; id: string; x: number; y: number }
 
@@ -14,7 +13,6 @@ export type CanvasNodeClickResult =
     | { kind: 'ignore' }
     | { kind: 'markdownEditor'; id: string }
     | { kind: 'canvasTerminal' }
-    | { kind: 'stageTracking' }
     | { kind: 'act'; id: string }
     | { kind: 'performer'; id: string; shouldCloseEditor: boolean }
 
@@ -40,10 +38,6 @@ export function resolveCanvasDragStop(node: Pick<Node, 'id' | 'position' | 'type
         return { kind: 'canvasTerminal', id: node.id, ...position }
     }
 
-    if (node.type === 'stageTracking') {
-        return { kind: 'stageTracking', ...position }
-    }
-
     if (node.type === 'act') {
         return { kind: 'act', id: node.id, ...position }
     }
@@ -66,10 +60,6 @@ export function resolveCanvasNodeClick(
 
     if (node.type === 'canvasTerminal') {
         return { kind: 'canvasTerminal' }
-    }
-
-    if (node.type === 'stageTracking') {
-        return { kind: 'stageTracking' }
     }
 
     if (node.type === 'act') {

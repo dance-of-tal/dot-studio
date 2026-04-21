@@ -38,7 +38,6 @@ function createTestState(): StudioState {
         isTrackingOpen: false,
         isAssetLibraryOpen: true,
         canvasTerminals: [],
-        trackingWindow: null,
         canvasCenter: null,
         layoutActId: null,
         editingTarget: null,
@@ -94,6 +93,7 @@ describe('workspace focus actions', () => {
         expect(state.focusSnapshot?.type).toBe('performer')
         expect(state.isAssetLibraryOpen).toBe(false)
         expect(state.isAssistantOpen).toBe(false)
+        expect(state.isTrackingOpen).toBe(false)
         expect(state.isTerminalOpen).toBe(false)
         expect(state.performers.find((entry) => entry.id === 'performer-1')).toMatchObject({
             hidden: false,
@@ -119,7 +119,29 @@ describe('workspace focus actions', () => {
         })
         expect(state.isAssetLibraryOpen).toBe(true)
         expect(state.isAssistantOpen).toBe(true)
+        expect(state.isTrackingOpen).toBe(false)
         expect(state.isTerminalOpen).toBe(true)
+    })
+
+    it('closes and restores workspace tracking around focus mode', () => {
+        const harness = createStateHarness({
+            ...createTestState(),
+            isAssistantOpen: false,
+            isTrackingOpen: true,
+        } as StudioState)
+
+        enterFocusModeImpl(harness.get, harness.set, 'performer-1', 'performer', { width: 900, height: 700 })
+
+        expect(harness.read().isTrackingOpen).toBe(false)
+        expect(harness.read().focusSnapshot).toMatchObject({
+            assistantOpen: false,
+            trackingOpen: true,
+        })
+
+        exitFocusModeImpl(harness.get, harness.set)
+
+        expect(harness.read().isAssistantOpen).toBe(false)
+        expect(harness.read().isTrackingOpen).toBe(true)
     })
 
     it('switches focus targets by restoring the baseline layout before refocusing', () => {
@@ -169,6 +191,7 @@ describe('workspace focus actions', () => {
             type: 'performer',
             assetLibraryOpen: true,
             assistantOpen: true,
+            trackingOpen: false,
             terminalOpen: true,
         })
         expect(state.performers.find((entry) => entry.id === 'performer-2')).toMatchObject({
@@ -238,6 +261,7 @@ describe('workspace focus actions', () => {
         expect(state.selectedMarkdownEditorId).toBe('markdown-editor-1')
         expect(state.isAssetLibraryOpen).toBe(true)
         expect(state.isAssistantOpen).toBe(true)
+        expect(state.isTrackingOpen).toBe(false)
         expect(state.isTerminalOpen).toBe(true)
         expect(state.performers.find((entry) => entry.id === 'performer-1')).toMatchObject({
             hidden: false,

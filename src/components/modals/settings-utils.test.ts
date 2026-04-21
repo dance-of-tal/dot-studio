@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+    getAllProviderCards,
     areVisibleProviderPromptsComplete,
     buildApiKeyProviderAuth,
     buildProviderAuthOptions,
@@ -46,6 +47,33 @@ describe('provider card grouping', () => {
                 authMethods: [],
             },
         ]).map((provider) => provider.id)).toEqual(['opencode'])
+    })
+
+    it('keeps non-popular auth-capable providers reachable in the all providers section', () => {
+        expect(getAllProviderCards([
+            {
+                id: 'openai',
+                name: 'OpenAI',
+                source: 'builtin',
+                env: ['OPENAI_API_KEY'],
+                connected: false,
+                modelCount: 10,
+                defaultModel: 'gpt-5',
+                hasPaidModels: true,
+                authMethods: [{ type: 'api', label: 'API Key' }],
+            },
+            {
+                id: 'cloudflare',
+                name: 'Cloudflare',
+                source: 'builtin',
+                env: ['CLOUDFLARE_API_TOKEN'],
+                connected: false,
+                modelCount: 4,
+                defaultModel: null,
+                hasPaidModels: true,
+                authMethods: [{ type: 'api', label: 'API Token' }],
+            },
+        ]).map((provider) => provider.id)).toEqual(['cloudflare'])
     })
 })
 
@@ -220,6 +248,25 @@ describe('buildProviderCards', () => {
         expect(merged).toHaveLength(1)
         expect(merged[0].id).toBe('openai')
         expect(merged[0].connected).toBe(false)
+    })
+
+    it('keeps non-popular providers visible even without auth methods when opencode reports them', () => {
+        const merged = buildProviderCards([
+            {
+                id: 'lmstudio',
+                name: 'LM Studio',
+                source: 'builtin',
+                env: [],
+                connected: false,
+                modelCount: 12,
+                defaultModel: null,
+                hasPaidModels: false,
+            },
+        ], {})
+
+        expect(merged).toHaveLength(1)
+        expect(merged[0].id).toBe('lmstudio')
+        expect(merged[0].authMethods).toEqual([])
     })
 
     it('does not fabricate provider cards that are missing from provider.list', () => {
