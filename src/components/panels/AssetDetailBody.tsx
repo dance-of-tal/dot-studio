@@ -69,7 +69,7 @@ export default function AssetDetailBody({
                     </span>
                 )}
                 {installed && asset.source !== 'stage' && asset.source !== 'global' && (
-                    <span className="asset-detail-panel__badge">Installed</span>
+                    <span className="badge">Installed</span>
                 )}
             </div>
 
@@ -82,7 +82,7 @@ export default function AssetDetailBody({
             {loading && <div className="asset-popover__section-item">Loading details...</div>}
 
             {summaryOnly && !loading && (
-                <div className="asset-detail-panel__note">
+                <div className="alert alert--muted" style={{ marginTop: '8px' }}>
                     Registry preview shows summary metadata only. Install the asset to inspect full content.
                 </div>
             )}
@@ -185,7 +185,7 @@ export default function AssetDetailBody({
                                     ? asset.missingMcpServerNames.join(', ')
                                     : 'None'}
                             </div>
-                            <div className="asset-detail-panel__note">
+                            <div className="alert alert--muted" style={{ marginTop: '8px' }}>
                                 Registry and local performer assets keep portable MCP requirements. Exact Studio-library name matches can auto-connect on import, but final MCP binding still belongs to each performer on the stage.
                             </div>
                         </div>
