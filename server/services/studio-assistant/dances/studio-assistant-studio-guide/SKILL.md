@@ -268,6 +268,7 @@ Local scope is split into:
   - `Workspace`
   - `Global`
 - This path is for Dance bundles coming from GitHub or compatible remote sources.
+- Studio copies repo-local shared bundle folders such as symlinked `assets/`, `references/`, or `scripts/` into the installed Dance bundle.
 - Installed GitHub Dance bundles keep source provenance so Studio can later check for update availability.
 - Studio checks installed GitHub Dance bundles when the user opens Local Installed Dance and can re-check on demand.
 - Studio never auto-applies GitHub Dance updates; update and repo-drift import are explicit user actions.

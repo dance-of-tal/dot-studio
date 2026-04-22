@@ -97,6 +97,7 @@ describe('addDanceFromGitHub', () => {
             '/tmp/workspace',
             'dance/@acme/skill-pack/research-pack',
             '/tmp/clone/skills/research-pack',
+            { repoRoot: '/tmp/clone' },
         )
         expect(upsertGitHubDanceLockEntryMock).toHaveBeenCalledWith(
             '/tmp/workspace',

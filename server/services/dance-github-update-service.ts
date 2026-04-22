@@ -32,6 +32,8 @@ type TargetDance = ScopeContext & {
 }
 
 type SourceGroupSnapshot = {
+    tempDir: string
+    cleanup: () => Promise<void>
     entries: Array<{ urn: string; entry: NormalizedGitHubDanceLockEntry }>
     discoveredByPath: Map<string, DiscoveredGitHubDanceSkill>
     repoDrift: GitHubDanceRepoDrift
@@ -103,41 +105,46 @@ async function getSourceGroupSnapshot(
         const allEntries = await readNormalizedGitHubDanceLockEntries(target.cwd)
         const groupEntries = allEntries.filter(({ entry }) => sourceGroupKey(entry) === sourceGroupKey(target.source!))
         const { tempDir, cleanup } = await cloneGitHubDanceSource(target.source!.sourceUrl, target.source!.ref)
+        const discovered = await discoverGitHubDanceSkills(tempDir, {
+            subpath: target.source!.sourceSubpath,
+        })
+        const discoveredByPath = new Map(discovered.map((item) => [item.repoRootSkillPath, item]))
+        const installedPaths = new Set(groupEntries.map(({ entry }) => entry.repoRootSkillPath))
 
-        try {
-            const discovered = await discoverGitHubDanceSkills(tempDir, {
-                subpath: target.source!.sourceSubpath,
-            })
-            const discoveredByPath = new Map(discovered.map((item) => [item.repoRootSkillPath, item]))
-            const installedPaths = new Set(groupEntries.map(({ entry }) => entry.repoRootSkillPath))
+        const newSkills = discovered
+            .filter((item) => !installedPaths.has(item.repoRootSkillPath))
+            .map((item) => ({
+                name: item.skill.name,
+                urn: `dance/@${target.source!.owner}/${target.source!.repo}/${item.skill.name}`,
+                repoRootSkillPath: item.repoRootSkillPath,
+            }))
 
-            const newSkills = discovered
-                .filter((item) => !installedPaths.has(item.repoRootSkillPath))
-                .map((item) => ({
-                    name: item.skill.name,
-                    urn: `dance/@${target.source!.owner}/${target.source!.repo}/${item.skill.name}`,
-                    repoRootSkillPath: item.repoRootSkillPath,
-                }))
+        const missingInstalledUrns = groupEntries
+            .filter(({ entry }) => !discoveredByPath.has(entry.repoRootSkillPath))
+            .map(({ urn }) => urn)
 
-            const missingInstalledUrns = groupEntries
-                .filter(({ entry }) => !discoveredByPath.has(entry.repoRootSkillPath))
-                .map(({ urn }) => urn)
-
-            return {
-                entries: groupEntries,
-                discoveredByPath,
-                repoDrift: {
-                    newSkills,
-                    missingInstalledUrns,
-                },
-            }
-        } finally {
-            await cleanup()
+        return {
+            tempDir,
+            cleanup,
+            entries: groupEntries,
+            discoveredByPath,
+            repoDrift: {
+                newSkills,
+                missingInstalledUrns,
+            },
         }
     })()
 
     cache.set(key, task)
     return task
+}
+
+async function cleanupSourceGroupCache(cache: Map<string, Promise<SourceGroupSnapshot>>) {
+    const settled = await Promise.allSettled([...cache.values()])
+    await Promise.all(settled.map(async (result) => {
+        if (result.status !== 'fulfilled') return
+        await Promise.resolve(result.value.cleanup()).catch(() => {})
+    }))
 }
 
 function resolveLegacyStatus(source: ReturnType<typeof normalizeGitHubDanceLockEntry> | null) {
@@ -173,93 +180,97 @@ export async function checkDanceGitHubUpdates(
     const targets = await resolveTargets(cwd, assets)
     const repoCache = new Map<string, Promise<SourceGroupSnapshot>>()
 
-    return Promise.all(targets.map(async (target) => {
-        const rawSourceMap = await readGitHubDanceSourceMap(target.cwd)
-        const rawSource = rawSourceMap.get(target.urn) || null
-        const legacyStatus = resolveLegacyStatus(rawSource)
-        if (legacyStatus) {
+    try {
+        return await Promise.all(targets.map(async (target) => {
+            const rawSourceMap = await readGitHubDanceSourceMap(target.cwd)
+            const rawSource = rawSourceMap.get(target.urn) || null
+            const legacyStatus = resolveLegacyStatus(rawSource)
+            if (legacyStatus) {
+                return {
+                    urn: target.urn,
+                    scope: target.scope,
+                    sync: legacyStatus,
+                }
+            }
+            if (!target.source) {
+                return {
+                    urn: target.urn,
+                    scope: target.scope,
+                    sync: buildSyncStatus('check_failed', {
+                        canUpdate: false,
+                        message: 'GitHub provenance metadata is unavailable.',
+                    }),
+                }
+            }
+
+            const remote = await getGitHubTreeSha(
+                target.source.owner,
+                target.source.repo,
+                target.source.ref,
+                target.source.repoRootSkillPath,
+            )
+
+            if (remote.status === 'missing') {
+                return {
+                    urn: target.urn,
+                    scope: target.scope,
+                    sync: buildSyncStatus('upstream_missing', {
+                        canUpdate: false,
+                        currentHash: target.source.skillFolderHash,
+                        message: 'The upstream skill path no longer exists on GitHub. Your local copy is still installed.',
+                    }),
+                }
+            }
+
+            if (remote.status === 'error') {
+                return {
+                    urn: target.urn,
+                    scope: target.scope,
+                    sync: buildSyncStatus('check_failed', {
+                        canUpdate: false,
+                        currentHash: target.source.skillFolderHash,
+                        message: remote.message,
+                    }),
+                }
+            }
+
+            let repoDrift: GitHubDanceRepoDrift | undefined
+            if (includeRepoDrift) {
+                const snapshot = await getSourceGroupSnapshot(target, repoCache)
+                if (snapshot.repoDrift.newSkills.length > 0 || snapshot.repoDrift.missingInstalledUrns.length > 0) {
+                    repoDrift = snapshot.repoDrift
+                }
+            }
+
+            if (repoDrift) {
+                return {
+                    urn: target.urn,
+                    scope: target.scope,
+                    sync: buildSyncStatus('repo_drift', {
+                        canUpdate: true,
+                        currentHash: target.source.skillFolderHash,
+                        remoteHash: remote.hash,
+                        repoDrift,
+                        message: 'The source repo now exposes a different set of Dance skills.',
+                    }),
+                }
+            }
+
+            const hasUpdate = target.source.skillFolderHash !== remote.hash
             return {
                 urn: target.urn,
                 scope: target.scope,
-                sync: legacyStatus,
-            }
-        }
-        if (!target.source) {
-            return {
-                urn: target.urn,
-                scope: target.scope,
-                sync: buildSyncStatus('check_failed', {
-                    canUpdate: false,
-                    message: 'GitHub provenance metadata is unavailable.',
-                }),
-            }
-        }
-
-        const remote = await getGitHubTreeSha(
-            target.source.owner,
-            target.source.repo,
-            target.source.ref,
-            target.source.repoRootSkillPath,
-        )
-
-        if (remote.status === 'missing') {
-            return {
-                urn: target.urn,
-                scope: target.scope,
-                sync: buildSyncStatus('upstream_missing', {
-                    canUpdate: false,
-                    currentHash: target.source.skillFolderHash,
-                    message: 'The upstream skill path no longer exists on GitHub. Your local copy is still installed.',
-                }),
-            }
-        }
-
-        if (remote.status === 'error') {
-            return {
-                urn: target.urn,
-                scope: target.scope,
-                sync: buildSyncStatus('check_failed', {
-                    canUpdate: false,
-                    currentHash: target.source.skillFolderHash,
-                    message: remote.message,
-                }),
-            }
-        }
-
-        let repoDrift: GitHubDanceRepoDrift | undefined
-        if (includeRepoDrift) {
-            const snapshot = await getSourceGroupSnapshot(target, repoCache)
-            if (snapshot.repoDrift.newSkills.length > 0 || snapshot.repoDrift.missingInstalledUrns.length > 0) {
-                repoDrift = snapshot.repoDrift
-            }
-        }
-
-        if (repoDrift) {
-            return {
-                urn: target.urn,
-                scope: target.scope,
-                sync: buildSyncStatus('repo_drift', {
+                sync: buildSyncStatus(hasUpdate ? 'update_available' : 'up_to_date', {
                     canUpdate: true,
                     currentHash: target.source.skillFolderHash,
                     remoteHash: remote.hash,
-                    repoDrift,
-                    message: 'The source repo now exposes a different set of Dance skills.',
+                    message: hasUpdate ? 'GitHub has newer contents for this Dance.' : 'This Dance matches the current GitHub source.',
                 }),
             }
-        }
-
-        const hasUpdate = target.source.skillFolderHash !== remote.hash
-        return {
-            urn: target.urn,
-            scope: target.scope,
-            sync: buildSyncStatus(hasUpdate ? 'update_available' : 'up_to_date', {
-                canUpdate: true,
-                currentHash: target.source.skillFolderHash,
-                remoteHash: remote.hash,
-                message: hasUpdate ? 'GitHub has newer contents for this Dance.' : 'This Dance matches the current GitHub source.',
-            }),
-        }
-    }))
+        }))
+    } finally {
+        await cleanupSourceGroupCache(repoCache)
+    }
 }
 
 export async function applyDanceGitHubUpdates(
@@ -271,85 +282,90 @@ export async function applyDanceGitHubUpdates(
     const updated: Array<InstalledDanceLocator & { sync: GitHubDanceSyncStatus }> = []
     const skipped: Array<InstalledDanceLocator & { reason: string; sync?: GitHubDanceSyncStatus }> = []
 
-    for (const target of targets) {
-        const rawSourceMap = await readGitHubDanceSourceMap(target.cwd)
-        const rawSource = rawSourceMap.get(target.urn) || null
-        const legacyStatus = resolveLegacyStatus(rawSource)
-        if (legacyStatus) {
-            skipped.push({
+    try {
+        for (const target of targets) {
+            const rawSourceMap = await readGitHubDanceSourceMap(target.cwd)
+            const rawSource = rawSourceMap.get(target.urn) || null
+            const legacyStatus = resolveLegacyStatus(rawSource)
+            if (legacyStatus) {
+                skipped.push({
+                    urn: target.urn,
+                    scope: target.scope,
+                    reason: legacyStatus.message || 'Legacy GitHub provenance is incomplete.',
+                    sync: legacyStatus,
+                })
+                continue
+            }
+            if (!target.source) {
+                skipped.push({
+                    urn: target.urn,
+                    scope: target.scope,
+                    reason: 'GitHub provenance metadata is missing.',
+                })
+                continue
+            }
+
+            const snapshot = await getSourceGroupSnapshot(target, repoCache)
+            const discovered = snapshot.discoveredByPath.get(target.source.repoRootSkillPath)
+            if (!discovered) {
+                const sync = buildSyncStatus('upstream_missing', {
+                    canUpdate: false,
+                    currentHash: target.source.skillFolderHash,
+                    message: 'The upstream skill path no longer exists on GitHub.',
+                })
+                skipped.push({
+                    urn: target.urn,
+                    scope: target.scope,
+                    reason: sync.message || 'Upstream skill is missing.',
+                    sync,
+                })
+                continue
+            }
+
+            await copyGitHubDanceSkill(
+                target.cwd,
+                target.urn,
+                path.dirname(discovered.skill.skillMdPath),
+                { repoRoot: snapshot.tempDir },
+            )
+
+            const remote = await getGitHubTreeSha(
+                target.source.owner,
+                target.source.repo,
+                target.source.ref,
+                target.source.repoRootSkillPath,
+            )
+
+            const lockEntry = buildGitHubDanceLockEntryInput(
+                parsedSourceFromEntry(target.source),
+                target.source.ref,
+                target.source.repoRootSkillPath,
+                remote.status === 'ok' ? remote.hash : target.source.skillFolderHash,
+            )
+            await upsertGitHubDanceLockEntry(target.cwd, target.urn, lockEntry)
+
+            updated.push({
                 urn: target.urn,
                 scope: target.scope,
-                reason: legacyStatus.message || 'Legacy GitHub provenance is incomplete.',
-                sync: legacyStatus,
+                sync: buildSyncStatus(remote.status === 'ok' ? 'up_to_date' : 'check_failed', {
+                    canUpdate: true,
+                    currentHash: remote.status === 'ok' ? remote.hash : target.source.skillFolderHash,
+                    remoteHash: remote.status === 'ok' ? remote.hash : undefined,
+                    message: remote.status === 'ok'
+                        ? 'Dance bundle updated from GitHub.'
+                        : 'Dance bundle updated, but Studio could not refresh the GitHub hash.',
+                }),
             })
-            continue
-        }
-        if (!target.source) {
-            skipped.push({
-                urn: target.urn,
-                scope: target.scope,
-                reason: 'GitHub provenance metadata is missing.',
-            })
-            continue
         }
 
-        const snapshot = await getSourceGroupSnapshot(target, repoCache)
-        const discovered = snapshot.discoveredByPath.get(target.source.repoRootSkillPath)
-        if (!discovered) {
-            const sync = buildSyncStatus('upstream_missing', {
-                canUpdate: false,
-                currentHash: target.source.skillFolderHash,
-                message: 'The upstream skill path no longer exists on GitHub.',
-            })
-            skipped.push({
-                urn: target.urn,
-                scope: target.scope,
-                reason: sync.message || 'Upstream skill is missing.',
-                sync,
-            })
-            continue
+        if (updated.length > 0) {
+            invalidate('assets')
         }
 
-        await copyGitHubDanceSkill(
-            target.cwd,
-            target.urn,
-            path.dirname(discovered.skill.skillMdPath),
-        )
-
-        const remote = await getGitHubTreeSha(
-            target.source.owner,
-            target.source.repo,
-            target.source.ref,
-            target.source.repoRootSkillPath,
-        )
-
-        const lockEntry = buildGitHubDanceLockEntryInput(
-            parsedSourceFromEntry(target.source),
-            target.source.ref,
-            target.source.repoRootSkillPath,
-            remote.status === 'ok' ? remote.hash : target.source.skillFolderHash,
-        )
-        await upsertGitHubDanceLockEntry(target.cwd, target.urn, lockEntry)
-
-        updated.push({
-            urn: target.urn,
-            scope: target.scope,
-            sync: buildSyncStatus(remote.status === 'ok' ? 'up_to_date' : 'check_failed', {
-                canUpdate: true,
-                currentHash: remote.status === 'ok' ? remote.hash : target.source.skillFolderHash,
-                remoteHash: remote.status === 'ok' ? remote.hash : undefined,
-                message: remote.status === 'ok'
-                    ? 'Dance bundle updated from GitHub.'
-                    : 'Dance bundle updated, but Studio could not refresh the GitHub hash.',
-            }),
-        })
+        return { updated, skipped }
+    } finally {
+        await cleanupSourceGroupCache(repoCache)
     }
-
-    if (updated.length > 0) {
-        invalidate('assets')
-    }
-
-    return { updated, skipped }
 }
 
 export async function reimportDanceGitHubSource(
@@ -364,55 +380,62 @@ export async function reimportDanceGitHubSource(
         throw new Error(legacyStatus?.message || 'GitHub provenance metadata is missing.')
     }
 
-    const snapshot = await getSourceGroupSnapshot(target, new Map())
-    const installedPaths = new Set(snapshot.entries.map(({ entry }) => entry.repoRootSkillPath))
-    const resolvedRef = await resolveGitHubRef(target.source.owner, target.source.repo, target.source.ref)
+    const repoCache = new Map<string, Promise<SourceGroupSnapshot>>()
 
-    const installed: DotDanceReimportSourceResponse['installed'] = []
-    const skippedExistingUrns: string[] = []
+    try {
+        const snapshot = await getSourceGroupSnapshot(target, repoCache)
+        const installedPaths = new Set(snapshot.entries.map(({ entry }) => entry.repoRootSkillPath))
+        const resolvedRef = await resolveGitHubRef(target.source.owner, target.source.repo, target.source.ref)
 
-    for (const discovered of snapshot.discoveredByPath.values()) {
-        if (installedPaths.has(discovered.repoRootSkillPath)) {
-            skippedExistingUrns.push(`dance/@${target.source.owner}/${target.source.repo}/${discovered.skill.name}`)
-            continue
+        const installed: DotDanceReimportSourceResponse['installed'] = []
+        const skippedExistingUrns: string[] = []
+
+        for (const discovered of snapshot.discoveredByPath.values()) {
+            if (installedPaths.has(discovered.repoRootSkillPath)) {
+                skippedExistingUrns.push(`dance/@${target.source.owner}/${target.source.repo}/${discovered.skill.name}`)
+                continue
+            }
+
+            const urn = `dance/@${target.source.owner}/${target.source.repo}/${discovered.skill.name}`
+            await copyGitHubDanceSkill(
+                target.cwd,
+                urn,
+                path.dirname(discovered.skill.skillMdPath),
+                { repoRoot: snapshot.tempDir },
+            )
+
+            const remote = await getGitHubTreeSha(
+                target.source.owner,
+                target.source.repo,
+                resolvedRef,
+                discovered.repoRootSkillPath,
+            )
+
+            const lockEntry = buildGitHubDanceLockEntryInput(
+                parsedSourceFromEntry(target.source),
+                resolvedRef,
+                discovered.repoRootSkillPath,
+                remote.status === 'ok' ? remote.hash : undefined,
+            )
+            await upsertGitHubDanceLockEntry(target.cwd, urn, lockEntry)
+
+            installed.push({
+                urn,
+                name: discovered.skill.name,
+                description: discovered.skill.description,
+            })
         }
 
-        const urn = `dance/@${target.source.owner}/${target.source.repo}/${discovered.skill.name}`
-        await copyGitHubDanceSkill(
-            target.cwd,
-            urn,
-            path.dirname(discovered.skill.skillMdPath),
-        )
+        if (installed.length > 0) {
+            invalidate('assets')
+        }
 
-        const remote = await getGitHubTreeSha(
-            target.source.owner,
-            target.source.repo,
-            resolvedRef,
-            discovered.repoRootSkillPath,
-        )
-
-        const lockEntry = buildGitHubDanceLockEntryInput(
-            parsedSourceFromEntry(target.source),
-            resolvedRef,
-            discovered.repoRootSkillPath,
-            remote.status === 'ok' ? remote.hash : undefined,
-        )
-        await upsertGitHubDanceLockEntry(target.cwd, urn, lockEntry)
-
-        installed.push({
-            urn,
-            name: discovered.skill.name,
-            description: discovered.skill.description,
-        })
-    }
-
-    if (installed.length > 0) {
-        invalidate('assets')
-    }
-
-    return {
-        sourceUrl: target.source.sourceUrl,
-        installed,
-        skippedExistingUrns,
+        return {
+            sourceUrl: target.source.sourceUrl,
+            installed,
+            skippedExistingUrns,
+        }
+    } finally {
+        await cleanupSourceGroupCache(repoCache)
     }
 }

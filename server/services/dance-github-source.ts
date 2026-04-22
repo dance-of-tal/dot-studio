@@ -70,6 +70,24 @@ function normalizeRepoPath(value: string | null | undefined) {
         .join('/')
 }
 
+function resolveCopyRepoRoot(
+    sourceSkillDir: string,
+    options?: { repoRoot?: string; repoRootSkillPath?: string },
+) {
+    if (options?.repoRoot) {
+        return path.resolve(options.repoRoot)
+    }
+
+    const repoRootSkillPath = normalizeRepoPath(options?.repoRootSkillPath)
+    if (!repoRootSkillPath) {
+        return path.resolve(sourceSkillDir)
+    }
+
+    const depth = repoRootSkillPath.split('/').filter(Boolean).length
+    const segments = Array.from({ length: depth }, () => '..')
+    return path.resolve(sourceSkillDir, ...segments)
+}
+
 function parseOwnerRepo(sourceUrl: string, fallbackOwner?: string, fallbackRepo?: string) {
     const parsed = getOwnerRepo(sourceUrl)
     if (parsed) {
@@ -345,9 +363,12 @@ export async function copyGitHubDanceSkill(
     cwd: string,
     urn: string,
     sourceSkillDir: string,
+    options?: { repoRoot?: string; repoRootSkillPath?: string },
 ) {
     const destinationDir = danceAssetDir(cwd, urn)
-    copySkillDir(sourceSkillDir, destinationDir)
+    const configuredRepoRoot = resolveCopyRepoRoot(sourceSkillDir, options)
+    const repoRoot = await fs.realpath(configuredRepoRoot).catch(() => path.resolve(configuredRepoRoot))
+    copySkillDir(sourceSkillDir, destinationDir, { repoRoot })
     return destinationDir
 }
 

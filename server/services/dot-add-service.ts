@@ -100,7 +100,7 @@ export async function addDanceFromGitHub(cwd: string, source: string, scope?: 'g
                 skill.repoRootSkillPath,
             )
 
-            await copyGitHubDanceSkill(targetCwd, urn, srcDir)
+            await copyGitHubDanceSkill(targetCwd, urn, srcDir, { repoRoot: tempDir })
             await upsertGitHubDanceLockEntry(
                 targetCwd,
                 urn,

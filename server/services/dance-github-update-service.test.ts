@@ -117,6 +117,7 @@ describe('dance GitHub update service', () => {
     })
 
     it('updates installed GitHub dance bundles in place and invalidates asset caches', async () => {
+        let cleaned = false
         readGitHubDanceSourceMapMock.mockResolvedValue(new Map([
             ['dance/@acme/skill-pack/research-pack', SOURCE],
         ]))
@@ -125,7 +126,9 @@ describe('dance GitHub update service', () => {
         ])
         cloneGitHubDanceSourceMock.mockResolvedValue({
             tempDir: '/tmp/clone',
-            cleanup: vi.fn(),
+            cleanup: vi.fn(async () => {
+                cleaned = true
+            }),
         })
         discoverGitHubDanceSkillsMock.mockResolvedValue([
             {
@@ -134,6 +137,9 @@ describe('dance GitHub update service', () => {
             },
         ])
         getGitHubTreeShaMock.mockResolvedValue({ status: 'ok', hash: 'remote-hash' })
+        copyGitHubDanceSkillMock.mockImplementation(async () => {
+            expect(cleaned).toBe(false)
+        })
 
         const { applyDanceGitHubUpdates } = await import('./dance-github-update-service.js')
         const result = await applyDanceGitHubUpdates('/tmp/workspace', [{
@@ -145,6 +151,7 @@ describe('dance GitHub update service', () => {
             '/tmp/workspace',
             'dance/@acme/skill-pack/research-pack',
             '/tmp/clone/skills/research-pack',
+            { repoRoot: '/tmp/clone' },
         )
         expect(upsertGitHubDanceLockEntryMock).toHaveBeenCalledWith(
             '/tmp/workspace',
@@ -157,6 +164,7 @@ describe('dance GitHub update service', () => {
         )
         expect(result.updated[0]?.sync.state).toBe('up_to_date')
         expect(invalidateMock).toHaveBeenCalledWith('assets')
+        expect(cleaned).toBe(true)
     })
 
     it('reimports only newly available skills from the same GitHub source group', async () => {
