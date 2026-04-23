@@ -15,9 +15,35 @@ import {
     startLogin,
 } from '../lib/dot-source.js'
 import type { PerformerAsset } from '../lib/dot-source.js'
+import type { AssetListItem } from '../../shared/asset-contracts.js'
 import { clearDotAuthUser, publishStudioAsset, readDotAuthUser, saveLocalStudioAsset, uninstallStudioAsset, type StudioAssetKind } from '../lib/dot-authoring.js'
 import { invalidate } from '../lib/cache.js'
-import { findInstalledDependents } from './asset-service.js'
+import { findInstalledDependents, getRegistryAssetDetail } from './asset-service.js'
+
+type RegistrySearchResult = {
+    urn: string
+    kind: 'tal' | 'dance' | 'performer' | 'act'
+    name: string
+    owner: string
+    stage: string
+    description: string
+    tags: string[]
+    updatedAt?: string
+}
+
+function toRegistrySearchAsset(result: RegistrySearchResult): AssetListItem {
+    return {
+        kind: result.kind,
+        urn: result.urn,
+        slug: result.name,
+        name: result.name,
+        author: `@${result.owner.replace(/^@/, '')}`,
+        source: 'registry',
+        description: result.description || '',
+        tags: Array.isArray(result.tags) ? result.tags : [],
+        ...(result.updatedAt ? { updatedAt: result.updatedAt } : {}),
+    } as AssetListItem
+}
 
 export function resolveDotCwd(cwd: string, scope?: string) {
     if (scope === 'global') {
@@ -70,10 +96,30 @@ export async function getDotPerformer(cwd: string, urn: string): Promise<Perform
 }
 
 export async function searchDotRegistry(query: string, options: { kind?: string | null; limit: number }) {
-    return searchRegistry(query, {
+    const results = await searchRegistry(query, {
         kind: options.kind || undefined,
         limit: options.limit,
     })
+
+    return Promise.all(results.map(async (result) => {
+        const typedResult = result as RegistrySearchResult
+        const fallback = toRegistrySearchAsset(typedResult)
+
+        if (typedResult.kind !== 'performer' && typedResult.kind !== 'act') {
+            return fallback
+        }
+
+        try {
+            return await getRegistryAssetDetail(
+                '',
+                typedResult.kind,
+                typedResult.owner,
+                `${typedResult.stage}/${typedResult.name}`,
+            )
+        } catch {
+            return fallback
+        }
+    }))
 }
 
 const SKILLS_SH_API = 'https://skills.sh/api/search'
