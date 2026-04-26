@@ -70,7 +70,11 @@ import {
     createEmptyProjectionDirtyState,
     mergeProjectionDirtyState,
 } from './runtime-change-policy'
-import { clearChatSessionView } from './session'
+import {
+    collectPerformerSessionTargets,
+    deleteSessionTargetsRemotely,
+    detachSessionTargets,
+} from './session/session-lifecycle'
 
 export const performerIdCounter = { value: 0 }
 export const markdownEditorIdCounter = { value: 0 }
@@ -322,11 +326,12 @@ export const createWorkspaceSlice: StateCreator<
     },
 
     removePerformer: (id) => {
-        const sessionId = get().chatKeyToSession[id] || null
         const performer = get().performers.find((entry) => entry.id === id)
         if (!performer) {
             return
         }
+        const sessionTargets = collectPerformerSessionTargets(get(), performer)
+        detachSessionTargets(set, get, sessionTargets)
 
         set((s) => {
             const focusExit = buildExitFocusModeState(s)
@@ -346,25 +351,11 @@ export const createWorkspaceSlice: StateCreator<
             }
         })
 
-        if (sessionId) {
-            clearChatSessionView(get, id)
-            get().removeSession(sessionId)
-            set((state) => ({
-                sessions: state.sessions.filter((session) => session.id !== sessionId),
-            }))
-
-            void api.chat.deleteSession(sessionId)
-                .catch((error) => {
-                    console.error('Failed to delete performer session', error)
-                    showToast('Failed to delete performer session', 'error', {
-                        title: 'Thread delete failed',
-                        dedupeKey: `thread:delete:${sessionId}`,
-                    })
-                })
-                .finally(() => {
-                    void get().listSessions()
-                })
-        }
+        deleteSessionTargetsRemotely(sessionTargets, {
+            title: 'Thread cleanup failed',
+            dedupeKey: `performer:delete-session-cleanup:${id}`,
+        })
+        void get().listSessions()
 
         get().recordStudioChange({ kind: 'performer', performerIds: [id], workspaceWide: true })
     },

@@ -55,6 +55,11 @@ export function scoreModel(model: ModelLike): number {
     if (model.toolCall) score += 8
     if (model.reasoning) score += 4
 
+    const gptVersion = text.match(/\bgpt[- ]?(\d+)(?:[.-](\d+))?/)
+    if (gptVersion) {
+        score += Number(gptVersion[1]) * 10 + Number(gptVersion[2] || 0)
+    }
+
     return score + Math.min(Math.round((model.context || 0) / 10000), 20)
 }
 

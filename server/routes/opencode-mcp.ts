@@ -35,6 +35,9 @@ opencodeMcp.put('/api/mcp/catalog', async (c) => {
 opencodeMcp.get('/api/mcp/servers', async (c) => {
     try {
         const cwd = requestWorkingDir(c)
+        if (c.req.query('refresh') === '1') {
+            return c.json(await listMcpServers(cwd))
+        }
         return c.json(await cached(`mcp-servers-${cwd}`, TTL.MCP_SERVERS, async () => listMcpServers(cwd)))
     } catch {
         return c.json([])

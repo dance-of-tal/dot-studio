@@ -101,7 +101,12 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
     }, [clearPendingSave])
 
     const invalidateMcpQueries = useCallback(async (includeRuntimeTools = false) => {
-        await queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+        const queryKey = [...queryKeys.mcpServers, workingDir] as const
+        const refreshed = await api.mcp.list({ refresh: true }).catch(() => null)
+        if (refreshed) {
+            queryClient.setQueryData(queryKey, refreshed)
+        }
+        await queryClient.invalidateQueries({ queryKey })
         if (includeRuntimeTools) {
             await queryClient.invalidateQueries({ queryKey: ['runtime-tools', workingDir] })
         }
@@ -139,7 +144,13 @@ export function useMcpCatalog(workingDir: string, showMcps: boolean): McpCatalog
                 setMcpCatalogStatus(`Timed out waiting for ${pendingMcpAuthName} authentication.`)
                 return
             }
-            void queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+            void api.mcp.list({ refresh: true })
+                .then((refreshed) => {
+                    queryClient.setQueryData([...queryKeys.mcpServers, workingDir], refreshed)
+                })
+                .catch(() => {
+                    void queryClient.invalidateQueries({ queryKey: [...queryKeys.mcpServers, workingDir] })
+                })
         }, 2_000)
 
         return () => window.clearInterval(timer)

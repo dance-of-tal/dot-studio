@@ -12,6 +12,7 @@ const updateDraftMock = vi.fn()
 const deleteDraftMock = vi.fn()
 const writeDanceBundleFileMock = vi.fn()
 const deleteDanceBundleFileMock = vi.fn()
+const deleteActRuntimeMock = vi.fn().mockResolvedValue({ ok: true })
 
 function overlaps(
     left: { x: number; y: number; width: number; height: number },
@@ -43,6 +44,9 @@ vi.mock('../../api', () => ({
             install: vi.fn(),
             addFromGitHub: vi.fn(),
         },
+        actRuntime: {
+            deleteAct: deleteActRuntimeMock,
+        },
     },
 }))
 
@@ -68,6 +72,7 @@ afterEach(() => {
     deleteDraftMock.mockReset()
     writeDanceBundleFileMock.mockReset()
     deleteDanceBundleFileMock.mockReset()
+    deleteActRuntimeMock.mockReset().mockResolvedValue({ ok: true })
     useStudioStore.setState({
         performers: [],
         acts: [],

@@ -134,9 +134,20 @@ export const createIntegrationSlice: StateCreator<
     }
 
     function registerResolvedSessionBinding(sessionId: string, ownerId: string) {
+        const existingSessionId = get().chatKeyToSession[ownerId]
+        if (existingSessionId && existingSessionId !== sessionId) {
+            logChatDebug('integration', 'skip owner bind: owner already points at another session', {
+                sessionId,
+                ownerId,
+                existingSessionId,
+            })
+            return false
+        }
+
         registerSessionBinding(set, get, ownerId, sessionId)
         ensureSessionRuntimeActor(set, get, ownerId, sessionId)
         reconcileSessionRuntimeActor(set, get, ownerId, sessionId)
+        return true
     }
 
     function bufferPendingSessionEvent(sessionId: string, event: ChatEvent) {
@@ -188,7 +199,9 @@ export const createIntegrationSlice: StateCreator<
             }
 
             failedResolves.delete(sessionId)
-            registerResolvedSessionBinding(sessionId, result.ownerId)
+            if (!registerResolvedSessionBinding(sessionId, result.ownerId)) {
+                return null
+            }
             return {
                 ownerId: result.ownerId,
                 ownerKind: result.ownerKind,

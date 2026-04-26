@@ -123,7 +123,13 @@ export async function listOpenCodeAgents(directory: string) {
 }
 
 export async function getGlobalOpenCodeConfig() {
-    return readGlobalConfigFile()
+    try {
+        const oc = await getOpencode()
+        const res = await oc.config.get()
+        return responseData<Record<string, unknown>>(res, {})
+    } catch {
+        return readGlobalConfigFile()
+    }
 }
 
 export async function getStudioMcpCatalog() {
@@ -191,7 +197,14 @@ export async function restartManagedOpenCode() {
 export async function updateGlobalOpenCodeConfig(patch: unknown) {
     const current = await readGlobalConfigFile()
     const nextConfig = mergeOpenCodeConfig(current, patch && typeof patch === 'object' ? patch as Record<string, unknown> : {})
-    await writeGlobalConfigFile(nextConfig)
+    try {
+        const oc = await getOpencode()
+        const res = await oc.config.update({ config: nextConfig })
+        invalidate('mcp-servers')
+        return responseData<Record<string, unknown>>(res, nextConfig)
+    } catch {
+        await writeGlobalConfigFile(nextConfig)
+    }
     invalidate('mcp-servers')
     return nextConfig
 }
@@ -215,7 +228,11 @@ export async function updateStudioMcpCatalog(catalog: unknown): Promise<McpCatal
         tools: nextTools,
     })
 
-    await writeGlobalConfigFile(nextConfig, { dispose: false })
+    try {
+        await (await getOpencode()).config.update({ config: nextConfig })
+    } catch {
+        await writeGlobalConfigFile(nextConfig, { dispose: false })
+    }
     invalidate('mcp-servers')
     return catalog
 }

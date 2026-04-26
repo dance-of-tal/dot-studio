@@ -6,11 +6,28 @@ import type { FileStatus } from '../../types'
 import '../assistant/AssistantChat.css'
 import './WorkspaceTrackingPanel.css'
 
+type FilePreview = {
+    path: string
+    content: string
+    error?: string
+}
+
+function readFilePreviewContent(value: unknown) {
+    if (!value || typeof value !== 'object') {
+        return ''
+    }
+    const record = value as Record<string, unknown>
+    return typeof record.content === 'string' ? record.content : ''
+}
+
 export function WorkspaceTrackingPanel() {
     const isTrackingOpen = useStudioStore((state) => state.isTrackingOpen)
     const setTrackingOpen = useStudioStore((state) => state.setTrackingOpen)
     const workingDir = useStudioStore((state) => state.workingDir)
     const [files, setFiles] = useState<FileStatus[]>([])
+    const [selectedPath, setSelectedPath] = useState<string | null>(null)
+    const [preview, setPreview] = useState<FilePreview | null>(null)
+    const [previewLoading, setPreviewLoading] = useState(false)
     const [panelWidth, setPanelWidth] = useState(320)
     const dragging = useRef(false)
 
@@ -54,6 +71,42 @@ export function WorkspaceTrackingPanel() {
         const interval = window.setInterval(() => void fetchFiles(), 10000)
         return () => window.clearInterval(interval)
     }, [fetchFiles, isTrackingOpen])
+
+    useEffect(() => {
+        if (!isTrackingOpen || !selectedPath) {
+            setPreview(null)
+            setPreviewLoading(false)
+            return
+        }
+
+        let cancelled = false
+        setPreviewLoading(true)
+        api.file.read(selectedPath)
+            .then((result) => {
+                if (cancelled) return
+                setPreview({
+                    path: selectedPath,
+                    content: readFilePreviewContent(result),
+                })
+            })
+            .catch((error: unknown) => {
+                if (cancelled) return
+                setPreview({
+                    path: selectedPath,
+                    content: '',
+                    error: error instanceof Error ? error.message : 'Unable to read file.',
+                })
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setPreviewLoading(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [isTrackingOpen, selectedPath])
 
     if (!isTrackingOpen) return null
 
@@ -102,7 +155,13 @@ export function WorkspaceTrackingPanel() {
                 ) : (
                     <ul className="workspace-tracking-panel__list">
                         {files.map((file) => (
-                            <li key={file.path} className="workspace-tracking-panel__item">
+                            <li key={file.path} className={`workspace-tracking-panel__item ${selectedPath === file.path ? 'is-selected' : ''}`.trim()}>
+                                <button
+                                    className="workspace-tracking-panel__file-button"
+                                    type="button"
+                                    onClick={() => setSelectedPath((current) => current === file.path ? null : file.path)}
+                                    title={file.path}
+                                >
                                 <FileCode size={12} className={`workspace-tracking-panel__icon workspace-tracking-panel__icon--${file.status}`} />
                                 <div className="workspace-tracking-panel__info">
                                     <span className="workspace-tracking-panel__path" title={file.path}>
@@ -118,6 +177,18 @@ export function WorkspaceTrackingPanel() {
                                     {file.added > 0 ? <span className="workspace-tracking-panel__added">+{file.added}</span> : null}
                                     {file.removed > 0 ? <span className="workspace-tracking-panel__removed">-{file.removed}</span> : null}
                                 </div>
+                                </button>
+                                {selectedPath === file.path ? (
+                                    <div className="workspace-tracking-panel__preview">
+                                        {previewLoading ? (
+                                            <span className="workspace-tracking-panel__preview-muted">Loading…</span>
+                                        ) : preview?.error ? (
+                                            <span className="workspace-tracking-panel__preview-muted">{preview.error}</span>
+                                        ) : (
+                                            <pre>{(preview?.content || '').slice(0, 4000) || 'No text content.'}</pre>
+                                        )}
+                                    </div>
+                                ) : null}
                             </li>
                         ))}
                     </ul>

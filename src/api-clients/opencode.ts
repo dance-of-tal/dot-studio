@@ -37,7 +37,7 @@ export const opencodeApi = {
     mcp: {
         getCatalog: () => fetchJSON<McpCatalog>('/api/mcp/catalog'),
         updateCatalog: (catalog: McpCatalog) => putJSON<McpCatalog>('/api/mcp/catalog', catalog),
-        list: () => fetchJSON<import('../types').McpServer[]>('/api/mcp/servers'),
+        list: (options?: { refresh?: boolean }) => fetchJSON<import('../types').McpServer[]>(`/api/mcp/servers${options?.refresh ? '?refresh=1' : ''}`),
         authStart: (name: string) => postJSON<{ authorizationUrl: string }>(`/api/mcp/${name}/auth/start`),
         authCallback: (name: string, code: string) => postJSON<unknown>(`/api/mcp/${name}/auth/callback`, { code }),
         authenticate: (name: string) => postJSON<unknown>(`/api/mcp/${name}/auth/authenticate`),

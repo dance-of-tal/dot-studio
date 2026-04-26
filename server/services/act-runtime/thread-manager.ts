@@ -39,6 +39,12 @@ interface ThreadRuntime {
     retiredParticipantSessions: Record<string, string[]>
 }
 
+export type DeletedThreadRuntime = {
+    deleted: boolean
+    actId: string | null
+    sessionIds: string[]
+}
+
 const THREAD_SNAPSHOT_SCHEMA_VERSION = 2
 
 interface PersistedThreadState {
@@ -282,10 +288,20 @@ export class ThreadManager {
         return Array.from(this.threads.keys())
     }
 
-    async deleteThread(threadId: string): Promise<boolean> {
+    async deleteThread(threadId: string): Promise<DeletedThreadRuntime> {
         const runtime = this.threads.get(threadId)
-        if (!runtime) return false
+        if (!runtime) {
+            return {
+                deleted: false,
+                actId: null,
+                sessionIds: [],
+            }
+        }
         const actId = runtime.thread.actId
+        const sessionIds = Array.from(new Set([
+            ...Object.values(runtime.thread.participantSessions || {}),
+            ...Object.values(runtime.retiredParticipantSessions || {}).flat(),
+        ].filter(Boolean)))
         this.threads.delete(threadId)
         publishActThreadDeleted(this._workingDir, actId, threadId)
         // Remove persisted directory
@@ -295,7 +311,11 @@ export class ThreadManager {
         } catch {
             // Ignore if already removed
         }
-        return true
+        return {
+            deleted: true,
+            actId,
+            sessionIds,
+        }
     }
 
     async setThreadName(threadId: string, name: string, options?: { ifUnset?: boolean }): Promise<ActThreadSummary | null> {

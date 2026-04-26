@@ -1,0 +1,283 @@
+- generic [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - generic [ref=e10]:
+            - generic [ref=e11]: Workspaces
+            - button "Open workspace directory" [ref=e12] [cursor=pointer]:
+              - img [ref=e13]
+          - generic [ref=e14]:
+            - generic [ref=e15]: Current
+            - strong [ref=e16]: investor-test
+            - generic "/Users/junhoyoon/tmp/investor-test" [ref=e17]
+          - generic [ref=e18]:
+            - button "investor-test …/tmp/investor-test" [ref=e19] [cursor=pointer]:
+              - img [ref=e21]
+              - generic [ref=e23]:
+                - generic [ref=e24]: investor-test
+                - generic [ref=e25]: …/tmp/investor-test
+              - button "Workspace actions" [ref=e29]:
+                - img [ref=e30]
+            - button "tmp …/junhoyoon/tmp" [ref=e34] [cursor=pointer]:
+              - img [ref=e36]
+              - generic [ref=e38]:
+                - generic [ref=e39]: tmp
+                - generic [ref=e40]: …/junhoyoon/tmp
+              - button "Workspace actions" [ref=e44]:
+                - img [ref=e45]
+            - button "wef …/lawyer/wef" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+              - generic [ref=e53]:
+                - generic [ref=e54]: wef
+                - generic [ref=e55]: …/lawyer/wef
+              - button "Workspace actions" [ref=e59]:
+                - img [ref=e60]
+            - button "lawyer …/tmp/lawyer" [ref=e64] [cursor=pointer]:
+              - img [ref=e66]
+              - generic [ref=e68]:
+                - generic [ref=e69]: lawyer
+                - generic [ref=e70]: …/tmp/lawyer
+              - button "Workspace actions" [ref=e74]:
+                - img [ref=e75]
+            - button "openbb …/tmp/openbb" [ref=e79] [cursor=pointer]:
+              - img [ref=e81]
+              - generic [ref=e83]:
+                - generic [ref=e84]: openbb
+                - generic [ref=e85]: …/tmp/openbb
+              - button "Workspace actions" [ref=e89]:
+                - img [ref=e90]
+            - button "legal …/tmp/legal" [ref=e94] [cursor=pointer]:
+              - img [ref=e96]
+              - generic [ref=e98]:
+                - generic [ref=e99]: legal
+                - generic [ref=e100]: …/tmp/legal
+              - button "Workspace actions" [ref=e104]:
+                - img [ref=e105]
+            - button "900 …/tmp/900" [ref=e109] [cursor=pointer]:
+              - img [ref=e111]
+              - generic [ref=e113]:
+                - generic [ref=e114]: "900"
+                - generic [ref=e115]: …/tmp/900
+              - button "Workspace actions" [ref=e119]:
+                - img [ref=e120]
+            - button "yoy …/tmp/yoy" [ref=e124] [cursor=pointer]:
+              - img [ref=e126]
+              - generic [ref=e128]:
+                - generic [ref=e129]: yoy
+                - generic [ref=e130]: …/tmp/yoy
+              - button "Workspace actions" [ref=e134]:
+                - img [ref=e135]
+            - button "multiagent …/tmp/multiagent" [ref=e139] [cursor=pointer]:
+              - img [ref=e141]
+              - generic [ref=e143]:
+                - generic [ref=e144]: multiagent
+                - generic [ref=e145]: …/tmp/multiagent
+              - button "Workspace actions" [ref=e149]:
+                - img [ref=e150]
+            - button "my-dot-project …/junhoyoon/my-dot-project" [ref=e154] [cursor=pointer]:
+              - img [ref=e156]
+              - generic [ref=e158]:
+                - generic [ref=e159]: my-dot-project
+                - generic [ref=e160]: …/junhoyoon/my-dot-project
+              - button "Workspace actions" [ref=e164]:
+                - img [ref=e165]
+            - button "invest-avengers …/junhoyoon/invest-avengers" [ref=e169] [cursor=pointer]:
+              - img [ref=e171]
+              - generic [ref=e173]:
+                - generic [ref=e174]: invest-avengers
+                - generic [ref=e175]: …/junhoyoon/invest-avengers
+              - button "Workspace actions" [ref=e179]:
+                - img [ref=e180]
+            - button "ai-invest …/junhoyoon/ai-invest" [ref=e184] [cursor=pointer]:
+              - img [ref=e186]
+              - generic [ref=e188]:
+                - generic [ref=e189]: ai-invest
+                - generic [ref=e190]: …/junhoyoon/ai-invest
+              - button "Workspace actions" [ref=e194]:
+                - img [ref=e195]
+            - button "93 …/junhoyoon/93" [ref=e199] [cursor=pointer]:
+              - img [ref=e201]
+              - generic [ref=e203]:
+                - generic [ref=e204]: "93"
+                - generic [ref=e205]: …/junhoyoon/93
+              - button "Workspace actions" [ref=e209]:
+                - img [ref=e210]
+            - button "dot-studio-guide-empty-workspace …/tmp/dot-studio-guide-empty-workspace" [ref=e214] [cursor=pointer]:
+              - img [ref=e216]
+              - generic [ref=e218]:
+                - generic [ref=e219]: dot-studio-guide-empty-workspace
+                - generic [ref=e220]: …/tmp/dot-studio-guide-empty-workspace
+              - button "Workspace actions" [ref=e224]:
+                - img [ref=e225]
+            - button "323 …/tmp/323" [ref=e229] [cursor=pointer]:
+              - img [ref=e231]
+              - generic [ref=e233]:
+                - generic [ref=e234]: "323"
+                - generic [ref=e235]: …/tmp/323
+              - button "Workspace actions" [ref=e239]:
+                - img [ref=e240]
+            - button "4423 …/tmp/4423" [ref=e244] [cursor=pointer]:
+              - img [ref=e246]
+              - generic [ref=e248]:
+                - generic [ref=e249]: "4423"
+                - generic [ref=e250]: …/tmp/4423
+              - button "Workspace actions" [ref=e254]:
+                - img [ref=e255]
+            - button "tmp /tmp" [ref=e259] [cursor=pointer]:
+              - img [ref=e261]
+              - generic [ref=e263]:
+                - generic [ref=e264]: tmp
+                - generic [ref=e265]: /tmp
+              - button "Workspace actions" [ref=e269]:
+                - img [ref=e270]
+        - generic [ref=e275]:
+          - generic [ref=e276]:
+            - generic [ref=e277]:
+              - generic [ref=e278]: Performers
+              - button "Add performer" [ref=e280] [cursor=pointer]:
+                - img [ref=e281]
+            - generic [ref=e284]:
+              - generic [ref=e285]:
+                - button "quantitative-analyst" [ref=e286] [cursor=pointer]:
+                  - img [ref=e288]
+                  - img [ref=e291]
+                  - generic [ref=e294]: quantitative-analyst
+                  - generic [ref=e295]:
+                    - button "Hide performer" [ref=e296]:
+                      - img [ref=e297]
+                    - button "New session" [ref=e300]:
+                      - img [ref=e301]
+                    - button "Edit performer" [ref=e302]:
+                      - img [ref=e303]
+                    - button "Save performer as draft" [ref=e306]:
+                      - img [ref=e307]
+                    - button "Delete performer" [ref=e310]:
+                      - img [ref=e311]
+                - generic [ref=e314]:
+                  - button "quantitative-analyst Current thread" [ref=e316] [cursor=pointer]:
+                    - img [ref=e318]
+                    - generic [ref=e320]:
+                      - generic [ref=e321]: quantitative-analyst
+                      - generic [ref=e322]: Current thread
+                    - generic [ref=e323]:
+                      - button "Rename session" [ref=e324]:
+                        - img [ref=e325]
+                      - button "Delete session" [ref=e328]:
+                        - img [ref=e329]
+                  - button "가벼운 인사 메시지 Saved thread" [ref=e333] [cursor=pointer]:
+                    - img [ref=e335]
+                    - generic [ref=e337]:
+                      - generic [ref=e338]: 가벼운 인사 메시지
+                      - generic [ref=e339]: Saved thread
+                    - generic [ref=e340]:
+                      - button "Rename session" [ref=e341]:
+                        - img [ref=e342]
+                      - button "Delete session" [ref=e345]:
+                        - img [ref=e346]
+                  - button "quantitative-analyst Saved thread" [ref=e350] [cursor=pointer]:
+                    - img [ref=e352]
+                    - generic [ref=e354]:
+                      - generic [ref=e355]: quantitative-analyst
+                      - generic [ref=e356]: Saved thread
+                    - generic [ref=e357]:
+                      - button "Rename session" [ref=e358]:
+                        - img [ref=e359]
+                      - button "Delete session" [ref=e362]:
+                        - img [ref=e363]
+              - button "Head Manager" [ref=e367] [cursor=pointer]:
+                - img [ref=e369]
+                - img [ref=e372]
+                - generic [ref=e375]: Head Manager
+                - generic [ref=e376]:
+                  - button "Hide performer" [ref=e377]:
+                    - img [ref=e378]
+                  - button "New session" [ref=e381]:
+                    - img [ref=e382]
+                  - button "Edit performer" [ref=e383]:
+                    - img [ref=e384]
+                  - button "Save performer as draft" [ref=e387]:
+                    - img [ref=e388]
+                  - button "Delete performer" [ref=e391]:
+                    - img [ref=e392]
+              - button "Fundamental Analyst" [ref=e396] [cursor=pointer]:
+                - img [ref=e398]
+                - img [ref=e401]
+                - generic [ref=e404]: Fundamental Analyst
+                - generic [ref=e405]:
+                  - button "Hide performer" [ref=e406]:
+                    - img [ref=e407]
+                  - button "New session" [ref=e410]:
+                    - img [ref=e411]
+                  - button "Edit performer" [ref=e412]:
+                    - img [ref=e413]
+                  - button "Save performer as draft" [ref=e416]:
+                    - img [ref=e417]
+                  - button "Delete performer" [ref=e420]:
+                    - img [ref=e421]
+          - generic [ref=e425]:
+            - generic [ref=e426]:
+              - generic [ref=e427]: Acts
+              - button "Add Act" [ref=e429] [cursor=pointer]:
+                - img [ref=e430]
+            - button "asset-management-team 3p · 3r · 0t" [ref=e437] [cursor=pointer]:
+              - img [ref=e439]
+              - img [ref=e442]
+              - generic [ref=e446]:
+                - generic [ref=e447]: asset-management-team
+                - generic [ref=e448]: 3p · 3r · 0t
+              - generic [ref=e449]:
+                - button "Hide from canvas" [ref=e450]:
+                  - img [ref=e451]
+                - button "New Thread" [ref=e454]:
+                  - img [ref=e455]
+                - button "Edit act" [ref=e456]:
+                  - img [ref=e457]
+                - button "Save act as draft" [ref=e460]:
+                  - img [ref=e461]
+                - button "Delete act" [ref=e464]:
+                  - img [ref=e465]
+      - button "Asset Library" [ref=e469] [cursor=pointer]:
+        - img [ref=e470]
+        - generic [ref=e475]: Asset Library
+        - img [ref=e476]
+    - generic [ref=e479]:
+      - generic [ref=e480]:
+        - generic [ref=e481]:
+          - button "Zoom In" [ref=e482] [cursor=pointer]:
+            - img [ref=e483]
+          - button "Zoom Out" [ref=e484] [cursor=pointer]:
+            - img [ref=e485]
+          - button "Fit to Screen" [ref=e486] [cursor=pointer]:
+            - img [ref=e487]
+        - generic [ref=e492]:
+          - button "DOT" [ref=e493]:
+            - img [ref=e494]
+            - generic [ref=e496]: DOT
+          - button "Sign in" [ref=e497] [cursor=pointer]:
+            - img [ref=e498]
+            - generic [ref=e501]: Sign in
+          - generic "Local server connected" [ref=e502]:
+            - img [ref=e503]
+          - button "Terminal" [ref=e509] [cursor=pointer]:
+            - img [ref=e510]
+            - img [ref=e512]
+          - button "Workspace Tracking" [ref=e514] [cursor=pointer]:
+            - img [ref=e515]
+          - button "Save or publish selected asset" [ref=e518] [cursor=pointer]:
+            - img [ref=e519]
+          - button "Toggle Theme" [ref=e522] [cursor=pointer]:
+            - img [ref=e523]
+          - button "Settings" [ref=e529] [cursor=pointer]:
+            - img [ref=e530]
+          - button "Assistant" [ref=e533] [cursor=pointer]
+      - application [ref=e534]:
+        - generic [ref=e536]:
+          - generic:
+            - generic:
+              - group [ref=e537]
+              - group [ref=e538]
+              - group [ref=e539]
+              - group [ref=e540]
+        - img
+  - status [ref=e542]

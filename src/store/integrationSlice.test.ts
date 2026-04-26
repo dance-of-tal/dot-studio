@@ -342,6 +342,66 @@ describe('integrationSlice act participant sync', () => {
         harness.get().cleanupRealtimeEvents()
     })
 
+    it('does not let a background performer event steal the selected thread binding', async () => {
+        const loadThreads = vi.fn(async () => {})
+        const harness = createHarness(loadThreads)
+        harness.get().chatKeyToSession['performer-1'] = 'selected-session'
+        harness.get().sessionToChatKey['selected-session'] = 'performer-1'
+
+        harness.get().initRealtimeEvents()
+
+        emitEvent(currentSources.chat, {
+            type: 'session.status',
+            properties: {
+                ownerId: 'performer-1',
+                sessionID: 'running-session',
+                status: { type: 'busy' },
+            },
+        })
+
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(harness.get().chatKeyToSession['performer-1']).toBe('selected-session')
+        expect(harness.get().sessionToChatKey['selected-session']).toBe('performer-1')
+        expect(harness.get().sessionToChatKey['running-session']).toBeUndefined()
+        expect(harness.get().seStatuses['running-session']).toBeUndefined()
+
+        harness.get().cleanupRealtimeEvents()
+    })
+
+    it('does not let lazy ownership resolution steal the selected performer thread', async () => {
+        const loadThreads = vi.fn(async () => {})
+        const harness = createHarness(loadThreads)
+        harness.get().chatKeyToSession['performer-1'] = 'selected-session'
+        harness.get().sessionToChatKey['selected-session'] = 'performer-1'
+        resolveSessionMock.mockReset().mockResolvedValue({
+            found: true,
+            ownerId: 'performer-1',
+            ownerKind: 'performer',
+        })
+
+        harness.get().initRealtimeEvents()
+
+        emitEvent(currentSources.chat, {
+            type: 'session.status',
+            properties: {
+                sessionID: 'running-session',
+                status: { type: 'busy' },
+            },
+        })
+
+        await Promise.resolve()
+        await Promise.resolve()
+
+        expect(resolveSessionMock).toHaveBeenCalledWith('running-session')
+        expect(harness.get().chatKeyToSession['performer-1']).toBe('selected-session')
+        expect(harness.get().sessionToChatKey['running-session']).toBeUndefined()
+        expect(harness.get().seStatuses['running-session']).toBeUndefined()
+
+        harness.get().cleanupRealtimeEvents()
+    })
+
     it('binds and streams camelCase act participant events with transport status for abort UI', async () => {
         const loadThreads = vi.fn(async () => {})
         const harness = createHarness(loadThreads)

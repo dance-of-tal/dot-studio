@@ -182,6 +182,8 @@ export const api = {
             ),
         deleteThread: (actId: string, threadId: string) =>
             deleteJSON<{ ok: boolean }>(`/api/act/${actId}/thread/${threadId}`),
+        deleteAct: (actId: string) =>
+            deleteJSON<{ ok: boolean }>(`/api/act/${actId}`),
         readBoard: (actId: string, threadId: string, key?: string) =>
             fetchJSON<{ ok: boolean; entries: Array<Record<string, unknown>> }>(
                 `/api/act/${actId}/thread/${threadId}/read-board${key ? `?key=${encodeURIComponent(key)}` : ''}`,

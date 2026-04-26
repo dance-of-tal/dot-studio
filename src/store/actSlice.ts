@@ -19,7 +19,6 @@ import {
     createActThreadImpl,
     findExistingParticipantKey,
     importActFromAssetImpl,
-    listActThreadChatKeys,
     loadActThreadsImpl,
     performerNodeToActRef,
     resolveActEditorStateAfterRelationRemoval,
@@ -39,7 +38,11 @@ import {
     setFocusSnapshotNodeHidden,
 } from '../lib/focus-utils'
 import { showToast } from '../lib/toast'
-import { clearChatSessionView } from './session'
+import {
+    collectActSessionTargets,
+    collectActThreadSessionTargets,
+    detachSessionTargets,
+} from './session/session-lifecycle'
 
 function relationConflicts(
     left: { between: [string, string]; direction: 'both' | 'one-way' },
@@ -106,6 +109,8 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     },
 
     removeAct: (id) => {
+        const sessionTargets = collectActSessionTargets(get(), id)
+        detachSessionTargets(set, get, sessionTargets)
         set((s) => {
             const focusExit = buildExitFocusModeState(s)
             const acts = (focusExit?.acts as StudioState['acts'] | undefined) || s.acts
@@ -123,6 +128,17 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
                 workspaceDirty: true,
             }
         })
+        void api.actRuntime.deleteAct(id)
+            .catch((error) => {
+                console.error('Failed to delete act runtime sessions', error)
+                showToast('Studio could not delete every runtime thread for that Act.', 'error', {
+                    title: 'Act cleanup failed',
+                    dedupeKey: `act:delete-runtime:${id}`,
+                })
+            })
+            .finally(() => {
+                void get().listSessions()
+            })
         get().recordStudioChange({ kind: 'act', actIds: [id], workspaceWide: true })
     },
 
@@ -529,12 +545,11 @@ export const createActSlice: StateCreator<StudioState, [], [], ActSlice> = (set,
     loadThreads: async (actId) => loadActThreadsImpl(get, set, actId),
 
     deleteThread: async (actId, threadId) => {
+        const threadSessionTargets = collectActThreadSessionTargets(get(), actId, threadId)
         await api.actRuntime.deleteThread(actId, threadId)
-        const threadChatKeys = listActThreadChatKeys(get(), actId, threadId)
+        detachSessionTargets(set, get, threadSessionTargets)
         set((state: StudioState) => buildDeletedActThreadState(state, actId, threadId))
-        for (const chatKey of threadChatKeys) {
-            clearChatSessionView(get, chatKey)
-        }
+        void get().listSessions()
     },
 
     renameThread: async (actId, threadId, name) => {

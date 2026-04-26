@@ -186,4 +186,9 @@ actRuntimeThreads.delete('/api/act/:actId/thread/:threadId', async (c) => {
     return c.json(result)
 })
 
+actRuntimeThreads.delete('/api/act/:actId', async (c) => {
+    const actId = c.req.param('actId')
+    return c.json(await getActRuntimeService(requestWorkingDir(c)).deleteAct(actId))
+})
+
 export default actRuntimeThreads

@@ -215,6 +215,10 @@ function isSdkContractError(message: string, status?: number) {
         || /\b(no body in sse response|unexpected response|response validation|invalid response|failed to parse|cannot read properties of undefined|not implemented)\b/i.test(message)
 }
 
+function isSessionNotFoundError(message: string) {
+    return /\bSession not found:/i.test(message)
+}
+
 export function normalizeOpencodeError(
     err: unknown,
     context: NormalizeErrorContext = {},
@@ -275,6 +279,19 @@ export function normalizeOpencodeError(
             action: 'reduce_context',
             retryable: false,
             status: status || 400,
+            ...(providerId ? { providerId } : {}),
+            ...(modelId ? { modelId } : {}),
+        }
+    }
+
+    if (isSessionNotFoundError(detail)) {
+        return {
+            error: detail,
+            detail,
+            code: 'validation',
+            action: 'refresh_studio',
+            retryable: false,
+            status: 404,
             ...(providerId ? { providerId } : {}),
             ...(modelId ? { modelId } : {}),
         }

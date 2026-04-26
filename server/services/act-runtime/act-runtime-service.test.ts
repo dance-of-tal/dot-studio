@@ -14,6 +14,7 @@ const processWakeTargetsMock = vi.fn()
 const tripParticipantCircuitMock = vi.fn()
 const sessionStatusMock = vi.fn()
 const sessionMessagesMock = vi.fn()
+const sessionDeleteMock = vi.fn()
 
 vi.mock('../opencode-projection/stage-projection-service.js', () => ({
     ensurePerformerProjection: ensurePerformerProjectionMock,
@@ -24,6 +25,7 @@ vi.mock('../../lib/opencode.js', () => ({
         session: {
             status: sessionStatusMock,
             messages: sessionMessagesMock,
+            delete: sessionDeleteMock,
         },
     }),
 }))
@@ -99,6 +101,7 @@ describe('ActRuntimeService projection prewarm', () => {
         tripParticipantCircuitMock.mockReset()
         sessionStatusMock.mockReset().mockResolvedValue({ data: {} })
         sessionMessagesMock.mockReset().mockResolvedValue({ data: [] })
+        sessionDeleteMock.mockReset().mockResolvedValue({ data: { ok: true } })
 
         const { workspaceIdForDir, workspaceDir } = await import('../../lib/config.js')
         const wsDir = workspaceDir(workspaceIdForDir(workingDir))

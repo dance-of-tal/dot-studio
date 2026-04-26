@@ -174,6 +174,12 @@ describe('scoreModel', () => {
         const preview = scoreModel({ name: 'GPT-5 Preview', connected: true, context: 0 })
         expect(regular).toBeGreaterThan(preview)
     })
+
+    it('prioritizes newer numbered GPT models', () => {
+        const latest = scoreModel({ name: 'GPT-5.5', id: 'gpt-5.5', connected: true, context: 0 })
+        const previous = scoreModel({ name: 'GPT-5.4', id: 'gpt-5.4', connected: true, context: 0 })
+        expect(latest).toBeGreaterThan(previous)
+    })
 })
 
 describe('filterInstalledAssets', () => {

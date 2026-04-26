@@ -28,6 +28,7 @@ import {
     isSessionStatusActive,
     resolveEffectiveSessionStatus,
 } from '../../lib/chat-session.js'
+import { deleteSessionOwnership } from '../session-ownership-service.js'
 import { evaluateWakeCondition } from './wake-evaluator.js'
 import { validateConditionExpr } from './wake-condition-validator.js'
 import { payloadString } from './act-runtime-utils.js'
@@ -986,13 +987,57 @@ class ActRuntimeService {
         return { ok: true as const, threads: this.threadManager.listThreads(actId) }
     }
 
+    private async deleteOpenCodeSessions(sessionIds: string[]) {
+        if (sessionIds.length === 0) {
+            return
+        }
+        const oc = await getOpencode()
+        for (const sessionId of Array.from(new Set(sessionIds))) {
+            try {
+                unwrapOpencodeResult(await oc.session.delete({
+                    sessionID: sessionId,
+                    directory: this.workingDir,
+                }))
+            } catch (error) {
+                console.warn('[act-runtime] Failed to delete linked OpenCode session', {
+                    sessionId,
+                    workingDir: this.workingDir,
+                    error,
+                })
+            }
+            await deleteSessionOwnership(sessionId).catch((error) => {
+                console.warn('[act-runtime] Failed to delete linked session ownership', {
+                    sessionId,
+                    workingDir: this.workingDir,
+                    error,
+                })
+            })
+        }
+    }
+
     async deleteThread(_actId: string, threadId: string) {
         this.clearThreadWakeConditionAlarms(threadId)
-        const deleted = await this.threadManager.deleteThread(threadId)
-        if (!deleted) {
+        const result = await this.threadManager.deleteThread(threadId)
+        if (!result.deleted) {
             return { ok: false as const, status: 404, error: `Thread ${threadId} not found` }
         }
         this.actorSystem.deleteThread(threadId)
+        await this.deleteOpenCodeSessions(result.sessionIds)
+        return { ok: true as const }
+    }
+
+    async deleteAct(actId: string) {
+        await this.ensureThreadsLoaded()
+        const threadIds = this.threadManager.listThreadIds(actId)
+        for (const threadId of threadIds) {
+            this.clearThreadWakeConditionAlarms(threadId)
+            const result = await this.threadManager.deleteThread(threadId)
+            if (!result.deleted) {
+                continue
+            }
+            this.actorSystem.deleteThread(threadId)
+            await this.deleteOpenCodeSessions(result.sessionIds)
+        }
         return { ok: true as const }
     }
 
