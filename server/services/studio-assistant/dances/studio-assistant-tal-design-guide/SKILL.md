@@ -65,7 +65,7 @@ Use this skill when the task is not just "make a Tal draft exist", but "design a
 
 ## Assistant Behavior
 - When proposing Tal for a new Performer, propose the smallest strong Tal that fits the requested role.
-- If the user did not specify Tal, offer a role-appropriate Tal draft and ask whether to apply it as-is.
+- If the user did not specify Tal and the role intent is clear, write a role-appropriate inline Tal draft without blocking the whole workflow. Ask first only when the Tal identity, tone, or policy choices are important and unclear.
 - If several different mental models are plausible, ask one short clarifying question instead of blending them into a vague Tal.
 - When revising a Tal, tighten and compress before expanding.
 - Prefer removing low-signal text over adding more text.

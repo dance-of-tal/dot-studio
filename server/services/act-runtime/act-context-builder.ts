@@ -72,6 +72,10 @@ function coordinationSignalLines(
     return lines
 }
 
+function listOrNone(items: string[]) {
+    return items.length > 0 ? items.join(', ') : 'none'
+}
+
 /**
  * Build markdown Act context for a participant's system prompt.
  */
@@ -83,13 +87,13 @@ export function buildActContext(
     const selfName = participantDisplayName(actDefinition, participantKey)
     const directPartners = directConnectionKeys(actDefinition, participantKey)
     const messageablePartners = messageablePartnerKeys(actDefinition, participantKey)
+    const teammateNames = messageablePartners.map((key) => participantDisplayName(actDefinition, key))
 
-    // ── Header ──────────────────────────────────────
-    lines.push('# Collaboration Context')
+    lines.push('# Act Runtime Context')
     if (actDefinition.description) {
         lines.push(`- Goal: ${actDefinition.description}`)
     }
-    lines.push(`- Team: ${actDefinition.name}`)
+    lines.push(`- Act: ${actDefinition.name}`)
     lines.push(`- Your role: ${selfName}`)
     const selfDescription = participantDescription(actDefinition, participantKey)
     if (selfDescription) {
@@ -97,39 +101,20 @@ export function buildActContext(
     }
     lines.push('')
 
-    // ── Collaboration Runtime ────────────────────────
-    lines.push('# Coordination Tools')
-    lines.push('- Use `message_teammate` for direct coordination with one teammate.')
-    lines.push('- For `message_teammate`, set `recipient` to the teammate display name exactly as shown below. Do not pass relation names like `participant_1_to_participant_2`.')
-    lines.push('- Use `update_shared_board` to keep compact shared state: decisions, task status, findings, and handoffs.')
-    lines.push('- Write shared board entries as short Markdown summaries. Use headings, bullets, and checklists when they help teammates scan quickly.')
-    lines.push('- Do not use the shared board as the storage location for full deliverables. Keep final outputs in the working directory or the proper destination, then post a short Markdown handoff or summary.')
-    lines.push('- Reuse the same shared note key when you are updating the same deliverable, decision, or workstream. Create a new key only when the work meaningfully splits into a different artifact, finding set, or task.')
-    lines.push('- If a directly connected teammate exposes shared note key patterns below, prefer a key that matches their pattern when you want them to notice or self-wake on that update.')
-    lines.push('- If you must create a new shared note key that teammates would not infer, send a direct message naming the exact key and what they should do with it.')
-    lines.push('- Use `list_shared_board` when you need to inspect what shared notes exist. It can filter by kind and defaults to compact summaries.')
-    lines.push('- When you are unsure whether a note already exists, inspect the board first and then either reuse the existing key or replace it with a fresher summary.')
-    lines.push('- Use `get_shared_board_entry` only when you already know the exact shared note key you need.')
-    lines.push('- Do not pass placeholder values like `recent` or category names like `artifact` as a shared note key.')
-    lines.push('- Treat message tags as lightweight coordination labels. Reuse teammate-facing tags when they fit the intent.')
-    lines.push('- If you invent a new tag, do not assume teammates subscribe to it. Keep the message understandable without the tag, or explain the new label in the message body.')
-    lines.push('- Before acting, check only the sender or shared note key relevant to the current event.')
-    lines.push('- Prefer replacing stale shared notes with a fresh summary instead of appending long incremental logs.')
-    lines.push('- Use `wait_until` instead of polling the full shared board when you are blocked on future input.')
-    lines.push('- Common wait conditions: `message_received`, `board_key_exists`, and `wake_at`.')
-    lines.push('- Use `all_of` or `any_of` only when you need to combine conditions.')
-    lines.push('- `wake_at` schedules your own self-wake at an absolute timestamp.')
-    lines.push('- After you call `wait_until`, end your turn immediately. Do not call `message_teammate`, `update_shared_board`, `list_shared_board`, or `get_shared_board_entry` again until you are resumed.')
+    lines.push('# Runtime Tools')
+    lines.push('- `message_teammate({recipient,message,tag?})`: send one direct update. `recipient` must be one of the messageable names below; do not use relation names like `participant_1_to_participant_2`.')
+    lines.push('- `update_shared_board({entryKey,entryType,content,mode?})`: publish compact Markdown for decisions, findings, tasks, status, and handoffs. Use `entryType`: `artifact`, `finding`, or `task`; prefer `mode:"replace"`.')
+    lines.push('- `list_shared_board({kind?,mode?})`: inspect existing notes before choosing a key. Defaults to summaries; use `mode:"full"` only for a necessary resync.')
+    lines.push('- `get_shared_board_entry({entryKey})`: read one exact key. Never pass placeholders like `recent` or category names like `artifact` as the key.')
+    lines.push('- `wait_until({resumeWith,conditionJson})`: park yourself until future input. `conditionJson` must be JSON using `message_received`, `board_key_exists`, `wake_at`, `all_of`, or `any_of`.')
+    lines.push('- Condition shapes: `{"type":"message_received","from":"Teammate","tag":"handoff"}`, `{"type":"board_key_exists","key":"review-summary"}`, `{"type":"wake_at","at":1735689600000}`. Use a direct connection display name for `from`.')
+    lines.push('- After `wait_until`, end the turn immediately; do not call another runtime tool until resumed.')
     lines.push('')
 
-    const teammateNames = messageablePartners.map((key) => participantDisplayName(actDefinition, key))
-    if (teammateNames.length > 0) {
-        lines.push('# Valid Teammates')
-        lines.push(`- Use these names as ` + '`recipient`' + ` values: ${teammateNames.join(', ')}`)
-        lines.push('')
-    }
+    lines.push('# Messageable Teammates')
+    lines.push(`- Valid ` + '`recipient`' + ` values: ${listOrNone(teammateNames)}`)
+    lines.push('')
 
-    // ── Available Relations ─────────────────────────
     const myRelations = actDefinition.relations.filter((rel) => rel.between.includes(participantKey))
     if (myRelations.length > 0) {
         lines.push('# Direct Connections')
@@ -152,25 +137,26 @@ export function buildActContext(
         lines.push('')
     }
 
-    // ── Coordination Signals ────────────────────────
     const signalLines = coordinationSignalLines(actDefinition, directPartners)
     if (signalLines.length > 0) {
-        lines.push('# Coordination Signals')
+        lines.push('# Teammate Wake Hints')
         lines.push(...signalLines)
+        lines.push('- Reuse these tags or shared note keys when they fit. If you invent a new key or tag, make the message self-explanatory.')
         lines.push('')
     }
 
-    // activeDances section removed per PRD-005
-    // Performer uses all its dances by default
+    lines.push('# Operating Rules')
+    lines.push('- Before acting on a wake event, inspect only the sender, message, or shared note key relevant to that event.')
+    lines.push('- Reuse the same shared note key for the same deliverable, decision, finding set, or task; create a new key only when the workstream splits.')
+    lines.push('- Shared board notes are not final deliverable storage. Save real artifacts in the working directory or proper destination, then post a short handoff summary.')
+    lines.push('- Use `wait_until` instead of polling when blocked on a teammate message, shared note, or scheduled self-wake.')
 
-    // ── Act Rules ───────────────────────────────────
     if (actDefinition.actRules && actDefinition.actRules.length > 0) {
-        lines.push('# Working Rules')
         for (const rule of actDefinition.actRules) {
             lines.push(`- ${rule}`)
         }
-        lines.push('')
     }
+    lines.push('')
 
     return lines.join('\n')
 }

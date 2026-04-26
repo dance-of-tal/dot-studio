@@ -26,7 +26,11 @@ Use this skill when the user wants help designing a performer team or workflow s
 - Prefer small, legible role splits over a large generic team.
 - Give each performer a distinct responsibility and a clear handoff.
 - If the workflow naturally has stages, mirror those stages in relation order.
+- Relation direction should match the actual flow of deliverables, decisions, approval, or escalation.
+- Use relation names for the concrete artifact or coordination moment being passed, such as `research brief`, `review notes`, or `launch handoff`.
 - If the user asks for review, approval, or escalation, model those as explicit relations rather than vague shared responsibility.
+- Use separate opposite one-way relations when a feedback loop is materially different from the original handoff.
+- Add participant subscriptions only for concrete wake behavior; align tags and shared board keys with the handoffs the user expects.
 - If a workflow can plausibly be solved with one performer, say so instead of forcing an Act.
 
 ## Common Patterns

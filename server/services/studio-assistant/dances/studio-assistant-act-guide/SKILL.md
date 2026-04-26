@@ -25,6 +25,7 @@ Use this skill when the user is asking about Act structure, relation design, or 
 ## Design Rules
 - If an Act has multiple participants, it should also have at least one relation.
 - The Act composition should match the user's requested team shape, workflow, and role split.
+- Infer choreography from the user's intent: roles, deliverables, handoffs, review or approval loops, escalation paths, and expected order of work.
 - For workflow or team requests, a participant-only Act is usually incomplete and should be treated as wrong unless the user explicitly asked for an unconnected group.
 - If the user asks for something like a `d2c company`, `investment team`, or `review workflow`, create the Act with participants and relations in the same `createAct` action.
 - For a brand-new Act whose participants are already known, prefer one `createAct` with `participantPerformerRefs`, `participantPerformerIds`, or `participantPerformerNames` instead of follow-up attach actions.
@@ -33,10 +34,14 @@ Use this skill when the user is asking about Act structure, relation design, or 
 - Use `attachPerformerToAct` mainly when extending an existing Act.
 - If the Act needs missing participants, create the missing Performers first in cascade and make sure those Performers also match the user intent.
 - Always give each new relation both a clear `name` and `description`.
+- Relation direction should follow the real handoff or authority flow. Use `one-way` for staged handoffs, and separate opposite `one-way` relations for feedback loops when both directions matter.
+- Relation names should name the artifact, decision, or coordination moment being handed off, not generic labels like `handoff` or `sync`.
 - Linked performer `description` becomes participant focus in Act runtime, so keep it aligned with the participant's job.
 - Use `sourceParticipantKey` / `sourcePerformerId` / `sourcePerformerRef` / `sourcePerformerName` and the matching `target...` fields for new relations.
 - Do not generate `from...` or `to...` relation field names.
 - Treat subscriptions as wake-up filters, not permissions.
+- Add subscriptions only when the user asks for wake behavior or the workflow clearly needs a participant to resume on specific `messageTags`, `callboardKeys`, or `runtime.idle`.
+- When using subscriptions, align tags and shared note keys with concrete relation handoffs so runtime performers notice the right updates.
 - Use `actRules` for whole-Act instructions that every participant should see.
 - Use `callboardKeys` as the field name even if the UI describes the same surface as shared board or shared notes.
 - `safety` is the whole-Act runtime guardrail layer. It is different from participant `wait_until`.
@@ -51,6 +56,7 @@ Use this skill when the user is asking about Act structure, relation design, or 
 - Put each participant's job focus in the linked Performer `description`.
 - Put runtime caps, loop limits, and timeout behavior in `safety`, not in relation metadata.
 - Put wake filters in participant `subscriptions`, not in `actRules`.
+- Use subscriptions sparingly; over-broad tags or shared note keys wake the wrong participant and waste context.
 - Keep relations concrete and legible. A good relation says who hands what to whom and why that handoff exists.
 - For review, approval, or escalation flows, it is often better to model separate one-way relations than one vague bidirectional relation.
 
