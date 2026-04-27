@@ -23,6 +23,7 @@ import {
     parseTags,
 } from './publish-modal-utils'
 import type { PickerItem } from './publish-modal-utils'
+import { stageFromWorkingDir } from '../../../shared/publish-stage'
 
 export function usePublishModalController(open: boolean) {
     const workingDir = useStudioStore((state) => state.workingDir)
@@ -46,6 +47,7 @@ export function usePublishModalController(open: boolean) {
     const [step, setStep] = useState<'picker' | 'form'>('picker')
     const [pickerSelection, setPickerSelection] = useState<PickerItem | null>(null)
     const [slug, setSlug] = useState('')
+    const [stage, setStage] = useState('')
     const [description, setDescription] = useState('')
     const [tagsText, setTagsText] = useState('')
     const [status, setStatus] = useState<null | { tone: 'success' | 'error'; message: string }>(null)
@@ -101,9 +103,10 @@ export function usePublishModalController(open: boolean) {
         if (!formSeed) return
 
         setSlug(formSeed.slug)
+        setStage(formSeed.stage || stageFromWorkingDir(workingDir))
         setDescription(formSeed.description)
         setTagsText(formSeed.tagsText)
-    }, [draft, isLocalAsset, performer, pickerSelection, selectedAct, step])
+    }, [draft, isLocalAsset, performer, pickerSelection, selectedAct, step, workingDir])
 
     const performerPreflight = useMemo(() => buildPerformerPreflight(performer), [performer])
 
@@ -138,6 +141,7 @@ export function usePublishModalController(open: boolean) {
     }, [drafts, performer, performers, selectedAct])
 
     const canSaveLocal = !!target
+        && !!stage.trim()
         && !!slug.trim()
         && (!markdownEditor || markdownDirty)
         && !!authUser?.authenticated
@@ -145,6 +149,7 @@ export function usePublishModalController(open: boolean) {
         && (!selectedAct || getActPublishBlockReasons(selectedAct).length === 0)
 
     const canPublish = !!target
+        && !!stage.trim()
         && !!slug.trim()
         && (!markdownEditor || markdownDirty)
         && !publishBlockedReason
@@ -222,7 +227,7 @@ export function usePublishModalController(open: boolean) {
                     description,
                     tags,
                 })
-                const result = await api.dot.saveLocalAsset('performer', slug, payload, authUser?.username || undefined)
+                const result = await api.dot.saveLocalAsset('performer', slug, payload, authUser?.username || undefined, stage)
                 await invalidateKind('performer')
                 setStatus({
                     tone: 'success',
@@ -234,7 +239,7 @@ export function usePublishModalController(open: boolean) {
             if (target.kind === 'act' && selectedAct) {
                 syncActAuthoringMeta(selectedAct.id, tags)
                 const payload = buildActAssetPayload(selectedAct, { description, tags })
-                const result = await api.dot.saveLocalAsset('act', slug, payload, authUser?.username || undefined)
+                const result = await api.dot.saveLocalAsset('act', slug, payload, authUser?.username || undefined, stage)
                 await invalidateKind('act')
                 setStatus({
                     tone: 'success',
@@ -245,7 +250,7 @@ export function usePublishModalController(open: boolean) {
 
             if (target.kind === 'tal' && markdownEditor && draft) {
                 const payload = buildMarkdownAssetPayload(markdownEditor, draft, slug, description, tags)
-                const result = await api.dot.saveLocalAsset(markdownEditor.kind, slug, payload, authUser?.username || undefined)
+                const result = await api.dot.saveLocalAsset(markdownEditor.kind, slug, payload, authUser?.username || undefined, stage)
                 syncMarkdownDraftPublishState(result.urn, slug, payload)
                 await invalidateKind(markdownEditor.kind)
                 setStatus({
@@ -283,6 +288,7 @@ export function usePublishModalController(open: boolean) {
                     drafts,
                     username: authUser?.username || '',
                     workingDir,
+                    stage,
                 })
                 const result = await api.dot.publishAsset(
                     'performer',
@@ -291,6 +297,7 @@ export function usePublishModalController(open: boolean) {
                     tags,
                     publishInput.providedAssets,
                     true,
+                    stage,
                 )
                 await invalidateKind('performer')
                 setStatus({
@@ -307,6 +314,7 @@ export function usePublishModalController(open: boolean) {
                     performers,
                     username: authUser?.username || '',
                     workingDir,
+                    stage,
                 })
                 const result = await api.dot.publishAsset(
                     'act',
@@ -315,6 +323,7 @@ export function usePublishModalController(open: boolean) {
                     tags,
                     publishInput.providedAssets,
                     true,
+                    stage,
                 )
                 await invalidateKind('act')
                 setStatus({
@@ -326,7 +335,7 @@ export function usePublishModalController(open: boolean) {
 
             if (target.kind === 'tal' && markdownEditor && draft) {
                 const payload = buildMarkdownAssetPayload(markdownEditor, draft, slug, description, tags)
-                const result = await api.dot.publishAsset(markdownEditor.kind, slug, payload, tags, undefined, true)
+                const result = await api.dot.publishAsset(markdownEditor.kind, slug, payload, tags, undefined, true, stage)
                 syncMarkdownDraftPublishState(result.urn, slug, payload)
                 await invalidateKind(markdownEditor.kind)
                 setStatus({
@@ -337,7 +346,7 @@ export function usePublishModalController(open: boolean) {
             }
 
             if (target.kind === 'tal' && isLocalAsset) {
-                const result = await api.dot.publishAsset(target.kind, slug, undefined, tags, undefined, true)
+                const result = await api.dot.publishAsset(target.kind, slug, undefined, tags, undefined, true, stage)
                 await invalidateKind(target.kind)
                 setStatus({
                     tone: 'success',
@@ -362,6 +371,8 @@ export function usePublishModalController(open: boolean) {
         target,
         slug,
         setSlug,
+        stage,
+        setStage,
         description,
         setDescription,
         tagsText,

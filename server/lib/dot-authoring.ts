@@ -10,7 +10,7 @@ import {
     parseDotAsset,
     parseDotAssetUrn,
 } from './dot-source.js'
-import { buildCanonicalStudioAssetUrn, stageFromWorkingDir } from '../../shared/publish-stage.js'
+import { buildCanonicalStudioAssetUrn, sanitizePublishSegment, stageFromWorkingDir } from '../../shared/publish-stage.js'
 
 const SLUG_RE = /^[a-z0-9][a-z0-9._-]{1,98}[a-z0-9]$/
 
@@ -254,7 +254,7 @@ export function normalizeStudioAssetPayload(kind: StudioAssetKind, authorInput: 
 
     const author = sanitizeAuthor(authorInput)
     const slug = sanitizeSlug(slugInput)
-    const stage = sanitizeSlug(stageInput)
+    const stage = sanitizePublishSegment(stageInput)
 
     switch (kind) {
         case 'tal':
@@ -274,11 +274,12 @@ export async function saveLocalStudioAsset(options: {
     kind: StudioAssetKind
     author: string
     slug: string
+    stage?: string
     payload: unknown
 }) {
     const author = sanitizeAuthor(options.author)
     const slug = sanitizeSlug(options.slug)
-    const stage = stageFromWorkingDir(options.cwd)
+    const stage = options.stage ? sanitizePublishSegment(options.stage) : stageFromWorkingDir(options.cwd)
     const urn = buildCanonicalStudioAssetUrn(options.kind, author, stage, slug)
     await ensureDotDir(options.cwd)
 
@@ -335,6 +336,7 @@ export async function publishStudioAsset(options: {
     cwd: string
     kind: StudioAssetKind
     slug: string
+    stage?: string
     payload?: unknown
     tags?: string[]
     providedAssets?: ProvidedPublishAsset[]
@@ -346,7 +348,7 @@ export async function publishStudioAsset(options: {
 
     const slug = sanitizeSlug(options.slug)
     const username = sanitizeAuthor(options.auth.username)
-    const stage = stageFromWorkingDir(options.cwd)
+    const stage = options.stage ? sanitizePublishSegment(options.stage) : stageFromWorkingDir(options.cwd)
     const urn = buildCanonicalStudioAssetUrn(options.kind, username, stage, slug)
     const providedAssets = (options.providedAssets || []).map((asset) => {
         const parsed = parseDotAsset(asset.payload)
@@ -382,6 +384,7 @@ export async function publishStudioAsset(options: {
             kind: options.kind,
             author: username,
             slug,
+            stage,
             payload: options.payload,
         })
         localPayload = saved.payload

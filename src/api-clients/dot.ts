@@ -54,8 +54,9 @@ export const dotApi = {
         slug: string,
         payload: Record<string, unknown>,
         author?: string,
+        stage?: string,
     ) =>
-        putJSON<{ ok: boolean; urn: string; path: string; existed: boolean; payload: Record<string, unknown> }>('/api/dot/assets/local', { kind, slug, payload, author } satisfies DotSaveLocalRequest),
+        putJSON<{ ok: boolean; urn: string; path: string; existed: boolean; payload: Record<string, unknown> }>('/api/dot/assets/local', { kind, slug, payload, author, stage } satisfies DotSaveLocalRequest),
 
     publishAsset: (
         kind: 'tal' | 'dance' | 'performer' | 'act',
@@ -69,6 +70,7 @@ export const dotApi = {
             tags?: string[]
         }>,
         acknowledgedTos = false,
+        stage?: string,
     ) =>
         postJSON<{
             ok: boolean
@@ -77,7 +79,7 @@ export const dotApi = {
             dependenciesPublished: string[]
             dependenciesSkipped: string[]
             dependenciesExisting: string[]
-        }>('/api/dot/assets/publish', { kind, slug, payload, tags, providedAssets, acknowledgedTos } satisfies DotPublishRequest),
+        }>('/api/dot/assets/publish', { kind, slug, payload, tags, providedAssets, acknowledgedTos, stage } satisfies DotPublishRequest),
 
     search: (query: string, kind?: string, limit?: number) =>
         fetchJSON<AssetListItem[]>(

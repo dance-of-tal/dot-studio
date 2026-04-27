@@ -37,6 +37,8 @@ import {
     resolveActiveActParticipantKey,
     resolveActParticipantPerformer,
 } from './act-chat-panel-helpers'
+import '../performer/AgentChat.css'
+import '../performer/AgentChatComposer.css'
 import './ActChatPanel.css'
 
 const EMPTY_MESSAGES: ChatMessage[] = []

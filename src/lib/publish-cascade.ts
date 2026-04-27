@@ -1,4 +1,4 @@
-import { buildCanonicalStudioAssetUrn, stageFromWorkingDir } from '../../shared/publish-stage'
+import { buildCanonicalStudioAssetUrn, sanitizePublishSegment, stageFromWorkingDir } from '../../shared/publish-stage'
 import type { DraftAsset, PerformerNode, WorkspaceAct } from '../types'
 import { resolvePerformerFromActBinding } from './act-participants'
 import { performerMcpConfigForAsset, slugifyAssetName } from './performers-publish'
@@ -21,6 +21,7 @@ type PublishContext = {
     drafts: Record<string, DraftAsset>
     username: string
     workingDir: string
+    stage?: string
 }
 
 type ActPublishContext = PublishContext & {
@@ -34,6 +35,10 @@ type PromotedAsset = {
 
 function filterTags(tags: string[] | undefined | null) {
     return (tags || []).map((tag) => tag.trim()).filter(Boolean)
+}
+
+function stageForContext(context: PublishContext) {
+    return context.stage ? sanitizePublishSegment(context.stage) : stageFromWorkingDir(context.workingDir)
 }
 
 function draftGuidanceForDance(scope: 'performer' | 'act') {
@@ -132,7 +137,7 @@ function promoteTalDraft(
         throw new Error(`Tal draft '${draftId}' is missing. Reconnect it from Asset Library before publishing.`)
     }
 
-    const stage = stageFromWorkingDir(context.workingDir)
+    const stage = stageForContext(context)
     const slug = draft.slug || slugifyAssetName(draft.name || draftId)
     const urn = buildCanonicalStudioAssetUrn('tal', context.username, stage, slug)
     pushProvidedAsset(collector, {
@@ -156,7 +161,7 @@ function promotePerformerNode(
     context: PublishContext,
     collector: Map<string, ProvidedPublishAsset>,
 ): PromotedAsset {
-    const stage = stageFromWorkingDir(context.workingDir)
+    const stage = stageForContext(context)
     const urn = buildCanonicalStudioAssetUrn('performer', context.username, stage, options.slug)
     const talUrn = performer.talRef?.kind === 'registry'
         ? performer.talRef.urn
@@ -220,7 +225,7 @@ function maybePromoteRegistryParticipantPerformer(
     context: ActPublishContext,
     collector: Map<string, ProvidedPublishAsset>,
 ) {
-    const stage = stageFromWorkingDir(context.workingDir)
+    const stage = stageForContext(context)
     const expectedPrefix = `performer/@${context.username}/${stage}/`
     if (!participantUrn.startsWith(expectedPrefix)) {
         return null
@@ -347,7 +352,7 @@ export function buildActPublishPayload(
     }
 
     const collector = new Map<string, ProvidedPublishAsset>()
-    const stage = stageFromWorkingDir(context.workingDir)
+    const stage = stageForContext(context)
     const urn = buildCanonicalStudioAssetUrn('act', context.username, stage, options.slug)
 
     const participants = Object.entries(act.participants).map(([key, binding]) => {

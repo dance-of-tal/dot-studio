@@ -48,9 +48,11 @@ export default function PublishModal({ open, onClose }: { open: boolean; onClose
                 ) : (
                     <PublishFormStep
                         slug={controller.slug}
+                        stage={controller.stage}
                         description={controller.description}
                         tagsText={controller.tagsText}
                         setSlug={controller.setSlug}
+                        setStage={controller.setStage}
                         setDescription={controller.setDescription}
                         setTagsText={controller.setTagsText}
                         performerPreflight={controller.performerPreflight}

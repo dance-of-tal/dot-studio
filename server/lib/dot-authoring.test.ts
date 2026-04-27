@@ -78,6 +78,22 @@ describe('publish dependency validation', () => {
         await expect(ensurePublishableDependencies(workingDir, 'act', act.payload)).rejects.toThrow('Export it from the Dance editor, upload it to GitHub, import it from Asset Library, and then try again')
     })
 
+    it('saves local assets with an explicit stage override', async () => {
+        const result = await saveLocalStudioAsset({
+            cwd: workingDir,
+            kind: 'tal',
+            author: 'alice',
+            slug: 'reviewer-tal',
+            stage: 'Launch Stage',
+            payload: {
+                description: 'Reviewer Tal',
+                content: '# Review carefully',
+            },
+        })
+
+        expect(result.urn).toBe('tal/@alice/launch-stage/reviewer-tal')
+    })
+
     it('publishes performer with provided draft Tal before the root asset', async () => {
         const stage = stageFromWorkingDir(workingDir)
         const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -125,6 +141,49 @@ describe('publish dependency validation', () => {
 
         const publishCalls = fetchMock.mock.calls.filter(([, init]) => String(init?.method || '').toUpperCase() === 'POST')
         expect(publishCalls).toHaveLength(2)
+    })
+
+    it('publishes assets and provided dependencies with an explicit stage override', async () => {
+        const stage = 'launch-stage'
+        vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+            const url = String(input)
+            if (url.includes('/registry/')) {
+                return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } })
+            }
+            if (url.endsWith('/publish') && init?.method === 'POST') {
+                return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+            }
+            return new Response('{}', { status: 500, headers: { 'Content-Type': 'application/json' } })
+        })
+
+        const result = await publishStudioAsset({
+            cwd: workingDir,
+            kind: 'performer',
+            slug: 'reviewer-performer',
+            stage: 'Launch Stage',
+            payload: {
+                description: 'Reviewer Performer',
+                tal: `tal/@acme/${stage}/reviewer-tal`,
+            },
+            providedAssets: [{
+                kind: 'tal',
+                urn: `tal/@acme/${stage}/reviewer-tal`,
+                payload: {
+                    kind: 'tal',
+                    urn: `tal/@acme/${stage}/reviewer-tal`,
+                    payload: {
+                        content: '# Review carefully',
+                    },
+                },
+            }],
+            auth: {
+                username: 'acme',
+                token: 'token',
+            },
+        })
+
+        expect(result.urn).toBe(`performer/@acme/${stage}/reviewer-performer`)
+        expect(result.dependenciesPublished).toEqual([`tal/@acme/${stage}/reviewer-tal`])
     })
 
     it('publishes nested provided performer and Tal before the root act', async () => {

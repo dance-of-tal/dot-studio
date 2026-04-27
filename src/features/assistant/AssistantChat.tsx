@@ -23,6 +23,7 @@ import {
     shouldShowAssistantLoadingPlaceholder,
 } from '../chat/chat-message-visibility'
 
+import '../performer/AgentChat.css'
 import './AssistantChat.css'
 
 export function AssistantChat() {

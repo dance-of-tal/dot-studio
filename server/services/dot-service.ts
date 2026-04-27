@@ -224,6 +224,7 @@ export async function logoutFromDot() {
 export async function saveDotLocalAsset(cwd: string, input: {
     kind: StudioAssetKind
     slug: string
+    stage?: string
     author?: string
     payload: unknown
 }) {
@@ -238,6 +239,7 @@ export async function saveDotLocalAsset(cwd: string, input: {
         kind: input.kind,
         author,
         slug: input.slug,
+        stage: input.stage,
         payload: input.payload,
     })
     invalidate('assets')
@@ -247,6 +249,7 @@ export async function saveDotLocalAsset(cwd: string, input: {
 export async function publishDotAsset(cwd: string, input: {
     kind: StudioAssetKind
     slug: string
+    stage?: string
     payload?: unknown
     tags?: string[]
     providedAssets?: Array<{
@@ -266,6 +269,7 @@ export async function publishDotAsset(cwd: string, input: {
         cwd,
         kind: input.kind,
         slug: input.slug,
+        stage: input.stage,
         payload: input.payload,
         tags: input.tags,
         providedAssets: input.providedAssets,

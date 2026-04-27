@@ -20,6 +20,7 @@ export type PickerItemAct = { kind: 'act'; source: 'canvas'; actId: string; name
 export type PickerItem = PickerItemLocal | PickerItemDraft | PickerItemPerformer | PickerItemAct
 export type PublishFormSeed = {
     slug: string
+    stage?: string
     description: string
     tagsText: string
 }
@@ -234,8 +235,10 @@ export function buildPublishFormSeed(args: {
     }
 
     if (localItem) {
+        const [, , stage] = localItem.urn.split('/')
         return {
             slug: localItem.slug,
+            stage,
             description: localItem.name,
             tagsText: '',
         }

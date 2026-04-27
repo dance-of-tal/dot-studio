@@ -6,9 +6,11 @@ type MarkdownDraft = Pick<DraftAsset, 'derivedFrom'>
 
 type Props = {
     slug: string
+    stage: string
     description: string
     tagsText: string
     setSlug: (value: string) => void
+    setStage: (value: string) => void
     setDescription: (value: string) => void
     setTagsText: (value: string) => void
     performerPreflight: PerformerPreflightEntry[]
@@ -24,9 +26,11 @@ type Props = {
 
 export default function PublishFormStep({
     slug,
+    stage,
     description,
     tagsText,
     setSlug,
+    setStage,
     setDescription,
     setTagsText,
     performerPreflight,
@@ -42,6 +46,10 @@ export default function PublishFormStep({
     return (
         <div className="publish-modal__body">
             <div className="publish-modal__grid">
+                <label className="publish-modal__field">
+                    <span>Stage</span>
+                    <input className="text-input" value={stage} onChange={(event) => setStage(event.target.value)} />
+                </label>
                 <label className="publish-modal__field">
                     <span>Slug</span>
                     <input className="text-input" value={slug} onChange={(event) => setSlug(event.target.value)} />

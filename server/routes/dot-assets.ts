@@ -41,6 +41,7 @@ dotAssets.put('/api/dot/assets/local', async (c) => {
     const body = await c.req.json<{
         kind: StudioAssetKind
         slug: string
+        stage?: string
         author?: string
         payload: unknown
     }>().catch(() => null)
@@ -61,6 +62,7 @@ dotAssets.post('/api/dot/assets/publish', async (c) => {
     const body = await c.req.json<{
         kind: StudioAssetKind
         slug: string
+        stage?: string
         payload?: unknown
         tags?: string[]
         providedAssets?: Array<{

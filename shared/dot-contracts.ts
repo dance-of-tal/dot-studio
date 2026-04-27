@@ -41,6 +41,7 @@ export type DotInstallRequest = {
 export type DotSaveLocalRequest = {
     kind: 'tal' | 'dance' | 'performer' | 'act'
     slug: string
+    stage?: string
     author?: string
     payload: unknown
 }
@@ -48,6 +49,7 @@ export type DotSaveLocalRequest = {
 export type DotPublishRequest = {
     kind: 'tal' | 'dance' | 'performer' | 'act'
     slug: string
+    stage?: string
     payload?: unknown
     tags?: string[]
     providedAssets?: Array<{

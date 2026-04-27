@@ -197,6 +197,41 @@ describe('publish cascade builders', () => {
         ])
     })
 
+    it('uses an explicit sanitized stage when publishing a performer cascade', () => {
+        const result = buildPerformerPublishPayload({
+            talRef: { kind: 'draft', draftId: 'tal-draft-1' },
+            danceRefs: [],
+            model: null,
+            modelVariant: null,
+            mcpServerNames: [],
+            mcpBindingMap: {},
+            declaredMcpConfig: null,
+        }, {
+            name: 'Reviewer Performer',
+            slug: 'reviewer-performer',
+        }, {
+            username: 'acme',
+            workingDir: '/tmp/agent-presets',
+            stage: 'Launch Stage',
+            drafts: {
+                'tal-draft-1': {
+                    id: 'tal-draft-1',
+                    kind: 'tal',
+                    name: 'Reviewer Tal',
+                    slug: 'reviewer-tal',
+                    description: 'Reviewer Tal',
+                    tags: [],
+                    content: '# Review carefully',
+                    updatedAt: 1,
+                    saveState: 'saved',
+                },
+            },
+        })
+
+        expect(result.payload.urn).toBe('performer/@acme/launch-stage/reviewer-performer')
+        expect(result.providedAssets[0]?.urn).toBe('tal/@acme/launch-stage/reviewer-tal')
+    })
+
     it('promotes a canvas performer and nested draft Tal when publishing an act', () => {
         const result = buildActPublishPayload({
             id: 'act-1',

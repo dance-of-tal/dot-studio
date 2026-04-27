@@ -109,4 +109,21 @@ describe('buildPublishFormSeed', () => {
             tagsText: '',
         })
     })
+
+    it('prefills stage from local asset URNs', () => {
+        expect(buildPublishFormSeed({
+            localItem: {
+                kind: 'tal',
+                source: 'local',
+                urn: 'tal/@acme/launch-stage/reviewer-tal',
+                name: 'reviewer-tal',
+                slug: 'reviewer-tal',
+            },
+        })).toEqual({
+            slug: 'reviewer-tal',
+            stage: 'launch-stage',
+            description: 'reviewer-tal',
+            tagsText: '',
+        })
+    })
 })
