@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { useDroppable } from '@dnd-kit/core'
 import {
-    AlertTriangle, AlertCircle, CheckCircle2, User, ArrowRightLeft, Shield, Trash2,
+    AlertTriangle, AlertCircle, CheckCircle2, User, ArrowRightLeft, Shield, Trash2, Cpu,
 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStudioStore } from '../../store'
@@ -10,6 +11,78 @@ import { evaluateActReadiness } from './act-readiness'
 import ActSafetyEditor from './ActSafetyEditor'
 import Tip from './Tip'
 import type { ActEditorTab } from '../../store/types'
+import type { PerformerNode, WorkspaceAct } from '../../types'
+import { resolvePerformerFromActBinding } from '../../lib/act-participants'
+
+type ParticipantModelDropRowProps = {
+    act: WorkspaceAct
+    participantKey: string
+    performers: PerformerNode[]
+    relationCount: number
+    onEdit: () => void
+    onRemove: () => void
+}
+
+function ParticipantModelDropRow({
+    act,
+    participantKey,
+    performers,
+    relationCount,
+    onEdit,
+    onRemove,
+}: ParticipantModelDropRowProps) {
+    const performer = resolvePerformerFromActBinding(performers, act.participants[participantKey])
+    const label = resolveActParticipantLabel(act, participantKey, performers)
+    const modelLabel = performer?.model
+        ? performer.model.modelId
+        : performer
+            ? 'Drop model here'
+            : 'No matching performer'
+    const modelTitle = performer?.model
+        ? `${performer.model.provider} / ${performer.model.modelId}`
+        : performer
+            ? 'Drop a model from Asset Library onto this participant'
+            : 'Resolve this participant binding before assigning a model'
+    const { isOver, setNodeRef } = useDroppable({
+        id: `act-participant-model-${act.id}-${participantKey}`,
+        data: { performerId: performer?.id || null, actId: act.id, type: 'model' },
+        disabled: !performer,
+    })
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={`act-edit-workbench__list-row act-edit-workbench__list-row--model-drop ${isOver ? 'act-edit-workbench__list-row--drop-over' : ''}`}
+        >
+            <button
+                type="button"
+                className="adv-list__item act-edit-workbench__list-button"
+                onClick={onEdit}
+            >
+                <User size={12} className="adv-list__icon" />
+                <span className="act-edit-workbench__list-body">
+                    <strong>{label}</strong>
+                    <span className="act-edit-workbench__participant-meta">
+                        <span>{relationCount} relation{relationCount === 1 ? '' : 's'}</span>
+                        <span className={`act-edit-workbench__model-chip ${performer?.model ? '' : 'act-edit-workbench__model-chip--empty'}`} title={modelTitle}>
+                            <Cpu size={10} />
+                            {modelLabel}
+                        </span>
+                    </span>
+                </span>
+            </button>
+            <button
+                type="button"
+                className="act-edit-workbench__inline-action act-edit-workbench__inline-action--danger"
+                title="Remove participant"
+                aria-label={`Remove ${label}`}
+                onClick={onRemove}
+            >
+                <Trash2 size={12} />
+            </button>
+        </div>
+    )
+}
 
 export default function ActMetaView() {
     const {
@@ -244,28 +317,15 @@ export default function ActMetaView() {
                                     {participantKeys.map((key) => {
                                         const relationCount = act.relations.filter((relation) => relation.between.includes(key)).length
                                         return (
-                                            <div key={key} className="act-edit-workbench__list-row">
-                                                <button
-                                                    type="button"
-                                                    className="adv-list__item act-edit-workbench__list-button"
-                                                    onClick={() => openActParticipantEditor(activeActId, key)}
-                                                >
-                                                    <User size={12} className="adv-list__icon" />
-                                                    <span className="act-edit-workbench__list-body">
-                                                        <strong>{resolveActParticipantLabel(act, key, performers)}</strong>
-                                                        <span>{relationCount} relation{relationCount === 1 ? '' : 's'}</span>
-                                                    </span>
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="act-edit-workbench__inline-action act-edit-workbench__inline-action--danger"
-                                                    title="Remove participant"
-                                                    aria-label={`Remove ${resolveActParticipantLabel(act, key, performers)}`}
-                                                    onClick={() => unbindPerformerFromAct(activeActId, key)}
-                                                >
-                                                    <Trash2 size={12} />
-                                                </button>
-                                            </div>
+                                            <ParticipantModelDropRow
+                                                key={key}
+                                                act={act}
+                                                participantKey={key}
+                                                performers={performers}
+                                                relationCount={relationCount}
+                                                onEdit={() => openActParticipantEditor(activeActId, key)}
+                                                onRemove={() => unbindPerformerFromAct(activeActId, key)}
+                                            />
                                         )
                                     })}
                                 </div>

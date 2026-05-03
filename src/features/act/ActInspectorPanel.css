@@ -249,6 +249,19 @@
     gap: 6px;
 }
 
+.act-edit-workbench__list-row--model-drop .act-edit-workbench__list-button {
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.act-edit-workbench__list-row--drop-over .act-edit-workbench__list-button {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border-main));
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+
+.act-edit-workbench__list-row--drop-over .act-edit-workbench__inline-action {
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--border-main));
+}
+
 .act-edit-workbench__inline-action {
     display: inline-flex;
     align-items: center;
@@ -294,6 +307,33 @@
     font-size: var(--font-sm);
     color: var(--text-secondary);
     line-height: 1.45;
+}
+
+.act-edit-workbench__participant-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.act-edit-workbench__model-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    gap: 4px;
+    padding: 1px 6px;
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border-light));
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--accent) 7%, var(--bg-card));
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.act-edit-workbench__model-chip--empty {
+    border-style: dashed;
+    color: var(--text-muted);
 }
 
 .act-edit-workbench__empty-card {
