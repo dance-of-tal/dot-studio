@@ -39,6 +39,10 @@ function isOptionalNullableString(value: unknown) {
     return value === undefined || value === null || isNonEmptyString(value)
 }
 
+function isOptionalBoolean(value: unknown) {
+    return value === undefined || typeof value === 'boolean'
+}
+
 function isOptionalEventTypeArray(value: unknown) {
     return value === undefined || (
         Array.isArray(value) && value.every((entry) => entry === 'runtime.idle')
@@ -47,6 +51,30 @@ function isOptionalEventTypeArray(value: unknown) {
 
 function isOptionalFiniteNumber(value: unknown) {
     return value === undefined || (typeof value === 'number' && Number.isFinite(value) && value >= 0)
+}
+
+function isFiniteNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isPositiveFiniteNumber(value: unknown) {
+    return isFiniteNumber(value) && value > 0
+}
+
+function isStudioSurface(value: unknown) {
+    return value === undefined || value === 'canvas' || value === 'editor'
+}
+
+function isActEditorMode(value: unknown) {
+    return value === undefined || value === 'act' || value === 'participant' || value === 'relation'
+}
+
+function isStudioPanel(value: unknown) {
+    return value === 'assetLibrary' || value === 'workspaceTracking' || value === 'terminal'
+}
+
+function isStudioNodeType(value: unknown) {
+    return value === 'performer' || value === 'act'
 }
 
 function normalizeOptionalString(value: unknown, options?: { allowNull?: boolean }) {
@@ -139,6 +167,7 @@ function normalizePerformerActionCandidate(action: ActionRecord) {
     return {
         ...action,
         model: normalizeModelBlueprintCandidate(action.model),
+        modelVariant: normalizeOptionalString(action.modelVariant, { allowNull: true }),
         description: normalizeOptionalString(action.description, { allowNull: true }),
         talUrn: normalizedTalUrn === null && (
             isNonEmptyString(normalizedTalDraftId)
@@ -163,6 +192,42 @@ function normalizePerformerActionCandidate(action: ActionRecord) {
         addMcpServerNames: normalizeOptionalStringArray(action.addMcpServerNames),
         removeMcpServerNames: normalizeOptionalStringArray(action.removeMcpServerNames),
     }
+}
+
+function normalizeShowPerformerActionCandidate(action: ActionRecord) {
+    return {
+        ...action,
+        performerId: normalizeOptionalString(action.performerId),
+        performerRef: normalizeOptionalString(action.performerRef),
+        performerName: normalizeOptionalString(action.performerName),
+        editorFocus: normalizeOptionalString(action.editorFocus),
+    }
+}
+
+function normalizeShowActActionCandidate(action: ActionRecord) {
+    return {
+        ...action,
+        actId: normalizeOptionalString(action.actId),
+        actRef: normalizeOptionalString(action.actRef),
+        actName: normalizeOptionalString(action.actName),
+        participantKey: normalizeOptionalString(action.participantKey),
+        relationId: normalizeOptionalString(action.relationId),
+    }
+}
+
+function normalizeShowDraftActionCandidate(action: ActionRecord) {
+    return {
+        ...action,
+        draftId: normalizeOptionalString(action.draftId),
+        draftRef: normalizeOptionalString(action.draftRef),
+        draftName: normalizeOptionalString(action.draftName),
+    }
+}
+
+function normalizeStudioNodeActionCandidate(action: ActionRecord) {
+    return action.nodeType === 'performer'
+        ? normalizeShowPerformerActionCandidate(action)
+        : normalizeShowActActionCandidate(action)
 }
 
 function normalizeAssistantActionCandidate(action: unknown): unknown {
@@ -190,6 +255,15 @@ function normalizeAssistantActionCandidate(action: unknown): unknown {
             }
         case 'connectPerformers':
             return normalizeRelationBlueprintCandidate(action)
+        case 'showPerformer':
+            return normalizeShowPerformerActionCandidate(action)
+        case 'showAct':
+            return normalizeShowActActionCandidate(action)
+        case 'showDraft':
+            return normalizeShowDraftActionCandidate(action)
+        case 'setStudioNodeVisibility':
+        case 'setStudioNodeFrame':
+            return normalizeStudioNodeActionCandidate(action)
         default:
             return action
     }
@@ -258,6 +332,7 @@ function isPerformerFields(value: unknown): value is AssistantPerformerFields {
     if (!isRecord(value)) return false
     return (
         (value.model === undefined || value.model === null || isModelBlueprint(value.model))
+        && (value.modelVariant === undefined || value.modelVariant === null || isNonEmptyString(value.modelVariant))
         && isOptionalNullableString(value.description)
         && (value.talUrn === undefined || value.talUrn === null || isNonEmptyString(value.talUrn))
         && (value.talDraftId === undefined || isNonEmptyString(value.talDraftId))
@@ -287,6 +362,24 @@ function isActRelationBlueprint(value: unknown) {
 
 function resolveDraftLocator(action: ActionRecord) {
     return isNonEmptyString(action.draftId) || isNonEmptyString(action.draftRef) || isNonEmptyString(action.draftName)
+}
+
+function isFramePosition(value: unknown) {
+    return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y)
+}
+
+function isFrameSize(value: unknown) {
+    return isRecord(value) && isPositiveFiniteNumber(value.width) && isPositiveFiniteNumber(value.height)
+}
+
+function isStudioNodeFramePatch(action: ActionRecord) {
+    const hasPosition = action.position !== undefined
+    const hasSize = action.size !== undefined
+    return (
+        (hasPosition || hasSize)
+        && (action.position === undefined || isFramePosition(action.position))
+        && (action.size === undefined || isFrameSize(action.size))
+    )
 }
 
 function hasValidBundlePath(action: ActionRecord) {
@@ -380,6 +473,43 @@ function isValidAssistantAction(action: unknown): action is AssistantAction {
         case 'updateRelation':
         case 'removeRelation':
             return hasActLocator(action) && isNonEmptyString(action.relationId)
+        case 'showPerformer':
+            return (
+                hasPerformerLocator(action)
+                && isStudioSurface(action.surface)
+                && isOptionalBoolean(action.reveal)
+                && (action.editorFocus === undefined || isNonEmptyString(action.editorFocus))
+            )
+        case 'showAct':
+            return (
+                hasActLocator(action)
+                && isStudioSurface(action.surface)
+                && isOptionalBoolean(action.reveal)
+                && isActEditorMode(action.editorMode)
+                && (action.participantKey === undefined || isNonEmptyString(action.participantKey))
+                && (action.relationId === undefined || isNonEmptyString(action.relationId))
+                && (action.editorMode !== 'participant' || isNonEmptyString(action.participantKey))
+                && (action.editorMode !== 'relation' || isNonEmptyString(action.relationId))
+            )
+        case 'showDraft':
+            return (
+                resolveDraftLocator(action)
+                && (action.kind === undefined || action.kind === 'tal' || action.kind === 'dance')
+            )
+        case 'setStudioNodeVisibility':
+            return (
+                isStudioNodeType(action.nodeType)
+                && typeof action.visible === 'boolean'
+                && (action.nodeType === 'performer' ? hasPerformerLocator(action) : hasActLocator(action))
+            )
+        case 'setStudioNodeFrame':
+            return (
+                isStudioNodeType(action.nodeType)
+                && (action.nodeType === 'performer' ? hasPerformerLocator(action) : hasActLocator(action))
+                && isStudioNodeFramePatch(action)
+            )
+        case 'setStudioPanel':
+            return isStudioPanel(action.panel) && typeof action.open === 'boolean'
         default:
             return false
     }
@@ -514,6 +644,18 @@ function requireDraftRef(
     }
 }
 
+function requireAnyDraftRef(
+    issues: AssistantActionLintIssue[],
+    actionIndex: number,
+    refs: Map<string, DraftRefKind>,
+    value: unknown,
+) {
+    if (!isNonEmptyString(value)) return
+    if (!refs.has(value)) {
+        pushIssue(issues, 'error', actionIndex, `draft ref "${value}" is used before it is created in the same tool call.`)
+    }
+}
+
 function lintPerformerFields(
     actionIndex: number,
     fields: ActionRecord,
@@ -644,6 +786,27 @@ export function lintAssistantActionEnvelope(envelope: AssistantActionEnvelope): 
             case 'updateRelation':
             case 'removeRelation':
                 requireNamedRef(issues, actionIndex, refState.acts, 'act', action.actRef)
+                break
+            case 'showPerformer':
+                requireNamedRef(issues, actionIndex, refState.performers, 'performer', action.performerRef)
+                break
+            case 'showAct':
+                requireNamedRef(issues, actionIndex, refState.acts, 'act', action.actRef)
+                break
+            case 'showDraft':
+                if (action.kind === 'tal' || action.kind === 'dance') {
+                    requireDraftRef(issues, actionIndex, refState.drafts, action.kind, action.draftRef)
+                } else {
+                    requireAnyDraftRef(issues, actionIndex, refState.drafts, action.draftRef)
+                }
+                break
+            case 'setStudioNodeVisibility':
+            case 'setStudioNodeFrame':
+                if (action.nodeType === 'performer') {
+                    requireNamedRef(issues, actionIndex, refState.performers, 'performer', (action as ActionRecord).performerRef)
+                } else {
+                    requireNamedRef(issues, actionIndex, refState.acts, 'act', (action as ActionRecord).actRef)
+                }
                 break
             default:
                 break

@@ -1,71 +1,51 @@
 ---
 name: studio-assistant-workflow-guide
-description: Helps design performer teams, role splits, handoff patterns, and connected Act structures in DOT Studio. Use when the user wants a team topology, workflow recommendation, role decomposition, or Act structure recommendation.
+description: "Helps design performer teams, role splits, handoff patterns, and connected Act topology in DOT Studio. Use when the user wants a team, workflow, pipeline, role decomposition, or Act structure recommendation."
 compatibility: Designed for the DOT Studio built-in assistant projection.
 ---
 
 # DOT Studio Workflow Guide
 
-Use this skill when the user wants help designing a performer team or workflow shape.
+Use this skill when the user wants help designing a Performer team or workflow shape.
 
-## Default Build Strategy
-- Reuse existing performers whenever they already satisfy the role.
-- Create only the missing performers, then create or update the Act.
-- The created Performers should reflect the user's requested role, responsibility, and working style rather than generic placeholders.
-- If the user intent implies a Tal, Dance, or model choice, carry that into the cascaded Performer creation unless the user explicitly asked to omit it.
-- When creating a new performer, prefer creating its Tal or Dance dependencies in the same tool call instead of leaving a partial performer behind.
-- If the user asked for a workflow or team, do not stop after creating performers alone.
-- If the new Act participants were created in the same reply, prefer `participantPerformerRefs` directly on `createAct`.
-- Keep dependent actions in cascade order inside one tool call: create performers first, then create or update the Act, then any follow-up participant or relation mutations.
-- For a new workflow Act with multiple participants, prefer adding at least one relation during `createAct`.
-- Do not assume an unseen existing participant for a from-scratch team request. Either use snapshot ids that actually exist or create the missing performer in the same tool call.
-- Prefer one complete mutation pass over many partial follow-up mutations.
-- When a capability is new and no known registry asset is present, prefer local Tal or Dance drafts over invented URNs.
+## Build Strategy
+- Reuse existing Performers when they already satisfy the role.
+- Create only missing Performers, then create or update the Act.
+- If the user asked for a workflow or team, do not stop after creating loose Performers.
+- When new participants are created in the same reply, prefer `participantPerformerRefs` directly on `createAct`.
+- Keep dependent actions in cascade order: create Performers, then create/update Act, then optional relation/subscription updates.
+- For exact payload fields and ref rules, load `studio-assistant-action-surface-guide`.
 
-## Workflow Design Heuristics
-- Prefer small, legible role splits over a large generic team.
-- Give each performer a distinct responsibility and a clear handoff.
-- If the workflow naturally has stages, mirror those stages in relation order.
+## Role Split Heuristics
+- Prefer small, legible role splits over large generic teams.
+- Give each Performer a distinct responsibility and a clear output or handoff.
+- If one Performer can plausibly solve the request, say so instead of forcing an Act.
+- If the workflow has stages, mirror those stages in relation order.
+- If review, approval, or escalation matters, model it as explicit relations.
+- Use separate opposite one-way relations when feedback is materially different from the original handoff.
+
+## Relation Heuristics
 - Relation direction should match the actual flow of deliverables, decisions, approval, or escalation.
-- Use relation names for the concrete artifact or coordination moment being passed, such as `research brief`, `review notes`, or `launch handoff`.
-- If the user asks for review, approval, or escalation, model those as explicit relations rather than vague shared responsibility.
-- Use separate opposite one-way relations when a feedback loop is materially different from the original handoff.
-- Add participant subscriptions only for concrete wake behavior; align tags and shared board keys with the handoffs the user expects.
-- If a workflow can plausibly be solved with one performer, say so instead of forcing an Act.
+- Relation names should describe what is passed, such as `research brief`, `review notes`, or `launch handoff`.
+- Add participant subscriptions only for concrete wake behavior.
+- Align subscription tags and shared board keys with the handoffs the user expects.
+- For contract field details, load `studio-assistant-act-guide`.
 
 ## Common Patterns
-
-### Single Expert
-- One performer with a clear role name
-- Add model, Tal, Dances, and MCP only when explicitly known
-
-### Research -> Writer
-- Researcher gathers and structures findings
-- Writer turns findings into polished output
-- Relation should include a concrete `name` and `description`
-
-### Code Review Loop
-- Developer writes code
-- Reviewer reviews and returns feedback
-- If both directions are needed, create two separate one-way relations
-
-### Small Delivery Team
-- Planner or PM
-- Builder
-- Reviewer or QA
-- Keep relations minimal and explicit
+- Single expert: one Performer with a clear role.
+- Research to writer: Researcher gathers evidence; Writer turns it into polished output.
+- Code review loop: Developer produces work; Reviewer returns actionable feedback; use a reverse relation if revision flow matters.
+- Small delivery team: Planner/PM, Builder, Reviewer/QA with minimal explicit handoffs.
 
 ## Response Strategy
 - State the intended structure briefly.
-- If the request is underspecified, ask the smallest clarifying question needed.
-- If the request already names the target roles and workflow shape, skip the extra confirmation step and create the concrete structure directly.
-- Asset creation can be conversational. Use a short question-and-answer flow when the correct Performer or Act shape depends on missing intent.
-- When Tal, Dance, or Performer setup can be done in more than one reasonable way, present the shortest useful option set first.
-- If the request is specific enough, create the concrete performer and Act structure directly.
-- Before finalizing a non-trivial mutation payload, make sure same-call refs, draft kinds, and workflow relations are all valid before calling `apply_studio_actions`.
+- Ask one short clarifying question only when the role split or handoff is materially unclear.
+- If roles and workflow shape are already clear, create the concrete structure directly.
+- Do not ignore a role the user explicitly requested.
+- Do not add Tal, Dance, model, or MCP choices the user explicitly asked to omit.
 
 ## Anti-Patterns
-- Creating several generic performers with overlapping jobs.
-- Returning an unconnected multi-participant Act for a workflow request.
-- Ignoring a role the user explicitly asked for because a simpler topology exists.
-- Adding Tal, Dance, or model choices that the user explicitly asked to omit.
+- Generic Performers with overlapping jobs.
+- Unconnected multi-participant Acts for workflow requests.
+- One giant graph when a focused Act would do.
+- Invented registry assets, MCP names, model ids, or variant ids.

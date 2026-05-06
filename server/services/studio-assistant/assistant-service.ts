@@ -297,7 +297,7 @@ function buildSkillFile(skill: BuiltinSkill): string {
 
 export function buildAssistantActionPrompt(context: AssistantStageContext | null | undefined): string {
     const snapshot = JSON.stringify(
-        context || { workingDir: '', performers: [], acts: [], drafts: [], availableModels: [] },
+        context || { workingDir: '', view: null, performers: [], acts: [], drafts: [], availableModels: [] },
         null,
         2,
     )
@@ -308,6 +308,7 @@ export function buildAssistantActionPrompt(context: AssistantStageContext | null
         snapshot,
         '```',
         'Use the workspace snapshot as the source of truth for current ids, names, connected models, model variants, draft state, and existing topology.',
+        'When present, snapshot view/position/size/hidden fields describe current Studio UI state and canvas geometry.',
         'Choose the lightest valid response mode for each turn:',
         '- explain directly when the user only wants guidance or critique',
         '- ask one short clarifying question when an important choice is unresolved',
@@ -315,10 +316,13 @@ export function buildAssistantActionPrompt(context: AssistantStageContext | null
         '- when a direct create request already specifies the intended roles or workflow, do not ask a redundant confirmation question',
         'If you want to mutate the stage, call the apply_studio_actions tool with one valid action envelope.',
         'Load the smallest relevant guide before calling the tool:',
-        '- performer or payload details: `studio-assistant-performer-guide`',
-        '- Act or workflow structure: `studio-assistant-act-guide` and `studio-assistant-workflow-guide`',
+        '- exact payload fields, refs, or validation: `studio-assistant-action-surface-guide`',
+        '- Performer role design or setup choices: `studio-assistant-performer-guide`',
+        '- Act contract fields, relations, subscriptions, or safety: `studio-assistant-act-guide`',
+        '- workflow topology, team role split, or handoff design: `studio-assistant-workflow-guide`',
         '- Tal design or Tal proposal: `studio-assistant-tal-design-guide`',
-        '- Studio UI/help questions: `studio-assistant-studio-guide`',
+        '- Studio product help/navigation: `studio-assistant-studio-guide`',
+        '- Studio UI operations like open/show/focus/reveal/hide/move/resize/panel requests: `studio-assistant-ui-operations-guide`',
         '- local Dance authoring: `studio-assistant-skill-creator-guide`',
         '- external skill search or apply: `find-skills`',
         'Core mutation rules:',
@@ -344,6 +348,11 @@ export function buildAssistantActionPrompt(context: AssistantStageContext | null
         '- You can CRUD all four authoring asset families through this action surface.',
         '- Tal and Dance are local draft create/update/delete only.',
         '- Performer and Act are current Stage create/update/delete only.',
+        '- Studio UI operations are supported too: showPerformer, showAct, showDraft, setStudioPanel, setStudioNodeVisibility, and setStudioNodeFrame.',
+        '- Use UI operations when the user asks to open, show, inspect, focus, reveal, hide, resize, move, or arrange existing Studio surfaces.',
+        '- UI operations are hot Studio state changes; do not describe them as saving, publishing, or changing runtime behavior.',
+        '- For showPerformer/showAct, use surface="editor" only when the user asks to edit/configure/inspect settings; otherwise use the canvas surface or omit surface.',
+        '- For setStudioNodeFrame, use absolute canvas coordinates from the snapshot. Do not invent geometry unless the user asked for arrangement and current geometry is present.',
         '- Treat install/import helpers as support paths, not as CRUD for Tal, Dance, Performer, or Act.',
         '- Save Local and Publish are outside this assistant CRUD surface.',
         '- If the user wants to create or improve a Dance bundle, load `studio-assistant-skill-creator-guide`.',
@@ -381,6 +390,8 @@ function shouldDiscoverAssets(message: string) {
     return [
         'tal', 'dance', 'performer', 'act', 'workflow', 'agent', 'skill', 'registry', 'install', 'import',
         'search', 'find', 'create', 'build', 'apply', 'use', 'attach',
+        '탈', '댄스', '퍼포머', '액트', '워크플로', '워크플로우', '에이전트', '스킬', '레지스트리',
+        '설치', '가져오기', '임포트', '검색', '찾', '만들', '생성', '적용', '사용', '붙여', '연결',
     ].some((token) => text.includes(token))
 }
 
@@ -389,7 +400,7 @@ type AssistantSkillIntent = 'create' | 'find' | 'apply' | 'mixed' | null
 function mentionsSkillContext(message: string) {
     const text = message.toLowerCase()
     return [
-        'skill', 'skills.sh', 'dance',
+        'skill', 'skills.sh', 'dance', '스킬', '댄스',
     ].some((token) => text.includes(token))
 }
 
@@ -402,21 +413,30 @@ function inferAssistantSkillIntent(message: string): AssistantSkillIntent {
         'create skill', 'make skill', 'new skill', 'build skill', 'author skill',
         'create dance', 'new dance', 'edit skill', 'update skill', 'improve skill', 'enhance skill',
         'skill creator', 'dance draft',
+        '스킬 만들어', '스킬 생성', '스킬 작성', '새 스킬', '댄스 만들어', '댄스 생성', '댄스 작성',
+        '스킬 수정', '스킬 개선', '댄스 수정', '댄스 개선', '댄스 초안',
     ].some((token) => text.includes(token))
         || ['create', 'make', 'build', 'author', 'edit', 'update', 'improve', 'enhance']
+            .some((token) => text.includes(token))
+        || ['만들', '생성', '작성', '수정', '개선', '고쳐']
             .some((token) => text.includes(token))
     const find =
         [
         'find skill', 'search skill', 'look for skill', 'is there a skill', 'recommend skill',
         'existing skill', 'skills.sh', 'find dance',
+        '스킬 찾아', '스킬 검색', '스킬 추천', '기존 스킬', '댄스 찾아', '댄스 검색', '댄스 추천',
     ].some((token) => text.includes(token))
         || ['find', 'search', 'recommend'].some((token) => text.includes(token))
+        || ['찾', '검색', '추천'].some((token) => text.includes(token))
     const apply =
         [
         'apply skill', 'use skill', 'install skill', 'add skill', 'attach skill',
         'apply dance', 'use dance', 'install dance', 'attach dance', 'import skill',
+        '스킬 적용', '스킬 사용', '스킬 설치', '스킬 추가', '스킬 붙여', '댄스 적용', '댄스 사용',
+        '댄스 설치', '댄스 추가', '댄스 붙여',
     ].some((token) => text.includes(token))
         || ['apply', 'install', 'use', 'attach', 'import'].some((token) => text.includes(token))
+        || ['적용', '설치', '사용', '붙여', '추가', '임포트', '가져와'].some((token) => text.includes(token))
 
     if (create && (find || apply)) return 'mixed'
     if (apply) return 'apply'
@@ -428,10 +448,20 @@ function inferAssistantSkillIntent(message: string): AssistantSkillIntent {
 function inferDiscoveryKinds(message: string): Array<'tal' | 'dance' | 'performer' | 'act'> {
     const text = message.toLowerCase()
     const kinds = new Set<'tal' | 'dance' | 'performer' | 'act'>()
-    if (text.includes('tal')) kinds.add('tal')
-    if (text.includes('dance') || text.includes('skill') || text.includes('skills.sh')) kinds.add('dance')
-    if (text.includes('performer') || text.includes('agent')) kinds.add('performer')
-    if (text.includes('act') || text.includes('workflow') || text.includes('pipeline') || text.includes('team')) {
+    if (text.includes('tal') || text.includes('탈')) kinds.add('tal')
+    if (text.includes('dance') || text.includes('skill') || text.includes('skills.sh') || text.includes('댄스') || text.includes('스킬')) kinds.add('dance')
+    if (text.includes('performer') || text.includes('agent') || text.includes('퍼포머') || text.includes('에이전트')) kinds.add('performer')
+    if (
+        text.includes('act')
+        || text.includes('workflow')
+        || text.includes('pipeline')
+        || text.includes('team')
+        || text.includes('액트')
+        || text.includes('워크플로')
+        || text.includes('워크플로우')
+        || text.includes('팀')
+        || text.includes('파이프라인')
+    ) {
         kinds.add('act')
         kinds.add('performer')
     }
@@ -447,10 +477,13 @@ function buildDiscoveryQuery(message: string) {
         'please', 'help', 'with', 'that', 'this', 'for', 'from', 'into', 'using', 'make', 'create', 'build',
         'find', 'search', 'install', 'import', 'add', 'use', 'want', 'need', 'the', 'a', 'an',
         'skill', 'skills', 'dance', 'performer', 'act', 'workflow', 'agent', 'tal',
+        '스킬', '댄스', '퍼포머', '액트', '워크플로', '워크플로우', '에이전트', '탈',
+        '만들', '만들어', '만들어줘', '생성', '생성해', '생성해줘', '찾아', '찾아줘', '검색',
+        '검색해', '검색해줘', '설치', '적용', '사용', '추가', '붙여', '가져와', '임포트',
     ])
     const tokens = message
         .toLowerCase()
-        .replace(/[^a-z0-9@/_\-\s]+/g, ' ')
+        .replace(/[^\p{L}\p{N}@/_\-\s]+/gu, ' ')
         .split(/\s+/)
         .map((token) => token.trim())
         .filter((token) => token.length >= 2 && !stopwords.has(token))
@@ -506,13 +539,22 @@ export async function buildAssistantDiscoveryPrompt(workingDir: string, userMess
     if (!shouldDiscoverAssets(userMessage)) return ''
 
     const query = buildDiscoveryQuery(userMessage)
-    if (!query) return ''
-
     const sections: string[] = []
     const skillIntent = inferAssistantSkillIntent(userMessage)
     const includeSkillsCatalog = skillIntent === 'find' || skillIntent === 'apply' || skillIntent === 'mixed'
 
     sections.push(...buildAssistantSkillIntentPrompt(skillIntent))
+
+    if (!query) {
+        return sections.length > 0
+            ? [
+                'Relevant Asset Discovery Hints:',
+                ...sections,
+                'Use these hints only when they clearly match the user request.',
+                'If multiple paths are still reasonable, ask the user which path they want.',
+            ].join('\n')
+            : ''
+    }
 
     for (const kind of inferDiscoveryKinds(userMessage).slice(0, 2)) {
         const installed = (await listStudioAssets(workingDir, kind))

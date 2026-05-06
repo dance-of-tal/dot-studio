@@ -13,6 +13,7 @@ const deleteDraftMock = vi.fn()
 const writeDanceBundleFileMock = vi.fn()
 const deleteDanceBundleFileMock = vi.fn()
 const deleteActRuntimeMock = vi.fn().mockResolvedValue({ ok: true })
+const listActThreadsMock = vi.fn().mockResolvedValue({ threads: [] })
 
 function overlaps(
     left: { x: number; y: number; width: number; height: number },
@@ -46,6 +47,7 @@ vi.mock('../../api', () => ({
         },
         actRuntime: {
             deleteAct: deleteActRuntimeMock,
+            listThreads: listActThreadsMock,
         },
     },
 }))
@@ -73,6 +75,7 @@ afterEach(() => {
     writeDanceBundleFileMock.mockReset()
     deleteDanceBundleFileMock.mockReset()
     deleteActRuntimeMock.mockReset().mockResolvedValue({ ok: true })
+    listActThreadsMock.mockReset().mockResolvedValue({ threads: [] })
     useStudioStore.setState({
         performers: [],
         acts: [],
@@ -82,9 +85,16 @@ afterEach(() => {
         workingDir: '',
         selectedActId: null,
         selectedPerformerId: null,
+        selectedMarkdownEditorId: null,
+        markdownEditors: [],
+        editingTarget: null,
         actEditorState: null,
         activeThreadId: null,
         activeThreadParticipantKey: null,
+        isAssetLibraryOpen: false,
+        isTrackingOpen: false,
+        isTerminalOpen: false,
+        canvasRevealTarget: null,
     })
 })
 
@@ -546,5 +556,57 @@ describe('assistant-actions', () => {
 
         expect(result.success).toBe(false)
         expect(writeDanceBundleFileMock).not.toHaveBeenCalled()
+    })
+
+    it('applies Studio UI operations for nodes, drafts, panels, and canvas frames', async () => {
+        const performerId = useStudioStore.getState().addPerformer('Writer')
+        const actId = useStudioStore.getState().addAct('Review Flow')
+        useStudioStore.setState({
+            drafts: {
+                'tal-draft-1': {
+                    id: 'tal-draft-1',
+                    kind: 'tal',
+                    name: 'Writer Tal',
+                    content: '# Writer',
+                    updatedAt: Date.now(),
+                    saveState: 'saved',
+                },
+            },
+        })
+
+        const result = await applyAssistantActions([
+            { type: 'showPerformer', performerId, surface: 'editor', editorFocus: 'model' },
+            { type: 'showAct', actId, surface: 'editor', editorMode: 'act' },
+            { type: 'showDraft', draftId: 'tal-draft-1', kind: 'tal' },
+            { type: 'setStudioPanel', panel: 'assetLibrary', open: true },
+            {
+                type: 'setStudioNodeVisibility',
+                nodeType: 'performer',
+                performerId,
+                visible: false,
+            },
+            {
+                type: 'setStudioNodeFrame',
+                nodeType: 'act',
+                actId,
+                position: { x: 320, y: 240 },
+                size: { width: 520, height: 460 },
+            },
+        ])
+
+        expect(result).toEqual({ applied: 6, failed: 0 })
+        const state = useStudioStore.getState()
+        expect(state.editingTarget).toEqual(null)
+        expect(state.actEditorState).toMatchObject({ actId, mode: 'act' })
+        expect(state.selectedMarkdownEditorId).toBeTruthy()
+        expect(state.markdownEditors[0]).toMatchObject({ draftId: 'tal-draft-1', kind: 'tal' })
+        expect(state.isAssetLibraryOpen).toBe(true)
+        expect(state.performers.find((entry) => entry.id === performerId)?.hidden).toBe(true)
+        expect(state.acts.find((entry) => entry.id === actId)).toMatchObject({
+            position: { x: 320, y: 240 },
+            width: 520,
+            height: 460,
+        })
+        expect(state.canvasRevealTarget).toMatchObject({ id: actId, type: 'act' })
     })
 })

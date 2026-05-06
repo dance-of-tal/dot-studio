@@ -76,6 +76,9 @@ describe('chat-runtime-target', () => {
         })) as never)
 
         expect(context?.acts[0].description).toBe('Research then draft.')
+        expect(context?.acts[0].position).toEqual({ x: 0, y: 0 })
+        expect(context?.acts[0].size).toEqual({ width: 400, height: 300 })
+        expect(context?.acts[0].hidden).toBe(false)
         expect(context?.acts[0].actRules).toEqual(['Escalate blockers quickly.'])
         expect(context?.acts[0].safety).toEqual({ threadTimeoutMs: 120000 })
         expect(context?.acts[0].participants[0].displayName).toBe('Lead Researcher')
@@ -164,6 +167,9 @@ describe('chat-runtime-target', () => {
                 id: 'performer-1',
                 name: 'Writer',
                 description: 'Drafts polished answers for the team.',
+                position: { x: 0, y: 0 },
+                size: { width: 320, height: 480 },
+                hidden: false,
                 model: {
                     provider: 'openai',
                     modelId: 'gpt-5.4',

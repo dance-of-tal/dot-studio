@@ -18,6 +18,29 @@ describe('assistant-protocol', () => {
         expect(envelope?.actions).toHaveLength(1)
     })
 
+    it('parses Studio UI operation actions', () => {
+        const envelope = parseAssistantActionEnvelope({
+            version: 1,
+            actions: [
+                { type: 'showPerformer', performerName: 'Writer', surface: 'editor' },
+                { type: 'showAct', actName: 'Review Flow', surface: 'editor', editorMode: 'act' },
+                { type: 'showDraft', draftName: 'Review Tal', kind: 'tal' },
+                { type: 'setStudioPanel', panel: 'assetLibrary', open: true },
+                {
+                    type: 'setStudioNodeFrame',
+                    nodeType: 'performer',
+                    performerName: 'Writer',
+                    position: { x: 120, y: 80 },
+                    size: { width: 420, height: 520 },
+                },
+            ],
+        })
+
+        expect(envelope?.actions).toHaveLength(5)
+        expect(envelope?.actions[0]).toMatchObject({ type: 'showPerformer', surface: 'editor' })
+        expect(lintAssistantActionEnvelope(envelope!)).toEqual([])
+    })
+
     it('rejects invalid action payloads from tool input', () => {
         const envelope = parseAssistantActionEnvelope({
             version: 1,
@@ -275,6 +298,30 @@ describe('assistant-protocol', () => {
                 level: 'error',
                 actionIndex: 0,
                 message: 'performer ref "reviewer" is used before it is created in the same tool call.',
+            },
+        ])
+    })
+
+    it('lints UI operation same-call refs', () => {
+        const envelope = parseAssistantActionEnvelope({
+            version: 1,
+            actions: [
+                { type: 'showPerformer', performerRef: 'writer' },
+                { type: 'setStudioNodeFrame', nodeType: 'act', actRef: 'flow', position: { x: 0, y: 0 } },
+            ],
+        })
+
+        expect(envelope).not.toBeNull()
+        expect(lintAssistantActionEnvelope(envelope!)).toEqual([
+            {
+                level: 'error',
+                actionIndex: 0,
+                message: 'performer ref "writer" is used before it is created in the same tool call.',
+            },
+            {
+                level: 'error',
+                actionIndex: 1,
+                message: 'act ref "flow" is used before it is created in the same tool call.',
             },
         ])
     })

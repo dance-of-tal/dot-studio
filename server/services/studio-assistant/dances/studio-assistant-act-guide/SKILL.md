@@ -1,87 +1,49 @@
 ---
 name: studio-assistant-act-guide
-description: Explains the current DOT Studio Act contract, participant choreography, relation naming, subscriptions, actRules, and publish-safe workflow structure. Use when the user asks about Act design, multi-performer workflows, participant keys, relation direction, runtime guardrails, or subscription wiring.
+description: "Explains the current DOT Studio Act contract: participants, relations, subscriptions, actRules, safety, and publish-safe field boundaries. Use for Act contract, relation, subscription, and runtime guardrail questions. For role split/topology decisions, load studio-assistant-workflow-guide."
 compatibility: Designed for the DOT Studio built-in assistant projection.
 ---
 
 # Act Contract Guide
 
-Use this skill when the user is asking about Act structure, relation design, or contract-correct choreography.
+Use this skill when the user asks about Act structure, relation fields, subscriptions, actRules, safety, or contract-correct Act mutations.
 
 ## Mental Model
 - An Act is participant choreography.
-- Workspace Acts, canonical Act assets, runtime Act definitions, and thread runtime state are different layers.
-- Assistant mutations operate on the Studio workspace layer, but should still aim for publishable Act structure.
+- Workspace Acts, canonical Act assets, runtime definitions, and runtime thread state are different layers.
+- Assistant mutations operate on the Studio workspace layer but should still aim for publishable structure.
 
-## Current Contract Facts
+## Contract Facts
 - Participants are keyed records in Studio workspace state.
-- Canonical Act assets use participant `key` plus performer URN, not workspace `performerRef`.
-- Participant subscriptions use `messagesFrom`, `messageTags`, `callboardKeys`, and `eventTypes`.
-- `eventTypes` currently only supports `runtime.idle`.
+- Canonical Act assets use participant `key` plus Performer URNs, not workspace `performerRef`.
 - Relations use `between: [sourceKey, targetKey]`, `direction`, `name`, and `description`.
 - For `one-way`, relation order matters.
 - Opposite one-way relations are valid as separate relations.
+- Participant subscriptions use `messagesFrom`, `messageTags`, `callboardKeys`, and `eventTypes`.
+- `eventTypes` currently supports only `runtime.idle`.
+- Use `callboardKeys` as the canonical field name.
 
-## Design Rules
-- If an Act has multiple participants, it should also have at least one relation.
-- The Act composition should match the user's requested team shape, workflow, and role split.
-- Infer choreography from the user's intent: roles, deliverables, handoffs, review or approval loops, escalation paths, and expected order of work.
-- For workflow or team requests, a participant-only Act is usually incomplete and should be treated as wrong unless the user explicitly asked for an unconnected group.
-- If the user asks for something like a `d2c company`, `investment team`, or `review workflow`, create the Act with participants and relations in the same `createAct` action.
-- For a brand-new Act whose participants are already known, prefer one `createAct` with `participantPerformerRefs`, `participantPerformerIds`, or `participantPerformerNames` instead of follow-up attach actions.
-- For a direct team/workflow creation request, do not stop after creating performers if the intended Act is already clear.
-- Missing Tal details alone are not a reason to block a clear Act creation request. If the requested roles are clear, create the needed Performers first and then the Act.
-- Use `attachPerformerToAct` mainly when extending an existing Act.
-- If the Act needs missing participants, create the missing Performers first in cascade and make sure those Performers also match the user intent.
-- Always give each new relation both a clear `name` and `description`.
-- Relation direction should follow the real handoff or authority flow. Use `one-way` for staged handoffs, and separate opposite `one-way` relations for feedback loops when both directions matter.
-- Relation names should name the artifact, decision, or coordination moment being handed off, not generic labels like `handoff` or `sync`.
-- Linked performer `description` becomes participant focus in Act runtime, so keep it aligned with the participant's job.
-- Use `sourceParticipantKey` / `sourcePerformerId` / `sourcePerformerRef` / `sourcePerformerName` and the matching `target...` fields for new relations.
-- Do not generate `from...` or `to...` relation field names.
-- Treat subscriptions as wake-up filters, not permissions.
-- Add subscriptions only when the user asks for wake behavior or the workflow clearly needs a participant to resume on specific `messageTags`, `callboardKeys`, or `runtime.idle`.
-- When using subscriptions, align tags and shared note keys with concrete relation handoffs so runtime performers notice the right updates.
-- Use `actRules` for whole-Act instructions that every participant should see.
-- Use `callboardKeys` as the field name even if the UI describes the same surface as shared board or shared notes.
-- `safety` is the whole-Act runtime guardrail layer. It is different from participant `wait_until`.
-- If you need to explain Act runtime waiting behavior, use `wait_until` conditions named `message_received`, `board_key_exists`, `wake_at`, `all_of`, and `any_of`.
-- `wake_at` is the scheduled self-wake condition name. Do not call it `timeout`.
-- Prefer focused Acts over one giant workflow graph.
-- Reuse existing performers when they already match the requested role.
-- Avoid promising legacy relation metadata or runtime-only fields unless the current assistant action surface can actually express them.
+## Relation Rules
+- A multi-participant workflow Act should have at least one relation unless the user explicitly asks for an unconnected group.
+- Every new relation needs source, target, direction, non-empty `name`, and non-empty `description`.
+- Use `source...` and `target...` locator fields in assistant payloads, not legacy `from...` or `to...`.
+- Relation direction should follow real work, authority, approval, or escalation flow.
+- Relation names should name the artifact or coordination moment, such as `research brief`, `review notes`, or `launch handoff`.
+- Avoid generic relation names like `handoff`, `sync`, or `collaboration`.
 
-## Design Heuristics
-- Put durable team-wide instructions in `actRules`, not in a relation description.
-- Put each participant's job focus in the linked Performer `description`.
-- Put runtime caps, loop limits, and timeout behavior in `safety`, not in relation metadata.
-- Put wake filters in participant `subscriptions`, not in `actRules`.
-- Use subscriptions sparingly; over-broad tags or shared note keys wake the wrong participant and waste context.
-- Keep relations concrete and legible. A good relation says who hands what to whom and why that handoff exists.
-- For review, approval, or escalation flows, it is often better to model separate one-way relations than one vague bidirectional relation.
+## actRules, Safety, And Subscriptions
+- Use `actRules` for durable whole-team behavior.
+- Put participant-specific focus in the linked Performer `description`.
+- Put runtime caps, loop limits, quiet windows, and thread deadline behavior in `safety`.
+- `safety.threadTimeoutMs` is a runtime limit, not a participant wake.
+- Participant subscriptions are wake filters, not permissions.
+- Add subscriptions only for concrete wake behavior.
+- Align `messageTags` and `callboardKeys` with concrete handoffs.
 
-## Common Failure Patterns
-- Creating multiple participants with no relations for a workflow request.
-- Using generic relation labels like `handoff` without a meaningful description.
-- Stuffing participant-specific behavior into `actRules` when it belongs on the Performer or participant subscription layer.
-- Inventing legacy fields such as `permissions`, `timeout`, or participant `id`.
-
-## Self-Check
-- Use `apply_studio_actions` for mutations.
-- Do not emit bare JSON or fenced JSON for mutations in the reply text.
-- If the new Act has multiple participants and represents a workflow/team, include at least one relation.
-- Every new relation must include source, target, direction, name, and description.
-- The cascaded Performers and the final Act structure both reflect the user's requested intent.
-
-## Asset Dialog
-- For new Act design requests, it is good to use a short question-and-answer flow when the participant split or workflow handoff is still unclear.
-- Ask only the smallest questions needed to determine who should participate, what each role does, and how handoff should work.
-
-Example:
-
-```json
-{"version":1,"actions":[{"type":"createPerformer","ref":"brand","name":"Brand Strategist"},{"type":"createPerformer","ref":"growth","name":"Growth Marketer"},{"type":"createPerformer","ref":"ops","name":"Ecommerce Operator"},{"type":"createAct","name":"D2C Company","participantPerformerRefs":["brand","growth","ops"],"relations":[{"sourcePerformerRef":"brand","targetPerformerRef":"growth","direction":"one-way","name":"campaign brief","description":"Brand Strategist hands positioning and campaign priorities to Growth Marketer."},{"sourcePerformerRef":"growth","targetPerformerRef":"ops","direction":"one-way","name":"launch handoff","description":"Growth Marketer hands launch requirements and expected volume to Ecommerce Operator."}]}]}
-```
+## Runtime Waiting Vocabulary
+- Use `wait_until` condition names `message_received`, `board_key_exists`, `wake_at`, `all_of`, and `any_of`.
+- `wake_at` is the scheduled self-wake condition name.
+- Do not call scheduled waits `timeout`.
 
 ## Legacy Fields To Avoid
 - participant `id`
@@ -89,3 +51,8 @@ Example:
 - relation `maxCalls`
 - relation `timeout`
 - relation `sessionPolicy`
+
+## Self-Check
+- Load `studio-assistant-action-surface-guide` before emitting payloads.
+- If a new Act has multiple participants and represents a workflow/team, include at least one relation.
+- Keep relation payloads contract-correct and publish-safe.

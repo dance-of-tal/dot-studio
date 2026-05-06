@@ -4,6 +4,7 @@ import type {
     AssistantDraftBlueprint,
     AssistantParticipantSubscriptionsInput,
     AssistantPerformerFields,
+    AssistantStudioNodeType,
 } from '../../../shared/assistant-actions'
 import { normalizeAssistantBundlePath } from '../../../shared/assistant-bundle-path'
 import type { AssetCard } from '../../types'
@@ -138,6 +139,51 @@ function resolveSavedDraftId(
     options: { draftId?: string; draftRef?: string; draftName?: string },
 ) {
     return resolveDraftId(refs, kind, options, { savedOnly: true })
+}
+
+function resolveAnyDraftId(
+    refs: AssistantRefState,
+    options: { draftId?: string; draftRef?: string; draftName?: string; kind?: 'tal' | 'dance' },
+): string | null {
+    if (options.kind) {
+        return resolveDraftId(refs, options.kind, options)
+    }
+
+    const stateDrafts = store().drafts
+    if (options.draftId) {
+        const draft = stateDrafts[options.draftId]
+        return draft?.kind === 'tal' || draft?.kind === 'dance' ? options.draftId : null
+    }
+    if (options.draftRef) {
+        const resolved = refs.drafts.get(options.draftRef)
+        return resolved?.id || null
+    }
+    if (options.draftName) {
+        const target = normalizeName(options.draftName)
+        const found = Object.values(stateDrafts).find(
+            (draft) => (draft.kind === 'tal' || draft.kind === 'dance') && normalizeName(draft.name) === target,
+        )
+        return found?.id || null
+    }
+
+    return null
+}
+
+function resolveStudioNodeId(
+    refs: AssistantRefState,
+    nodeType: AssistantStudioNodeType,
+    options: {
+        performerId?: string
+        performerRef?: string
+        performerName?: string
+        actId?: string
+        actRef?: string
+        actName?: string
+    },
+) {
+    return nodeType === 'performer'
+        ? resolvePerformerId(refs, options)
+        : resolveActId(refs, options)
 }
 
 function resolveParticipantKey(
@@ -319,6 +365,53 @@ function autoLayoutAssistantActCluster(
         },
         workspaceDirty: true,
     }))
+}
+
+function applyNodeReveal(nodeId: string, nodeType: AssistantStudioNodeType) {
+    store().revealCanvasNode(nodeId, nodeType)
+}
+
+function applyNodeSelection(nodeId: string, nodeType: AssistantStudioNodeType) {
+    if (nodeType === 'performer') {
+        store().selectPerformer(nodeId)
+    } else {
+        store().selectAct(nodeId)
+    }
+}
+
+function getNodeHidden(nodeId: string, nodeType: AssistantStudioNodeType) {
+    return nodeType === 'performer'
+        ? !!store().performers.find((performer) => performer.id === nodeId)?.hidden
+        : !!store().acts.find((act) => act.id === nodeId)?.hidden
+}
+
+function setNodeVisibility(nodeId: string, nodeType: AssistantStudioNodeType, visible: boolean) {
+    const hidden = getNodeHidden(nodeId, nodeType)
+    if (hidden === visible) {
+        if (nodeType === 'performer') {
+            store().togglePerformerVisibility(nodeId)
+        } else {
+            store().toggleActVisibility(nodeId)
+        }
+    }
+}
+
+function setNodeFrame(
+    nodeId: string,
+    nodeType: AssistantStudioNodeType,
+    frame: {
+        position?: { x: number; y: number }
+        size?: { width: number; height: number }
+    },
+) {
+    if (nodeType === 'performer') {
+        if (frame.position) store().updatePerformerPosition(nodeId, frame.position.x, frame.position.y)
+        if (frame.size) store().updatePerformerSize(nodeId, frame.size.width, frame.size.height)
+        return
+    }
+
+    if (frame.position) store().updateActPosition(nodeId, frame.position.x, frame.position.y)
+    if (frame.size) store().updateActSize(nodeId, frame.size.width, frame.size.height)
 }
 
 // ── Draft helpers ─────────────────────────────────────────────────────────────
@@ -762,6 +855,87 @@ export async function applyAssistantAction(
                 const actId = resolveActId(refs, action)
                 if (!actId || !hasRelation(actId, action.relationId)) return { success: false }
                 store().removeRelation(actId, action.relationId)
+                return { success: true }
+            }
+
+            // ── Studio UI and canvas operations ──────────────────────────────
+            case 'showPerformer': {
+                const performerId = resolvePerformerId(refs, action)
+                if (!performerId) return { success: false }
+                if (action.surface === 'editor') {
+                    store().openPerformerEditor(performerId, action.editorFocus || null)
+                } else {
+                    applyNodeSelection(performerId, 'performer')
+                }
+                if (action.reveal !== false) {
+                    applyNodeReveal(performerId, 'performer')
+                }
+                return { success: true }
+            }
+            case 'showAct': {
+                const actId = resolveActId(refs, action)
+                if (!actId) return { success: false }
+                const act = getActById(actId)
+                if (!act) return { success: false }
+
+                store().closeEditor()
+                applyNodeSelection(actId, 'act')
+                if (action.reveal !== false) {
+                    applyNodeReveal(actId, 'act')
+                }
+                if (action.surface === 'editor') {
+                    if (action.editorMode === 'participant') {
+                        if (!action.participantKey || !act.participants[action.participantKey]) return { success: false }
+                        store().openActParticipantEditor(actId, action.participantKey)
+                    } else if (action.editorMode === 'relation') {
+                        if (!action.relationId || !hasRelation(actId, action.relationId)) return { success: false }
+                        store().openActRelationEditor(actId, action.relationId)
+                    } else {
+                        store().openActEditor(actId, 'act')
+                    }
+                }
+                return { success: true }
+            }
+            case 'showDraft': {
+                const draftId = resolveAnyDraftId(refs, action)
+                if (!draftId) return { success: false }
+                store().closeEditor()
+                return { success: store().openDraftEditor(draftId) !== null }
+            }
+            case 'setStudioNodeVisibility': {
+                const nodeId = resolveStudioNodeId(refs, action.nodeType, action)
+                if (!nodeId) return { success: false }
+                setNodeVisibility(nodeId, action.nodeType, action.visible)
+                if (action.visible) {
+                    applyNodeReveal(nodeId, action.nodeType)
+                }
+                return { success: true }
+            }
+            case 'setStudioNodeFrame': {
+                const nodeId = resolveStudioNodeId(refs, action.nodeType, action)
+                if (!nodeId) return { success: false }
+                if (!action.position && !action.size) return { success: false }
+                setNodeFrame(nodeId, action.nodeType, {
+                    ...(action.position ? { position: action.position } : {}),
+                    ...(action.size ? { size: action.size } : {}),
+                })
+                applyNodeReveal(nodeId, action.nodeType)
+                return { success: true }
+            }
+            case 'setStudioPanel': {
+                switch (action.panel) {
+                    case 'assetLibrary':
+                        store().setAssetLibraryOpen(action.open)
+                        break
+                    case 'workspaceTracking':
+                        store().setTrackingOpen(action.open)
+                        break
+                    case 'terminal':
+                        store().setTerminalOpen(action.open)
+                        break
+                    default:
+                        return { success: false }
+                }
                 return { success: true }
             }
 

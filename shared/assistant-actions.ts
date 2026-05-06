@@ -3,6 +3,10 @@ import type { ActSafetyConfig } from './act-types.js'
 export type AssistantActionDirection = 'both' | 'one-way'
 export type AssistantParticipantEventType = 'runtime.idle'
 export const ASSISTANT_MUTATION_TOOL_NAME = 'apply_studio_actions'
+export type AssistantStudioNodeType = 'performer' | 'act'
+export type AssistantStudioPanel = 'assetLibrary' | 'workspaceTracking' | 'terminal'
+export type AssistantStudioSurface = 'canvas' | 'editor'
+export type AssistantActEditorMode = 'act' | 'participant' | 'relation'
 
 export interface AssistantParticipantSubscriptions {
     messagesFrom?: string[]
@@ -106,6 +110,9 @@ export interface AssistantStagePerformerSummary {
     id: string
     name: string
     description?: string
+    position?: { x: number; y: number }
+    size?: { width: number; height: number }
+    hidden?: boolean
     model: { provider: string; modelId: string } | null
     modelVariant: string | null
     talUrn: string | null
@@ -135,18 +142,41 @@ export interface AssistantStageActSummary {
     id: string
     name: string
     description?: string
+    position?: { x: number; y: number }
+    size?: { width: number; height: number }
+    hidden?: boolean
     actRules?: string[]
     safety?: AssistantActSafetyInput
     participants: AssistantStageActParticipantSummary[]
     relations: AssistantStageActRelationSummary[]
 }
 
+export interface AssistantStageViewSummary {
+    selectedPerformerId: string | null
+    selectedActId: string | null
+    selectedMarkdownEditorId: string | null
+    activeChatPerformerId: string | null
+    viewMode: 'canvas' | 'full' | 'split'
+    panels: {
+        assetLibrary: boolean
+        workspaceTracking: boolean
+        terminal: boolean
+        assistant: boolean
+    }
+}
+
 export interface AssistantStageContext {
     workingDir: string
+    view?: AssistantStageViewSummary
     performers: AssistantStagePerformerSummary[]
     acts: AssistantStageActSummary[]
     drafts: AssistantDraftSummary[]
     availableModels: AssistantAvailableModelSummary[]
+}
+
+export interface AssistantStudioNodeFramePatch {
+    position?: { x: number; y: number }
+    size?: { width: number; height: number }
 }
 
 // ── Action types ─────────────────────────────────────────────────────────────
@@ -355,6 +385,73 @@ export type AssistantAction =
         actRef?: string
         actName?: string
         relationId: string
+    }
+    // ── Studio UI and canvas operations ─────────────────
+    | {
+        type: 'showPerformer'
+        performerId?: string
+        performerRef?: string
+        performerName?: string
+        surface?: AssistantStudioSurface
+        reveal?: boolean
+        editorFocus?: string
+    }
+    | {
+        type: 'showAct'
+        actId?: string
+        actRef?: string
+        actName?: string
+        surface?: AssistantStudioSurface
+        reveal?: boolean
+        editorMode?: AssistantActEditorMode
+        participantKey?: string
+        relationId?: string
+    }
+    | {
+        type: 'showDraft'
+        draftId?: string
+        draftRef?: string
+        draftName?: string
+        kind?: 'tal' | 'dance'
+    }
+    | ({
+        type: 'setStudioNodeVisibility'
+        nodeType: 'performer'
+        visible: boolean
+    } & {
+        performerId?: string
+        performerRef?: string
+        performerName?: string
+    })
+    | ({
+        type: 'setStudioNodeVisibility'
+        nodeType: 'act'
+        visible: boolean
+    } & {
+        actId?: string
+        actRef?: string
+        actName?: string
+    })
+    | ({
+        type: 'setStudioNodeFrame'
+        nodeType: 'performer'
+    } & AssistantStudioNodeFramePatch & {
+        performerId?: string
+        performerRef?: string
+        performerName?: string
+    })
+    | ({
+        type: 'setStudioNodeFrame'
+        nodeType: 'act'
+    } & AssistantStudioNodeFramePatch & {
+        actId?: string
+        actRef?: string
+        actName?: string
+    })
+    | {
+        type: 'setStudioPanel'
+        panel: AssistantStudioPanel
+        open: boolean
     }
 
 export interface AssistantActionEnvelope {

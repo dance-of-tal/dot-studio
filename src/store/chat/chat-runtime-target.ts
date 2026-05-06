@@ -97,6 +97,9 @@ function resolveActSummary(get: ChatGet, act: WorkspaceAct): AssistantStageActSu
         id: act.id,
         name: act.name,
         description: act.description,
+        position: act.position,
+        size: { width: act.width, height: act.height },
+        hidden: !!act.hidden,
         actRules: act.actRules,
         safety: act.safety,
         participants,
@@ -116,12 +119,31 @@ export function buildAssistantStageContext(get: ChatGet): AssistantStageContext 
 
     return {
         workingDir: state.workingDir,
+        view: {
+            selectedPerformerId: state.selectedPerformerId ?? null,
+            selectedActId: state.selectedActId ?? null,
+            selectedMarkdownEditorId: state.selectedMarkdownEditorId ?? null,
+            activeChatPerformerId: state.activeChatPerformerId ?? null,
+            viewMode: state.viewMode || 'canvas',
+            panels: {
+                assetLibrary: !!state.isAssetLibraryOpen,
+                workspaceTracking: !!state.isTrackingOpen,
+                terminal: !!state.isTerminalOpen,
+                assistant: !!state.isAssistantOpen,
+            },
+        },
         performers: state.performers.map((performer) => {
             const description = performer.meta?.authoring?.description?.trim()
             return {
                 id: performer.id,
                 name: performer.name,
                 ...(description ? { description } : {}),
+                position: performer.position,
+                size: {
+                    width: performer.width ?? 400,
+                    height: performer.height ?? 500,
+                },
+                hidden: !!performer.hidden,
                 model: performer.model
                     ? {
                         provider: performer.model.provider,
