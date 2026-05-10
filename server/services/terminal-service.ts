@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import * as pty from '@homebridge/node-pty-prebuilt-multiarch'
-import type { IDisposable, IPty } from '@homebridge/node-pty-prebuilt-multiarch'
+import * as pty from '@lydell/node-pty'
+import type { IDisposable, IPty } from '@lydell/node-pty'
 import { readGlobalConfigFile } from '../lib/global-config.js'
 
 export interface TerminalSessionSummary {
