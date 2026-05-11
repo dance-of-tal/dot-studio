@@ -63,6 +63,55 @@ export async function readStoredProviderAuthType(providerId: string): Promise<'a
     return type === 'api' || type === 'oauth' || type === 'wellknown' ? type : null
 }
 
+export async function readStoredProviderApiKey(providerId: string): Promise<string | null> {
+    const store = await readStoredAuthStore()
+    const normalized = providerId.replace(/\/+$/, '')
+    const auth = store[providerId] || store[normalized] || store[`${normalized}/`]
+    if (!auth || typeof auth !== 'object') {
+        return null
+    }
+    const entry = auth as Record<string, unknown>
+    if (entry.type === 'api' && typeof entry.key === 'string') {
+        return entry.key
+    }
+    if (entry.type === 'oauth' && typeof entry.access === 'string') {
+        return entry.access
+    }
+    return null
+}
+
+export type StoredProviderAuth =
+    | { type: 'api'; key: string }
+    | { type: 'oauth'; access: string; refresh?: string; expires?: number; accountId?: string; enterpriseUrl?: string }
+    | { type: 'wellknown'; key: string; token: string }
+
+export async function readStoredProviderAuth(providerId: string): Promise<StoredProviderAuth | null> {
+    const store = await readStoredAuthStore()
+    const normalized = providerId.replace(/\/+$/, '')
+    const auth = store[providerId] || store[normalized] || store[`${normalized}/`]
+    if (!auth || typeof auth !== 'object') {
+        return null
+    }
+    const entry = auth as Record<string, unknown>
+    if (entry.type === 'api' && typeof entry.key === 'string') {
+        return { type: 'api', key: entry.key }
+    }
+    if (entry.type === 'oauth' && typeof entry.access === 'string') {
+        return {
+            type: 'oauth',
+            access: entry.access,
+            refresh: typeof entry.refresh === 'string' ? entry.refresh : undefined,
+            expires: typeof entry.expires === 'number' ? entry.expires : undefined,
+            accountId: typeof entry.accountId === 'string' ? entry.accountId : undefined,
+            enterpriseUrl: typeof entry.enterpriseUrl === 'string' ? entry.enterpriseUrl : undefined,
+        }
+    }
+    if (entry.type === 'wellknown' && typeof entry.key === 'string' && typeof entry.token === 'string') {
+        return { type: 'wellknown', key: entry.key, token: entry.token }
+    }
+    return null
+}
+
 export async function clearStoredProviderAuth(providerId: string) {
     const authPath = await resolveAuthStorePath()
     if (!authPath) {

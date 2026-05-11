@@ -236,3 +236,143 @@
     flex-direction: column;
     gap: 20px;
 }
+
+/* ── Using / Usage tab ──────────────────────────────── */
+.using-stat-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.using-stat-card {
+    flex: 1;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    background: var(--bg-canvas);
+    padding: 10px 12px;
+    min-width: 0;
+}
+
+.using-stat-card__value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.using-stat-card__label {
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.using-stat-card__sub {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.using-badge {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-hover);
+    border-radius: var(--radius-md);
+    padding: 2px 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.using-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    background: var(--bg-canvas);
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.using-notice--danger {
+    color: var(--status-danger);
+    border-color: var(--status-danger);
+}
+
+.using-notice--warn {
+    color: var(--status-warning, #f59e0b);
+    border-color: var(--status-warning, #f59e0b);
+}
+
+.using-day-row {
+    padding: 6px 12px;
+}
+
+.using-day-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    width: 36px;
+    flex-shrink: 0;
+}
+
+.using-day-bar {
+    flex: 1;
+    padding: 0 8px;
+}
+
+.using-bar-bg {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--bg-hover);
+    overflow: hidden;
+}
+
+.using-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent-main, #6366f1);
+    transition: width 0.2s ease;
+}
+
+.using-day-count {
+    font-size: 11px;
+    color: var(--text-secondary);
+    width: 40px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* ── Quota rows ─────────────────────────────────────────── */
+.using-quota-row {
+    align-items: center;
+}
+
+.using-quota-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+    min-width: 120px;
+}
+
+.using-quota-pct {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.using-bar-bg--wide {
+    width: 120px;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spin {
+    animation: spin 0.8s linear infinite;
+}

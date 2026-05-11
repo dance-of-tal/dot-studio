@@ -123,4 +123,23 @@ export const opencodeApi = {
     vcs: {
         get: () => fetchJSON<{ branch?: string | null }>('/api/vcs'),
     },
+
+    usage: {
+        get: () => fetchJSON<{
+            studio: {
+                totalCostUsd: number
+                inputTokens: number
+                outputTokens: number
+                reasoningTokens: number
+            }
+            codex: {
+                connected: boolean
+                authType: 'oauth' | 'api' | null
+                fiveHour?: { percentUsed: number; resetsAt: string | null }
+                sevenDay?: { percentUsed: number; resetsAt: string | null }
+                weekly?: { percentUsed: number; resetsAt: string | null }
+                error?: string
+            }
+        }>('/api/usage'),
+    },
 }

@@ -202,6 +202,7 @@ export const api = {
     file: opencodeApi.file,
     find: opencodeApi.find,
     vcs: opencodeApi.vcs,
+    usage: opencodeApi.usage,
 
     workspace: workspaceApi,
     discord: discordApi,
